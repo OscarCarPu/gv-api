@@ -1,0 +1,17 @@
+from typing import Annotated
+
+from fastapi import Depends
+from sqlalchemy.ext.asyncio import AsyncConnection
+
+from app.config import Settings
+from app.database import get_engine
+
+SettingsDep = Annotated[Settings, Depends(Settings)]
+
+
+async def get_db_connection():
+    async with get_engine().connect() as conn:
+        yield conn
+
+
+DbConnectionDep = Annotated[AsyncConnection, Depends(get_db_connection)]

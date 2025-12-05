@@ -1,0 +1,26 @@
+[project]
+name = "gv"
+version = "0.1.0"
+requires-python = ">=3.14"
+dependencies = [
+    "fastapi[standard]==0.123.9",
+    "uvicorn[standard]==0.38.0",
+    "asyncpg[standard]==0.31.0",
+    "sqlalchemy[asyncio]==2.0.44",
+    "pydantic_settings==2.12.0",
+]
+
+[tool.ruff]
+target-version = "py314"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM", "ASYNC"]
+ignore = []
+
+[tool.ruff.format]
+quote-style = "double"
+
+[tool.pyright]
+venvPath = "."
+venv = ".venv"
