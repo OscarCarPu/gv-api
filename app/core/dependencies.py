@@ -3,8 +3,8 @@ from typing import Annotated
 from fastapi import Depends
 from sqlalchemy.ext.asyncio import AsyncConnection
 
-from app.config import Settings
-from app.database import get_engine
+from app.core.config import Settings
+from app.core.database import get_engine
 
 SettingsDep = Annotated[Settings, Depends(Settings)]
 

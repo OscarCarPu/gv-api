@@ -7,14 +7,16 @@ The API is built with FastAPI and follows a modular structure.
 ## Folder Structure
 
 ```
-api/
-├── app/
-│   ├── main.py          # Application entry point
+app/
+├── main.py              # Application entry point
+├── core/                # Core functionality
 │   ├── config.py        # Settings (pydantic-settings)
 │   ├── database.py      # Database connection
 │   ├── dependencies.py  # Dependency injection
 │   ├── logging.py       # Logging setup
-│   └── routers/         # API endpoints
+│   └── security.py      # API key authentication
+└── health/              # Health check endpoints
+    └── router.py
 ```
 
 ## Future Directories

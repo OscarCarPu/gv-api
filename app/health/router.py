@@ -1,8 +1,7 @@
 from fastapi import APIRouter
 from sqlalchemy import text
 
-from app.dependencies import DbConnectionDep
-from app.logging import get_logger
+from app.core import DbConnectionDep, get_logger
 
 router = APIRouter(tags=["health"])
 logger = get_logger(__name__)

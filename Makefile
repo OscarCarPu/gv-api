@@ -10,6 +10,9 @@ clean:
 rebuild:
 	docker compose up -d --build
 
+logs:
+	docker compose logs -f
+
 prod-up:
 	STAGE=prod docker compose up -d
 
@@ -21,3 +24,6 @@ prod-clean:
 
 prod-rebuild:
 	STAGE=prod docker compose up -d --build
+
+test:
+	uv run pytest
