@@ -27,3 +27,12 @@ prod-rebuild:
 
 test:
 	uv run pytest
+
+generate-migration:
+	uv run alembic revision --autogenerate -m "$(m)"
+
+execute-migrations:
+	uv run alembic upgrade head
+
+db-reset:
+	docker compose down -v && docker compose up -d db && sleep 3 && uv run alembic upgrade head

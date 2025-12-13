@@ -2,8 +2,11 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from secure import Secure
+from starlette.requests import Request
 
-from app.core import dispose_engine, init_engine, setup_logging
+from app.core import dispose_engine, get_settings, init_engine, setup_logging
+from app.habits import router as habits_router
 from app.health import router as health_router
 
 
@@ -17,11 +20,24 @@ async def lifespan(_: FastAPI):
 
 app = FastAPI(lifespan=lifespan)
 
+secure_headers = Secure()
+
+
+@app.middleware("http")
+async def add_security_headers(request: Request, call_next):
+    response = await call_next(request)
+    secure_headers.set_headers(response)
+    return response
+
+
+settings = get_settings()
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_methods=["GET"],
-    allow_headers=["*"],
+    allow_origins=settings.cors_origins_list,
+    allow_methods=["GET", "POST", "PATCH", "PUT", "DELETE"],
+    allow_headers=["Content-Type", "X-API-Key", "Authorization"],
 )
 
-app.include_router(health_router)
+
+app.include_router(health_router, prefix="/api/v1")
+app.include_router(habits_router, prefix="/api/v1")

@@ -1,48 +1,113 @@
 import asyncpg
 import pytest
 from httpx import ASGITransport, AsyncClient
-from sqlalchemy.ext.asyncio import create_async_engine
+from sqlalchemy import delete
+from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 
 from app.core import database
 from app.core.config import get_settings
+from app.core.database import Base
+from app.habits.models import Habit, HabitLog
+from app.habits.repository import HabitLogRepository, HabitRepository
+from app.habits.service import HabitLogService, HabitService
 from app.main import app
 
+# Use a module-level flag to track if DB is set up
+_db_setup_done = False
 
-@pytest.fixture(scope="session", autouse=True)
-async def setup_test_db():
+
+@pytest.fixture
+async def test_engine():
+    """Create test engine per test function."""
+    global _db_setup_done
     settings = get_settings()
 
-    conn = await asyncpg.connect(
-        user=settings.postgres_user,
-        password=settings.postgres_password,
-        host=settings.postgres_host,
-        port=settings.postgres_port,
-        database="postgres",
+    # Only create DB once
+    if not _db_setup_done:
+        conn = await asyncpg.connect(
+            user=settings.postgres_user,
+            password=settings.postgres_password,
+            host=settings.postgres_host,
+            port=settings.postgres_port,
+            database="postgres",
+        )
+        await conn.execute(f"DROP DATABASE IF EXISTS {settings.postgres_db}_test;")
+        await conn.execute(f"CREATE DATABASE {settings.postgres_db}_test;")
+        await conn.close()
+        _db_setup_done = True
+
+    engine = create_async_engine(
+        f"{settings.database_url}_test",
+        echo=True,
+        pool_pre_ping=True,
     )
-
-    await conn.execute(f"DROP DATABASE IF EXISTS {settings.postgres_db}_test;")
-    await conn.execute(f"CREATE DATABASE {settings.postgres_db}_test;")
-    await conn.close()
-
-    yield
-
-
-@pytest.fixture(scope="session")
-def test_engine():
-    """Use a test database."""
-    settings = get_settings()
-    return create_async_engine(f"{settings.database_url}_test", echo=True)
-
-
-@pytest.fixture(autouse=True)
-def override_engine(test_engine):
-    """Inject test engine, bypassing lifespan init."""
-    database.engine = test_engine
-    yield
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+    database.engine = engine
+    yield engine
+    await engine.dispose()
     database.engine = None
 
 
 @pytest.fixture
-async def client():
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+async def client(test_engine):
+    """HTTP client fixture."""
+    settings = get_settings()
+    headers = {"X-API-Key": settings.api_key}
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test", headers=headers
+    ) as ac:
         yield ac
+
+
+@pytest.fixture
+async def _clean_habits(test_engine):
+    """Clean habits and logs tables before and after each test that uses this fixture."""
+    async with AsyncSession(test_engine) as session:
+        await session.execute(delete(HabitLog))
+        await session.execute(delete(Habit))
+        await session.commit()
+    yield
+    async with AsyncSession(test_engine) as session:
+        await session.execute(delete(HabitLog))
+        await session.execute(delete(Habit))
+        await session.commit()
+
+
+# --- Repository Fixtures ---
+
+
+@pytest.fixture
+async def session(test_engine):
+    """Provide an async session for tests."""
+    async with AsyncSession(test_engine) as session:
+        yield session
+
+
+@pytest.fixture
+def habit_repository(session: AsyncSession) -> HabitRepository:
+    return HabitRepository(session)
+
+
+@pytest.fixture
+def log_repository(session: AsyncSession) -> HabitLogRepository:
+    return HabitLogRepository(session)
+
+
+# --- Service Fixtures ---
+
+
+@pytest.fixture
+def habit_service(
+    habit_repository: HabitRepository,
+    log_repository: HabitLogRepository,
+) -> HabitService:
+    return HabitService(habit_repository, log_repository)
+
+
+@pytest.fixture
+def log_service(
+    habit_repository: HabitRepository,
+    log_repository: HabitLogRepository,
+) -> HabitLogService:
+    return HabitLogService(habit_repository, log_repository)
