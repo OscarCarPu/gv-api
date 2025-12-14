@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 from datetime import date
 from decimal import Decimal
 
@@ -38,7 +36,7 @@ class Habit(Base):
     color: Mapped[str] = mapped_column(String(COLOR_MAX_LENGTH), default=DEFAULT_COLOR)
     icon: Mapped[str] = mapped_column(default=DEFAULT_ICON)
 
-    logs: Mapped[list[HabitLog]] = relationship(back_populates="habit")
+    logs: Mapped[list["HabitLog"]] = relationship(back_populates="habit")  # noqa: UP037
 
     @validates("name")
     def _validate_name(self, key: str, value: str) -> str:  # noqa
@@ -87,7 +85,7 @@ class HabitLog(Base):
     log_date: Mapped[date] = mapped_column(index=True)
     value: Mapped[Decimal] = mapped_column(Numeric(10, 2))
 
-    habit: Mapped[Habit] = relationship(back_populates="logs")
+    habit: Mapped["Habit"] = relationship(back_populates="logs")  # noqa: UP037
 
     def validate_value_for_type(self, value_type: ValueType) -> None:
         """Validate that the log value is compatible with the habit's value type."""
