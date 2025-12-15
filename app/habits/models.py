@@ -39,7 +39,7 @@ class Habit(Base):
     logs: Mapped[list["HabitLog"]] = relationship(back_populates="habit")  # noqa: UP037
 
     @validates("name")
-    def _validate_name(self, key: str, value: str) -> str:  # noqa
+    def _validate_name(self, key: str, value: str) -> str:
         return sanitize_name(value)
 
     @validates("description")
