@@ -14,7 +14,7 @@ class Settings(BaseSettings):
     postgres_password: str
     postgres_db: str
     postgres_host: str = "localhost"
-    postgres_port: int = 5432
+    postgres_port: int = 54322
     api_key: str
     cors_origins: str = "http://localhost:3000"
 
