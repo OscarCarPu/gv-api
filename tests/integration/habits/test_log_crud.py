@@ -73,3 +73,46 @@ class TestLogUpdateDelete:
         await log_service.delete(log.id)
         with pytest.raises(NotFoundError):
             await log_service.get(log.id)
+
+
+class TestLogUpsert:
+    async def test_upsert_creates_new_log(self, log_service: HabitLogService, habit):
+        """Upsert should create a new log when one doesn't exist for the date."""
+        log = await log_service.upsert(habit.id, date.today(), Decimal("1"))
+        assert log.habit_id == habit.id
+        assert log.log_date == date.today()
+        assert log.value == Decimal("1")
+
+    async def test_upsert_updates_existing_log(self, log_service: HabitLogService, habit):
+        """Upsert should update the value when a log already exists for the date."""
+        today = date.today()
+        # Create initial log (boolean habit: value=1)
+        original = await log_service.upsert(habit.id, today, Decimal("1"))
+        original_id = original.id
+
+        # Upsert with new value (boolean habit: value=0)
+        updated = await log_service.upsert(habit.id, today, Decimal("0"))
+
+        assert updated.id == original_id  # Same log, not a new one
+        assert updated.value == Decimal("0")
+
+    async def test_upsert_nonexistent_habit_fails(
+        self, log_service: HabitLogService, _clean_habits
+    ):
+        """Upsert should fail when the habit doesn't exist."""
+        with pytest.raises(NotFoundError):
+            await log_service.upsert(99999, date.today(), Decimal("1"))
+
+    async def test_upsert_different_dates_creates_separate_logs(
+        self, log_service: HabitLogService, habit
+    ):
+        """Upsert on different dates should create separate logs."""
+        today = date.today()
+        yesterday = today - timedelta(days=1)
+
+        log1 = await log_service.upsert(habit.id, today, Decimal("1"))
+        log2 = await log_service.upsert(habit.id, yesterday, Decimal("1"))
+
+        assert log1.id != log2.id
+        assert log1.log_date == today
+        assert log2.log_date == yesterday

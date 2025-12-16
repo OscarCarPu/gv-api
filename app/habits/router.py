@@ -213,6 +213,22 @@ async def create_log(habit_id: int, data: HabitLogBody, service: LogServiceDep):
     return await service.create(log_data)
 
 
+@router.put(
+    "/{habit_id}/logs",
+    response_model=HabitLogRead,
+    summary="Upsert habit log",
+    description="Create or update a log entry for a habit on a specific date. "
+    "If a log exists for the given date, it will be updated; otherwise, a new log is created.",
+    responses={
+        status.HTTP_401_UNAUTHORIZED: {"description": "Invalid or missing API key"},
+        status.HTTP_404_NOT_FOUND: {"description": "Habit not found"},
+        status.HTTP_422_UNPROCESSABLE_CONTENT: {"description": "Validation error"},
+    },
+)
+async def upsert_log(habit_id: int, data: HabitLogBody, service: LogServiceDep):
+    return await service.upsert(habit_id, data.log_date, data.value)
+
+
 @router.patch(
     "/{habit_id}/logs/{log_id}",
     response_model=HabitLogRead,

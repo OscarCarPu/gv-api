@@ -138,10 +138,13 @@ class HabitService:
             id=habit.id,
             name=habit.name,
             value_type=habit.value_type,
+            unit=habit.unit,
             frequency=habit.frequency,
             target_value=habit.target_value,
             comparison_type=habit.comparison_type,
             is_required=habit.is_required,
+            color=habit.color,
+            icon=habit.icon,
             current_streak=current_streak,
             longest_streak=longest_streak,
             average_value=avg_value,
@@ -506,3 +509,16 @@ class HabitLogService:
     async def delete(self, log_id: int) -> None:
         log = await self.get(log_id)
         await self.log_repo.delete(log)
+
+    async def upsert(self, habit_id: int, log_date: date, value: Decimal) -> HabitLog:
+        """Upsert a habit log: update if exists, create if not."""
+        habit = await self._get_habit(habit_id)
+        self._validate_log_date(habit, log_date)
+
+        existing = await self.log_repo.get_by_habit_and_date(habit_id, log_date)
+        if existing:
+            existing.value = value
+            return await self.log_repo.update(existing)
+
+        log = HabitLog(habit_id=habit_id, log_date=log_date, value=value)
+        return await self.log_repo.create(log)

@@ -16,7 +16,7 @@ class Settings(BaseSettings):
     postgres_host: str = "localhost"
     postgres_port: int = 54322
     api_key: str
-    cors_origins: str = "http://localhost:3000"
+    cors_origins: str = "http://localhost:3000,http://localhost:5173"
 
     @property
     def is_dev(self) -> bool:

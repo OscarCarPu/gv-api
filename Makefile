@@ -8,7 +8,7 @@ clean:
 	docker compose down -v
 
 rebuild:
-	docker compose up -d --build
+	docker compose up -d --build && sleep 3 && uv run alembic upgrade head
 
 logs:
 	docker compose logs -f

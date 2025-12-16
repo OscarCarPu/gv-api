@@ -177,10 +177,13 @@ class HabitTodayStats(BaseModel):
     id: int
     name: str
     value_type: ValueType
+    unit: str | None
     frequency: TargetFrequency
     target_value: Decimal | None
     comparison_type: ComparisonType | None
     is_required: bool
+    color: str
+    icon: str
 
     # Stats
     current_streak: int
