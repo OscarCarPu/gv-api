@@ -80,7 +80,7 @@ async def _clean_habits(test_engine):
 @pytest.fixture
 async def session(test_engine):
     """Provide an async session for tests."""
-    async with AsyncSession(test_engine) as session:
+    async with AsyncSession(test_engine, expire_on_commit=False) as session:
         yield session
 
 

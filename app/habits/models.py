@@ -25,7 +25,7 @@ class Habit(Base):
     description: Mapped[str | None] = mapped_column(default=None)
     value_type: Mapped[ValueType]
     unit: Mapped[str | None] = mapped_column(String(UNIT_MAX_LENGTH), default=None)
-    frequency: Mapped[TargetFrequency | None] = mapped_column(default=None)
+    frequency: Mapped[TargetFrequency] = mapped_column(default=TargetFrequency.daily)
     target_value: Mapped[Decimal | None] = mapped_column(Numeric(10, 2), default=None)
     target_min: Mapped[Decimal | None] = mapped_column(Numeric(10, 2), default=None)
     target_max: Mapped[Decimal | None] = mapped_column(Numeric(10, 2), default=None)

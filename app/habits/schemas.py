@@ -30,7 +30,7 @@ class HabitBase(BaseModel):
     description: str | None = None
     value_type: ValueType
     unit: str | None = None
-    frequency: TargetFrequency | None = None
+    frequency: TargetFrequency = TargetFrequency.daily
     target_value: Decimal | None = None
     target_min: Decimal | None = None
     target_max: Decimal | None = None
@@ -147,13 +147,6 @@ class HabitLogBody(HabitLogBase):
     pass
 
 
-class QuickLogBody(BaseModel):
-    """Request body for quick-log endpoint."""
-
-    value: Decimal | None = None
-    log_date: date | None = None
-
-
 class HabitLogUpdate(BaseModel):
     log_date: date | None = None
     value: Decimal | None = None
@@ -172,24 +165,42 @@ class HabitWithLogs(HabitRead):
     logs: list[HabitLogRead] = []
 
 
-class HabitStats(BaseModel):
-    total_logs: int
-    completion_rate: Decimal
+# --- New Stats Schemas ---
+
+
+class HabitTodayStats(BaseModel):
+    """Stats for a habit on today's dashboard."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    # Habit info
+    id: int
+    name: str
+    value_type: ValueType
+    frequency: TargetFrequency
+    target_value: Decimal | None
+    comparison_type: ComparisonType | None
+    is_required: bool
+
+    # Stats
     current_streak: int
     longest_streak: int
     average_value: Decimal | None
+    average_completion_rate: Decimal
+    current_period_value: Decimal | None
 
 
-class DailyProgress(BaseModel):
+class AggregatedPeriod(BaseModel):
+    """A single aggregated time period."""
+
+    period_start: date
+    period_end: date
+    total_value: Decimal
+
+
+class HabitHistory(BaseModel):
+    """History of aggregated log data for a habit."""
+
     habit_id: int
-    habit_name: str
-    is_due: bool
-    is_logged: bool
-    is_target_met: bool
-    logged_value: Decimal | None
-
-
-class HabitStreak(BaseModel):
-    current: int
-    longest: int
-    last_completed: date | None
+    time_period: str
+    periods: list[AggregatedPeriod]

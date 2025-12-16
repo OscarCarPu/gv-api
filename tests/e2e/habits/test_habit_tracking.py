@@ -1,12 +1,13 @@
 """End-to-end tests for the complete habit tracking flow."""
 
 from datetime import date, timedelta
+from decimal import Decimal
 
 from httpx import AsyncClient
 
 
 class TestHabitTrackingFlow:
-    """Complete flow: create habit -> log entries -> check stats -> check progress."""
+    """Complete flow: create habit -> log entries -> check stats -> check history."""
 
     async def test_complete_habit_flow(self, client: AsyncClient, _clean_habits):
         # 1. Create a boolean habit
@@ -19,37 +20,39 @@ class TestHabitTrackingFlow:
         habit_id = habit["id"]
         assert habit["name"] == "Exercise"
 
-        # 2. Log entries for past 3 days using quick-log
+        # 2. Log entries for past 3 days
         for i in range(3):
             log_date = (date.today() - timedelta(days=i)).isoformat()
             response = await client.post(
-                f"/api/v1/habits/{habit_id}/quick-log",
-                json={"log_date": log_date},
+                f"/api/v1/habits/{habit_id}/logs",
+                json={"log_date": log_date, "value": "1"},
             )
-            assert response.status_code == 200
+            assert response.status_code == 201
 
-        # 3. Check stats
-        response = await client.get(f"/api/v1/habits/{habit_id}/stats", params={"days": 7})
+        # 3. Check today's habits (includes stats and streak)
+        response = await client.get("/api/v1/habits/today")
         assert response.status_code == 200
-        stats = response.json()
-        assert stats["total_logs"] == 3
-        assert stats["current_streak"] == 3
+        today_habits = response.json()
+        assert len(today_habits) == 1
+        habit_stats = today_habits[0]
+        assert habit_stats["id"] == habit_id
+        assert habit_stats["current_streak"] == 3
+        assert Decimal(habit_stats["current_period_value"]) == Decimal("1")
 
-        # 4. Check streak
-        response = await client.get(f"/api/v1/habits/{habit_id}/streak")
+        # 4. Check habit history
+        response = await client.get(
+            f"/api/v1/habits/{habit_id}/history",
+            params={
+                "start_date": (date.today() - timedelta(days=2)).isoformat(),
+                "end_date": date.today().isoformat(),
+            },
+        )
         assert response.status_code == 200
-        streak = response.json()
-        assert streak["current"] == 3
-        assert streak["last_completed"] == date.today().isoformat()
-
-        # 5. Check daily progress
-        response = await client.get("/api/v1/habits/daily")
-        assert response.status_code == 200
-        progress = response.json()
-        assert len(progress) == 1
-        assert progress[0]["habit_id"] == habit_id
-        assert progress[0]["is_logged"] is True
-        assert progress[0]["is_target_met"] is True
+        history = response.json()
+        assert history["habit_id"] == habit_id
+        assert len(history["periods"]) == 3
+        # All periods should have value 1 (logged each day)
+        assert all(Decimal(p["total_value"]) == Decimal("1") for p in history["periods"])
 
     async def test_numeric_habit_flow(self, client: AsyncClient, _clean_habits):
         # 1. Create a numeric habit with target
@@ -78,18 +81,30 @@ class TestHabitTrackingFlow:
             )
             assert response.status_code == 201
 
-        # 3. Check stats - completion rate should reflect 2/3 met
-        response = await client.get(f"/api/v1/habits/{habit_id}/stats", params={"days": 7})
+        # 3. Check today's habits - includes current period value
+        response = await client.get("/api/v1/habits/today")
         assert response.status_code == 200
-        stats = response.json()
-        assert stats["total_logs"] == 3
+        today_habits = response.json()
+        assert len(today_habits) == 1
+        habit_stats = today_habits[0]
+        assert Decimal(habit_stats["current_period_value"]) == Decimal("10")
+        assert Decimal(habit_stats["target_value"]) == Decimal("8")
 
-        # 4. Check daily progress - today (value=10) should meet target
-        response = await client.get("/api/v1/habits/daily")
+        # 4. Check habit history
+        response = await client.get(
+            f"/api/v1/habits/{habit_id}/history",
+            params={
+                "start_date": (date.today() - timedelta(days=2)).isoformat(),
+                "end_date": date.today().isoformat(),
+            },
+        )
         assert response.status_code == 200
-        progress = response.json()
-        assert progress[0]["is_target_met"] is True
-        assert progress[0]["logged_value"] == "10.00"
+        history = response.json()
+        assert len(history["periods"]) == 3
+        # Check values: oldest first (8, 6, 10)
+        assert Decimal(history["periods"][0]["total_value"]) == Decimal("8")
+        assert Decimal(history["periods"][1]["total_value"]) == Decimal("6")
+        assert Decimal(history["periods"][2]["total_value"]) == Decimal("10")
 
     async def test_habit_update_delete_flow(self, client: AsyncClient, _clean_habits):
         # 1. Create habit

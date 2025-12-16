@@ -8,18 +8,16 @@ from app.core import SessionDep, verify_api_key
 
 from .repository import HabitLogRepository, HabitRepository
 from .schemas import (
-    DailyProgress,
     HabitCreate,
+    HabitHistory,
     HabitLogBody,
     HabitLogCreate,
     HabitLogRead,
     HabitLogUpdate,
     HabitRead,
-    HabitStats,
-    HabitStreak,
+    HabitTodayStats,
     HabitUpdate,
     PaginatedResponse,
-    QuickLogBody,
 )
 from .service import HabitLogService, HabitService
 
@@ -80,6 +78,18 @@ async def list_habits(
     return await service.get_all(page=page, page_size=page_size)
 
 
+@router.get(
+    "/today",
+    response_model=list[HabitTodayStats],
+    summary="Get today's habits",
+    description="Get all active habits for today with their statistics "
+    "including streaks, averages, and current period value.",
+    responses={status.HTTP_401_UNAUTHORIZED: {"description": "Invalid or missing API key"}},
+)
+async def get_today_habits(service: HabitServiceDep):
+    return await service.get_today_habits()
+
+
 @router.post(
     "",
     response_model=HabitRead,
@@ -93,20 +103,6 @@ async def list_habits(
 )
 async def create_habit(data: HabitCreate, service: HabitServiceDep):
     return await service.create(data)
-
-
-@router.get(
-    "/daily",
-    response_model=list[DailyProgress],
-    summary="Get daily progress",
-    description="Get progress for all due habits on a specific date. Defaults to today.",
-    responses={status.HTTP_401_UNAUTHORIZED: {"description": "Invalid or missing API key"}},
-)
-async def get_daily_progress(
-    service: HabitServiceDep,
-    target_date: Annotated[date, Query(default_factory=date.today)],
-):
-    return await service.get_daily_progress(target_date)
 
 
 @router.get(
@@ -153,36 +149,24 @@ async def delete_habit(habit_id: int, service: HabitServiceDep):
 
 
 @router.get(
-    "/{habit_id}/stats",
-    response_model=HabitStats,
-    summary="Get habit stats",
-    description="Get statistics for a habit over a specified period (default 30 days).",
+    "/{habit_id}/history",
+    response_model=HabitHistory,
+    summary="Get habit history",
+    description="Get aggregated log data for a habit over a date range. "
+    "Aggregates by time period (day, week, or month).",
     responses={
         status.HTTP_401_UNAUTHORIZED: {"description": "Invalid or missing API key"},
         status.HTTP_404_NOT_FOUND: {"description": "Habit not found"},
     },
 )
-async def get_habit_stats(
+async def get_habit_history(
     habit_id: int,
     service: HabitServiceDep,
-    days: Annotated[int, Query(ge=1, le=365)] = 30,
+    start_date: date | None = None,
+    end_date: date | None = None,
+    time_period: str | None = None,
 ):
-    return await service.get_stats(habit_id, days)
-
-
-@router.get(
-    "/{habit_id}/streak",
-    response_model=HabitStreak,
-    summary="Get habit streak",
-    description="Get streak information for a habit including \
-    current streak, longest streak, and last completed date.",
-    responses={
-        status.HTTP_401_UNAUTHORIZED: {"description": "Invalid or missing API key"},
-        status.HTTP_404_NOT_FOUND: {"description": "Habit not found"},
-    },
-)
-async def get_habit_streak(habit_id: int, service: HabitServiceDep):
-    return await service.get_streak(habit_id)
+    return await service.get_habit_history(habit_id, start_date, end_date, time_period)
 
 
 # --- Logs ---
@@ -227,39 +211,6 @@ async def list_logs(
 async def create_log(habit_id: int, data: HabitLogBody, service: LogServiceDep):
     log_data = HabitLogCreate(habit_id=habit_id, **data.model_dump())
     return await service.create(log_data)
-
-
-@router.patch(
-    "/{habit_id}/logs",
-    response_model=HabitLogRead,
-    summary="Upsert habit log",
-    description="Create or update a log for a habit on a specific date.",
-    responses={
-        status.HTTP_401_UNAUTHORIZED: {"description": "Invalid or missing API key"},
-        status.HTTP_404_NOT_FOUND: {"description": "Habit not found"},
-        status.HTTP_422_UNPROCESSABLE_CONTENT: {"description": "Validation error"},
-    },
-)
-async def upsert_log(habit_id: int, data: HabitLogBody, service: LogServiceDep):
-    log_data = HabitLogCreate(habit_id=habit_id, **data.model_dump())
-    log, _ = await service.upsert(log_data)
-    return log
-
-
-@router.post(
-    "/{habit_id}/quick-log",
-    response_model=HabitLogRead,
-    summary="Quick log habit",
-    description="Quick log with smart defaults. Uses today's date and the habit's target value.",
-    responses={
-        status.HTTP_401_UNAUTHORIZED: {"description": "Invalid or missing API key"},
-        status.HTTP_404_NOT_FOUND: {"description": "Habit not found"},
-    },
-)
-async def quick_log(habit_id: int, service: LogServiceDep, data: QuickLogBody | None = None):
-    if data is None:
-        data = QuickLogBody()
-    return await service.quick_log(habit_id, data.value, data.log_date)
 
 
 @router.patch(

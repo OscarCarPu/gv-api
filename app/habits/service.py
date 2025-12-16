@@ -8,14 +8,14 @@ from app.core import ConflictError, NotFoundError, ValidationError
 from .models import ComparisonType, Habit, HabitLog, TargetFrequency, ValueType
 from .repository import HabitLogRepository, HabitRepository
 from .schemas import (
-    DailyProgress,
+    AggregatedPeriod,
     HabitCreate,
+    HabitHistory,
     HabitLogCreate,
     HabitLogRead,
     HabitLogUpdate,
     HabitRead,
-    HabitStats,
-    HabitStreak,
+    HabitTodayStats,
     HabitUpdate,
     PaginatedResponse,
 )
@@ -83,15 +83,334 @@ class HabitService:
         habit = await self.get(habit_id)
         await self.habit_repo.delete(habit)
 
-    # --- Business Logic ---
+    # --- Today's Habits Stats ---
 
-    def check_target_met(self, habit: Habit, value: Decimal) -> bool:
-        """Check if a logged value meets the habit's target."""
+    async def get_today_habits(self) -> list[HabitTodayStats]:
+        """Get all active habits for today with their statistics."""
+        today = date.today()
+        habits = await self.habit_repo.get_active_habits(today)
+
+        results = []
+        for habit in habits:
+            stats = await self._calculate_habit_stats(habit, today)
+            results.append(stats)
+
+        return results
+
+    async def _calculate_habit_stats(self, habit: Habit, today: date) -> HabitTodayStats:
+        """Calculate all stats for a single habit."""
+        # Get period boundaries
+        period_start, period_end = self._get_period_boundaries(habit.frequency, today)
+
+        # Get current period value (sum of logs in current period)
+        current_period_value = await self.log_repo.get_period_sum(
+            habit.id, period_start, period_end
+        )
+
+        # Calculate stats for last 30 periods (excluding current period)
+        stats_start = self._get_periods_ago(habit.frequency, today, 30)
+        stats_end = period_start - timedelta(days=1)  # Exclude current period
+
+        if stats_end >= stats_start:
+            total_logs, avg_value, targets_met = await self.log_repo.get_stats_for_habit(
+                habit, stats_start, stats_end
+            )
+            expected_periods = self._count_periods_between(habit.frequency, stats_start, stats_end)
+            avg_completion = (
+                Decimal(targets_met) / Decimal(max(expected_periods, 1)) * 100
+            ).quantize(Decimal("0.1"))
+
+            # For boolean habits, average_value is completion rate
+            if habit.value_type == ValueType.boolean:
+                avg_value = avg_completion / 100 if total_logs > 0 else None
+        else:
+            avg_value = None
+            avg_completion = Decimal("0")
+
+        # Calculate streaks
+        dates_met = await self.log_repo.get_dates_with_target_met(habit)
+        all_log_dates = await self.log_repo.get_all_log_dates(habit.id)
+        current_streak, longest_streak = self._calculate_streaks(
+            habit, today, set(dates_met), set(all_log_dates)
+        )
+
+        return HabitTodayStats(
+            id=habit.id,
+            name=habit.name,
+            value_type=habit.value_type,
+            frequency=habit.frequency,
+            target_value=habit.target_value,
+            comparison_type=habit.comparison_type,
+            is_required=habit.is_required,
+            current_streak=current_streak,
+            longest_streak=longest_streak,
+            average_value=avg_value,
+            average_completion_rate=avg_completion,
+            current_period_value=current_period_value if current_period_value else None,
+        )
+
+    def _get_period_boundaries(
+        self, frequency: TargetFrequency, target_date: date
+    ) -> tuple[date, date]:
+        """Get the start and end dates for the period containing target_date."""
+        match frequency:
+            case TargetFrequency.daily:
+                return target_date, target_date
+            case TargetFrequency.weekly:
+                # Week starts on Monday (weekday 0)
+                start = target_date - timedelta(days=target_date.weekday())
+                end = start + timedelta(days=6)
+                return start, end
+            case TargetFrequency.monthly:
+                start = target_date.replace(day=1)
+                # Get last day of month
+                if target_date.month == 12:
+                    end = target_date.replace(day=31)
+                else:
+                    end = target_date.replace(month=target_date.month + 1, day=1) - timedelta(
+                        days=1
+                    )
+                return start, end
+            case _:
+                return target_date, target_date
+
+    def _get_periods_ago(self, frequency: TargetFrequency, target_date: date, periods: int) -> date:
+        """Get the start date of N periods ago."""
+        match frequency:
+            case TargetFrequency.daily:
+                return target_date - timedelta(days=periods)
+            case TargetFrequency.weekly:
+                return target_date - timedelta(weeks=periods)
+            case TargetFrequency.monthly:
+                # Approximate: go back periods months
+                year = target_date.year
+                month = target_date.month - periods
+                while month <= 0:
+                    month += 12
+                    year -= 1
+                return date(year, month, 1)
+            case _:
+                return target_date - timedelta(days=periods)
+
+    def _count_periods_between(
+        self, frequency: TargetFrequency, start_date: date, end_date: date
+    ) -> int:
+        """Count the number of periods between two dates."""
+        if end_date < start_date:
+            return 0
+
+        match frequency:
+            case TargetFrequency.daily:
+                return (end_date - start_date).days + 1
+            case TargetFrequency.weekly:
+                # Count weeks
+                start_week = start_date - timedelta(days=start_date.weekday())
+                end_week = end_date - timedelta(days=end_date.weekday())
+                return ((end_week - start_week).days // 7) + 1
+            case TargetFrequency.monthly:
+                # Count months
+                months = (end_date.year - start_date.year) * 12
+                months += end_date.month - start_date.month + 1
+                return months
+
+    def _calculate_streaks(
+        self,
+        habit: Habit,
+        today: date,
+        dates_met: set[date],
+        all_log_dates: set[date],
+    ) -> tuple[int, int]:
+        """Calculate current and longest streaks."""
+        if not dates_met:
+            return 0, 0
+
+        # For streak calculation, we need to check consecutive periods
+        current_streak = self._calculate_current_streak(habit, today, dates_met, all_log_dates)
+        longest_streak = self._calculate_longest_streak(habit, dates_met, all_log_dates)
+
+        return current_streak, longest_streak
+
+    def _calculate_current_streak(
+        self,
+        habit: Habit,
+        today: date,
+        dates_met: set[date],
+        all_log_dates: set[date],
+    ) -> int:
+        """Calculate current streak counting backwards from today."""
+        streak = 0
+        check_date = today
+
+        # Go back through periods
+        while True:
+            period_start, period_end = self._get_period_boundaries(habit.frequency, check_date)
+
+            # Check if any date in this period met the target
+            period_met = any(d in dates_met for d in self._dates_in_range(period_start, period_end))
+
+            if period_met:
+                streak += 1
+            else:
+                # Check if this is a required habit
+                if habit.is_required:
+                    # Missing period breaks the streak
+                    break
+                else:
+                    # For non-required, check if there was any log
+                    period_logged = any(
+                        d in all_log_dates for d in self._dates_in_range(period_start, period_end)
+                    )
+                    if period_logged:
+                        # Logged but didn't meet target - breaks streak
+                        break
+                    # No log at all - doesn't count, continue checking previous period
+
+            # Move to previous period
+            check_date = period_start - timedelta(days=1)
+
+            # Safety limit
+            if streak > 1000 or check_date.year < 2000:
+                break
+
+        return streak
+
+    def _calculate_longest_streak(
+        self,
+        habit: Habit,
+        dates_met: set[date],
+        all_log_dates: set[date],
+    ) -> int:
+        """Calculate the longest streak ever."""
+        if not dates_met:
+            return 0
+
+        # Sort dates and find longest consecutive period sequence
+        sorted_dates = sorted(dates_met)
+        min_date = sorted_dates[0]
+        max_date = sorted_dates[-1]
+
+        longest = 0
+        current = 0
+        check_date = min_date
+
+        while check_date <= max_date:
+            period_start, period_end = self._get_period_boundaries(habit.frequency, check_date)
+
+            period_met = any(d in dates_met for d in self._dates_in_range(period_start, period_end))
+
+            if period_met:
+                current += 1
+                longest = max(longest, current)
+            else:
+                if habit.is_required:
+                    current = 0
+                else:
+                    period_logged = any(
+                        d in all_log_dates for d in self._dates_in_range(period_start, period_end)
+                    )
+                    if period_logged:
+                        current = 0
+
+            # Move to next period
+            check_date = period_end + timedelta(days=1)
+
+        return longest
+
+    def _dates_in_range(self, start: date, end: date) -> list[date]:
+        """Generate all dates in a range."""
+        dates = []
+        current = start
+        while current <= end:
+            dates.append(current)
+            current += timedelta(days=1)
+        return dates
+
+    # --- Habit History ---
+
+    async def get_habit_history(
+        self,
+        habit_id: int,
+        start_date: date | None = None,
+        end_date: date | None = None,
+        time_period: str | None = None,
+    ) -> HabitHistory:
+        """Get aggregated log history for a habit."""
+        habit = await self.get(habit_id)
+
+        # Defaults
+        today = date.today()
+        if end_date is None:
+            end_date = today
+
+        # Use habit's frequency if time_period not specified
+        time_period = habit.frequency.value if time_period is None else time_period.lower()
+
+        # Map short time_period names to frequency enum values
+        period_to_freq = {
+            "day": "daily",
+            "week": "weekly",
+            "month": "monthly",
+            "daily": "daily",
+            "weekly": "weekly",
+            "monthly": "monthly",
+        }
+        freq_value = period_to_freq.get(time_period, time_period)
+
+        # Convert time_period string to frequency enum for calculations
+        freq = TargetFrequency(freq_value)
+
+        if start_date is None:
+            start_date = self._get_periods_ago(freq, end_date, 30)
+
+        # Generate all periods in range
+        periods = self._generate_periods(freq, start_date, end_date)
+
+        # Get aggregated values for each period
+        aggregated_periods = []
+        for period_start, period_end in periods:
+            total_value = await self.log_repo.get_period_sum(habit_id, period_start, period_end)
+            aggregated_periods.append(
+                AggregatedPeriod(
+                    period_start=period_start,
+                    period_end=period_end,
+                    total_value=total_value,
+                )
+            )
+
+        return HabitHistory(
+            habit_id=habit_id,
+            time_period=time_period,
+            periods=aggregated_periods,
+        )
+
+    def _generate_periods(
+        self, frequency: TargetFrequency, start_date: date, end_date: date
+    ) -> list[tuple[date, date]]:
+        """Generate all period boundaries between start and end dates."""
+        periods = []
+        current = start_date
+
+        while current <= end_date:
+            period_start, period_end = self._get_period_boundaries(frequency, current)
+
+            # Ensure we don't go beyond end_date
+            if period_start > end_date:
+                break
+
+            periods.append((period_start, min(period_end, end_date)))
+
+            # Move to next period
+            current = period_end + timedelta(days=1)
+
+        return periods
+
+    def _check_target_met(self, habit: Habit, value: Decimal) -> bool:
+        """Check if a value meets the habit's target."""
         if habit.value_type == ValueType.boolean:
             return value == Decimal("1")
 
         if habit.comparison_type is None or habit.target_value is None:
-            return True  # No target defined
+            return True
 
         match habit.comparison_type:
             case ComparisonType.equals:
@@ -108,177 +427,6 @@ class HabitService:
                 if habit.target_min is None or habit.target_max is None:
                     return True
                 return habit.target_min <= value <= habit.target_max
-
-    async def get_stats(self, habit_id: int, days: int = 30) -> HabitStats:
-        """Calculate statistics for a habit over a period."""
-        habit = await self.get(habit_id)
-        start_date = date.today() - timedelta(days=days)
-
-        # Database-level aggregation for stats
-        total_logs, average_value, targets_met = await self.log_repo.get_stats_aggregated(
-            habit, start_date
-        )
-
-        if total_logs == 0:
-            return HabitStats(
-                total_logs=0,
-                completion_rate=Decimal("0"),
-                current_streak=0,
-                longest_streak=0,
-                average_value=None,
-            )
-
-        # Calculate completion rate
-        expected_days = self._calculate_expected_days(habit, start_date, date.today())
-        completion_rate = Decimal(targets_met) / Decimal(max(expected_days, 1)) * 100
-
-        # Calculate streaks using pre-filtered dates from database
-        dates_met = await self.log_repo.get_dates_target_met(habit, start_date)
-        current_streak, longest_streak = self._calculate_streaks_from_dates(habit, set(dates_met))
-
-        # Only include average for numeric habits
-        if habit.value_type != ValueType.numeric:
-            average_value = None
-
-        return HabitStats(
-            total_logs=total_logs,
-            completion_rate=completion_rate.quantize(Decimal("0.1")),
-            current_streak=current_streak,
-            longest_streak=longest_streak,
-            average_value=average_value,
-        )
-
-    def _calculate_expected_days(self, habit: Habit, start: date, end: date) -> int:
-        """Calculate how many times a habit should have been completed."""
-        count = 0
-        current = start
-        while current <= end:
-            if self._is_due_on_date(habit, current):
-                count += 1
-            current += timedelta(days=1)
-        return count
-
-    def _calculate_streaks(self, habit: Habit, logs: list[HabitLog]) -> tuple[int, int]:
-        """Calculate current and longest streaks (frequency-aware)."""
-        if not logs:
-            return 0, 0
-
-        dates_met = {log.log_date for log in logs if self.check_target_met(habit, log.value)}
-        return self._calculate_streaks_from_dates(habit, dates_met)
-
-    def _calculate_streaks_from_dates(self, habit: Habit, dates_met: set[date]) -> tuple[int, int]:
-        """Calculate current and longest streaks from pre-filtered dates."""
-        if not dates_met:
-            return 0, 0
-
-        # Current streak: count consecutive due dates met, starting from today backwards
-        current_streak = 0
-        check_date = date.today()
-        min_date = min(dates_met)
-
-        # Find the most recent due date (today or before)
-        while check_date >= min_date and not self._is_due_on_date(habit, check_date):
-            check_date -= timedelta(days=1)
-
-        # Count consecutive due dates that were met
-        while check_date >= min_date:
-            if self._is_due_on_date(habit, check_date):
-                if check_date in dates_met:
-                    current_streak += 1
-                else:
-                    break  # Streak broken - due date was missed
-            check_date -= timedelta(days=1)
-
-        # Longest streak: find consecutive due dates that were all met
-        sorted_dates = sorted(dates_met)
-        longest_streak = 0
-        current_run = 0
-
-        # Build list of all due dates in the log range
-        due_dates: list[date] = []
-        current = sorted_dates[0]
-        while current <= sorted_dates[-1]:
-            if self._is_due_on_date(habit, current):
-                due_dates.append(current)
-            current += timedelta(days=1)
-
-        # Count consecutive due dates that were met
-        for due_date in due_dates:
-            if due_date in dates_met:
-                current_run += 1
-                longest_streak = max(longest_streak, current_run)
-            else:
-                current_run = 0
-
-        return current_streak, longest_streak
-
-    async def get_streak(self, habit_id: int) -> HabitStreak:
-        """Get streak information for a habit."""
-        habit = await self.get(habit_id)
-
-        # Get pre-filtered dates from database
-        dates_met_list = await self.log_repo.get_dates_target_met(habit)
-
-        if not dates_met_list:
-            return HabitStreak(current=0, longest=0, last_completed=None)
-
-        dates_met = set(dates_met_list)
-        current_streak, longest_streak = self._calculate_streaks_from_dates(habit, dates_met)
-        last_completed = max(dates_met_list)
-
-        return HabitStreak(
-            current=current_streak,
-            longest=longest_streak,
-            last_completed=last_completed,
-        )
-
-    async def get_daily_progress(self, target_date: date) -> list[DailyProgress]:
-        """Get progress for all habits on a specific day."""
-        habits = await self.habit_repo.get_all()
-
-        logs = await self.log_repo.get_logs_for_date(target_date)
-        logs_by_habit = {log.habit_id: log for log in logs}
-
-        progress = []
-        for habit in habits:
-            # Skip if habit frequency doesn't apply today
-            if habit.id is None or not self._is_due_on_date(habit, target_date):
-                continue
-
-            log = logs_by_habit.get(habit.id)
-            progress.append(
-                DailyProgress(
-                    habit_id=habit.id,
-                    habit_name=habit.name,
-                    is_due=True,
-                    is_logged=log is not None,
-                    is_target_met=self.check_target_met(habit, log.value) if log else False,
-                    logged_value=log.value if log else None,
-                )
-            )
-
-        return progress
-
-    def _is_due_on_date(self, habit: Habit, target_date: date) -> bool:
-        """Check if a habit is due on a specific date."""
-        if habit.start_date and target_date < habit.start_date:
-            return False
-        if habit.end_date and target_date > habit.end_date:
-            return False
-
-        match habit.frequency:
-            case TargetFrequency.daily:
-                return True
-            case TargetFrequency.weekly:
-                # Due on the same weekday as start_date, or Monday if no start
-                start = habit.start_date or habit.created_at.date()
-                return target_date.weekday() == start.weekday()
-            case TargetFrequency.monthly:
-                # Due on the same day of month as start_date
-                start = habit.start_date or habit.created_at.date()
-                return target_date.day == start.day
-            case _:
-                return True
 
 
 class HabitLogService:
@@ -345,48 +493,6 @@ class HabitLogService:
 
         log = HabitLog(**data.model_dump())
         return await self.log_repo.create(log)
-
-    async def upsert(self, data: HabitLogCreate) -> tuple[HabitLog, bool]:
-        """Create or update a log. Returns (log, was_created)."""
-        habit = await self._get_habit(data.habit_id)
-        self._validate_log_date(habit, data.log_date)
-
-        existing = await self.log_repo.get_by_habit_and_date(data.habit_id, data.log_date)
-
-        if existing:
-            existing.value = data.value
-            return await self.log_repo.update(existing), False
-
-        log = HabitLog(**data.model_dump())
-        return await self.log_repo.create(log), True
-
-    async def quick_log(
-        self,
-        habit_id: int,
-        value: Decimal | None = None,
-        log_date: date | None = None,
-    ) -> HabitLog:
-        """Quick log with smart defaults."""
-        habit = await self._get_habit(habit_id)
-        target_date = log_date or date.today()
-        self._validate_log_date(habit, target_date)
-
-        # Default value based on type
-        if value is None:
-            if habit.value_type == ValueType.boolean:
-                value = Decimal("1")
-            elif habit.target_value:
-                value = habit.target_value
-            else:
-                value = Decimal("1")  # Default for numeric habits without target
-
-        data = HabitLogCreate(
-            habit_id=habit_id,
-            log_date=target_date,
-            value=value,
-        )
-        log, _ = await self.upsert(data)
-        return log
 
     async def update(self, log_id: int, data: HabitLogUpdate) -> HabitLog:
         log = await self.get(log_id)
