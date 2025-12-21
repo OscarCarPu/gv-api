@@ -85,6 +85,7 @@ class HabitCreate(HabitBase):
 class HabitUpdate(BaseModel):
     name: str | None = None
     description: str | None = None
+    value_type: ValueType | None = None
     unit: str | None = None
     frequency: TargetFrequency | None = None
     target_value: Decimal | None = None
@@ -96,7 +97,6 @@ class HabitUpdate(BaseModel):
     is_required: bool | None = None
     color: str | None = None
     icon: str | None = None
-    active: bool | None = None
 
     @field_validator("name")
     @classmethod
@@ -191,6 +191,7 @@ class HabitTodayStats(BaseModel):
     average_value: Decimal | None
     average_completion_rate: Decimal
     current_period_value: Decimal | None
+    date_value: Decimal | None  # Log value for the specific target_date only
 
 
 class AggregatedPeriod(BaseModel):

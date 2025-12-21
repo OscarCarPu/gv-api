@@ -36,3 +36,6 @@ execute-migrations:
 
 db-reset:
 	docker compose down -v && docker compose up -d db && sleep 3 && uv run alembic upgrade head
+
+seed:
+	docker compose down -v && docker compose up -d db && sleep 5 && uv run alembic upgrade head && docker compose up -d

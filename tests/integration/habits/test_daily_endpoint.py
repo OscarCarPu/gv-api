@@ -1,4 +1,4 @@
-"""Tests for the /habits/today endpoint."""
+"""Tests for the /habits/daily endpoint."""
 
 from datetime import date, timedelta
 from decimal import Decimal
@@ -8,18 +8,18 @@ from app.habits.schemas import HabitCreate, HabitLogCreate
 from app.habits.service import HabitLogService, HabitService
 
 
-class TestTodayEndpoint:
-    """Tests for get_today_habits functionality."""
+class TestDailyEndpoint:
+    """Tests for get_daily_habits functionality."""
 
     async def test_empty_response_no_habits(self, habit_service: HabitService, _clean_habits):
         """Should return empty list when no habits exist."""
-        result = await habit_service.get_today_habits()
+        result = await habit_service.get_daily_habits()
         assert result == []
 
     async def test_returns_active_habit(self, habit_service: HabitService, _clean_habits):
         """Should return habits that are active today."""
         await habit_service.create(HabitCreate(name="Active Habit", value_type=ValueType.boolean))
-        result = await habit_service.get_today_habits()
+        result = await habit_service.get_daily_habits()
         assert len(result) == 1
         assert result[0].name == "Active Habit"
 
@@ -33,7 +33,7 @@ class TestTodayEndpoint:
                 start_date=tomorrow,
             )
         )
-        result = await habit_service.get_today_habits()
+        result = await habit_service.get_daily_habits()
         assert len(result) == 0
 
     async def test_excludes_ended_habit(self, habit_service: HabitService, _clean_habits):
@@ -46,7 +46,7 @@ class TestTodayEndpoint:
                 end_date=yesterday,
             )
         )
-        result = await habit_service.get_today_habits()
+        result = await habit_service.get_daily_habits()
         assert len(result) == 0
 
     async def test_current_period_value(
@@ -58,7 +58,7 @@ class TestTodayEndpoint:
         await log_service.create(
             HabitLogCreate(habit_id=habit.id, log_date=today, value=Decimal("5"))
         )
-        result = await habit_service.get_today_habits()
+        result = await habit_service.get_daily_habits()
         assert len(result) == 1
         assert result[0].current_period_value == Decimal("5")
 
@@ -79,7 +79,7 @@ class TestTodayEndpoint:
                     value=Decimal("1"),
                 )
             )
-        result = await habit_service.get_today_habits()
+        result = await habit_service.get_daily_habits()
         assert result[0].current_streak == 3
 
     async def test_streak_breaks_on_missing_day_required(
@@ -99,7 +99,7 @@ class TestTodayEndpoint:
                 habit_id=habit.id, log_date=today - timedelta(days=2), value=Decimal("1")
             )
         )
-        result = await habit_service.get_today_habits()
+        result = await habit_service.get_daily_habits()
         assert result[0].current_streak == 1
 
     async def test_streak_continues_on_missing_day_non_required(
@@ -119,7 +119,7 @@ class TestTodayEndpoint:
                 habit_id=habit.id, log_date=today - timedelta(days=2), value=Decimal("1")
             )
         )
-        result = await habit_service.get_today_habits()
+        result = await habit_service.get_daily_habits()
         # Non-required habits ignore missing days
         assert result[0].current_streak == 2
 
@@ -135,6 +135,6 @@ class TestTodayEndpoint:
                 target_value=Decimal("10"),
             )
         )
-        result = await habit_service.get_today_habits()
+        result = await habit_service.get_daily_habits()
         assert result[0].target_value == Decimal("10")
         assert result[0].comparison_type == ComparisonType.greater_equal_than

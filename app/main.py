@@ -5,6 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from secure import Secure
 from starlette.requests import Request
 
+from app.agentai import router as agentai_router
 from app.core import dispose_engine, get_settings, init_engine, setup_logging
 from app.habits import router as habits_router
 from app.health import router as health_router
@@ -34,10 +35,12 @@ settings = get_settings()
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origins_list,
-    allow_methods=["GET", "POST", "PATCH", "PUT", "DELETE"],
+    allow_credentials=True,
+    allow_methods=["GET", "POST", "PATCH", "PUT", "DELETE", "OPTIONS"],
     allow_headers=["Content-Type", "X-API-Key", "Authorization"],
 )
 
 
 app.include_router(health_router, prefix="/api/v1")
 app.include_router(habits_router, prefix="/api/v1")
+app.include_router(agentai_router, prefix="/api/v1")

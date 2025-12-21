@@ -50,6 +50,10 @@ class HabitRepository(BaseRepository[Habit]):
         ]
         return await self.get_all(*filters)
 
+    async def search_by_name(self, name: str) -> Habit | None:
+        """Search for a habit by name."""
+        return await self.get_by(name=func.lower(name).like(f"%%{name}%%"))
+
 
 class HabitLogRepository(BaseRepository[HabitLog]):
     """Repository for HabitLog data access."""
@@ -95,6 +99,20 @@ class HabitLogRepository(BaseRepository[HabitLog]):
     ) -> HabitLog | None:
         """Get a specific log by habit and date."""
         return await self.get_by(habit_id=habit_id, log_date=log_date)
+
+    async def get_value_for_date(
+        self,
+        habit_id: int,
+        target_date: date,
+    ) -> Decimal | None:
+        """Get the log value for a specific date, or None if no log exists."""
+        stmt = (
+            select(HabitLog.value)
+            .where(HabitLog.habit_id == habit_id)
+            .where(HabitLog.log_date == target_date)
+        )
+        result = await self.session.execute(stmt)
+        return result.scalar_one_or_none()
 
     async def get_logs_in_range(
         self,
@@ -223,5 +241,3 @@ class HabitLogRepository(BaseRepository[HabitLog]):
                     HabitLog.value >= habit.target_min,
                     HabitLog.value <= habit.target_max,
                 )
-            case _:
-                return true()

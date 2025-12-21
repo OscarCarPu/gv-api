@@ -30,7 +30,7 @@ class TestHabitTrackingFlow:
             assert response.status_code == 201
 
         # 3. Check today's habits (includes stats and streak)
-        response = await client.get("/api/v1/habits/today")
+        response = await client.get("/api/v1/habits/daily")
         assert response.status_code == 200
         today_habits = response.json()
         assert len(today_habits) == 1
@@ -82,7 +82,7 @@ class TestHabitTrackingFlow:
             assert response.status_code == 201
 
         # 3. Check today's habits - includes current period value
-        response = await client.get("/api/v1/habits/today")
+        response = await client.get("/api/v1/habits/daily")
         assert response.status_code == 200
         today_habits = response.json()
         assert len(today_habits) == 1

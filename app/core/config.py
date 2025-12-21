@@ -17,6 +17,8 @@ class Settings(BaseSettings):
     postgres_port: int = 54322
     api_key: str
     cors_origins: str = "http://localhost:3000,http://localhost:5173"
+    agent_model: str = "ollama:qwen2.5:7b"
+    ollama_base_url: str = "http://127.0.0.1:11434/v1"
 
     @property
     def is_dev(self) -> bool:

@@ -83,16 +83,17 @@ class HabitService:
         habit = await self.get(habit_id)
         await self.habit_repo.delete(habit)
 
-    # --- Today's Habits Stats ---
+    # --- Daily Habits Stats ---
 
-    async def get_today_habits(self) -> list[HabitTodayStats]:
-        """Get all active habits for today with their statistics."""
-        today = date.today()
-        habits = await self.habit_repo.get_active_habits(today)
+    async def get_daily_habits(self, target_date: date | None = None) -> list[HabitTodayStats]:
+        """Get all active habits for a date with their statistics."""
+        if target_date is None:
+            target_date = date.today()
+        habits = await self.habit_repo.get_active_habits(target_date)
 
         results = []
         for habit in habits:
-            stats = await self._calculate_habit_stats(habit, today)
+            stats = await self._calculate_habit_stats(habit, target_date)
             results.append(stats)
 
         return results
@@ -106,6 +107,9 @@ class HabitService:
         current_period_value = await self.log_repo.get_period_sum(
             habit.id, period_start, period_end
         )
+
+        # Get value for the specific target date (single day's log)
+        date_value = await self.log_repo.get_value_for_date(habit.id, today)
 
         # Calculate stats for last 30 periods (excluding current period)
         stats_start = self._get_periods_ago(habit.frequency, today, 30)
@@ -150,6 +154,7 @@ class HabitService:
             average_value=avg_value,
             average_completion_rate=avg_completion,
             current_period_value=current_period_value if current_period_value else None,
+            date_value=date_value,
         )
 
     def _get_period_boundaries(

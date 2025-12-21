@@ -25,14 +25,10 @@ services:
     depends_on:
       db:
         condition: service_healthy
+    env_file: .env
     environment:
-      STAGE: ${STAGE}
-      POSTGRES_USER: ${POSTGRES_USER}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
-      POSTGRES_DB: ${POSTGRES_DB}
       POSTGRES_PORT: 5432
       POSTGRES_HOST: db
-      API_KEY: ${API_KEY}
     healthcheck:
       test: ["CMD", "wget", "-q", "--spider", "http://localhost:8000/health"]
       interval: 10s
@@ -44,6 +40,8 @@ services:
       - action: sync+restart
         path: ./app
         target: /app/app
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
 
 volumes:
   db-data:

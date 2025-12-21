@@ -4,10 +4,9 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, Query, status
 
 from app.common.constants import DEFAULT_PAGE, DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE
-from app.core import SessionDep, verify_api_key
-
-from .repository import HabitLogRepository, HabitRepository
-from .schemas import (
+from app.core import verify_api_key
+from app.habits.dependencies import HabitLogServiceDep, HabitServiceDep
+from app.habits.schemas import (
     HabitCreate,
     HabitHistory,
     HabitLogBody,
@@ -19,48 +18,8 @@ from .schemas import (
     HabitUpdate,
     PaginatedResponse,
 )
-from .service import HabitLogService, HabitService
 
 router = APIRouter(prefix="/habits", tags=["habits"], dependencies=[Depends(verify_api_key)])
-
-
-# --- Repository Dependencies ---
-
-
-def get_habit_repository(session: SessionDep) -> HabitRepository:
-    return HabitRepository(session)
-
-
-def get_log_repository(session: SessionDep) -> HabitLogRepository:
-    return HabitLogRepository(session)
-
-
-HabitRepoDep = Annotated[HabitRepository, Depends(get_habit_repository)]
-LogRepoDep = Annotated[HabitLogRepository, Depends(get_log_repository)]
-
-
-# --- Service Dependencies ---
-
-
-def get_habit_service(
-    habit_repo: HabitRepoDep,
-    log_repo: LogRepoDep,
-) -> HabitService:
-    return HabitService(habit_repo, log_repo)
-
-
-def get_log_service(
-    habit_repo: HabitRepoDep,
-    log_repo: LogRepoDep,
-) -> HabitLogService:
-    return HabitLogService(habit_repo, log_repo)
-
-
-HabitServiceDep = Annotated[HabitService, Depends(get_habit_service)]
-LogServiceDep = Annotated[HabitLogService, Depends(get_log_service)]
-
-
-# --- Habits ---
 
 
 @router.get(
@@ -79,15 +38,15 @@ async def list_habits(
 
 
 @router.get(
-    "/today",
+    "/daily",
     response_model=list[HabitTodayStats],
-    summary="Get today's habits",
-    description="Get all active habits for today with their statistics "
-    "including streaks, averages, and current period value.",
+    summary="Get habits for a date",
+    description="Get all active habits for a specific date (defaults to today) "
+    "with their statistics including streaks, averages, and current period value.",
     responses={status.HTTP_401_UNAUTHORIZED: {"description": "Invalid or missing API key"}},
 )
-async def get_today_habits(service: HabitServiceDep):
-    return await service.get_today_habits()
+async def get_daily_habits(service: HabitServiceDep, target_date: date | None = None):
+    return await service.get_daily_habits(target_date)
 
 
 @router.post(
@@ -184,7 +143,7 @@ async def get_habit_history(
 )
 async def list_logs(
     habit_id: int,
-    service: LogServiceDep,
+    service: HabitLogServiceDep,
     start_date: date | None = None,
     end_date: date | None = None,
     page: Annotated[int, Query(ge=1)] = DEFAULT_PAGE,
@@ -208,7 +167,7 @@ async def list_logs(
         status.HTTP_422_UNPROCESSABLE_CONTENT: {"description": "Validation error"},
     },
 )
-async def create_log(habit_id: int, data: HabitLogBody, service: LogServiceDep):
+async def create_log(habit_id: int, data: HabitLogBody, service: HabitLogServiceDep):
     log_data = HabitLogCreate(habit_id=habit_id, **data.model_dump())
     return await service.create(log_data)
 
@@ -225,7 +184,7 @@ async def create_log(habit_id: int, data: HabitLogBody, service: LogServiceDep):
         status.HTTP_422_UNPROCESSABLE_CONTENT: {"description": "Validation error"},
     },
 )
-async def upsert_log(habit_id: int, data: HabitLogBody, service: LogServiceDep):
+async def upsert_log(habit_id: int, data: HabitLogBody, service: HabitLogServiceDep):
     return await service.upsert(habit_id, data.log_date, data.value)
 
 
@@ -240,7 +199,7 @@ async def upsert_log(habit_id: int, data: HabitLogBody, service: LogServiceDep):
         status.HTTP_422_UNPROCESSABLE_CONTENT: {"description": "Validation error"},
     },
 )
-async def update_log(log_id: int, data: HabitLogUpdate, service: LogServiceDep):
+async def update_log(log_id: int, data: HabitLogUpdate, service: HabitLogServiceDep):
     return await service.update(log_id, data)
 
 
@@ -254,5 +213,5 @@ async def update_log(log_id: int, data: HabitLogUpdate, service: LogServiceDep):
         status.HTTP_404_NOT_FOUND: {"description": "Log not found"},
     },
 )
-async def delete_log(log_id: int, service: LogServiceDep):
+async def delete_log(log_id: int, service: HabitLogServiceDep):
     await service.delete(log_id)

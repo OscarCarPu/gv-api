@@ -27,6 +27,10 @@ class Base(DeclarativeBase):
         name = re.sub(r"(?<!^)(?=[A-Z])", "_", cls.__name__).lower()
         return name
 
+    def to_dict(self) -> dict:
+        """Convert model to dictionary with column values."""
+        return {c.name: getattr(self, c.name) for c in self.__table__.columns}
+
 
 engine: AsyncEngine | None = None
 

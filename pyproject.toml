@@ -8,7 +8,9 @@ dependencies = [
     "asyncpg==0.31.0",
     "sqlalchemy[asyncio]==2.0.44",
     "pydantic_settings==2.12.0",
-    "secure==1.0.1"
+    "secure==1.0.1",
+    "pydantic-ai-slim==1.34.0",
+    "openai==2.13.0",
 ]
 
 [tool.ruff]
