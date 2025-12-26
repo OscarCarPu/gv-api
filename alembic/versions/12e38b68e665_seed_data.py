@@ -35,7 +35,7 @@ HABITS = [
         "comparison_type": "greater_equal_than",
         "is_required": True,
         "color": "#FF5733",
-        "icon": "dumbbell",
+        "icon": "fas fa-dumbbell",
     },
     {
         "name": "Read",
@@ -49,7 +49,7 @@ HABITS = [
         "comparison_type": None,
         "is_required": False,
         "color": "#3498DB",
-        "icon": "book",
+        "icon": "fas fa-book",
     },
     {
         "name": "Water Intake",
@@ -63,7 +63,7 @@ HABITS = [
         "comparison_type": "greater_equal_than",
         "is_required": True,
         "color": "#1ABC9C",
-        "icon": "droplet",
+        "icon": "fas fa-droplet",
     },
     {
         "name": "Meditation",
@@ -77,7 +77,7 @@ HABITS = [
         "comparison_type": "greater_equal_than",
         "is_required": False,
         "color": "#9B59B6",
-        "icon": "brain",
+        "icon": "fas fa-brain",
     },
     {
         "name": "Weight",
@@ -91,7 +91,7 @@ HABITS = [
         "comparison_type": "in_range",
         "is_required": False,
         "color": "#E67E22",
-        "icon": "scale",
+        "icon": "fas fa-weight-scale",
     },
 ]
 

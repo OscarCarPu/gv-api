@@ -13,3 +13,8 @@ class Icons(str, Enum):
     bell = "fas fa-bell"
     info = "fas fa-info"
     question = "fas fa-question"
+    dumbbell = "fas fa-dumbbell"
+    book = "fas fa-book"
+    droplet = "fas fa-droplet"
+    brain = "fas fa-brain"
+    scale = "fas fa-weight-scale"

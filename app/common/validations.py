@@ -60,7 +60,7 @@ def sanitize_color(value: str) -> str:
 def validate_icon(value: str) -> str:
     """Strip and validate icon against allowed values."""
     value = value.strip()
-    valid_icons = set(Icons.__members__.values())
+    valid_icons = {icon.value for icon in Icons}
     if value not in valid_icons:
         raise ValueError("Invalid icon")
     return value
