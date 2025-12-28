@@ -1,3 +1,8 @@
+import os
+
+# Override Docker-specific env vars for local test execution
+os.environ["OLLAMA_BASE_URL"] = "http://127.0.0.1:11434/v1"
+
 import asyncpg
 import pytest
 from httpx import ASGITransport, AsyncClient

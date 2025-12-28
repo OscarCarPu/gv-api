@@ -21,13 +21,13 @@ down_revision: str | Sequence[str] | None = "001_frequency"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
-# Seed habits configuration
+# Seed habits configuration (Spanish)
 HABITS = [
     {
-        "name": "Exercise",
-        "description": "Weekly physical activity",
+        "name": "Ejercicio",
+        "description": "Actividad física semanal (correr, caminar, nadar, etc.)",
         "value_type": "numeric",
-        "unit": "minutes",
+        "unit": "minutos",
         "frequency": "weekly",
         "target_value": 150,
         "target_min": None,
@@ -38,8 +38,8 @@ HABITS = [
         "icon": "fas fa-dumbbell",
     },
     {
-        "name": "Read",
-        "description": "Daily reading habit",
+        "name": "Lectura",
+        "description": "Hábito de lectura diaria",
         "value_type": "boolean",
         "unit": None,
         "frequency": "daily",
@@ -52,8 +52,8 @@ HABITS = [
         "icon": "fas fa-book",
     },
     {
-        "name": "Water Intake",
-        "description": "Stay hydrated throughout the day",
+        "name": "Agua",
+        "description": "Mantenerse hidratado durante el día",
         "value_type": "numeric",
         "unit": "ml",
         "frequency": "daily",
@@ -66,10 +66,10 @@ HABITS = [
         "icon": "fas fa-droplet",
     },
     {
-        "name": "Meditation",
-        "description": "Weekly meditation practice",
+        "name": "Meditación",
+        "description": "Práctica de meditación semanal",
         "value_type": "numeric",
-        "unit": "minutes",
+        "unit": "minutos",
         "frequency": "weekly",
         "target_value": 60,
         "target_min": None,
@@ -80,8 +80,8 @@ HABITS = [
         "icon": "fas fa-brain",
     },
     {
-        "name": "Weight",
-        "description": "Track weekly weight",
+        "name": "Peso",
+        "description": "Seguimiento del peso semanal",
         "value_type": "numeric",
         "unit": "kg",
         "frequency": "weekly",
@@ -100,14 +100,14 @@ def generate_value(habit_name: str, value_type: str) -> Decimal:
     """Generate realistic values based on habit type."""
     if value_type == "boolean":
         return Decimal("1") if random.random() < 0.8 else Decimal("0")
-    elif habit_name == "Exercise":
+    elif habit_name == "Ejercicio":
         # Weekly target 150 min, log 30-60 min per session
         return Decimal(str(random.randint(30, 60)))
-    elif habit_name == "Water Intake":
+    elif habit_name == "Agua":
         return Decimal(str(random.randint(1000, 3000)))
-    elif habit_name == "Meditation":
+    elif habit_name == "Meditación":
         return Decimal(str(random.randint(10, 30)))
-    elif habit_name == "Weight":
+    elif habit_name == "Peso":
         return Decimal(str(round(random.uniform(68, 77), 1)))
     return Decimal(str(random.randint(1, 100)))
 

@@ -19,6 +19,12 @@ class HabitRepository(BaseRepository[Habit]):
         """Find a habit by its name."""
         return await self.get_by(name=name)
 
+    async def get_by_name_icase(self, name: str) -> Habit | None:
+        """Find a habit by its name (case-insensitive exact match)."""
+        stmt = select(Habit).where(func.lower(Habit.name) == name.lower())
+        result = await self.session.execute(stmt)
+        return result.scalars().first()
+
     async def get_all(
         self,
         *filters: ColumnElement[bool],

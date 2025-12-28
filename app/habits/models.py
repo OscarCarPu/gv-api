@@ -68,6 +68,34 @@ class Habit(Base):
             self.target_max,
         )
 
+    def __str__(self) -> str:
+        """Return LLM-friendly string representation of the habit."""
+        parts = [f"ID {self.id}: {self.name} ({self.value_type.value}"]
+
+        if self.value_type == ValueType.numeric and self.unit:
+            parts.append(f", unit: {self.unit}")
+
+        if self.comparison_type:
+            if self.comparison_type == ComparisonType.in_range:
+                target_str = f", target: {self.target_min}-{self.target_max}"
+            else:
+                symbols = {
+                    ComparisonType.equals: "=",
+                    ComparisonType.greater_than: ">",
+                    ComparisonType.less_than: "<",
+                    ComparisonType.greater_equal_than: ">=",
+                    ComparisonType.less_equal_than: "<=",
+                }
+                target_str = (
+                    f", target: {symbols.get(self.comparison_type, '')} {self.target_value}"
+                )
+            if self.unit:
+                target_str += f" {self.unit}"
+            parts.append(target_str)
+
+        parts.append(f", {self.frequency.value})")
+        return "".join(parts)
+
 
 @event.listens_for(Habit, "before_insert")
 @event.listens_for(Habit, "before_update")

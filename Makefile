@@ -7,23 +7,8 @@ down:
 clean:
 	docker compose down -v
 
-rebuild:
-	docker compose up -d --build && sleep 3 && uv run alembic upgrade head
-
 logs:
 	docker compose logs -f
-
-prod-up:
-	STAGE=prod docker compose up -d
-
-prod-down:
-	STAGE=prod docker compose down
-
-prod-clean:
-	STAGE=prod docker compose down -v
-
-prod-rebuild:
-	STAGE=prod docker compose up -d --build
 
 test:
 	uv run pytest
@@ -35,7 +20,16 @@ execute-migrations:
 	uv run alembic upgrade head
 
 db-reset:
-	docker compose down -v && docker compose up -d db && sleep 3 && uv run alembic upgrade head
-
-seed:
 	docker compose down -v && docker compose up -d db && sleep 5 && uv run alembic upgrade head && docker compose up -d
+
+watch:
+	docker compose down -v && docker compose up -d db && sleep 5 && uv run alembic upgrade head && docker compose watch
+
+ollama-start:
+	OLLAMA_HOST=0.0.0.0 ollama serve & sleep 2 && ollama run qwen3-fast
+
+ollama-stop:
+	pkill ollama || true
+
+ollama-create-model:
+	ollama pull qwen3:0.6b && ollama create qwen3-fast -f ollama/qwen3-fast.modelfile
