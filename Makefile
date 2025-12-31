@@ -22,9 +22,6 @@ execute-migrations:
 db-reset:
 	docker compose down -v && docker compose up -d db --wait && uv run alembic upgrade head && docker compose up -d --wait
 
-watch:
-	docker compose down -v && docker compose up -d db --wait && uv run alembic upgrade head && docker compose watch
-
 ollama-start:
 	OLLAMA_HOST=0.0.0.0 ollama serve & sleep 2 && ollama run qwen3-fast
 

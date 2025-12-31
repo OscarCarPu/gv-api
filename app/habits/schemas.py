@@ -191,7 +191,7 @@ class HabitTodayStats(BaseModel):
     average_value: Decimal | None
     average_completion_rate: Decimal
     current_period_value: Decimal | None
-    date_value: Decimal | None  # Log value for the specific target_date only
+    date_value: Decimal | None
 
 
 class AggregatedPeriod(BaseModel):

@@ -177,7 +177,11 @@ class HabitLogRepository(BaseRepository[HabitLog]):
         row = result.one()
 
         total_logs = row.total_logs or 0
-        average_value = Decimal(str(row.average_value)) if row.average_value is not None else None
+        average_value = (
+            Decimal(str(row.average_value)).quantize(Decimal("0.01"))
+            if row.average_value is not None
+            else None
+        )
         targets_met = row.targets_met or 0
 
         return total_logs, average_value, targets_met

@@ -35,11 +35,8 @@ services:
       timeout: 5s
       retries: 3
       start_period: 10s
-    develop:
-     watch:
-      - action: sync+restart
-        path: ./app
-        target: /app/app
+    volumes:
+      - ./app:/app/app
     extra_hosts:
       - "host.docker.internal:host-gateway"
 
