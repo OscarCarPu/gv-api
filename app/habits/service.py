@@ -254,6 +254,9 @@ class HabitService:
         streak = 0
         check_date = today
 
+        # For non-required habits, find the earliest log date to limit how far back we count
+        min_log_date = min(all_log_dates) if all_log_dates else today
+
         # Go back through periods
         while True:
             period_start, period_end = self._get_period_boundaries(habit.frequency, check_date)
@@ -276,7 +279,11 @@ class HabitService:
                     if period_logged:
                         # Logged but didn't meet target - breaks streak
                         break
-                    # No log at all - doesn't count, continue checking previous period
+                    # No log at all - still counts towards streak for non-required
+                    # But stop if we've gone before the first log
+                    if period_end < min_log_date:
+                        break
+                    streak += 1
 
             # Move to previous period
             check_date = period_start - timedelta(days=1)
@@ -323,6 +330,10 @@ class HabitService:
                     )
                     if period_logged:
                         current = 0
+                    else:
+                        # No log - still counts towards streak for non-required
+                        current += 1
+                        longest = max(longest, current)
 
             # Move to next period
             check_date = period_end + timedelta(days=1)

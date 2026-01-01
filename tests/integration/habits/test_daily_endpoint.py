@@ -105,7 +105,7 @@ class TestDailyEndpoint:
     async def test_streak_continues_on_missing_day_non_required(
         self, habit_service: HabitService, log_service: HabitLogService, _clean_habits
     ):
-        """For non-required habits, missing day doesn't break streak."""
+        """For non-required habits, missing day counts towards streak."""
         habit = await habit_service.create(
             HabitCreate(name="Optional", value_type=ValueType.boolean, is_required=False)
         )
@@ -120,8 +120,8 @@ class TestDailyEndpoint:
             )
         )
         result = await habit_service.get_daily_habits()
-        # Non-required habits ignore missing days
-        assert result[0].current_streak == 2
+        # Non-required habits: missing days count towards streak
+        assert result[0].current_streak == 3
 
     async def test_numeric_habit_stats(
         self, habit_service: HabitService, log_service: HabitLogService, _clean_habits
@@ -138,3 +138,72 @@ class TestDailyEndpoint:
         result = await habit_service.get_daily_habits()
         assert result[0].target_value == Decimal("10")
         assert result[0].comparison_type == ComparisonType.greater_equal_than
+
+    async def test_in_range_streak_breaks_when_value_over_max(
+        self, habit_service: HabitService, log_service: HabitLogService, _clean_habits
+    ):
+        """For in_range habits, value over max should break streak."""
+        habit = await habit_service.create(
+            HabitCreate(
+                name="Weight",
+                value_type=ValueType.numeric,
+                comparison_type=ComparisonType.in_range,
+                target_min=Decimal("70"),
+                target_max=Decimal("75"),
+                is_required=False,
+            )
+        )
+        today = date.today()
+        # Day 1 (2 days ago): 74.0 - in range, should count
+        await log_service.create(
+            HabitLogCreate(
+                habit_id=habit.id, log_date=today - timedelta(days=2), value=Decimal("74.0")
+            )
+        )
+        # Day 2 (yesterday): 75.7 - OVER max, should break streak
+        await log_service.create(
+            HabitLogCreate(
+                habit_id=habit.id, log_date=today - timedelta(days=1), value=Decimal("75.7")
+            )
+        )
+        # Day 3 (today): 73.0 - in range, should start new streak
+        await log_service.create(
+            HabitLogCreate(habit_id=habit.id, log_date=today, value=Decimal("73.0"))
+        )
+        result = await habit_service.get_daily_habits()
+        # Current streak should be 1 (only today), not 3
+        assert result[0].current_streak == 1
+        # Longest streak should also be 1
+        assert result[0].longest_streak == 1
+
+    async def test_in_range_streak_continues_when_no_log(
+        self, habit_service: HabitService, log_service: HabitLogService, _clean_habits
+    ):
+        """For non-required in_range habits, missing day counts towards streak."""
+        habit = await habit_service.create(
+            HabitCreate(
+                name="Weight",
+                value_type=ValueType.numeric,
+                comparison_type=ComparisonType.in_range,
+                target_min=Decimal("70"),
+                target_max=Decimal("75"),
+                is_required=False,
+            )
+        )
+        today = date.today()
+        # Day 1 (2 days ago): 74.0 - in range
+        await log_service.create(
+            HabitLogCreate(
+                habit_id=habit.id, log_date=today - timedelta(days=2), value=Decimal("74.0")
+            )
+        )
+        # Day 2 (yesterday): NO LOG - should count towards streak for non-required
+        # Day 3 (today): 73.0 - in range
+        await log_service.create(
+            HabitLogCreate(habit_id=habit.id, log_date=today, value=Decimal("73.0"))
+        )
+        result = await habit_service.get_daily_habits()
+        # Current streak should be 3 (missing day counts)
+        assert result[0].current_streak == 3
+        # Longest streak should also be 3
+        assert result[0].longest_streak == 3

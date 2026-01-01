@@ -289,7 +289,11 @@ class HabitLogRepository(BaseRepository[HabitLog]):
 
     def _build_target_met_expression(self, habit: Habit):
         """Build SQL expression for checking if target is met."""
-        if habit.comparison_type is None or habit.target_value is None:
+        if habit.comparison_type is None:
+            return true()
+
+        # For non-range comparisons, we need target_value
+        if habit.comparison_type != ComparisonType.in_range and habit.target_value is None:
             return true()
 
         match habit.comparison_type:
