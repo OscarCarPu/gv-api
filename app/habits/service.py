@@ -115,21 +115,25 @@ class HabitService:
         stats_start = self._get_periods_ago(habit.frequency, today, 30)
         stats_end = period_start - timedelta(days=1)  # Exclude current period
 
+        has_objective = habit.target_value is not None or habit.comparison_type is not None
+
         if stats_end >= stats_start:
-            total_logs, avg_value, targets_met = await self.log_repo.get_stats_for_habit(
+            total_logs, avg_value, periods_met = await self.log_repo.get_stats_for_habit(
                 habit, stats_start, stats_end
             )
-            expected_periods = self._count_periods_between(habit.frequency, stats_start, stats_end)
-            avg_completion = (
-                Decimal(targets_met) / Decimal(max(expected_periods, 1)) * 100
-            ).quantize(Decimal("0.1"))
+            if has_objective:
+                expected_periods = self._count_periods_between(
+                    habit.frequency, stats_start, stats_end
+                )
+                avg_completion = (
+                    Decimal(periods_met) / Decimal(max(expected_periods, 1)) * 100
+                ).quantize(Decimal("0.1"))
+            else:
+                avg_completion = None
 
-            # For boolean habits, average_value is completion rate
-            if habit.value_type == ValueType.boolean:
-                avg_value = avg_completion / 100 if total_logs > 0 else None
         else:
             avg_value = None
-            avg_completion = Decimal("0")
+            avg_completion = None if not has_objective else Decimal("0")
 
         # Calculate streaks
         dates_met = await self.log_repo.get_dates_with_target_met(habit)
@@ -145,6 +149,8 @@ class HabitService:
             unit=habit.unit,
             frequency=habit.frequency,
             target_value=habit.target_value,
+            target_min=habit.target_min,
+            target_max=habit.target_max,
             comparison_type=habit.comparison_type,
             is_required=habit.is_required,
             icon=habit.icon,
@@ -152,7 +158,7 @@ class HabitService:
             longest_streak=longest_streak,
             average_value=avg_value,
             average_completion_rate=avg_completion,
-            current_period_value=current_period_value if current_period_value else None,
+            current_period_value=current_period_value,
             date_value=date_value,
         )
 

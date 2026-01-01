@@ -167,6 +167,8 @@ class HabitTodayStats(BaseModel):
     unit: str | None
     frequency: TargetFrequency
     target_value: Decimal | None
+    target_min: Decimal | None
+    target_max: Decimal | None
     comparison_type: ComparisonType | None
     is_required: bool
     icon: str
@@ -175,7 +177,7 @@ class HabitTodayStats(BaseModel):
     current_streak: int
     longest_streak: int
     average_value: Decimal | None
-    average_completion_rate: Decimal
+    average_completion_rate: Decimal | None
     current_period_value: Decimal | None
     date_value: Decimal | None
 

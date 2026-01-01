@@ -3,11 +3,11 @@ from datetime import date
 from decimal import Decimal
 from typing import Any
 
-from sqlalchemy import ColumnElement, UnaryExpression, and_, case, desc, func, or_, select, true
+from sqlalchemy import ColumnElement, UnaryExpression, and_, desc, func, or_, select, true
 
 from app.common import BaseRepository
 
-from .models import ComparisonType, Habit, HabitLog, TargetFrequency, ValueType
+from .models import ComparisonType, Habit, HabitLog, TargetFrequency
 
 
 class HabitRepository(BaseRepository[Habit]):
@@ -158,22 +158,19 @@ class HabitLogRepository(BaseRepository[HabitLog]):
     ) -> tuple[int, Decimal | None, int]:
         """
         Get aggregated stats for a habit over a period.
-        Returns (total_logs, average_value, targets_met_count).
+        Returns (total_logs, average_value, periods_met_count).
+        For weekly/monthly habits, counts periods where the SUM meets target.
         """
-        target_met_expr = self._build_target_met_expression(habit)
-
-        stmt = (
+        basic_stmt = (
             select(
                 func.count(HabitLog.id).label("total_logs"),
                 func.avg(HabitLog.value).label("average_value"),
-                func.sum(case((target_met_expr, 1), else_=0)).label("targets_met"),
             )
             .where(HabitLog.habit_id == habit.id)
             .where(HabitLog.log_date >= start_date)
             .where(HabitLog.log_date <= end_date)
         )
-
-        result = await self.session.execute(stmt)
+        result = await self.session.execute(basic_stmt)
         row = result.one()
 
         total_logs = row.total_logs or 0
@@ -182,9 +179,74 @@ class HabitLogRepository(BaseRepository[HabitLog]):
             if row.average_value is not None
             else None
         )
-        targets_met = row.targets_met or 0
 
-        return total_logs, average_value, targets_met
+        periods_met = await self._count_periods_met(habit, start_date, end_date)
+        return total_logs, average_value, periods_met
+
+    async def _count_periods_met(
+        self,
+        habit: Habit,
+        start_date: date,
+        end_date: date,
+    ) -> int:
+        """Count periods where the target was met (using period SUM)."""
+        if habit.target_value is None and habit.comparison_type is None:
+            return 0
+
+        period_trunc = self._get_period_truncation(habit.frequency)
+        subq = (
+            select(
+                period_trunc.label("period"),
+                func.sum(HabitLog.value).label("period_sum"),
+            )
+            .where(HabitLog.habit_id == habit.id)
+            .where(HabitLog.log_date >= start_date)
+            .where(HabitLog.log_date <= end_date)
+            .group_by(period_trunc)
+            .subquery()
+        )
+
+        sum_met_expr = self._build_sum_target_met_expression(habit, subq.c.period_sum)
+        stmt = select(func.count()).select_from(subq).where(sum_met_expr)
+        result = await self.session.execute(stmt)
+        return result.scalar() or 0
+
+    def _get_period_truncation(self, frequency: TargetFrequency):
+        """Get SQL expression to truncate dates to period start."""
+        match frequency:
+            case TargetFrequency.weekly:
+                return func.date_trunc("week", HabitLog.log_date)
+            case TargetFrequency.monthly:
+                return func.date_trunc("month", HabitLog.log_date)
+            case _:
+                return HabitLog.log_date
+
+    def _build_sum_target_met_expression(self, habit: Habit, sum_column):
+        """Build SQL expression for checking if summed period value meets target."""
+        target_value = habit.target_value
+
+        if habit.comparison_type is None:
+            if target_value is not None:
+                return sum_column >= target_value
+            return true()
+
+        match habit.comparison_type:
+            case ComparisonType.equals:
+                return sum_column == target_value
+            case ComparisonType.greater_than:
+                return sum_column > target_value
+            case ComparisonType.less_than:
+                return sum_column < target_value
+            case ComparisonType.greater_equal_than:
+                return sum_column >= target_value
+            case ComparisonType.less_equal_than:
+                return sum_column <= target_value
+            case ComparisonType.in_range:
+                if habit.target_min is None or habit.target_max is None:
+                    return true()
+                return and_(sum_column >= habit.target_min, sum_column <= habit.target_max)
+            case _:
+                return true()
 
     async def get_dates_with_target_met(
         self,
@@ -227,9 +289,6 @@ class HabitLogRepository(BaseRepository[HabitLog]):
 
     def _build_target_met_expression(self, habit: Habit):
         """Build SQL expression for checking if target is met."""
-        if habit.value_type == ValueType.boolean:
-            return HabitLog.value == Decimal("1")
-
         if habit.comparison_type is None or habit.target_value is None:
             return true()
 
