@@ -18,3 +18,7 @@ class Icons(str, Enum):
     droplet = "fas fa-droplet"
     brain = "fas fa-brain"
     scale = "fas fa-weight-scale"
+    utensils = "fas fa-utensils"
+    shoe_prints = "fas fa-shoe-prints"
+    mobile_screen = "fas fa-mobile-screen"
+    mug_hot = "fas fa-mug-hot"

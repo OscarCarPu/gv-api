@@ -88,6 +88,58 @@ HABITS = [
         "is_required": False,
         "icon": "fas fa-weight-scale",
     },
+    {
+        "name": "Comidas",
+        "description": "Comer exactamente 3 comidas al día",
+        "value_type": "numeric",
+        "unit": "comidas",
+        "frequency": "daily",
+        "target_value": 3,
+        "target_min": None,
+        "target_max": None,
+        "comparison_type": "equals",
+        "is_required": False,
+        "icon": "fas fa-utensils",
+    },
+    {
+        "name": "Pasos",
+        "description": "Caminar más de 10,000 pasos diarios",
+        "value_type": "numeric",
+        "unit": "pasos",
+        "frequency": "daily",
+        "target_value": 10000,
+        "target_min": None,
+        "target_max": None,
+        "comparison_type": "greater_than",
+        "is_required": False,
+        "icon": "fas fa-shoe-prints",
+    },
+    {
+        "name": "Pantalla",
+        "description": "Limitar tiempo de pantalla a menos de 2 horas",
+        "value_type": "numeric",
+        "unit": "minutos",
+        "frequency": "daily",
+        "target_value": 120,
+        "target_min": None,
+        "target_max": None,
+        "comparison_type": "less_than",
+        "is_required": False,
+        "icon": "fas fa-mobile-screen",
+    },
+    {
+        "name": "Cafeína",
+        "description": "Mantener consumo de cafeína <= 400mg",
+        "value_type": "numeric",
+        "unit": "mg",
+        "frequency": "daily",
+        "target_value": 400,
+        "target_min": None,
+        "target_max": None,
+        "comparison_type": "less_equal_than",
+        "is_required": False,
+        "icon": "fas fa-mug-hot",
+    },
 ]
 
 
@@ -104,6 +156,14 @@ def generate_value(habit_name: str, value_type: str) -> Decimal:
         return Decimal(str(random.randint(10, 30)))
     elif habit_name == "Peso":
         return Decimal(str(round(random.uniform(68, 77), 1)))
+    elif habit_name == "Comidas":
+        return Decimal(str(random.randint(2, 4)))
+    elif habit_name == "Pasos":
+        return Decimal(str(random.randint(5000, 15000)))
+    elif habit_name == "Pantalla":
+        return Decimal(str(random.randint(60, 180)))
+    elif habit_name == "Cafeína":
+        return Decimal(str(random.randint(100, 500)))
     return Decimal(str(random.randint(1, 100)))
 
 
