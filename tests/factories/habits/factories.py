@@ -29,7 +29,6 @@ class HabitFactory(Factory):
     start_date = None
     end_date = None
     is_required = True
-    color = "#3B82F6"
     icon = "fas fa-check"
     created_at = LazyFunction(partial(datetime.now, TZ))
     updated_at = LazyFunction(partial(datetime.now, TZ))

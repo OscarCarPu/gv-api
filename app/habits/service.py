@@ -147,7 +147,6 @@ class HabitService:
             target_value=habit.target_value,
             comparison_type=habit.comparison_type,
             is_required=habit.is_required,
-            color=habit.color,
             icon=habit.icon,
             current_streak=current_streak,
             longest_streak=longest_streak,

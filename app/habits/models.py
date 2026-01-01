@@ -5,17 +5,15 @@ from sqlalchemy import Connection, ForeignKey, Numeric, String, UniqueConstraint
 from sqlalchemy.orm import Mapped, Mapper, mapped_column, relationship, validates
 
 from app.common.validations import (
-    COLOR_MAX_LENGTH,
     NAME_MAX_LENGTH,
     UNIT_MAX_LENGTH,
-    sanitize_color,
     sanitize_description,
     sanitize_name,
     sanitize_unit,
     validate_icon,
 )
 from app.core.database import Base
-from app.habits.constants import DEFAULT_COLOR, DEFAULT_ICON
+from app.habits.constants import DEFAULT_ICON
 from app.habits.enums import ComparisonType, TargetFrequency, ValueType
 from app.habits.validations import validate_target_config
 
@@ -33,7 +31,6 @@ class Habit(Base):
     start_date: Mapped[date | None] = mapped_column(default=None)
     end_date: Mapped[date | None] = mapped_column(default=None)
     is_required: Mapped[bool] = mapped_column(default=True)
-    color: Mapped[str] = mapped_column(String(COLOR_MAX_LENGTH), default=DEFAULT_COLOR)
     icon: Mapped[str] = mapped_column(default=DEFAULT_ICON)
 
     logs: Mapped[list["HabitLog"]] = relationship(back_populates="habit")  # noqa: UP037
@@ -49,10 +46,6 @@ class Habit(Base):
     @validates("unit")
     def _validate_unit(self, key: str, value: str | None) -> str | None:
         return sanitize_unit(value)
-
-    @validates("color")
-    def _validate_color(self, key: str, value: str) -> str:
-        return sanitize_color(value)
 
     @validates("icon")
     def _validate_icon(self, key: str, value: str) -> str:

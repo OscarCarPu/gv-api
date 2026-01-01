@@ -34,7 +34,6 @@ HABITS = [
         "target_max": None,
         "comparison_type": "greater_equal_than",
         "is_required": True,
-        "color": "#FF5733",
         "icon": "fas fa-dumbbell",
     },
     {
@@ -48,7 +47,6 @@ HABITS = [
         "target_max": None,
         "comparison_type": None,
         "is_required": False,
-        "color": "#3498DB",
         "icon": "fas fa-book",
     },
     {
@@ -62,7 +60,6 @@ HABITS = [
         "target_max": None,
         "comparison_type": "greater_equal_than",
         "is_required": True,
-        "color": "#1ABC9C",
         "icon": "fas fa-droplet",
     },
     {
@@ -76,7 +73,6 @@ HABITS = [
         "target_max": None,
         "comparison_type": "greater_equal_than",
         "is_required": False,
-        "color": "#9B59B6",
         "icon": "fas fa-brain",
     },
     {
@@ -90,7 +86,6 @@ HABITS = [
         "target_max": 75,
         "comparison_type": "in_range",
         "is_required": False,
-        "color": "#E67E22",
         "icon": "fas fa-weight-scale",
     },
 ]
@@ -124,12 +119,12 @@ def upgrade() -> None:
                 INSERT INTO habit (
                     name, description, value_type, unit, frequency,
                     target_value, target_min, target_max, comparison_type,
-                    is_required, color, icon, created_at, updated_at
+                    is_required, icon, created_at, updated_at
                 ) VALUES (
                     :name, :description, CAST(:value_type AS valuetype), :unit,
                     CAST(:frequency AS targetfrequency), :target_value, :target_min,
                     :target_max, CAST(:comparison_type AS comparisontype),
-                    :is_required, :color, :icon, :created_at, :updated_at
+                    :is_required, :icon, :created_at, :updated_at
                 )
             """),
             {**habit, "created_at": now, "updated_at": now},

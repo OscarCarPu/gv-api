@@ -53,7 +53,6 @@ def upgrade() -> None:
         sa.Column("start_date", sa.Date(), nullable=True),
         sa.Column("end_date", sa.Date(), nullable=True),
         sa.Column("is_required", sa.Boolean(), nullable=False),
-        sa.Column("color", sa.String(length=7), nullable=False),
         sa.Column("icon", sa.String(), nullable=False),
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
         sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False),

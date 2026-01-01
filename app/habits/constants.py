@@ -1,7 +1,6 @@
 """Habit-related constants and error messages."""
 
 # Default values
-DEFAULT_COLOR = "#3B82F6"
 DEFAULT_ICON = "fas fa-check"
 
 

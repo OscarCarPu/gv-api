@@ -7,7 +7,6 @@ from app.common.enums import Icons
 # Field length constants
 NAME_MAX_LENGTH = 25
 UNIT_MAX_LENGTH = 10
-COLOR_MAX_LENGTH = 7
 DESCRIPTION_MAX_LENGTH = 500
 
 
@@ -42,19 +41,6 @@ def sanitize_unit(value: str | None) -> str | None:
     if result and len(result) > UNIT_MAX_LENGTH:
         raise ValueError(f"Unit cannot exceed {UNIT_MAX_LENGTH} characters")
     return result
-
-
-def sanitize_color(value: str) -> str:
-    """Strip, uppercase, and validate hex color format."""
-    value = value.strip().upper()
-    valid_chars = "0123456789ABCDEF"
-    if (
-        len(value) != COLOR_MAX_LENGTH
-        or not value.startswith("#")
-        or not all(c in valid_chars for c in value[1:])
-    ):
-        raise ValueError("Invalid color format (must be #RRGGBB)")
-    return value
 
 
 def validate_icon(value: str) -> str:

@@ -4,13 +4,12 @@ from decimal import Decimal
 from pydantic import BaseModel, ConfigDict, field_validator, model_validator
 
 from app.common.validations import (
-    sanitize_color,
     sanitize_description,
     sanitize_name,
     sanitize_unit,
     validate_icon,
 )
-from app.habits.constants import DEFAULT_COLOR, DEFAULT_ICON
+from app.habits.constants import DEFAULT_ICON
 from app.habits.enums import ComparisonType, TargetFrequency, ValueType
 from app.habits.validations import validate_target_config
 
@@ -38,7 +37,6 @@ class HabitBase(BaseModel):
     start_date: date | None = None
     end_date: date | None = None
     is_required: bool = True
-    color: str = DEFAULT_COLOR
     icon: str = DEFAULT_ICON
 
     @field_validator("name")
@@ -55,11 +53,6 @@ class HabitBase(BaseModel):
     @classmethod
     def _sanitize_unit(cls, v: str | None) -> str | None:
         return sanitize_unit(v)
-
-    @field_validator("color")
-    @classmethod
-    def _sanitize_color(cls, v: str) -> str:
-        return sanitize_color(v)
 
     @field_validator("icon")
     @classmethod
@@ -95,7 +88,6 @@ class HabitUpdate(BaseModel):
     start_date: date | None = None
     end_date: date | None = None
     is_required: bool | None = None
-    color: str | None = None
     icon: str | None = None
 
     @field_validator("name")
@@ -112,11 +104,6 @@ class HabitUpdate(BaseModel):
     @classmethod
     def _sanitize_unit(cls, v: str | None) -> str | None:
         return sanitize_unit(v)
-
-    @field_validator("color")
-    @classmethod
-    def _sanitize_color(cls, v: str | None) -> str | None:
-        return sanitize_color(v) if v is not None else None
 
     @field_validator("icon")
     @classmethod
@@ -182,7 +169,6 @@ class HabitTodayStats(BaseModel):
     target_value: Decimal | None
     comparison_type: ComparisonType | None
     is_required: bool
-    color: str
     icon: str
 
     # Stats

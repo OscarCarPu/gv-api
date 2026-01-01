@@ -117,11 +117,10 @@ class TestHabitTrackingFlow:
         # 2. Update habit
         response = await client.patch(
             f"/api/v1/habits/{habit_id}",
-            json={"name": "Updated", "color": "#FF0000"},
+            json={"name": "Updated"},
         )
         assert response.status_code == 200
         assert response.json()["name"] == "Updated"
-        assert response.json()["color"] == "#FF0000"
 
         # 3. Delete habit
         response = await client.delete(f"/api/v1/habits/{habit_id}")
