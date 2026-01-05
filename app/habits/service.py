@@ -543,3 +543,16 @@ class HabitLogService:
 
         log = HabitLog(habit_id=habit_id, log_date=log_date, value=value)
         return await self.log_repo.create(log)
+
+    async def modify(self, habit_id: int, log_date: date, value: Decimal) -> HabitLog:
+        """Modify a habit log: add value to existing log or create if not exists."""
+        habit = await self._get_habit(habit_id)
+        self._validate_log_date(habit, log_date)
+
+        existing = await self.log_repo.get_by_habit_and_date(habit_id, log_date)
+        if existing:
+            existing.value += value
+            return await self.log_repo.update(existing)
+
+        log = HabitLog(habit_id=habit_id, log_date=log_date, value=value)
+        return await self.log_repo.create(log)

@@ -188,6 +188,22 @@ async def upsert_log(habit_id: int, data: HabitLogBody, service: HabitLogService
     return await service.upsert(habit_id, data.log_date, data.value)
 
 
+@router.post(
+    "/{habit_id}/logs/modify",
+    response_model=HabitLogRead,
+    summary="Modify habit log value",
+    description="Add a value to an existing log entry or create a new log if it doesn't exist. "
+    "The value is added to the current value (use negative values to subtract).",
+    responses={
+        status.HTTP_401_UNAUTHORIZED: {"description": "Invalid or missing API key"},
+        status.HTTP_404_NOT_FOUND: {"description": "Habit not found"},
+        status.HTTP_422_UNPROCESSABLE_CONTENT: {"description": "Validation error"},
+    },
+)
+async def modify_log(habit_id: int, data: HabitLogBody, service: HabitLogServiceDep):
+    return await service.modify(habit_id, data.log_date, data.value)
+
+
 @router.patch(
     "/{habit_id}/logs/{log_id}",
     response_model=HabitLogRead,
