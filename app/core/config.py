@@ -17,12 +17,9 @@ class Settings(BaseSettings):
     postgres_port: int = 54322
     api_key: str
     cors_origins: str = "http://localhost:3000,http://localhost:5173"
-    agent_model: str = "ollama:qwen3-fast"
-    ollama_base_url: str = "http://127.0.0.1:11434/v1"
+    groq_api_key: str
+    agent_model: str = "groq:llama-3.3-70b-versatile"
     agent_temperature: float = 0
-    agent_seed: int = 42
-    agent_num_predict: int = 256
-    agent_num_ctx: int = 1024
 
     @property
     def is_dev(self) -> bool:

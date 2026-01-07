@@ -67,12 +67,6 @@ class ActionRouter:
             output_type=insert_habit_log,
             model_settings=ModelSettings(
                 temperature=settings.agent_temperature,
-                seed=settings.agent_seed,
-                extra_body={
-                    "num_predict": settings.agent_num_predict,
-                    "num_ctx": settings.agent_num_ctx,
-                    "think": False,
-                },
             ),
             system_prompt=PROMPT_FILE.read_text().format(habits_context=habits_context),
         )
