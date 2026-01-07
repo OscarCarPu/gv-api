@@ -1,7 +1,7 @@
 """seed_data
 
-Revision ID: 12e38b68e665
-Revises: 001_frequency
+Revision ID: 999
+Revises: 002
 Create Date: 2025-12-21 20:50:52.465548
 
 """
@@ -16,8 +16,8 @@ import sqlalchemy as sa
 from alembic import op
 
 # revision identifiers, used by Alembic.
-revision: str = "12e38b68e665"
-down_revision: str | Sequence[str] | None = "001_frequency"
+revision: str = "999"
+down_revision: str | Sequence[str] | None = "002"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
@@ -35,6 +35,8 @@ HABITS = [
         "comparison_type": "greater_equal_than",
         "is_required": True,
         "icon": "fas fa-dumbbell",
+        "big_step": 30,
+        "small_step": 10,
     },
     {
         "name": "Lectura",
@@ -48,6 +50,8 @@ HABITS = [
         "comparison_type": "greater_equal_than",
         "is_required": False,
         "icon": "fas fa-book",
+        "big_step": None,
+        "small_step": None,
     },
     {
         "name": "Agua",
@@ -61,6 +65,8 @@ HABITS = [
         "comparison_type": "greater_equal_than",
         "is_required": True,
         "icon": "fas fa-droplet",
+        "big_step": 500,
+        "small_step": 250,
     },
     {
         "name": "Meditación",
@@ -74,6 +80,8 @@ HABITS = [
         "comparison_type": "greater_equal_than",
         "is_required": False,
         "icon": "fas fa-brain",
+        "big_step": 15,
+        "small_step": 5,
     },
     {
         "name": "Peso",
@@ -87,6 +95,8 @@ HABITS = [
         "comparison_type": "in_range",
         "is_required": False,
         "icon": "fas fa-weight-scale",
+        "big_step": 1,
+        "small_step": 0.1,
     },
     {
         "name": "Comidas",
@@ -100,6 +110,8 @@ HABITS = [
         "comparison_type": "equals",
         "is_required": False,
         "icon": "fas fa-utensils",
+        "big_step": 1,
+        "small_step": 1,
     },
     {
         "name": "Pasos",
@@ -113,6 +125,8 @@ HABITS = [
         "comparison_type": "greater_than",
         "is_required": False,
         "icon": "fas fa-shoe-prints",
+        "big_step": 1000,
+        "small_step": 500,
     },
     {
         "name": "Pantalla",
@@ -126,6 +140,8 @@ HABITS = [
         "comparison_type": "less_than",
         "is_required": False,
         "icon": "fas fa-mobile-screen",
+        "big_step": 30,
+        "small_step": 15,
     },
     {
         "name": "Cafeína",
@@ -139,6 +155,8 @@ HABITS = [
         "comparison_type": "less_equal_than",
         "is_required": False,
         "icon": "fas fa-mug-hot",
+        "big_step": 100,
+        "small_step": 50,
     },
 ]
 
@@ -179,12 +197,12 @@ def upgrade() -> None:
                 INSERT INTO habit (
                     name, description, value_type, unit, frequency,
                     target_value, target_min, target_max, comparison_type,
-                    is_required, icon, created_at, updated_at
+                    is_required, icon, big_step, small_step, created_at, updated_at
                 ) VALUES (
                     :name, :description, CAST(:value_type AS valuetype), :unit,
                     CAST(:frequency AS targetfrequency), :target_value, :target_min,
                     :target_max, CAST(:comparison_type AS comparisontype),
-                    :is_required, :icon, :created_at, :updated_at
+                    :is_required, :icon, :big_step, :small_step, :created_at, :updated_at
                 )
             """),
             {**habit, "created_at": now, "updated_at": now},

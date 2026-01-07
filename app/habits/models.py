@@ -32,6 +32,8 @@ class Habit(Base):
     end_date: Mapped[date | None] = mapped_column(default=None)
     is_required: Mapped[bool] = mapped_column(default=True)
     icon: Mapped[str] = mapped_column(default=DEFAULT_ICON)
+    big_step: Mapped[Decimal | None] = mapped_column(Numeric(10, 2), default=None)
+    small_step: Mapped[Decimal | None] = mapped_column(Numeric(10, 2), default=None)
 
     logs: Mapped[list["HabitLog"]] = relationship(back_populates="habit")  # noqa: UP037
 

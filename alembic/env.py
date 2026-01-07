@@ -6,6 +6,9 @@ from alembic import context
 from app.core.config import get_settings
 from app.core.database import Base
 
+# Import all models so they are registered with Base.metadata
+from app.habits import models as habit_models  # noqa: F401
+
 config = context.config
 
 if config.config_file_name is not None:

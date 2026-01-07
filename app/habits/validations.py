@@ -14,13 +14,6 @@ def validate_target_config(
     target_max: Decimal | None,
 ) -> None:
     """Validate that target configuration is consistent."""
-    if value_type == ValueType.boolean:
-        if any([target_value, target_min, target_max]):
-            raise ValueError(ErrorMessages.BOOLEAN_NO_NUMERIC_TARGETS)
-        if comparison_type and comparison_type != ComparisonType.equals:
-            raise ValueError(ErrorMessages.BOOLEAN_ONLY_EQUALS)
-        return
-
     # Numeric validation
     if comparison_type == ComparisonType.in_range:
         if target_min is None or target_max is None:

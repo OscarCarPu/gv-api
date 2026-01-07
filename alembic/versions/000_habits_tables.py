@@ -1,6 +1,6 @@
 """habits_tables
 
-Revision ID: dbb8772805a1
+Revision ID: 000
 Revises:
 Create Date: 2025-12-13 11:59:59.583754
 
@@ -13,7 +13,7 @@ import sqlalchemy as sa
 from alembic import op
 
 # revision identifiers, used by Alembic.
-revision: str = "dbb8772805a1"
+revision: str = "000"
 down_revision: str | Sequence[str] | None = None
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None

@@ -9,7 +9,7 @@ from app.common.validations import (
     sanitize_unit,
     validate_icon,
 )
-from app.habits.constants import DEFAULT_ICON
+from app.habits.constants import DEFAULT_ICON, ErrorMessages
 from app.habits.enums import ComparisonType, TargetFrequency, ValueType
 from app.habits.validations import validate_target_config
 
@@ -38,6 +38,15 @@ class HabitBase(BaseModel):
     end_date: date | None = None
     is_required: bool = True
     icon: str = DEFAULT_ICON
+    big_step: Decimal | None = None
+    small_step: Decimal | None = None
+
+    @field_validator("big_step", "small_step")
+    @classmethod
+    def _validate_step_positive(cls, v: Decimal | None) -> Decimal | None:
+        if v is not None and v <= 0:
+            raise ValueError(ErrorMessages.STEP_MUST_BE_POSITIVE)
+        return v
 
     @field_validator("name")
     @classmethod
@@ -89,6 +98,15 @@ class HabitUpdate(BaseModel):
     end_date: date | None = None
     is_required: bool | None = None
     icon: str | None = None
+    big_step: Decimal | None = None
+    small_step: Decimal | None = None
+
+    @field_validator("big_step", "small_step")
+    @classmethod
+    def _validate_step_positive(cls, v: Decimal | None) -> Decimal | None:
+        if v is not None and v <= 0:
+            raise ValueError(ErrorMessages.STEP_MUST_BE_POSITIVE)
+        return v
 
     @field_validator("name")
     @classmethod
@@ -172,6 +190,8 @@ class HabitTodayStats(BaseModel):
     comparison_type: ComparisonType | None
     is_required: bool
     icon: str
+    big_step: Decimal | None
+    small_step: Decimal | None
 
     # Stats
     current_streak: int

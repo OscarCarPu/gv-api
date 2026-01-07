@@ -30,6 +30,8 @@ class HabitFactory(Factory):
     end_date = None
     is_required = True
     icon = "fas fa-check"
+    big_step = None
+    small_step = None
     created_at = LazyFunction(partial(datetime.now, TZ))
     updated_at = LazyFunction(partial(datetime.now, TZ))
 

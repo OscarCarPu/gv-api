@@ -14,19 +14,10 @@ test:
 	uv run pytest
 
 generate-migration:
-	uv run alembic revision --autogenerate -m "$(m)"
+	uv run alembic revision --autogenerate -m "$(m)" --rev-id="$(r)"
 
 execute-migrations:
 	uv run alembic upgrade head
 
 db-reset:
-	docker compose down -v && docker compose up -d db --wait && uv run alembic upgrade head && docker compose up -d --wait
-
-ollama-start:
-	OLLAMA_HOST=0.0.0.0 ollama serve & sleep 2 && ollama run qwen3-fast
-
-ollama-stop:
-	pkill ollama || true
-
-ollama-create-model:
-	ollama pull qwen3:0.6b && ollama create qwen3-fast -f ollama/qwen3-fast.modelfile
+	docker compose down -v && docker compose up -d --build db --wait && uv run alembic upgrade head && docker compose up -d --wait --build

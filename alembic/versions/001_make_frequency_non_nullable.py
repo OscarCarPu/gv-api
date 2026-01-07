@@ -1,7 +1,7 @@
 """make_frequency_non_nullable
 
-Revision ID: 001_frequency
-Revises: dbb8772805a1
+Revision ID: 001
+Revises: 000
 Create Date: 2025-12-16
 
 """
@@ -13,8 +13,8 @@ import sqlalchemy as sa
 from alembic import op
 
 # revision identifiers, used by Alembic.
-revision: str = "001_frequency"
-down_revision: str | Sequence[str] | None = "dbb8772805a1"
+revision: str = "001"
+down_revision: str | Sequence[str] | None = "000"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 

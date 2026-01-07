@@ -154,6 +154,8 @@ class HabitService:
             comparison_type=habit.comparison_type,
             is_required=habit.is_required,
             icon=habit.icon,
+            big_step=habit.big_step,
+            small_step=habit.small_step,
             current_streak=current_streak,
             longest_streak=longest_streak,
             average_value=avg_value,
