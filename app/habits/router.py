@@ -4,7 +4,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, Query, status
 
 from app.common.constants import DEFAULT_PAGE, DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE
-from app.core import verify_api_key
+from app.core.security import require_auth
 from app.habits.dependencies import HabitLogServiceDep, HabitServiceDep
 from app.habits.schemas import (
     HabitCreate,
@@ -19,7 +19,7 @@ from app.habits.schemas import (
     PaginatedResponse,
 )
 
-router = APIRouter(prefix="/habits", tags=["habits"], dependencies=[Depends(verify_api_key)])
+router = APIRouter(prefix="/habits", tags=["habits"], dependencies=[Depends(require_auth)])
 
 
 @router.get(

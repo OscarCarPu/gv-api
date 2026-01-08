@@ -21,3 +21,6 @@ execute-migrations:
 
 db-reset:
 	docker compose down -v && docker compose up -d --build db --wait && uv run alembic upgrade head && docker compose up -d --wait --build
+
+reset:
+	docker compose up -d --build --wait

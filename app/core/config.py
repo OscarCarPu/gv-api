@@ -7,19 +7,29 @@ TZ = ZoneInfo("Europe/Madrid")
 
 
 class Settings(BaseSettings):
-    model_config = SettingsConfigDict(env_file=".env")
+    model_config = SettingsConfigDict(env_file=".env", extra="ignore", env_prefix="")
 
+    # --- APP ---
     stage: str = "dev"
+
+    # --- DATABASE ---
     postgres_user: str
     postgres_password: str
     postgres_db: str
     postgres_host: str = "localhost"
     postgres_port: int = 54322
-    api_key: str
-    cors_origins: str = "http://localhost:3000,http://localhost:5173"
+
+    # --- LLM CONNECTIVITY ---
     groq_api_key: str
     agent_model: str = "groq:llama-3.3-70b-versatile"
     agent_temperature: float = 0
+
+    # --- SECURITY ---
+    secret_key: str
+    totp_secret: str
+    hashed_password: str
+    algorithm: str = "HS256"
+    cors_origins: str = "http://localhost:3000,http://localhost:5173"
 
     @property
     def is_dev(self) -> bool:
@@ -41,3 +51,12 @@ class Settings(BaseSettings):
 @lru_cache
 def get_settings() -> Settings:
     return Settings()  # type: ignore[call-arg]
+
+
+# --- CONSTANTS ---
+
+
+class ErrorMessages:
+    INVALID_PASSWORD = "Contraseña incorrecta"
+    INVALID_2FA = "Código de autenticación inválido"
+    INVALID_TOKEN = "Token inválido"

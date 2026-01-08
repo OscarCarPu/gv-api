@@ -1,8 +1,3 @@
-import os
-
-# Override Docker-specific env vars for local test execution
-os.environ["OLLAMA_BASE_URL"] = "http://127.0.0.1:11434/v1"
-
 import asyncpg
 import pytest
 from httpx import ASGITransport, AsyncClient
@@ -12,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from app.core import database
 from app.core.config import get_settings
 from app.core.database import Base
+from app.core.security import require_auth
 from app.habits.models import Habit, HabitLog
 from app.habits.repository import HabitLogRepository, HabitRepository
 from app.habits.service import HabitLogService, HabitService
@@ -57,12 +53,10 @@ async def test_engine():
 @pytest.fixture
 async def client(test_engine):
     """HTTP client fixture."""
-    settings = get_settings()
-    headers = {"X-API-Key": settings.api_key}
-    async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test", headers=headers
-    ) as ac:
+    app.dependency_overrides[require_auth] = lambda: "test_user"
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
         yield ac
+    app.dependency_overrides.clear()
 
 
 @pytest.fixture

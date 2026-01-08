@@ -9,7 +9,6 @@ from app.core.dependencies import (
 )
 from app.core.exceptions import AppException, ConflictError, NotFoundError, ValidationError
 from app.core.logging import get_logger, setup_logging
-from app.core.security import ApiKeyDep, verify_api_key
 
 __all__ = [
     "TZ",
@@ -25,8 +24,6 @@ __all__ = [
     "get_db_connection",
     "SessionDep",
     "get_session",
-    "ApiKeyDep",
-    "verify_api_key",
     "AppException",
     "NotFoundError",
     "ConflictError",

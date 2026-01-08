@@ -4,10 +4,10 @@ from fastapi import APIRouter, Depends, UploadFile
 from starlette.responses import PlainTextResponse
 
 from app.agentai.service import AgentAIService
-from app.core.security import verify_api_key
+from app.core.security import require_auth
 from app.habits.dependencies import HabitLogServiceDep, HabitServiceDep
 
-router = APIRouter(prefix="/agentai", dependencies=[Depends(verify_api_key)], tags=["agent"])
+router = APIRouter(prefix="/agentai", tags=["agent"], dependencies=[Depends(require_auth)])
 
 
 def get_agentai_service(
