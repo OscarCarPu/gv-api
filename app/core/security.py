@@ -3,7 +3,7 @@ from typing import Annotated
 
 import pyotp
 from fastapi import Depends, HTTPException, status
-from fastapi.security import OAuth2PasswordBearer
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from jose import JWTError, jwt
 from pwdlib import PasswordHash
 from pwdlib.hashers.argon2 import Argon2Hasher
@@ -12,7 +12,7 @@ from app.core.config import TZ, get_settings
 
 settings = get_settings()
 pwd_hash = PasswordHash((Argon2Hasher(),))
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login")
+bearer_scheme = HTTPBearer()
 
 
 def create_access_token(data: dict, expires_delta: timedelta | None = None):
@@ -32,13 +32,16 @@ def verify_totp(code: str) -> bool:
 
 
 # --- DEPENDENCIES ---
-async def require_auth(token: Annotated[str, Depends(oauth2_scheme)]):
+async def require_auth(
+    credentials: Annotated[HTTPAuthorizationCredentials, Depends(bearer_scheme)],
+):
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Could not validate credentials",
         headers={"WWW-Authenticate": "Bearer"},
     )
     try:
+        token = credentials.credentials
         payload = jwt.decode(token, settings.secret_key, algorithms=[settings.algorithm])
         username: str | None = payload.get("sub")
         mfa_status: bool = payload.get("mfa", False)
