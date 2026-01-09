@@ -196,13 +196,18 @@ class HabitLogRepository(BaseRepository[HabitLog]):
 
     def _get_period_truncation(self, frequency: TargetFrequency):
         """Get SQL expression to truncate dates to period start."""
-        match frequency:
-            case TargetFrequency.weekly:
-                return func.date_trunc("week", HabitLog.log_date).cast(Date)
-            case TargetFrequency.monthly:
-                return func.date_trunc("month", HabitLog.log_date).cast(Date)
-            case _:
-                return HabitLog.log_date
+        # Fix: Convert to string safely to catch 'weekly' (str) vs TargetFrequency.weekly (enum)
+        freq_value = str(frequency.value) if hasattr(frequency, "value") else str(frequency)
+
+        # We use if/else instead of match to ensure the string comparison works
+        # regardless of whether SQLAlchemy returned a string or an Enum object.
+        if freq_value == "weekly":
+            return func.date_trunc("week", HabitLog.log_date).cast(Date)
+        elif freq_value == "monthly":
+            return func.date_trunc("month", HabitLog.log_date).cast(Date)
+
+        # Fallback to Daily (no truncation)
+        return HabitLog.log_date
 
     def _build_comparison_expression(self, habit: Habit, value_expression):
         """
@@ -234,6 +239,8 @@ class HabitLogRepository(BaseRepository[HabitLog]):
                     value_expression >= habit.target_min,
                     value_expression <= habit.target_max,
                 )
+            case _:
+                return true()
 
     async def get_dates_with_target_met(
         self,
@@ -247,8 +254,10 @@ class HabitLogRepository(BaseRepository[HabitLog]):
         """
         period_col = self._get_period_truncation(habit.frequency)
 
+        # Always check the SUM of the period (Daily sum, Weekly sum, etc.)
         value_to_check = func.sum(HabitLog.value)
 
+        # Build the comparison expression
         target_expr = self._build_comparison_expression(habit, value_to_check)
 
         stmt = select(period_col).where(HabitLog.habit_id == habit.id)

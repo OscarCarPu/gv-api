@@ -219,7 +219,7 @@ class HabitService:
             case TargetFrequency.daily:
                 return (end_date - start_date).days + 1
             case TargetFrequency.weekly:
-                # Count weeks
+                # Count weeks": "201.00
                 start_week = start_date - timedelta(days=start_date.weekday())
                 end_week = end_date - timedelta(days=end_date.weekday())
                 return ((end_week - start_week).days // 7) + 1
