@@ -40,7 +40,7 @@ async def init_engine() -> None:
     settings = get_settings()
     engine = create_async_engine(
         settings.database_url,
-        echo=settings.is_dev,
+        echo=False,  # A lot of noise, only enable for hard debugging
         pool_size=5,
         max_overflow=10,
         pool_pre_ping=True,

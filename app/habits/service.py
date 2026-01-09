@@ -4,6 +4,7 @@ from decimal import Decimal
 
 from app.common.constants import DEFAULT_PAGE, DEFAULT_PAGE_SIZE
 from app.core import ConflictError, NotFoundError, ValidationError
+from app.core.logging import get_logger
 
 from .models import ComparisonType, Habit, HabitLog, TargetFrequency, ValueType
 from .repository import HabitLogRepository, HabitRepository
@@ -264,7 +265,12 @@ class HabitService:
             period_start, period_end = self._get_period_boundaries(habit.frequency, check_date)
 
             # Check if any date in this period met the target
+            logger = get_logger(__name__)
+            if habit.id == 1:
+                logger.debug(f"Checking if period {period_start} to {period_end} met target")
             period_met = any(d in dates_met for d in self._dates_in_range(period_start, period_end))
+            if habit.id == 1:
+                logger.debug(f"Period {period_start} to {period_end} met target: {period_met}")
 
             if period_met:
                 streak += 1
