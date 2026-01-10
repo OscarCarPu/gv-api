@@ -188,7 +188,7 @@ def generate_value(habit_name: str, value_type: str) -> Decimal:
 
 def upgrade() -> None:
     """Insert seed data."""
-    if os.getenv("STAGE") == "prod":
+    if os.getenv("STAGE") != "prod":
         return
     conn = op.get_bind()
     now = datetime.now(UTC)
@@ -245,5 +245,7 @@ def upgrade() -> None:
 
 def downgrade() -> None:
     """Remove seed data."""
+    if os.getenv("STAGE") != "prod":
+        return
     op.execute("DELETE FROM habit_log")
     op.execute("DELETE FROM habit")

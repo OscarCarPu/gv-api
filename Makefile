@@ -29,4 +29,4 @@ deploy:
 	docker compose down
 	docker compose up -d --build --wait
 	uv run alembic upgrade head
-	docker prune -f
+	docker system prune -f
