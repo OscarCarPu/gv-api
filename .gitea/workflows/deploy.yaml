@@ -16,7 +16,10 @@ jobs:
           TARGET_DIR="/home/ocp/docker/gv/gv-api"
 
           mkdir -p $TARGET_DIR
-          rsync -avz --delete --exclude .git/ ./ $TARGET_DIR/
+          rsync -avz --delete \
+            --exclude=".git" \
+            --exclude=".env" \
+            ./ $TARGET_DIR/
 
           cd $TARGET_DIR
           make reset
