@@ -19,6 +19,9 @@ jobs:
           rsync -avz --delete \
             --exclude=".git" \
             --exclude=".env" \
+            --exclude="__pycache__" \
+            --exclude="*.pyc" \
+            --exclude=".pytest_cache/" \
             ./ $TARGET_DIR/
 
           cd $TARGET_DIR
