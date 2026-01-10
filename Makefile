@@ -23,6 +23,10 @@ db-reset:
 	docker compose down -v && docker compose up -d --build db --wait && uv run alembic upgrade head && docker compose up -d --wait --build
 
 reset:
+	docker compose up -d --build --wait
+
+deploy:
 	docker compose down
 	docker compose up -d --build --wait
-	docker image prune -f
+	uv run alembic upgrade head
+	docker prune -f

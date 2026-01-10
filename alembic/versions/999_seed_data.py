@@ -6,6 +6,7 @@ Create Date: 2025-12-21 20:50:52.465548
 
 """
 
+import os
 import random
 from collections.abc import Sequence
 from datetime import UTC, date, datetime, timedelta
@@ -187,6 +188,8 @@ def generate_value(habit_name: str, value_type: str) -> Decimal:
 
 def upgrade() -> None:
     """Insert seed data."""
+    if os.getenv("STAGE") == "prod":
+        return
     conn = op.get_bind()
     now = datetime.now(UTC)
 
