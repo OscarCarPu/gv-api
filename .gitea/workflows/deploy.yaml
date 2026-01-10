@@ -19,4 +19,4 @@ jobs:
           rsync -avz --delete --exclude .git/ ./ $TARGET_DIR/
 
           cd $TARGET_DIR
-          make build
+          make reset
