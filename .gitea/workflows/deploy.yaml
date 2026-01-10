@@ -1,0 +1,22 @@
+name: Simple Lab Deploy
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy:
+    runs-on: self-hosted
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v3
+
+      - name: Sync and Rebuild
+        run: |
+          TARGET_DIR="/home/ocp/docker/gv/gv-api"
+
+          mkdir -p $TARGET_DIR
+          rsync -avz --delete --exclude .git/ ./ $TARGET_DIR/
+
+          cd $TARGET_DIR
+          make build
