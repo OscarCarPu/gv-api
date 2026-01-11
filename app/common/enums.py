@@ -22,3 +22,4 @@ class Icons(str, Enum):
     shoe_prints = "fas fa-shoe-prints"
     mobile_screen = "fas fa-mobile-screen"
     mug_hot = "fas fa-mug-hot"
+    smoking = "fas fa-smoking"
