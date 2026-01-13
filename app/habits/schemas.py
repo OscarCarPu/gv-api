@@ -200,19 +200,3 @@ class HabitTodayStats(BaseModel):
     average_completion_rate: Decimal | None
     current_period_value: Decimal | None
     date_value: Decimal | None
-
-
-class AggregatedPeriod(BaseModel):
-    """A single aggregated time period."""
-
-    period_start: date
-    period_end: date
-    total_value: Decimal
-
-
-class HabitHistory(BaseModel):
-    """History of aggregated log data for a habit."""
-
-    habit_id: int
-    time_period: str
-    periods: list[AggregatedPeriod]

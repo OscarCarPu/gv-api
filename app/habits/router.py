@@ -8,7 +8,6 @@ from app.core.security import require_auth
 from app.habits.dependencies import HabitLogServiceDep, HabitServiceDep
 from app.habits.schemas import (
     HabitCreate,
-    HabitHistory,
     HabitLogBody,
     HabitLogCreate,
     HabitLogRead,
@@ -105,27 +104,6 @@ async def update_habit(habit_id: int, data: HabitUpdate, service: HabitServiceDe
 )
 async def delete_habit(habit_id: int, service: HabitServiceDep):
     await service.delete(habit_id)
-
-
-@router.get(
-    "/{habit_id}/history",
-    response_model=HabitHistory,
-    summary="Get habit history",
-    description="Get aggregated log data for a habit over a date range. "
-    "Aggregates by time period (day, week, or month).",
-    responses={
-        status.HTTP_401_UNAUTHORIZED: {"description": "Invalid or missing API key"},
-        status.HTTP_404_NOT_FOUND: {"description": "Habit not found"},
-    },
-)
-async def get_habit_history(
-    habit_id: int,
-    service: HabitServiceDep,
-    start_date: date | None = None,
-    end_date: date | None = None,
-    time_period: str | None = None,
-):
-    return await service.get_habit_history(habit_id, start_date, end_date, time_period)
 
 
 # --- Logs ---

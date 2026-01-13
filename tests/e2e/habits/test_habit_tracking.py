@@ -7,7 +7,7 @@ from httpx import AsyncClient
 
 
 class TestHabitTrackingFlow:
-    """Complete flow: create habit -> log entries -> check stats -> check history."""
+    """Complete flow: create habit -> log entries -> check stats."""
 
     async def test_complete_habit_flow(self, client: AsyncClient, _clean_habits):
         # 1. Create a boolean habit
@@ -38,21 +38,6 @@ class TestHabitTrackingFlow:
         assert habit_stats["id"] == habit_id
         assert habit_stats["current_streak"] == 3
         assert Decimal(habit_stats["current_period_value"]) == Decimal("1")
-
-        # 4. Check habit history
-        response = await client.get(
-            f"/api/v1/habits/{habit_id}/history",
-            params={
-                "start_date": (date.today() - timedelta(days=2)).isoformat(),
-                "end_date": date.today().isoformat(),
-            },
-        )
-        assert response.status_code == 200
-        history = response.json()
-        assert history["habit_id"] == habit_id
-        assert len(history["periods"]) == 3
-        # All periods should have value 1 (logged each day)
-        assert all(Decimal(p["total_value"]) == Decimal("1") for p in history["periods"])
 
     async def test_numeric_habit_flow(self, client: AsyncClient, _clean_habits):
         # 1. Create a numeric habit with target
@@ -89,22 +74,6 @@ class TestHabitTrackingFlow:
         habit_stats = today_habits[0]
         assert Decimal(habit_stats["current_period_value"]) == Decimal("10")
         assert Decimal(habit_stats["target_value"]) == Decimal("8")
-
-        # 4. Check habit history
-        response = await client.get(
-            f"/api/v1/habits/{habit_id}/history",
-            params={
-                "start_date": (date.today() - timedelta(days=2)).isoformat(),
-                "end_date": date.today().isoformat(),
-            },
-        )
-        assert response.status_code == 200
-        history = response.json()
-        assert len(history["periods"]) == 3
-        # Check values: oldest first (8, 6, 10)
-        assert Decimal(history["periods"][0]["total_value"]) == Decimal("8")
-        assert Decimal(history["periods"][1]["total_value"]) == Decimal("6")
-        assert Decimal(history["periods"][2]["total_value"]) == Decimal("10")
 
     async def test_habit_update_delete_flow(self, client: AsyncClient, _clean_habits):
         # 1. Create habit

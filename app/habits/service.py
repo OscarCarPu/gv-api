@@ -9,9 +9,7 @@ from app.core.logging import get_logger
 from .models import ComparisonType, Habit, HabitLog, TargetFrequency, ValueType
 from .repository import HabitLogRepository, HabitRepository
 from .schemas import (
-    AggregatedPeriod,
     HabitCreate,
-    HabitHistory,
     HabitLogCreate,
     HabitLogRead,
     HabitLogUpdate,
@@ -356,85 +354,6 @@ class HabitService:
             dates.append(current)
             current += timedelta(days=1)
         return dates
-
-    # --- Habit History ---
-
-    async def get_habit_history(
-        self,
-        habit_id: int,
-        start_date: date | None = None,
-        end_date: date | None = None,
-        time_period: str | None = None,
-    ) -> HabitHistory:
-        """Get aggregated log history for a habit."""
-        habit = await self.get(habit_id)
-
-        # Defaults
-        today = date.today()
-        if end_date is None:
-            end_date = today
-
-        # Use habit's frequency if time_period not specified
-        time_period = habit.frequency.value if time_period is None else time_period.lower()
-
-        # Map short time_period names to frequency enum values
-        period_to_freq = {
-            "day": "daily",
-            "week": "weekly",
-            "month": "monthly",
-            "daily": "daily",
-            "weekly": "weekly",
-            "monthly": "monthly",
-        }
-        freq_value = period_to_freq.get(time_period, time_period)
-
-        # Convert time_period string to frequency enum for calculations
-        freq = TargetFrequency(freq_value)
-
-        if start_date is None:
-            start_date = self._get_periods_ago(freq, end_date, 30)
-
-        # Generate all periods in range
-        periods = self._generate_periods(freq, start_date, end_date)
-
-        # Get aggregated values for each period
-        aggregated_periods = []
-        for period_start, period_end in periods:
-            total_value = await self.log_repo.get_period_sum(habit_id, period_start, period_end)
-            aggregated_periods.append(
-                AggregatedPeriod(
-                    period_start=period_start,
-                    period_end=period_end,
-                    total_value=total_value,
-                )
-            )
-
-        return HabitHistory(
-            habit_id=habit_id,
-            time_period=time_period,
-            periods=aggregated_periods,
-        )
-
-    def _generate_periods(
-        self, frequency: TargetFrequency, start_date: date, end_date: date
-    ) -> list[tuple[date, date]]:
-        """Generate all period boundaries between start and end dates."""
-        periods = []
-        current = start_date
-
-        while current <= end_date:
-            period_start, period_end = self._get_period_boundaries(frequency, current)
-
-            # Ensure we don't go beyond end_date
-            if period_start > end_date:
-                break
-
-            periods.append((period_start, min(period_end, end_date)))
-
-            # Move to next period
-            current = period_end + timedelta(days=1)
-
-        return periods
 
     def _check_target_met(self, habit: Habit, value: Decimal) -> bool:
         """Check if a value meets the habit's target."""
