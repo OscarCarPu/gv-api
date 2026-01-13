@@ -38,6 +38,7 @@ HABITS = [
         "icon": "fas fa-dumbbell",
         "big_step": 30,
         "small_step": 10,
+        "streak_strict": False,
     },
     {
         "name": "Lectura",
@@ -53,6 +54,7 @@ HABITS = [
         "icon": "fas fa-book",
         "big_step": None,
         "small_step": None,
+        "streak_strict": False,
     },
     {
         "name": "Agua",
@@ -68,6 +70,7 @@ HABITS = [
         "icon": "fas fa-droplet",
         "big_step": 500,
         "small_step": 250,
+        "streak_strict": False,
     },
     {
         "name": "Meditación",
@@ -83,6 +86,7 @@ HABITS = [
         "icon": "fas fa-brain",
         "big_step": 15,
         "small_step": 5,
+        "streak_strict": False,
     },
     {
         "name": "Peso",
@@ -98,6 +102,7 @@ HABITS = [
         "icon": "fas fa-weight-scale",
         "big_step": 1,
         "small_step": 0.1,
+        "streak_strict": False,
     },
     {
         "name": "Comidas",
@@ -113,6 +118,7 @@ HABITS = [
         "icon": "fas fa-utensils",
         "big_step": 1,
         "small_step": 1,
+        "streak_strict": False,
     },
     {
         "name": "Pasos",
@@ -128,6 +134,7 @@ HABITS = [
         "icon": "fas fa-shoe-prints",
         "big_step": 1000,
         "small_step": 500,
+        "streak_strict": False,
     },
     {
         "name": "Pantalla",
@@ -143,6 +150,7 @@ HABITS = [
         "icon": "fas fa-mobile-screen",
         "big_step": 30,
         "small_step": 15,
+        "streak_strict": True,
     },
     {
         "name": "Cafeína",
@@ -158,6 +166,7 @@ HABITS = [
         "icon": "fas fa-mug-hot",
         "big_step": 100,
         "small_step": 50,
+        "streak_strict": False,
     },
 ]
 
@@ -200,12 +209,13 @@ def upgrade() -> None:
                 INSERT INTO habit (
                     name, description, value_type, unit, frequency,
                     target_value, target_min, target_max, comparison_type,
-                    default_value, icon, big_step, small_step, created_at, updated_at
+                    default_value, icon, big_step, small_step, streak_strict, created_at, updated_at
                 ) VALUES (
                     :name, :description, CAST(:value_type AS valuetype), :unit,
                     CAST(:frequency AS targetfrequency), :target_value, :target_min,
                     :target_max, CAST(:comparison_type AS comparisontype),
-                    :default_value, :icon, :big_step, :small_step, :created_at, :updated_at
+                    :default_value, :icon, :big_step, :small_step, :streak_strict,
+                    :created_at, :updated_at
                 )
             """),
             {**habit, "created_at": now, "updated_at": now},
