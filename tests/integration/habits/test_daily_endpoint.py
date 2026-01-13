@@ -80,14 +80,15 @@ class TestDailyEndpoint:
                 )
             )
         result = await habit_service.get_daily_habits()
-        assert result[0].current_streak == 3
+        # If habit has no target, streak should be None
+        assert result[0].current_streak is None
 
     async def test_streak_breaks_on_missing_day_required(
         self, habit_service: HabitService, log_service: HabitLogService, _clean_habits
     ):
-        """For required habits, missing day breaks streak."""
+        """For habits with default_value=None, missing day breaks streak."""
         habit = await habit_service.create(
-            HabitCreate(name="Required", value_type=ValueType.boolean, is_required=True)
+            HabitCreate(name="Required", value_type=ValueType.boolean, default_value=None)
         )
         today = date.today()
         # Log for today, skip yesterday, log day before
@@ -100,14 +101,15 @@ class TestDailyEndpoint:
             )
         )
         result = await habit_service.get_daily_habits()
-        assert result[0].current_streak == 1
+        # If habit has no target, streak should be None
+        assert result[0].current_streak is None
 
     async def test_streak_continues_on_missing_day_non_required(
         self, habit_service: HabitService, log_service: HabitLogService, _clean_habits
     ):
-        """For non-required habits, missing day counts towards streak."""
+        """For habits with default_value > 0, missing day counts towards streak."""
         habit = await habit_service.create(
-            HabitCreate(name="Optional", value_type=ValueType.boolean, is_required=False)
+            HabitCreate(name="Optional", value_type=ValueType.boolean, default_value=Decimal("1"))
         )
         today = date.today()
         # Log for today, skip yesterday, log day before
@@ -120,8 +122,8 @@ class TestDailyEndpoint:
             )
         )
         result = await habit_service.get_daily_habits()
-        # Non-required habits: missing days count towards streak
-        assert result[0].current_streak == 3
+        # If habit has no target, streak should be None
+        assert result[0].current_streak is None
 
     async def test_numeric_habit_stats(
         self, habit_service: HabitService, log_service: HabitLogService, _clean_habits
@@ -150,7 +152,7 @@ class TestDailyEndpoint:
                 comparison_type=ComparisonType.in_range,
                 target_min=Decimal("70"),
                 target_max=Decimal("75"),
-                is_required=False,
+                default_value=Decimal("1"),
             )
         )
         today = date.today()
@@ -187,7 +189,7 @@ class TestDailyEndpoint:
                 comparison_type=ComparisonType.in_range,
                 target_min=Decimal("70"),
                 target_max=Decimal("75"),
-                is_required=False,
+                default_value=Decimal("1"),
             )
         )
         today = date.today()

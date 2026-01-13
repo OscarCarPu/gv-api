@@ -28,7 +28,8 @@ class HabitFactory(Factory):
     comparison_type = None
     start_date = None
     end_date = None
-    is_required = True
+    default_value = None
+    streak_strict = True
     icon = "fas fa-check"
     big_step = None
     small_step = None

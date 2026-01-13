@@ -36,7 +36,8 @@ class HabitBase(BaseModel):
     comparison_type: ComparisonType | None = None
     start_date: date | None = None
     end_date: date | None = None
-    is_required: bool = True
+    default_value: Decimal | None = None
+    streak_strict: bool = False
     icon: str = DEFAULT_ICON
     big_step: Decimal | None = None
     small_step: Decimal | None = None
@@ -96,7 +97,8 @@ class HabitUpdate(BaseModel):
     comparison_type: ComparisonType | None = None
     start_date: date | None = None
     end_date: date | None = None
-    is_required: bool | None = None
+    default_value: Decimal | None = None
+    streak_strict: bool | None = None
     icon: str | None = None
     big_step: Decimal | None = None
     small_step: Decimal | None = None
@@ -181,6 +183,7 @@ class HabitTodayStats(BaseModel):
     # Habit info
     id: int
     name: str
+    description: str | None
     value_type: ValueType
     unit: str | None
     frequency: TargetFrequency
@@ -188,14 +191,15 @@ class HabitTodayStats(BaseModel):
     target_min: Decimal | None
     target_max: Decimal | None
     comparison_type: ComparisonType | None
-    is_required: bool
+    default_value: Decimal | None
+    streak_strict: bool
     icon: str
     big_step: Decimal | None
     small_step: Decimal | None
 
     # Stats
-    current_streak: int
-    longest_streak: int
+    current_streak: int | None
+    longest_streak: int | None
     average_value: Decimal | None
     average_completion_rate: Decimal | None
     current_period_value: Decimal | None

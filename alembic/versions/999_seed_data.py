@@ -18,7 +18,7 @@ from alembic import op
 
 # revision identifiers, used by Alembic.
 revision: str = "999"
-down_revision: str | Sequence[str] | None = "002"
+down_revision: str | Sequence[str] | None = "003"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
@@ -34,7 +34,7 @@ HABITS = [
         "target_min": None,
         "target_max": None,
         "comparison_type": "greater_equal_than",
-        "is_required": True,
+        "default_value": None,
         "icon": "fas fa-dumbbell",
         "big_step": 30,
         "small_step": 10,
@@ -49,7 +49,7 @@ HABITS = [
         "target_min": None,
         "target_max": None,
         "comparison_type": "greater_equal_than",
-        "is_required": False,
+        "default_value": 1,
         "icon": "fas fa-book",
         "big_step": None,
         "small_step": None,
@@ -64,7 +64,7 @@ HABITS = [
         "target_min": None,
         "target_max": None,
         "comparison_type": "greater_equal_than",
-        "is_required": True,
+        "default_value": None,
         "icon": "fas fa-droplet",
         "big_step": 500,
         "small_step": 250,
@@ -79,7 +79,7 @@ HABITS = [
         "target_min": None,
         "target_max": None,
         "comparison_type": "greater_equal_than",
-        "is_required": False,
+        "default_value": 1,
         "icon": "fas fa-brain",
         "big_step": 15,
         "small_step": 5,
@@ -94,7 +94,7 @@ HABITS = [
         "target_min": 70,
         "target_max": 75,
         "comparison_type": "in_range",
-        "is_required": False,
+        "default_value": None,
         "icon": "fas fa-weight-scale",
         "big_step": 1,
         "small_step": 0.1,
@@ -109,7 +109,7 @@ HABITS = [
         "target_min": None,
         "target_max": None,
         "comparison_type": "equals",
-        "is_required": False,
+        "default_value": 3,
         "icon": "fas fa-utensils",
         "big_step": 1,
         "small_step": 1,
@@ -124,7 +124,7 @@ HABITS = [
         "target_min": None,
         "target_max": None,
         "comparison_type": "greater_than",
-        "is_required": False,
+        "default_value": None,
         "icon": "fas fa-shoe-prints",
         "big_step": 1000,
         "small_step": 500,
@@ -139,7 +139,7 @@ HABITS = [
         "target_min": None,
         "target_max": None,
         "comparison_type": "less_than",
-        "is_required": False,
+        "default_value": None,
         "icon": "fas fa-mobile-screen",
         "big_step": 30,
         "small_step": 15,
@@ -154,7 +154,7 @@ HABITS = [
         "target_min": None,
         "target_max": None,
         "comparison_type": "less_equal_than",
-        "is_required": False,
+        "default_value": None,
         "icon": "fas fa-mug-hot",
         "big_step": 100,
         "small_step": 50,
@@ -200,30 +200,30 @@ def upgrade() -> None:
                 INSERT INTO habit (
                     name, description, value_type, unit, frequency,
                     target_value, target_min, target_max, comparison_type,
-                    is_required, icon, big_step, small_step, created_at, updated_at
+                    default_value, icon, big_step, small_step, created_at, updated_at
                 ) VALUES (
                     :name, :description, CAST(:value_type AS valuetype), :unit,
                     CAST(:frequency AS targetfrequency), :target_value, :target_min,
                     :target_max, CAST(:comparison_type AS comparisontype),
-                    :is_required, :icon, :big_step, :small_step, :created_at, :updated_at
+                    :default_value, :icon, :big_step, :small_step, :created_at, :updated_at
                 )
             """),
             {**habit, "created_at": now, "updated_at": now},
         )
 
     # Get inserted habits
-    result = conn.execute(sa.text("SELECT id, name, value_type, is_required FROM habit"))
+    result = conn.execute(sa.text("SELECT id, name, value_type, default_value FROM habit"))
     habits = result.fetchall()
 
     # Generate logs for the past 60 days
     today = date.today()
 
-    for habit_id, habit_name, value_type, is_required in habits:
+    for habit_id, habit_name, value_type, default_value in habits:
         for day_offset in range(60):
             log_date = today - timedelta(days=day_offset)
 
             # Skip some days randomly
-            skip_chance = 0.1 if is_required else 0.3
+            skip_chance = 0.1 if default_value is None else 0.3
             if random.random() < skip_chance:
                 continue
 

@@ -4,7 +4,6 @@ from decimal import Decimal
 
 from app.common.constants import DEFAULT_PAGE, DEFAULT_PAGE_SIZE
 from app.core import ConflictError, NotFoundError, ValidationError
-from app.core.logging import get_logger
 
 from .models import ComparisonType, Habit, HabitLog, TargetFrequency, ValueType
 from .repository import HabitLogRepository, HabitRepository
@@ -108,7 +107,10 @@ class HabitService:
         )
 
         # Get value for the specific target date (single day's log)
+        # If no log exists and default_value is set, use the default
         date_value = await self.log_repo.get_value_for_date(habit.id, today)
+        if date_value is None and habit.default_value is not None:
+            date_value = habit.default_value
 
         # Calculate stats for last 30 periods (excluding current period)
         stats_start = self._get_periods_ago(habit.frequency, today, 30)
@@ -144,6 +146,7 @@ class HabitService:
         return HabitTodayStats(
             id=habit.id,
             name=habit.name,
+            description=habit.description,
             value_type=habit.value_type,
             unit=habit.unit,
             frequency=habit.frequency,
@@ -151,12 +154,13 @@ class HabitService:
             target_min=habit.target_min,
             target_max=habit.target_max,
             comparison_type=habit.comparison_type,
-            is_required=habit.is_required,
+            default_value=habit.default_value,
+            streak_strict=habit.streak_strict,
             icon=habit.icon,
             big_step=habit.big_step,
             small_step=habit.small_step,
-            current_streak=current_streak,
-            longest_streak=longest_streak,
+            current_streak=current_streak if current_streak is not None else None,
+            longest_streak=longest_streak if longest_streak is not None else None,
             average_value=avg_value,
             average_completion_rate=avg_completion,
             current_period_value=current_period_value,
@@ -233,8 +237,10 @@ class HabitService:
         today: date,
         dates_met: set[date],
         all_log_dates: set[date],
-    ) -> tuple[int, int]:
-        """Calculate current and longest streaks."""
+    ) -> tuple[int | None, int | None]:
+        """Calculate current and longest streaks. If habit has no target, streaks are None."""
+        if not habit.has_target:
+            return None, None
         if not dates_met:
             return 0, 0
 
@@ -254,50 +260,34 @@ class HabitService:
         """Calculate current streak counting backwards from today."""
         streak = 0
         check_date = today
-
-        # For non-required habits, find the earliest log date to limit how far back we count
         min_log_date = min(all_log_dates) if all_log_dates else today
-
-        # Go back through periods
         while True:
             period_start, period_end = self._get_period_boundaries(habit.frequency, check_date)
-
-            # Check if any date in this period met the target
-            logger = get_logger(__name__)
-            if habit.id == 1:
-                logger.debug(f"Checking if period {period_start} to {period_end} met target")
             period_met = any(d in dates_met for d in self._dates_in_range(period_start, period_end))
-            if habit.id == 1:
-                logger.debug(f"Period {period_start} to {period_end} met target: {period_met}")
-
             if period_met:
                 streak += 1
             else:
-                # Check if this is a required habit
-                if habit.is_required:
-                    # Missing period breaks the streak
-                    break
+                # If habit has a target, use streak_strict to decide if missing day breaks streak
+                if habit.has_target:
+                    if habit.streak_strict:
+                        break
+                    else:
+                        # For non-strict, missing log does not break streak
+                        period_logged = any(
+                            d in all_log_dates
+                            for d in self._dates_in_range(period_start, period_end)
+                        )
+                        if period_logged:
+                            break
+                        if period_end < min_log_date:
+                            break
+                        streak += 1
                 else:
-                    # For non-required, check if there was any log
-                    period_logged = any(
-                        d in all_log_dates for d in self._dates_in_range(period_start, period_end)
-                    )
-                    if period_logged:
-                        # Logged but didn't meet target - breaks streak
-                        break
-                    # No log at all - still counts towards streak for non-required
-                    # But stop if we've gone before the first log
-                    if period_end < min_log_date:
-                        break
-                    streak += 1
-
-            # Move to previous period
+                    # No target: treat as strict
+                    break
             check_date = period_start - timedelta(days=1)
-
-            # Safety limit
             if streak > 1000 or check_date.year < 2000:
                 break
-
         return streak
 
     def _calculate_longest_streak(
@@ -328,7 +318,7 @@ class HabitService:
                 current += 1
                 longest = max(longest, current)
             else:
-                if habit.is_required:
+                if habit.default_value is None:
                     current = 0
                 else:
                     period_logged = any(

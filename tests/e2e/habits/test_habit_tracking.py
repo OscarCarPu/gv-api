@@ -36,7 +36,8 @@ class TestHabitTrackingFlow:
         assert len(today_habits) == 1
         habit_stats = today_habits[0]
         assert habit_stats["id"] == habit_id
-        assert habit_stats["current_streak"] == 3
+        # If habit has no target, streak should be None
+        assert habit_stats["current_streak"] is None
         assert Decimal(habit_stats["current_period_value"]) == Decimal("1")
 
     async def test_numeric_habit_flow(self, client: AsyncClient, _clean_habits):

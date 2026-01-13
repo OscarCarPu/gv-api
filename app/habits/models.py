@@ -30,7 +30,13 @@ class Habit(Base):
     comparison_type: Mapped[ComparisonType | None] = mapped_column(default=None)
     start_date: Mapped[date | None] = mapped_column(default=None)
     end_date: Mapped[date | None] = mapped_column(default=None)
-    is_required: Mapped[bool] = mapped_column(default=True)
+    default_value: Mapped[Decimal | None] = mapped_column(Numeric(10, 2), default=None)
+    streak_strict: Mapped[bool] = mapped_column(default=False)
+
+    @property
+    def has_target(self) -> bool:
+        return self.target_value is not None or self.comparison_type is not None
+
     icon: Mapped[str] = mapped_column(default=DEFAULT_ICON)
     big_step: Mapped[Decimal | None] = mapped_column(Numeric(10, 2), default=None)
     small_step: Mapped[Decimal | None] = mapped_column(Numeric(10, 2), default=None)
