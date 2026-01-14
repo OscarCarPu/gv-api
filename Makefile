@@ -14,7 +14,7 @@ test:
 	uv run pytest
 
 generate-migration:
-	uv run alembic revision --autogenerate -m "$(m)" --rev-id="$(r)"
+	uv run alembic revision --autogenerate -m "$(m)" --rev-id="$(r)" --head=default
 
 execute-migrations:
 	uv run alembic upgrade head

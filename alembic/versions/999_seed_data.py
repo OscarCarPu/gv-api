@@ -6,7 +6,6 @@ Create Date: 2025-12-21 20:50:52.465548
 
 """
 
-import os
 import random
 from collections.abc import Sequence
 from datetime import UTC, date, datetime, timedelta
@@ -21,6 +20,7 @@ revision: str = "999"
 down_revision: str | Sequence[str] | None = "003"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
+branch_labels = ("data_seed",)
 
 # Seed habits configuration (Spanish)
 HABITS = [
@@ -197,8 +197,6 @@ def generate_value(habit_name: str, value_type: str) -> Decimal:
 
 def upgrade() -> None:
     """Insert seed data."""
-    if os.getenv("STAGE") != "prod":
-        return
     conn = op.get_bind()
     now = datetime.now(UTC)
 
@@ -255,7 +253,5 @@ def upgrade() -> None:
 
 def downgrade() -> None:
     """Remove seed data."""
-    if os.getenv("STAGE") != "prod":
-        return
     op.execute("DELETE FROM habit_log")
     op.execute("DELETE FROM habit")
