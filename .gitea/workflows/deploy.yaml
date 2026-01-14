@@ -15,17 +15,7 @@ jobs:
         run: |
           TARGET_DIR="/home/ocp/docker/gv/gv-api"
 
-          mkdir -p $TARGET_DIR
-          rsync -avz --delete \
-            --exclude=".git" \
-            --exclude=".env" \
-            --exclude="__pycache__" \
-            --exclude="*.pyc" \
-            --exclude=".pytest_cache/" \
-            --exclude="**/__pycache__/" \
-            --exclude=".venv/" \
-            --exclude="venv/" \
-            ./ $TARGET_DIR/
 
           cd $TARGET_DIR
+          git pull
           make server-reset
