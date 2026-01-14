@@ -25,8 +25,14 @@ db-reset:
 reset:
 	docker compose up -d --build --wait
 
-deploy:
+server-reset:
 	docker compose down
 	docker compose up -d --build --wait
 	uv run alembic upgrade head
 	docker system prune -f
+
+deploy:
+	git checkout main
+	git merge develop
+	git push
+	git checkout develop
