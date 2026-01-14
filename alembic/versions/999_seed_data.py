@@ -17,10 +17,9 @@ from alembic import op
 
 # revision identifiers, used by Alembic.
 revision: str = "999"
-down_revision: str | Sequence[str] | None = "003"
-branch_labels: str | Sequence[str] | None = None
+down_revision: str | Sequence[str] | None = None
+branch_labels: str | Sequence[str] | None = ("data_seed",)
 depends_on: str | Sequence[str] | None = None
-branch_labels = ("data_seed",)
 
 # Seed habits configuration (Spanish)
 HABITS = [

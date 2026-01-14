@@ -19,8 +19,12 @@ generate-migration:
 execute-migrations:
 	uv run alembic upgrade head
 
-db-reset:
-	docker compose down -v && docker compose up -d --build db --wait && uv run alembic upgrade head && docker compose up -d --wait --build
+local-reset:
+	docker compose down -v
+	docker compose up -d --build db --wait
+	uv run alembic upgrade default@head
+	uv run alembic upgrade data_seed@head
+	docker compose up -d --wait --build
 
 reset:
 	docker compose up -d --build --wait
@@ -28,7 +32,7 @@ reset:
 server-reset:
 	docker compose down
 	docker compose up -d --build --wait
-	uv run alembic upgrade head
+	uv run alembic upgrade default@head
 	docker system prune -f
 
 deploy:
