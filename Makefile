@@ -1,5 +1,7 @@
 up:
-	docker compose up -d --wait
+	if ! docker compose ps -q | grep -q ^; then \
+		docker compose up -d --wait; \
+	fi
 
 down:
 	docker compose down
