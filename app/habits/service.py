@@ -106,13 +106,13 @@ class HabitService:
             habit.id, period_start, period_end
         )
 
-        # Get value for the specific target date (single day's log)
-        # If no log exists and default_value is set, use the default
         date_value = await self.log_repo.get_value_for_date(habit.id, today)
         if date_value is None and habit.default_value is not None:
+            await self.log_repo.create(
+                HabitLog(habit_id=habit.id, log_date=today, value=habit.default_value)
+            )
             date_value = habit.default_value
 
-        # Calculate stats for last 30 periods (excluding current period)
         stats_start = self._get_periods_ago(habit.frequency, today, 30)
         stats_end = period_start - timedelta(days=1)  # Exclude current period
 
