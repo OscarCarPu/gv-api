@@ -113,7 +113,7 @@ class HabitService:
             )
             date_value = habit.default_value
 
-        stats_start = self._get_periods_ago(habit.frequency, today, 30)
+        stats_start = await self._get_periods_ago(habit.frequency, today, 30, habit.id)
         stats_end = period_start - timedelta(days=1)  # Exclude current period
 
         has_objective = habit.target_value is not None or habit.comparison_type is not None
@@ -189,16 +189,19 @@ class HabitService:
                         days=1
                     )
                 return start, end
-            case _:
-                return target_date, target_date
 
-    def _get_periods_ago(self, frequency: TargetFrequency, target_date: date, periods: int) -> date:
+    async def _get_periods_ago(
+        self, frequency: TargetFrequency, target_date: date, periods: int, habit_id: int
+    ) -> date:
         """Get the start date of N periods ago."""
+        oldest_log: HabitLog | None = await self.log_repo.get_oldest_log(habit_id)
+        if oldest_log is None:
+            return target_date
         match frequency:
             case TargetFrequency.daily:
-                return target_date - timedelta(days=periods)
+                return max(target_date - timedelta(days=periods), oldest_log.log_date)
             case TargetFrequency.weekly:
-                return target_date - timedelta(weeks=periods)
+                return max(target_date - timedelta(weeks=periods), oldest_log.log_date)
             case TargetFrequency.monthly:
                 # Approximate: go back periods months
                 year = target_date.year
@@ -206,9 +209,7 @@ class HabitService:
                 while month <= 0:
                     month += 12
                     year -= 1
-                return date(year, month, 1)
-            case _:
-                return target_date - timedelta(days=periods)
+                return max(date(year, month, 1), oldest_log.log_date)
 
     def _count_periods_between(
         self, frequency: TargetFrequency, start_date: date, end_date: date

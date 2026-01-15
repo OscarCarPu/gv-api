@@ -239,8 +239,6 @@ class HabitLogRepository(BaseRepository[HabitLog]):
                     value_expression >= habit.target_min,
                     value_expression <= habit.target_max,
                 )
-            case _:
-                return true()
 
     async def get_dates_with_target_met(
         self,
@@ -287,3 +285,14 @@ class HabitLogRepository(BaseRepository[HabitLog]):
 
         result = await self.session.execute(stmt)
         return result.scalars().all()
+
+    async def get_oldest_log(self, habit_id: int) -> HabitLog | None:
+        """Get the oldest log for a habit."""
+        stmt = (
+            select(HabitLog)
+            .where(HabitLog.habit_id == habit_id)
+            .order_by(HabitLog.log_date)
+            .limit(1)
+        )
+        result = await self.session.execute(stmt)
+        return result.scalar_one_or_none()
