@@ -13,7 +13,7 @@ logs:
 	docker compose logs -f
 
 test:
-	uv run pytest
+	uv run pytest -vv
 
 generate-migration:
 	uv run alembic revision --autogenerate -m "$(m)" --rev-id="$(r)" --head=default
