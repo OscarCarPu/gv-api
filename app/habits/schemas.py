@@ -14,16 +14,6 @@ from app.habits.enums import ComparisonType, TargetFrequency, ValueType
 from app.habits.validations import validate_target_config
 
 
-class PaginatedResponse[T](BaseModel):
-    """Generic paginated response wrapper."""
-
-    items: list[T]
-    total: int
-    page: int
-    page_size: int
-    total_pages: int
-
-
 class HabitBase(BaseModel):
     name: str
     description: str | None = None

@@ -1,9 +1,9 @@
 from datetime import datetime
 
-from sqlalchemy import Connection, DateTime, ForeignKey, String, event
-from sqlalchemy.orm import Mapped, Mapper, mapped_column, relationship, validates
+from sqlalchemy import DateTime, ForeignKey, String
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from app.common.validations import NAME_MAX_LENGTH, sanitize_description, sanitize_name
+from app.common.validations import NAME_MAX_LENGTH
 from app.core.database import Base
 from app.tasks.enums import TaskCategory, TaskStatus
 
@@ -14,13 +14,6 @@ class Project(Base):
     finished: Mapped[bool] = mapped_column(default=False)
 
     tasks: Mapped[list["Task"]] = relationship(back_populates="project")  # noqa: UP037
-
-    @validates("name")
-    def _validate_name(self, key: str, value: str) -> str:
-        return sanitize_name(value)
-
-    def _validate_description(self, key: str, value: str | None) -> str | None:
-        return sanitize_description(value)
 
     def __str__(self) -> str:
         """Return LLM-friendly"""
@@ -39,10 +32,6 @@ class Task(Base):
 
     project: Mapped["Project"] = relationship(back_populates="tasks")  # noqa: UP037
 
-    @validates("title")
-    def _validate_title(self, key: str, value: str) -> str:
-        return sanitize_name(value)
-
     def __str__(self) -> str:
         """Return LLM-friendly"""
         return f"ID {self.id} in {str(self.project)}: {self.title}, status: {self.status}"
@@ -59,12 +48,3 @@ class TaskSchedule(Base):
     def __str__(self) -> str:
         """Return LLM-friendly"""
         return f"ID {self.id}: {self.datetime_start} - {self.datetime_end}, done: {self.done}"
-
-
-@event.listens_for(TaskSchedule, "before_insert")
-@event.listens_for(TaskSchedule, "before_update")
-def _validate_task_schedule_before_persist(
-    mapper: Mapper[TaskSchedule], connection: Connection, target: TaskSchedule
-) -> None:
-    if target.datetime_end and target.datetime_start > target.datetime_end:
-        raise ValueError("Start datetime must be before end datetime")

@@ -1,21 +1,16 @@
 from datetime import date
 from decimal import Decimal
 
-from sqlalchemy import Connection, ForeignKey, Numeric, String, UniqueConstraint, event, select
-from sqlalchemy.orm import Mapped, Mapper, mapped_column, relationship, validates
+from sqlalchemy import ForeignKey, Numeric, String, UniqueConstraint
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.common.validations import (
     NAME_MAX_LENGTH,
     UNIT_MAX_LENGTH,
-    sanitize_description,
-    sanitize_name,
-    sanitize_unit,
-    validate_icon,
 )
 from app.core.database import Base
 from app.habits.constants import DEFAULT_ICON
 from app.habits.enums import ComparisonType, TargetFrequency, ValueType
-from app.habits.validations import validate_target_config
 
 
 class Habit(Base):
@@ -42,32 +37,6 @@ class Habit(Base):
     small_step: Mapped[Decimal | None] = mapped_column(Numeric(10, 2), default=None)
 
     logs: Mapped[list["HabitLog"]] = relationship(back_populates="habit")  # noqa: UP037
-
-    @validates("name")
-    def _validate_name(self, key: str, value: str) -> str:
-        return sanitize_name(value)
-
-    @validates("description")
-    def _validate_description(self, key: str, value: str | None) -> str | None:
-        return sanitize_description(value)
-
-    @validates("unit")
-    def _validate_unit(self, key: str, value: str | None) -> str | None:
-        return sanitize_unit(value)
-
-    @validates("icon")
-    def _validate_icon(self, key: str, value: str) -> str:
-        return validate_icon(value)
-
-    def validate_target_config(self) -> None:
-        """Validate that target configuration is consistent."""
-        validate_target_config(
-            self.value_type,
-            self.comparison_type,
-            self.target_value,
-            self.target_min,
-            self.target_max,
-        )
 
     def __str__(self) -> str:
         """Return LLM-friendly string representation of the habit."""
@@ -98,15 +67,6 @@ class Habit(Base):
         return "".join(parts)
 
 
-@event.listens_for(Habit, "before_insert")
-@event.listens_for(Habit, "before_update")
-def _validate_habit_before_persist(
-    mapper: Mapper[Habit], connection: object, target: Habit
-) -> None:
-    """Validate Habit state before insert or update."""
-    target.validate_target_config()
-
-
 class HabitLog(Base):
     __table_args__ = (UniqueConstraint("habit_id", "log_date", name="uq_habit_log_date"),)
 
@@ -116,21 +76,5 @@ class HabitLog(Base):
 
     habit: Mapped["Habit"] = relationship(back_populates="logs")  # noqa: UP037
 
-    def validate_value_for_type(self, value_type: ValueType) -> None:
-        """Validate that the log value is compatible with the habit's value type."""
-        if value_type == ValueType.boolean and self.value not in (Decimal("0"), Decimal("1")):
-            raise ValueError("Boolean habits only accept 0 or 1")
-        if value_type == ValueType.numeric and self.value < Decimal("0"):
-            raise ValueError("Numeric habit values must be non-negative")
-
-
-@event.listens_for(HabitLog, "before_insert")
-@event.listens_for(HabitLog, "before_update")
-def _validate_habit_log_before_persist(
-    mapper: Mapper[HabitLog], connection: Connection, target: HabitLog
-) -> None:
-    """Validate HabitLog value against the habit's value_type."""
-    result = connection.execute(select(Habit.value_type).where(Habit.id == target.habit_id))
-    row = result.first()
-    if row:
-        target.validate_value_for_type(row[0])
+    def __str__(self) -> str:
+        return f"ID {self.id}: {self.habit.name} ({self.habit.value_type.value})"

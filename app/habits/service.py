@@ -3,6 +3,7 @@ from datetime import date, timedelta
 from decimal import Decimal
 
 from app.common.constants import DEFAULT_PAGE, DEFAULT_PAGE_SIZE
+from app.common.schemas import PaginatedResponse
 from app.core import ConflictError, NotFoundError, ValidationError
 
 from .models import ComparisonType, Habit, HabitLog, TargetFrequency, ValueType
@@ -15,7 +16,6 @@ from .schemas import (
     HabitRead,
     HabitTodayStats,
     HabitUpdate,
-    PaginatedResponse,
 )
 
 

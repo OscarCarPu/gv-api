@@ -4,6 +4,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, Query, status
 
 from app.common.constants import DEFAULT_PAGE, DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE
+from app.common.schemas import PaginatedResponse
 from app.core.security import require_auth
 from app.habits.dependencies import HabitLogServiceDep, HabitServiceDep
 from app.habits.schemas import (
@@ -15,7 +16,6 @@ from app.habits.schemas import (
     HabitRead,
     HabitTodayStats,
     HabitUpdate,
-    PaginatedResponse,
 )
 
 router = APIRouter(prefix="/habits", tags=["habits"], dependencies=[Depends(require_auth)])
