@@ -9,6 +9,7 @@ from app.core.database import Base
 
 # Import all models so they are registered with Base.metadata
 from app.habits import models as habit_models  # noqa: F401
+from app.tasks import models as task_models  # noqa: F401
 
 config = context.config
 
