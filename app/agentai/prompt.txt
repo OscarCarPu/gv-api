@@ -1,5 +1,0 @@
-Call insert_habit_log to log the user's habit.
-
-{habits_context}
-
-Match the user's activity to the correct habit by name. Convert units: hours->minutes (*60), liters->ml (*1000).

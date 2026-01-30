@@ -1,0 +1,11 @@
+version: "2"
+sql:
+  - schema: "db/migrations"
+    queries: "db/queries"
+    engine: "postgresql"
+    gen:
+      go:
+        package: "postgres"
+        out: "internal/database/postgres"
+        emit_json_tags: true
+        emit_pointers_for_null_types: true

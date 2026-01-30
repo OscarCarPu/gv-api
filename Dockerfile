@@ -1,19 +1,30 @@
-FROM python:3.14-slim
-
-ARG STAGE=prod
-ENV STAGE=${STAGE}
+# BUILDING
+#
+FROM golang:1.25-alpine AS builder
 
 WORKDIR /app
 
-RUN pip install uv
+COPY go.mod go.sum ./ 
 
-COPY pyproject.toml .
-RUN uv pip install --system -r pyproject.toml
+RUN go mod download 
 
-COPY app/ ./app/
+COPY . .
 
-CMD if [ "$STAGE" = "dev" ]; then \
-      uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload; \
-    else \
-      uvicorn app.main:app --host 0.0.0.0 --port 8000; \
-    fi
+RUN GCO_ENABLED=0 GOOS=linux go build -ldflags="-w -s" -o /main cmd/api/main.go 
+
+FROM alpine:latest
+
+RUN addgroup -S appgroup && adduser -S appuser -G appgroup
+
+WORKDIR /app
+
+COPY --from=builder /main .
+
+COPY --from=builder /app/db/migrations ./db/migrations
+
+USER appuser
+EXPOSE 8080
+
+CMD ["./main"]
+
+

@@ -1,44 +1,42 @@
+.PHONY: sqlc run build docker-build up setup-project
+
+# --- PROJECT SETUP ---
+setup-project:
+	@cp -n .env.example .env || true
+
+# --- CODE GENERATION ---
+
+# Run sqlc using Docker (No local install needed!)
+sqlc:
+	docker run --rm -v $(pwd):/src -w /src sqlc/sqlc generate
+
+# Create a new migration file
+# Usage: make migration name=add_users
+migration:
+	@read -p "Enter migration name: " name; \
+	touch db/migrations/$(shell date +%Y%m%d%H%M%S)_$$name.sql
+
+# --- DOCKER OPERATIONS ---
+
+# start the project, building it 
 up:
-	if ! docker compose ps -q | grep -q ^; then \
-		docker compose up -d --wait; \
-	fi
+	docker compose up --build --wait -d 
 
-down:
-	docker compose down
+# reset the project
+reset:
+	docker compose down -v --remove-orphans
+	docker compose up --build --wait -d
 
-clean:
-	docker compose down -v
-
+# follow logs 
 logs:
 	docker compose logs -f
 
-test:
-	uv run pytest -vv
+# up and logs 
+up-logs:
+	make up
+	make logs
 
-generate-migration:
-	uv run alembic revision --autogenerate -m "$(m)" --rev-id="$(r)" --head=default
-
-execute-migrations:
-	uv run alembic upgrade head
-
-local-reset:
-	docker compose down -v
-	docker compose up -d --build db --wait
-	uv run alembic upgrade default@head
-	uv run alembic upgrade data_seed@head
-	docker compose up -d --wait --build
-
-reset:
-	docker compose up -d --build --wait
-
-server-reset:
-	docker compose down
-	docker compose up -d --build --wait
-	uv run alembic upgrade default@head
-	docker system prune -f
-
-deploy:
-	git checkout main
-	git merge develop
-	git push
-	git checkout develop
+# reset and logs 
+reset-logs:
+	make reset
+	make logs
