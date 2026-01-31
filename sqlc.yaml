@@ -17,3 +17,4 @@ sql:
         overrides:
           - db_type: "date"
             go_type: "time.Time"
+
