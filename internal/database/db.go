@@ -1,22 +1,32 @@
+// Package database provides the database
 package database
 
 import (
+	"context"
 	"fmt"
 	"time"
 
-	"github.com/jmoiron/sqlx"
-	_ "github.com/lib/pq"
+	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-func New(connectionString string) (*sqlx.DB, error) {
-	db, err := sqlx.Connect("postgres", connectionString)
+func New(ctx context.Context, connectionString string) (*pgxpool.Pool, error) {
+	config, err := pgxpool.ParseConfig(connectionString)
 	if err != nil {
-		return nil, fmt.Errorf("failed to connect to db: %w", err)
+		return nil, fmt.Errorf("failed to parse connection string: %w", err)
 	}
 
-	db.SetMaxOpenConns(25)
-	db.SetMaxIdleConns(25)
-	db.SetConnMaxLifetime(5 * time.Minute)
+	config.MaxConns = 25
+	config.MaxConnLifetime = 5 * time.Minute
+	config.MinConns = 5
 
-	return db, nil
+	pool, err := pgxpool.NewWithConfig(ctx, config)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create pool: %w", err)
+	}
+
+	if err := pool.Ping(ctx); err != nil {
+		return nil, fmt.Errorf("failed to ping pool: %w", err)
+	}
+
+	return pool, nil
 }

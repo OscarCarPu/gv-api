@@ -4,26 +4,25 @@ import (
 	"context"
 	"time"
 
-	"gv-api/internal/database/postgres"
+	"gv-api/internal/database/sqlc"
 
-	"github.com/jmoiron/sqlx"
+	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 type Repository interface {
-	// Update return type to match DTO
 	GetHabitsWithLogs(ctx context.Context, date time.Time) ([]HabitWithLog, error)
-	UpsertLog(ctx context.Context, habitID int32, date time.Time, value float64) error
+	UpsertLog(ctx context.Context, habitID int32, date time.Time, value float32) error
 }
 
 type PostgresRepository struct {
-	db *sqlx.DB
-	q  *postgres.Queries
+	db *pgxpool.Pool
+	q  *sqlc.Queries
 }
 
-func NewRepository(db *sqlx.DB) *PostgresRepository {
+func NewRepository(db *pgxpool.Pool) *PostgresRepository {
 	return &PostgresRepository{
 		db: db,
-		q:  postgres.New(db),
+		q:  sqlc.New(db),
 	}
 }
 
@@ -36,26 +35,22 @@ func (r *PostgresRepository) GetHabitsWithLogs(ctx context.Context, date time.Ti
 	var results []HabitWithLog
 	for _, row := range rows {
 		habit := HabitWithLog{
-			ID:   row.ID,
-			Name: row.Name,
+			ID:          row.ID,
+			Name:        row.Name,
+			Description: row.Description,
+			LogValue:    row.Value,
 		}
-		if row.Description.Valid {
-			habit.Description = &row.Description.String
-		}
-		if row.Value.Valid {
-			logValue := row.Value.Float64
-			habit.LogValue = &logValue
-		}
+
 		results = append(results, habit)
 	}
 	return results, nil
 }
 
-func (r *PostgresRepository) UpsertLog(ctx context.Context, habitID int32, date time.Time, value float64) error {
-	params := postgres.UpsertLogParams{
+func (r *PostgresRepository) UpsertLog(ctx context.Context, habitID int32, date time.Time, value float32) error {
+	params := sqlc.UpsertLogParams{
 		HabitID: int32(habitID),
 		LogDate: date,
-		Value:   float32(value), // Cast generic float64 to DB type float32
+		Value:   value,
 	}
 	return r.q.UpsertLog(ctx, params)
 }

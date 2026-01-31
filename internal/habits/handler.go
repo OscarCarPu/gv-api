@@ -3,6 +3,8 @@ package habits
 import (
 	"encoding/json"
 	"net/http"
+
+	"gv-api/internal/response"
 )
 
 type Handler struct {
@@ -13,7 +15,7 @@ func NewHandler(s *Service) *Handler {
 	return &Handler{service: s}
 }
 
-// GET /habits?date=2023-10-27
+// GetDaily -> GET /habits?date=2023-10-27
 func (h *Handler) GetDaily(w http.ResponseWriter, r *http.Request) {
 	dateParam := r.URL.Query().Get("date")
 
@@ -23,9 +25,9 @@ func (h *Handler) GetDaily(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var response []HabitWithLog
+	var habits []HabitWithLog
 	for _, item := range domainData {
-		response = append(response, HabitWithLog{
+		habits = append(habits, HabitWithLog{
 			ID:          item.ID,
 			Name:        item.Name,
 			Description: item.Description,
@@ -33,23 +35,21 @@ func (h *Handler) GetDaily(w http.ResponseWriter, r *http.Request) {
 		})
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(response)
+	response.JSON(w, http.StatusOK, habits)
 }
 
-// POST /habits/log
+// UpsertLog -> POST /habits/log
 func (h *Handler) UpsertLog(w http.ResponseWriter, r *http.Request) {
 	var req LogUpsertRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, "Invalid Body", http.StatusBadRequest)
+		response.Error(w, http.StatusBadRequest, "Invalid Body")
 		return
 	}
 
 	if err := h.service.LogHabit(r.Context(), req); err != nil {
-		http.Error(w, "Failed to log", http.StatusInternalServerError)
+		response.Error(w, http.StatusInternalServerError, "Failed to log")
 		return
 	}
 
-	w.WriteHeader(http.StatusOK)
-	w.Write([]byte(`{"status":"ok"}`))
+	response.JSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }

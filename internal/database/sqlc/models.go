@@ -2,13 +2,14 @@
 // versions:
 //   sqlc v1.30.0
 
-package postgres
+package sqlc
 
 import (
-	"database/sql"
 	"database/sql/driver"
 	"fmt"
 	"time"
+
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 type HabitComparisonType string
@@ -143,27 +144,27 @@ func (ns NullHabitValueType) Value() (driver.Value, error) {
 }
 
 type Habit struct {
-	ID             int32                   `json:"id"`
-	Name           string                  `json:"name"`
-	Description    sql.NullString          `json:"description"`
-	ValueType      HabitValueType          `json:"value_type"`
-	Unit           sql.NullString          `json:"unit"`
-	Frequency      HabitFrequency          `json:"frequency"`
-	TargetValue    sql.NullFloat64         `json:"target_value"`
-	TargetMin      sql.NullFloat64         `json:"target_min"`
-	TargetMax      sql.NullFloat64         `json:"target_max"`
-	ComparisonType NullHabitComparisonType `json:"comparison_type"`
-	StartDate      sql.NullTime            `json:"start_date"`
-	EndDate        sql.NullTime            `json:"end_date"`
-	DefaultValue   sql.NullFloat64         `json:"default_value"`
-	StreakStrict   sql.NullBool            `json:"streak_strict"`
-	Icon           string                  `json:"icon"`
-	BigStep        sql.NullFloat64         `json:"big_step"`
-	SmallStep      sql.NullFloat64         `json:"small_step"`
+	ID             int32                   `db:"id" json:"id"`
+	Name           string                  `db:"name" json:"name"`
+	Description    *string                 `db:"description" json:"description"`
+	ValueType      HabitValueType          `db:"value_type" json:"value_type"`
+	Unit           *string                 `db:"unit" json:"unit"`
+	Frequency      HabitFrequency          `db:"frequency" json:"frequency"`
+	TargetValue    *float32                `db:"target_value" json:"target_value"`
+	TargetMin      *float32                `db:"target_min" json:"target_min"`
+	TargetMax      *float32                `db:"target_max" json:"target_max"`
+	ComparisonType NullHabitComparisonType `db:"comparison_type" json:"comparison_type"`
+	StartDate      pgtype.Date             `db:"start_date" json:"start_date"`
+	EndDate        pgtype.Date             `db:"end_date" json:"end_date"`
+	DefaultValue   *float32                `db:"default_value" json:"default_value"`
+	StreakStrict   *bool                   `db:"streak_strict" json:"streak_strict"`
+	Icon           string                  `db:"icon" json:"icon"`
+	BigStep        *float32                `db:"big_step" json:"big_step"`
+	SmallStep      *float32                `db:"small_step" json:"small_step"`
 }
 
 type HabitLog struct {
-	HabitID int32     `json:"habit_id"`
-	LogDate time.Time `json:"log_date"`
-	Value   float32   `json:"value"`
+	HabitID int32     `db:"habit_id" json:"habit_id"`
+	LogDate time.Time `db:"log_date" json:"log_date"`
+	Value   float32   `db:"value" json:"value"`
 }

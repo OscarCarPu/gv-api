@@ -3,11 +3,10 @@
 //   sqlc v1.30.0
 // source: habits.sql
 
-package postgres
+package sqlc
 
 import (
 	"context"
-	"database/sql"
 	"time"
 )
 
@@ -18,19 +17,19 @@ LEFT JOIN habit_logs hl ON h.id = hl.habit_id AND hl.log_date = $1
 `
 
 type GetHabitsWithLogsRow struct {
-	ID          int32           `json:"id"`
-	Name        string          `json:"name"`
-	Description sql.NullString  `json:"description"`
-	Value       sql.NullFloat64 `json:"value"`
+	ID          int32    `db:"id" json:"id"`
+	Name        string   `db:"name" json:"name"`
+	Description *string  `db:"description" json:"description"`
+	Value       *float32 `db:"value" json:"value"`
 }
 
 func (q *Queries) GetHabitsWithLogs(ctx context.Context, logDate time.Time) ([]GetHabitsWithLogsRow, error) {
-	rows, err := q.db.QueryContext(ctx, getHabitsWithLogs, logDate)
+	rows, err := q.db.Query(ctx, getHabitsWithLogs, logDate)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []GetHabitsWithLogsRow
+	items := []GetHabitsWithLogsRow{}
 	for rows.Next() {
 		var i GetHabitsWithLogsRow
 		if err := rows.Scan(
@@ -42,9 +41,6 @@ func (q *Queries) GetHabitsWithLogs(ctx context.Context, logDate time.Time) ([]G
 			return nil, err
 		}
 		items = append(items, i)
-	}
-	if err := rows.Close(); err != nil {
-		return nil, err
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err
@@ -60,12 +56,12 @@ DO UPDATE SET value = excluded.value
 `
 
 type UpsertLogParams struct {
-	HabitID int32     `json:"habit_id"`
-	LogDate time.Time `json:"log_date"`
-	Value   float32   `json:"value"`
+	HabitID int32     `db:"habit_id" json:"habit_id"`
+	LogDate time.Time `db:"log_date" json:"log_date"`
+	Value   float32   `db:"value" json:"value"`
 }
 
 func (q *Queries) UpsertLog(ctx context.Context, arg UpsertLogParams) error {
-	_, err := q.db.ExecContext(ctx, upsertLog, arg.HabitID, arg.LogDate, arg.Value)
+	_, err := q.db.Exec(ctx, upsertLog, arg.HabitID, arg.LogDate, arg.Value)
 	return err
 }

@@ -3,12 +3,13 @@
 # --- PROJECT SETUP ---
 setup-project:
 	@cp -n .env.example .env || true
+	@command -v sqlc >/dev/null 2>&1 || { echo >&2 "sqlc is not installed."; exit 1; }
 
 # --- CODE GENERATION ---
 
-# Run sqlc using Docker (No local install needed!)
+# Run sqlc 
 sqlc:
-	docker run --rm -v $(pwd):/src -w /src sqlc/sqlc generate
+	sqlc generate
 
 # Create a new migration file
 # Usage: make migration name=add_users
