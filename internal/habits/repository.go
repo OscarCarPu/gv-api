@@ -12,6 +12,7 @@ import (
 type Repository interface {
 	GetHabitsWithLogs(ctx context.Context, date time.Time) ([]HabitWithLog, error)
 	UpsertLog(ctx context.Context, habitID int32, date time.Time, value float32) error
+	CreateHabit(ctx context.Context, name string, description *string) (CreateHabitResponse, error)
 }
 
 type PostgresRepository struct {
@@ -53,4 +54,19 @@ func (r *PostgresRepository) UpsertLog(ctx context.Context, habitID int32, date 
 		Value:   value,
 	}
 	return r.q.UpsertLog(ctx, params)
+}
+
+func (r *PostgresRepository) CreateHabit(ctx context.Context, name string, description *string) (CreateHabitResponse, error) {
+	habit, err := r.q.CreateHabit(ctx, sqlc.CreateHabitParams{
+		Name:        name,
+		Description: description,
+	})
+	if err != nil {
+		return CreateHabitResponse{}, err
+	}
+	return CreateHabitResponse{
+		ID:          habit.ID,
+		Name:        habit.Name,
+		Description: habit.Description,
+	}, nil
 }

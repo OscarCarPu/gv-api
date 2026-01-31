@@ -32,6 +32,7 @@ func main() {
 
 	r := chi.NewRouter()
 	r.Get("/habits", habitHandler.GetDaily)
+	r.Post("/habits", habitHandler.CreateHabit)
 	r.Post("/habits/log", habitHandler.UpsertLog)
 
 	log.Printf("Starting server on port %s", cfg.Port)

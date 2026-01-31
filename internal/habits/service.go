@@ -30,5 +30,13 @@ func (s *Service) GetDailyView(ctx context.Context, dateStr string) ([]HabitWith
 }
 
 func (s *Service) LogHabit(ctx context.Context, req LogUpsertRequest) error {
-	return s.repo.UpsertLog(ctx, req.HabitID, req.Date, req.Value)
+	date, err := time.Parse("2006-01-02", req.Date)
+	if err != nil {
+		return err
+	}
+	return s.repo.UpsertLog(ctx, req.HabitID, date, req.Value)
+}
+
+func (s *Service) CreateHabit(ctx context.Context, req CreateHabitRequest) (CreateHabitResponse, error) {
+	return s.repo.CreateHabit(ctx, req.Name, req.Description)
 }

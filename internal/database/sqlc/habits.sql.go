@@ -10,6 +10,24 @@ import (
 	"time"
 )
 
+const createHabit = `-- name: CreateHabit :one
+INSERT INTO habits (name, description)
+VALUES ($1, $2)
+RETURNING id, name, description
+`
+
+type CreateHabitParams struct {
+	Name        string  `db:"name" json:"name"`
+	Description *string `db:"description" json:"description"`
+}
+
+func (q *Queries) CreateHabit(ctx context.Context, arg CreateHabitParams) (Habit, error) {
+	row := q.db.QueryRow(ctx, createHabit, arg.Name, arg.Description)
+	var i Habit
+	err := row.Scan(&i.ID, &i.Name, &i.Description)
+	return i, err
+}
+
 const getHabitsWithLogs = `-- name: GetHabitsWithLogs :many
 SELECT h.id, h.name, h.description, hl.value
 FROM habits h 

@@ -1,9 +1,17 @@
 .PHONY: sqlc run build docker-build up setup-project
 
+# Colors
+RED=\033[0;31m
+GREEN=\033[0;32m
+YELLOW=\033[0;33m
+CYAN=\033[0;36m
+NC=\033[0m
+
 # --- PROJECT SETUP ---
 setup-project:
 	@cp -n .env.example .env || true
-	@command -v sqlc >/dev/null 2>&1 || { echo >&2 "sqlc is not installed."; exit 1; }
+	@command -v go >/dev/null 2>&1 || { printf "$(RED)go is not installed$(NC)\n" >&2; exit 1; }
+	@command -v sqlc >/dev/null 2>&1 || { printf "$(RED)sqlc is not installed$(NC)\n" >&2; exit 1; }
 
 # --- CODE GENERATION ---
 
@@ -41,3 +49,51 @@ up-logs:
 reset-logs:
 	make reset
 	make logs
+
+# --- TESTING ---
+
+include .env
+
+INNER_TEST_DB_URL=postgresql://$(POSTGRES_USER):$(POSTGRES_PASSWORD)@db:5432/$(TEST_DB)?sslmode=disable
+OUTSIDE_TEST_DB_URL=postgresql://$(POSTGRES_USER):$(POSTGRES_PASSWORD)@localhost:5432/$(TEST_DB)?sslmode=disable
+
+test-db-setup:
+	@printf "$(CYAN)>>> Starting database...$(NC)\n"
+	@docker compose up -d --wait db > /dev/null
+	@printf "$(YELLOW)>>> Dropping test database if exists...$(NC)\n"
+	@docker compose exec -T db psql -U $(POSTGRES_USER) -d postgres -c "DROP DATABASE IF EXISTS \"$(TEST_DB)\";" > /dev/null 2>&1
+	@printf "$(YELLOW)>>> Creating test database...$(NC)\n"
+	@docker compose exec -T db psql -U $(POSTGRES_USER) -d postgres -c "CREATE DATABASE \"$(TEST_DB)\";" > /dev/null
+	@printf "$(YELLOW)>>> Running migrations...$(NC)\n"
+	@docker compose exec -T db psql -U $(POSTGRES_USER) -d $(TEST_DB) -f /docker-entrypoint-initdb.d/001_habits.sql > /dev/null
+	@printf "$(GREEN)>>> Test database ready$(NC)\n"
+
+test-db-cleanup:
+	@printf "$(YELLOW)>>> Cleaning up test database...$(NC)\n"
+	@docker compose exec -T db psql -U $(POSTGRES_USER) -d postgres -c "DROP DATABASE IF EXISTS \"$(TEST_DB)\";" > /dev/null 2>&1
+	@printf "$(GREEN)>>> Cleanup complete$(NC)\n"
+
+test-unit:
+	@printf "$(CYAN)>>> Running unit tests...$(NC)\n"
+	@go test ./internal/... -short
+
+test-e2e: test-db-setup
+	@printf "$(CYAN)>>> Rebuilding and restarting API with test database...$(NC)\n"
+	@docker compose stop api > /dev/null 2>&1 || true
+	@DATABASE_URL=$(INNER_TEST_DB_URL) docker compose up -d --wait api > /dev/null
+	@printf "$(GREEN)>>> API ready$(NC)\n"
+	@printf "$(CYAN)>>> Running e2e tests...$(NC)\n"
+	@TEST_DB_URL=$(OUTSIDE_TEST_DB_URL) PORT=$(PORT) go test ./test/e2e/... -v
+	@$(MAKE) test-db-cleanup --no-print-directory
+
+test: test-db-setup
+	@printf "$(CYAN)>>> Rebuilding and restarting API with test database...$(NC)\n"
+	@docker compose stop api > /dev/null 2>&1 || true
+	@DATABASE_URL=$(INNER_TEST_DB_URL) docker compose up -d --wait api > /dev/null
+	@printf "$(GREEN)>>> API ready$(NC)\n"
+	@printf "$(CYAN)>>> Running all tests...$(NC)\n"
+	@TEST_DB_URL=$(OUTSIDE_TEST_DB_URL) PORT=$(PORT) go test $$(go list ./... | grep -v /internal/database/sqlc) -coverprofile=coverage.out
+	@$(MAKE) test-db-cleanup --no-print-directory
+	@printf "$(CYAN)>>> Generating coverage treemap...$(NC)\n"
+	@go run github.com/nikolaydubina/go-cover-treemap@latest -coverprofile=coverage.out > coverage.svg
+	@printf "$(GREEN)>>> Coverage saved to coverage.svg$(NC)\n"

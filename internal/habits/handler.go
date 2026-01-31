@@ -1,17 +1,24 @@
 package habits
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 
 	"gv-api/internal/response"
 )
 
-type Handler struct {
-	service *Service
+type ServiceInterface interface {
+	GetDailyView(ctx context.Context, dateStr string) ([]HabitWithLog, error)
+	LogHabit(ctx context.Context, req LogUpsertRequest) error
+	CreateHabit(ctx context.Context, req CreateHabitRequest) (CreateHabitResponse, error)
 }
 
-func NewHandler(s *Service) *Handler {
+type Handler struct {
+	service ServiceInterface
+}
+
+func NewHandler(s ServiceInterface) *Handler {
 	return &Handler{service: s}
 }
 
@@ -52,4 +59,26 @@ func (h *Handler) UpsertLog(w http.ResponseWriter, r *http.Request) {
 	}
 
 	response.JSON(w, http.StatusOK, map[string]string{"status": "ok"})
+}
+
+// CreateHabit -> POST /habits
+func (h *Handler) CreateHabit(w http.ResponseWriter, r *http.Request) {
+	var req CreateHabitRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		response.Error(w, http.StatusBadRequest, "Invalid Body")
+		return
+	}
+
+	if req.Name == "" {
+		response.Error(w, http.StatusBadRequest, "name is required")
+		return
+	}
+
+	habit, err := h.service.CreateHabit(r.Context(), req)
+	if err != nil {
+		response.Error(w, http.StatusInternalServerError, "Failed to create habit")
+		return
+	}
+
+	response.JSON(w, http.StatusCreated, habit)
 }

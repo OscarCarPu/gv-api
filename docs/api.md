@@ -62,3 +62,35 @@ This document provides details on the available endpoints for the GV-API.
     - **Content:** `Invalid Body`
   - **Code:** `500 Internal Server Error`
     - **Content:** `Failed to log`
+
+---
+
+## Create Habit
+
+- **Method:** `POST`
+- **Endpoint:** `/habits`
+- **Description:** Creates a new habit.
+- **Request Body:**
+  ```json
+  {
+    "name": "Exercise",
+    "description": "Go for a 30-minute run."
+  }
+  ```
+  - `name` (required): The name of the habit.
+  - `description` (optional): A description of the habit.
+- **Success Response:**
+  - **Code:** `201 Created`
+  - **Content:**
+    ```json
+    {
+      "id": 1,
+      "name": "Exercise",
+      "description": "Go for a 30-minute run."
+    }
+    ```
+- **Error Responses:**
+  - **Code:** `400 Bad Request`
+    - **Content:** `Invalid Body` or `name is required`
+  - **Code:** `500 Internal Server Error`
+    - **Content:** `Failed to create habit`

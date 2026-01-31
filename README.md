@@ -2,6 +2,10 @@
 
 Un orquestador de vida integral desarrollado en Go, diseñado para centralizar datos de múltiples servicios web, plataformas y dispositivos.
 
+## Coverage
+
+![Coverage](coverage.svg)
+
 
 ## Tecnologías
 

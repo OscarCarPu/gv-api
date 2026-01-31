@@ -8,3 +8,8 @@ INSERT INTO habit_logs (habit_id, log_date, value)
 VALUES ($1, $2, $3)
 ON CONFLICT (habit_id, log_date)
 DO UPDATE SET value = excluded.value;
+
+-- name: CreateHabit :one
+INSERT INTO habits (name, description)
+VALUES ($1, $2)
+RETURNING id, name, description;
