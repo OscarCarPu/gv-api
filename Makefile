@@ -94,6 +94,7 @@ test: test-db-setup
 	@printf "$(CYAN)>>> Running all tests...$(NC)\n"
 	@TEST_DB_URL=$(OUTSIDE_TEST_DB_URL) PORT=$(PORT) go test $$(go list ./... | grep -v /internal/database/sqlc) -coverprofile=coverage.out
 	@$(MAKE) test-db-cleanup --no-print-directory
-	@printf "$(CYAN)>>> Generating coverage treemap...$(NC)\n"
-	@go run github.com/nikolaydubina/go-cover-treemap@latest -coverprofile=coverage.out > coverage.svg
-	@printf "$(GREEN)>>> Coverage saved to coverage.svg$(NC)\n"
+	@printf "$(YELLOW)>>> Updating README with coverage table...$(NC)\n"
+	uv run scripts/coverage.py
+	@printf "$(GREEN)>>> README.md updated successfully!$(NC)\n"
+
