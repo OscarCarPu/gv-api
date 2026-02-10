@@ -11,6 +11,7 @@ import (
 	"gv-api/internal/habits"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/go-chi/cors"
 )
 
 func main() {
@@ -33,6 +34,11 @@ func main() {
 	habitHandler := habits.NewHandler(habitService)
 
 	r := chi.NewRouter()
+	r.Use(cors.Handler(cors.Options{
+		AllowedOrigins:   []string{"*"},
+		AllowedMethods:   []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},
+		AllowedHeaders:   []string{"Content-Type"},
+	}))
 	r.Get("/habits", habitHandler.GetDaily)
 	r.Post("/habits", habitHandler.CreateHabit)
 	r.Post("/habits/log", habitHandler.UpsertLog)
