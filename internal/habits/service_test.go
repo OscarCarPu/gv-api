@@ -33,173 +33,168 @@ func (m *mockRepo) CreateHabit(ctx context.Context, name string, description *st
 	return CreateHabitResponse{}, nil
 }
 
-func TestGetDailyView_DateParsing(t *testing.T) {
-	repo := &mockRepo{
-		getHabitsFn: func(ctx context.Context, date time.Time) ([]HabitWithLog, error) {
-			expectedDate := time.Date(2025, 1, 31, 0, 0, 0, 0, time.UTC)
-			if !date.Equal(expectedDate) {
-				t.Errorf("expected date %v, got %v", expectedDate, date)
-			}
-			return []HabitWithLog{}, nil
-		},
-	}
-	svc := NewService(repo)
+func TestService_GetDailyView(t *testing.T) {
+	t.Run("parses date correctly", func(t *testing.T) {
+		want := time.Date(2025, 1, 31, 0, 0, 0, 0, time.UTC)
+		repo := &mockRepo{
+			getHabitsFn: func(ctx context.Context, got time.Time) ([]HabitWithLog, error) {
+				if !got.Equal(want) {
+					t.Errorf("got date %v, want %v", got, want)
+				}
+				return []HabitWithLog{}, nil
+			},
+		}
+		svc := NewService(repo)
 
-	_, err := svc.GetDailyView(context.Background(), "2025-01-31")
-	if err != nil {
-		t.Errorf("expected no error, got %v", err)
-	}
+		_, err := svc.GetDailyView(context.Background(), "2025-01-31")
+		if err != nil {
+			t.Fatalf("got error %v, want nil", err)
+		}
+	})
 
-	_, err = svc.GetDailyView(context.Background(), "invalid-date")
-	if err == nil {
-		t.Errorf("expected error, got %v", err)
-	}
+	t.Run("returns error for invalid date", func(t *testing.T) {
+		svc := NewService(&mockRepo{})
+
+		_, err := svc.GetDailyView(context.Background(), "invalid-date")
+		if err == nil {
+			t.Fatal("got nil, want error")
+		}
+	})
+
+	t.Run("returns empty results", func(t *testing.T) {
+		repo := &mockRepo{
+			getHabitsFn: func(ctx context.Context, date time.Time) ([]HabitWithLog, error) {
+				return []HabitWithLog{}, nil
+			},
+		}
+		svc := NewService(repo)
+
+		got, err := svc.GetDailyView(context.Background(), "2025-01-31")
+		if err != nil {
+			t.Fatalf("got error %v, want nil", err)
+		}
+		if len(got) != 0 {
+			t.Errorf("got %d results, want 0", len(got))
+		}
+	})
+
+	t.Run("uses today when date is empty", func(t *testing.T) {
+		var got time.Time
+		repo := &mockRepo{
+			getHabitsFn: func(ctx context.Context, date time.Time) ([]HabitWithLog, error) {
+				got = date
+				return []HabitWithLog{}, nil
+			},
+		}
+		svc := NewService(repo)
+
+		_, err := svc.GetDailyView(context.Background(), "")
+		if err != nil {
+			t.Fatalf("got error %v, want nil", err)
+		}
+
+		now := time.Now().UTC()
+		want := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC)
+		if !got.Equal(want) {
+			t.Errorf("got date %v, want %v", got, want)
+		}
+	})
 }
 
-func TestGetDailyView_EmptyResults(t *testing.T) {
-	repo := &mockRepo{
-		getHabitsFn: func(ctx context.Context, date time.Time) ([]HabitWithLog, error) {
-			return []HabitWithLog{}, nil
-		},
-	}
-	svc := NewService(repo)
+func TestService_LogHabit(t *testing.T) {
+	t.Run("delegates to repository", func(t *testing.T) {
+		var gotHabitID int32
+		var gotDate time.Time
+		var gotValue float32
 
-	res, _ := svc.GetDailyView(context.Background(), "")
+		mock := &mockRepo{
+			upsertLogFn: func(ctx context.Context, habitID int32, date time.Time, value float32) error {
+				gotHabitID = habitID
+				gotDate = date
+				gotValue = value
+				return nil
+			},
+		}
+		svc := NewService(mock)
 
-	if len(res) != 0 {
-		t.Errorf("expected 0 results, got %d", len(res))
-	}
+		req := LogUpsertRequest{HabitID: 5, Date: "2025-01-31", Value: 100.0}
+		err := svc.LogHabit(context.Background(), req)
+		if err != nil {
+			t.Fatalf("got error %v, want nil", err)
+		}
+
+		wantDate := time.Date(2025, 1, 31, 0, 0, 0, 0, time.UTC)
+		if gotHabitID != 5 {
+			t.Errorf("got habitID %d, want 5", gotHabitID)
+		}
+		if !gotDate.Equal(wantDate) {
+			t.Errorf("got date %v, want %v", gotDate, wantDate)
+		}
+		if gotValue != 100.0 {
+			t.Errorf("got value %f, want 100.0", gotValue)
+		}
+	})
+
+	t.Run("returns error for invalid date", func(t *testing.T) {
+		svc := NewService(&mockRepo{})
+
+		req := LogUpsertRequest{HabitID: 1, Date: "not-a-date", Value: 10.0}
+		err := svc.LogHabit(context.Background(), req)
+		if err == nil {
+			t.Fatal("got nil, want error")
+		}
+	})
 }
 
-func TestLogHabit_DelegatesToRepo(t *testing.T) {
-	var capturedHabitID int32
-	var capturedDate time.Time
-	var capturedValue float32
+func TestService_CreateHabit(t *testing.T) {
+	t.Run("delegates to repository", func(t *testing.T) {
+		var gotName string
+		var gotDesc *string
 
-	mock := &mockRepo{
-		upsertLogFn: func(ctx context.Context, habitID int32, date time.Time, value float32) error {
-			capturedHabitID = habitID
-			capturedDate = date
-			capturedValue = value
-			return nil
-		},
-	}
-	service := NewService(mock)
+		desc := "test description"
+		mock := &mockRepo{
+			createHabitFn: func(ctx context.Context, name string, description *string) (CreateHabitResponse, error) {
+				gotName = name
+				gotDesc = description
+				return CreateHabitResponse{ID: 1, Name: name, Description: description}, nil
+			},
+		}
+		svc := NewService(mock)
 
-	expectedDate := time.Date(2025, 1, 31, 0, 0, 0, 0, time.UTC)
-	req := LogUpsertRequest{
-		HabitID: 5,
-		Date:    "2025-01-31",
-		Value:   100.0,
-	}
+		req := CreateHabitRequest{Name: "Exercise", Description: &desc}
+		got, err := svc.CreateHabit(context.Background(), req)
+		if err != nil {
+			t.Fatalf("got error %v, want nil", err)
+		}
+		if gotName != "Exercise" {
+			t.Errorf("got name %q, want %q", gotName, "Exercise")
+		}
+		if gotDesc == nil || *gotDesc != "test description" {
+			t.Errorf("got description %v, want %q", gotDesc, "test description")
+		}
+		if got.ID != 1 {
+			t.Errorf("got ID %d, want 1", got.ID)
+		}
+	})
 
-	err := service.LogHabit(context.Background(), req)
-	if err != nil {
-		t.Errorf("expected no error, got %v", err)
-	}
-	if capturedHabitID != 5 {
-		t.Errorf("expected habitID 5, got %d", capturedHabitID)
-	}
-	if !capturedDate.Equal(expectedDate) {
-		t.Errorf("expected date %v, got %v", expectedDate, capturedDate)
-	}
-	if capturedValue != 100.0 {
-		t.Errorf("expected value 100.0, got %f", capturedValue)
-	}
-}
+	t.Run("handles nil description", func(t *testing.T) {
+		var gotDesc *string
 
-func TestLogHabit_InvalidDate(t *testing.T) {
-	service := NewService(&mockRepo{})
+		mock := &mockRepo{
+			createHabitFn: func(ctx context.Context, name string, description *string) (CreateHabitResponse, error) {
+				gotDesc = description
+				return CreateHabitResponse{ID: 1, Name: name}, nil
+			},
+		}
+		svc := NewService(mock)
 
-	req := LogUpsertRequest{
-		HabitID: 1,
-		Date:    "not-a-date",
-		Value:   10.0,
-	}
-
-	err := service.LogHabit(context.Background(), req)
-	if err == nil {
-		t.Error("expected error for invalid date, got nil")
-	}
-}
-
-func TestGetDailyView_EmptyDateUsesToday(t *testing.T) {
-	var capturedDate time.Time
-	repo := &mockRepo{
-		getHabitsFn: func(ctx context.Context, date time.Time) ([]HabitWithLog, error) {
-			capturedDate = date
-			return []HabitWithLog{}, nil
-		},
-	}
-	svc := NewService(repo)
-
-	_, err := svc.GetDailyView(context.Background(), "")
-	if err != nil {
-		t.Errorf("expected no error, got %v", err)
-	}
-
-	now := time.Now().UTC()
-	expectedDate := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC)
-	if !capturedDate.Equal(expectedDate) {
-		t.Errorf("expected today's date %v, got %v", expectedDate, capturedDate)
-	}
-}
-
-func TestCreateHabit_DelegatesToRepo(t *testing.T) {
-	var capturedName string
-	var capturedDesc *string
-
-	desc := "test description"
-	mock := &mockRepo{
-		createHabitFn: func(ctx context.Context, name string, description *string) (CreateHabitResponse, error) {
-			capturedName = name
-			capturedDesc = description
-			return CreateHabitResponse{ID: 1, Name: name, Description: description}, nil
-		},
-	}
-	service := NewService(mock)
-
-	req := CreateHabitRequest{
-		Name:        "Exercise",
-		Description: &desc,
-	}
-
-	resp, err := service.CreateHabit(context.Background(), req)
-	if err != nil {
-		t.Errorf("expected no error, got %v", err)
-	}
-	if capturedName != "Exercise" {
-		t.Errorf("expected name 'Exercise', got %s", capturedName)
-	}
-	if capturedDesc == nil || *capturedDesc != "test description" {
-		t.Errorf("expected description 'test description', got %v", capturedDesc)
-	}
-	if resp.ID != 1 {
-		t.Errorf("expected ID 1, got %d", resp.ID)
-	}
-}
-
-func TestCreateHabit_NilDescription(t *testing.T) {
-	var capturedDesc *string
-
-	mock := &mockRepo{
-		createHabitFn: func(ctx context.Context, name string, description *string) (CreateHabitResponse, error) {
-			capturedDesc = description
-			return CreateHabitResponse{ID: 1, Name: name}, nil
-		},
-	}
-	service := NewService(mock)
-
-	req := CreateHabitRequest{
-		Name:        "Exercise",
-		Description: nil,
-	}
-
-	_, err := service.CreateHabit(context.Background(), req)
-	if err != nil {
-		t.Errorf("expected no error, got %v", err)
-	}
-	if capturedDesc != nil {
-		t.Errorf("expected nil description, got %v", capturedDesc)
-	}
+		req := CreateHabitRequest{Name: "Exercise", Description: nil}
+		_, err := svc.CreateHabit(context.Background(), req)
+		if err != nil {
+			t.Fatalf("got error %v, want nil", err)
+		}
+		if gotDesc != nil {
+			t.Errorf("got description %v, want nil", gotDesc)
+		}
+	})
 }

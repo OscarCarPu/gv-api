@@ -15,7 +15,7 @@ setup-project:
 
 # --- CODE GENERATION ---
 
-# Run sqlc 
+# Run sqlc
 sqlc:
 	sqlc generate
 
@@ -27,25 +27,25 @@ migration:
 
 # --- DOCKER OPERATIONS ---
 
-# start the project, building it 
+# start the project, building it
 up:
-	docker compose up --build --wait -d 
+	docker compose up --build --wait -d
 
 # reset the project
 reset:
 	docker compose down -v --remove-orphans
 	docker compose up --build --wait -d
 
-# follow logs 
+# follow logs
 logs:
 	docker compose logs -f
 
-# up and logs 
+# up and logs
 up-logs:
 	make up
 	make logs
 
-# reset and logs 
+# reset and logs
 reset-logs:
 	make reset
 	make logs
@@ -73,28 +73,38 @@ test-db-cleanup:
 	@docker compose exec -T db psql -U $(POSTGRES_USER) -d postgres -c "DROP DATABASE IF EXISTS \"$(TEST_DB)\";" > /dev/null 2>&1
 	@printf "$(GREEN)>>> Cleanup complete$(NC)\n"
 
-test-unit:
-	@printf "$(CYAN)>>> Running unit tests...$(NC)\n"
-	@go test ./internal/... -short
-
-test-e2e: test-db-setup
+test-api-setup: test-db-setup
 	@printf "$(CYAN)>>> Rebuilding and restarting API with test database...$(NC)\n"
 	@docker compose stop api > /dev/null 2>&1 || true
 	@DATABASE_URL=$(INNER_TEST_DB_URL) docker compose up -d --wait api > /dev/null
 	@printf "$(GREEN)>>> API ready$(NC)\n"
+
+# Unit tests: fast, no external dependencies
+test-unit:
+	@printf "$(CYAN)>>> Running unit tests...$(NC)\n"
+	@go test -v -short ./internal/...
+
+# Integration tests: require a running database
+test-integration: test-db-setup
+	@printf "$(CYAN)>>> Running integration tests...$(NC)\n"
+	@TEST_DB_URL=$(OUTSIDE_TEST_DB_URL) go test -v -run Integration ./internal/...
+	@$(MAKE) test-db-cleanup --no-print-directory
+
+# E2E tests: require full stack (API + database)
+test-e2e: test-api-setup
 	@printf "$(CYAN)>>> Running e2e tests...$(NC)\n"
 	@TEST_DB_URL=$(OUTSIDE_TEST_DB_URL) PORT=$(PORT) go test ./test/e2e/... -v
 	@$(MAKE) test-db-cleanup --no-print-directory
 
-test: test-db-setup
-	@printf "$(CYAN)>>> Rebuilding and restarting API with test database...$(NC)\n"
-	@docker compose stop api > /dev/null 2>&1 || true
-	@DATABASE_URL=$(INNER_TEST_DB_URL) docker compose up -d --wait api > /dev/null
-	@printf "$(GREEN)>>> API ready$(NC)\n"
-	@printf "$(CYAN)>>> Running all tests...$(NC)\n"
-	@TEST_DB_URL=$(OUTSIDE_TEST_DB_URL) PORT=$(PORT) go test $$(go list ./... | grep -v /internal/database/sqlc) -coverprofile=coverage.out
+# Coverage: run all tests and generate coverage report
+test-coverage: test-api-setup
+	@printf "$(CYAN)>>> Running all tests with coverage...$(NC)\n"
+	@TEST_DB_URL=$(OUTSIDE_TEST_DB_URL) PORT=$(PORT) go test -v $$(go list ./... | grep -v /internal/database/sqlc) -coverprofile=coverage.out
 	@$(MAKE) test-db-cleanup --no-print-directory
 	@printf "$(YELLOW)>>> Updating README with coverage table...$(NC)\n"
-	uv run scripts/coverage.py
-	@printf "$(GREEN)>>> README.md updated successfully!$(NC)\n"
+	@uv run scripts/coverage.py
+	@printf "$(GREEN)>>> Coverage report updated$(NC)\n"
 
+# Run all tests
+test: test-unit test-integration test-e2e
+	@printf "$(GREEN)>>> All tests passed$(NC)\n"

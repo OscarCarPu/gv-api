@@ -5,8 +5,6 @@ import (
 	"time"
 
 	"gv-api/internal/database/sqlc"
-
-	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 type Repository interface {
@@ -16,15 +14,11 @@ type Repository interface {
 }
 
 type PostgresRepository struct {
-	db *pgxpool.Pool
-	q  *sqlc.Queries
+	q sqlc.Querier
 }
 
-func NewRepository(db *pgxpool.Pool) *PostgresRepository {
-	return &PostgresRepository{
-		db: db,
-		q:  sqlc.New(db),
-	}
+func NewRepository(q sqlc.Querier) *PostgresRepository {
+	return &PostgresRepository{q: q}
 }
 
 func (r *PostgresRepository) GetHabitsWithLogs(ctx context.Context, date time.Time) ([]HabitWithLog, error) {
@@ -49,7 +43,7 @@ func (r *PostgresRepository) GetHabitsWithLogs(ctx context.Context, date time.Ti
 
 func (r *PostgresRepository) UpsertLog(ctx context.Context, habitID int32, date time.Time, value float32) error {
 	params := sqlc.UpsertLogParams{
-		HabitID: int32(habitID),
+		HabitID: habitID,
 		LogDate: date,
 		Value:   value,
 	}

@@ -26,20 +26,10 @@ func NewHandler(s ServiceInterface) *Handler {
 func (h *Handler) GetDaily(w http.ResponseWriter, r *http.Request) {
 	dateParam := r.URL.Query().Get("date")
 
-	domainData, err := h.service.GetDailyView(r.Context(), dateParam)
+	habits, err := h.service.GetDailyView(r.Context(), dateParam)
 	if err != nil {
 		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 		return
-	}
-
-	var habits []HabitWithLog
-	for _, item := range domainData {
-		habits = append(habits, HabitWithLog{
-			ID:          item.ID,
-			Name:        item.Name,
-			Description: item.Description,
-			LogValue:    item.LogValue,
-		})
 	}
 
 	response.JSON(w, http.StatusOK, habits)

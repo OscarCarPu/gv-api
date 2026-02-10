@@ -7,6 +7,15 @@ COMMENTS = {
     "gv-api/cmd/api/main.go": "Entry point, no business logic",
     "gv-api/internal/config/config.go": "Configuration boilerplate",
     "gv-api/internal/database/db.go": "Database boilerplate",
+    "gv-api/test/e2e/client.go": "E2E test infrastructure",
+    "gv-api/test/e2e/setup.go": "E2E test infrastructure",
+}
+
+# Paths to exclude from the total coverage calculation
+EXCLUDED_FROM_TOTAL = {
+    *COMMENTS.keys(),
+    "gv-api/test/e2e/client.go",
+    "gv-api/test/e2e/setup.go",
 }
 
 
@@ -83,9 +92,19 @@ def main():
 
         table.append(f"| `{path}` | {badge} | {comment_text} |")
 
-    # Add Total Row at the bottom
-    total_badge = get_badge(total_coverage, False)
-    table.append(f"| **Total** | {total_badge} | |")
+    # Calculate total from non-excluded files only
+    included_pcts = []
+    for path, pcts in file_data.items():
+        if path not in EXCLUDED_FROM_TOTAL:
+            included_pcts.extend(pcts)
+
+    if included_pcts:
+        real_total = f"{sum(included_pcts) / len(included_pcts):.1f}%"
+    else:
+        real_total = total_coverage
+
+    total_badge = get_badge(real_total, False)
+    table.append(f"| **Total** | {total_badge} | Excludes boilerplate and test infra |")
 
     table_content = "\n".join(table) + "\n"
 

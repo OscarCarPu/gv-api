@@ -7,6 +7,7 @@ import (
 
 	"gv-api/internal/config"
 	"gv-api/internal/database"
+	"gv-api/internal/database/sqlc"
 	"gv-api/internal/habits"
 
 	"github.com/go-chi/chi/v5"
@@ -26,7 +27,8 @@ func main() {
 	//nolint:errcheck // if the db is closed, the program has already exited
 	defer db.Close()
 
-	habitRepo := habits.NewRepository(db)
+	queries := sqlc.New(db)
+	habitRepo := habits.NewRepository(queries)
 	habitService := habits.NewService(habitRepo)
 	habitHandler := habits.NewHandler(habitService)
 
