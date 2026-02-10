@@ -79,6 +79,15 @@ test-api-setup: test-db-setup
 	@DATABASE_URL=$(INNER_TEST_DB_URL) docker compose up -d --wait api > /dev/null
 	@printf "$(GREEN)>>> API ready$(NC)\n"
 
+# All tests: silent, only prints pass/fail
+test-silent: test-api-setup
+	@printf "$(CYAN)>>> Running all tests...$(NC)\n"
+	@go test -short ./internal/... > /dev/null 2>&1 || { printf "$(RED)>>> Unit tests failed$(NC)\n"; $(MAKE) test-db-cleanup --no-print-directory; exit 1; }
+	@TEST_DB_URL=$(OUTSIDE_TEST_DB_URL) go test -run Integration ./internal/... > /dev/null 2>&1 || { printf "$(RED)>>> Integration tests failed$(NC)\n"; $(MAKE) test-db-cleanup --no-print-directory; exit 1; }
+	@TEST_DB_URL=$(OUTSIDE_TEST_DB_URL) PORT=$(PORT) go test ./test/e2e/... > /dev/null 2>&1 || { printf "$(RED)>>> E2E tests failed$(NC)\n"; $(MAKE) test-db-cleanup --no-print-directory; exit 1; }
+	@$(MAKE) test-db-cleanup --no-print-directory
+	@printf "$(GREEN)>>> All tests passed$(NC)\n"
+
 # Unit tests: fast, no external dependencies
 test-unit:
 	@printf "$(CYAN)>>> Running unit tests...$(NC)\n"
