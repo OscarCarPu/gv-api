@@ -1,4 +1,4 @@
-.PHONY: sqlc run build docker-build up setup-project
+.PHONY: sqlc run build docker-build up setup-project pgcli-db
 
 # Colors
 RED=\033[0;31m
@@ -24,6 +24,12 @@ sqlc:
 migration:
 	@read -p "Enter migration name: " name; \
 	touch db/migrations/$(shell date +%Y%m%d%H%M%S)_$$name.sql
+
+# --- DATABASE ---
+
+# Connect to the database with pgcli
+pgcli-db:
+	pgcli postgresql://$(POSTGRES_USER):$(POSTGRES_PASSWORD)@localhost:5432/$(POSTGRES_DB)
 
 # --- DOCKER OPERATIONS ---
 
