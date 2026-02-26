@@ -1,0 +1,61 @@
+package auth
+
+import (
+	"errors"
+	"net/http"
+	"net/http/httptest"
+	"testing"
+)
+
+type MockAuthService struct {
+	mockValidateFunc func(token string) error
+}
+
+func (m *MockAuthService) ValidateToken(tokenString string) error {
+	return m.mockValidateFunc(tokenString)
+}
+
+func TestAuthMiddleware(t *testing.T) {
+	fakeHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	})
+
+	mockSvc := &MockAuthService{
+		mockValidateFunc: func(token string) error {
+			if token == "my-secret-token" {
+				return nil
+			}
+			return errors.New("invalid token")
+		},
+	}
+
+	middleware := NewMiddleware(mockSvc)
+
+	tests := []struct {
+		name           string
+		token          string
+		expectedStatus int
+	}{
+		{"ValidToken", "my-secret-token", http.StatusOK},
+		{"InvalidToken", "my-secret-token-invalid", http.StatusUnauthorized},
+		{"NoToken", "", http.StatusUnauthorized},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			req := httptest.NewRequest("GET", "/", nil)
+			if test.token != "" {
+				req.Header.Set("Authorization", "Bearer "+test.token)
+			}
+
+			rr := httptest.NewRecorder()
+
+			handler := middleware.Handle(fakeHandler)
+			handler.ServeHTTP(rr, req)
+
+			if status := rr.Code; status != test.expectedStatus {
+				t.Errorf("handler returned wrong status code: got %v want %v", status, test.expectedStatus)
+			}
+		})
+	}
+}

@@ -5,6 +5,7 @@ import (
 	"log"
 	"net/http"
 
+	"gv-api/internal/auth"
 	"gv-api/internal/config"
 	"gv-api/internal/database"
 	"gv-api/internal/database/sqlc"
@@ -29,19 +30,34 @@ func main() {
 	defer db.Close()
 
 	queries := sqlc.New(db)
+
+	// Habit Setup
 	habitRepo := habits.NewRepository(queries)
 	habitService := habits.NewService(habitRepo)
 	habitHandler := habits.NewHandler(habitService)
 
+	// Auth Setup
+	authService := auth.NewService(cfg, nil)
+	authMiddleware := auth.NewMiddleware(authService)
+
 	r := chi.NewRouter()
 	r.Use(cors.Handler(cors.Options{
-		AllowedOrigins:   []string{"*"},
-		AllowedMethods:   []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},
-		AllowedHeaders:   []string{"Content-Type"},
+		AllowedOrigins: []string{"*"},
+		AllowedMethods: []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},
+		AllowedHeaders: []string{"Content-Type", "Authorization"},
 	}))
-	r.Get("/habits", habitHandler.GetDaily)
-	r.Post("/habits", habitHandler.CreateHabit)
-	r.Post("/habits/log", habitHandler.UpsertLog)
+
+	// Public
+	r.Post("/login", authHandler.Login)
+	r.Post("/login/2fa", authHandler.Login2FA)
+
+	// Protected
+	r.Group(func(r chi.Router) {
+		r.Use(authMiddleware.Handle)
+		r.Get("/habits", habitHandler.GetDaily)
+		r.Post("/habits", habitHandler.CreateHabit)
+		r.Post("/habits/log", habitHandler.UpsertLog)
+	})
 
 	log.Printf("Starting server on port %s", cfg.Port)
 	log.Fatal(http.ListenAndServe(":"+cfg.Port, r))
