@@ -7,12 +7,16 @@ import (
 	"gv-api/internal/config"
 
 	"github.com/golang-jwt/jwt/v5"
+	"github.com/pquerna/otp/totp"
 )
 
 var (
 	ErrInvalidPassword = errors.New("invalid password")
 	ErrInvalidToken    = errors.New("invalid token")
+	ErrInvalidCode     = errors.New("invalid 2fa code")
 )
+
+var validateTOTP = totp.Validate // for easy mocking
 
 func GenerateToken(expiringTime time.Duration) (string, error) {
 	cfg, err := config.Load()
@@ -56,4 +60,25 @@ func ValidateToken(tokenString string) error {
 	}
 
 	return nil
+}
+
+func Login2FA(tokenString, code string) (string, error) {
+	cfg, err := config.Load()
+	if err != nil {
+		return "", err
+	}
+	err = ValidateToken(tokenString)
+	if err != nil {
+		return "", err
+	}
+	valid := validateTOTP(code, cfg.TotpSecret)
+	if !valid {
+		return "", ErrInvalidCode
+	}
+
+	token, err := GenerateToken(time.Hour * 24)
+	if err != nil {
+		return "", err
+	}
+	return token, nil
 }
