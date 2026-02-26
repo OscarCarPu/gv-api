@@ -4,6 +4,8 @@ import (
 	"errors"
 	"time"
 
+	"gv-api/internal/config"
+
 	"github.com/golang-jwt/jwt/v5"
 )
 
@@ -12,35 +14,41 @@ var (
 	ErrInvalidToken    = errors.New("invalid token")
 )
 
-// TODO: Move to .env
-var (
-	jwtSecret      = []byte("secret")
-	storedPassword = "Abc123.."
-)
-
 func GenerateToken(expiringTime time.Duration) (string, error) {
+	cfg, err := config.Load()
+	if err != nil {
+		return "", err
+	}
 	claims := jwt.RegisteredClaims{
 		ExpiresAt: jwt.NewNumericDate(time.Now().Add(expiringTime)),
 		IssuedAt:  jwt.NewNumericDate(time.Now()),
 	}
 
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
-	return token.SignedString(jwtSecret)
+	return token.SignedString([]byte(cfg.JwtSecret))
 }
 
 func Login(password string) (string, error) {
-	if password != storedPassword {
+	cfg, err := config.Load()
+	if err != nil {
+		return "", err
+	}
+	if password != cfg.Password {
 		return "", ErrInvalidPassword
 	}
 	return GenerateToken(time.Minute * 5)
 }
 
 func ValidateToken(tokenString string) error {
+	cfg, err := config.Load()
+	if err != nil {
+		return err
+	}
 	token, err := jwt.Parse(tokenString, func(token *jwt.Token) (any, error) {
 		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
 			return nil, jwt.ErrInvalidKeyType
 		}
-		return jwtSecret, nil
+		return []byte(cfg.JwtSecret), nil
 	})
 
 	if err != nil || !token.Valid {

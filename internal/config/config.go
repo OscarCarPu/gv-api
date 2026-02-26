@@ -4,14 +4,18 @@ package config
 import "os"
 
 type Config struct {
-	DBUrl string
-	Port  string
+	DBUrl     string
+	Port      string
+	Password  string
+	JwtSecret string
 }
 
 func Load() (*Config, error) {
 	return &Config{
-		DBUrl: os.Getenv("DATABASE_URL"),
-		Port:  getEnv("PORT", "8080"),
+		DBUrl:     os.Getenv("DATABASE_URL"),
+		Port:      getEnv("PORT", "8080"),
+		Password:  getEnv("PASSWORD", "Abc123.."),
+		JwtSecret: getEnv("JWT_SECRET", "secret"),
 	}, nil
 }
 
