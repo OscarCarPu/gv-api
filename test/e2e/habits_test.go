@@ -10,7 +10,7 @@ func TestE2E_InsertLogAndVerifyDailyView(t *testing.T) {
 	}
 
 	truncateTables(t)
-	client := NewAPIClient(t)
+	client := authenticate(t)
 
 	desc := "E2E test habit"
 	habit := client.CreateHabit(t, CreateHabitRequest{Name: "Test Weight", Description: &desc})

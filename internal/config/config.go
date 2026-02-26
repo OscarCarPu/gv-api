@@ -9,6 +9,7 @@ type Config struct {
 	Password   string
 	JwtSecret  string
 	TotpSecret string
+	Timezone   string
 }
 
 func Load() (*Config, error) {
@@ -18,6 +19,7 @@ func Load() (*Config, error) {
 		Password:   getEnv("PASSWORD", "Abc123.."),
 		JwtSecret:  getEnv("JWT_SECRET", "secret"),
 		TotpSecret: getEnv("TOTP_SECRET", "secret"),
+		Timezone:   getEnv("TIMEZONE", "Europe/Madrid"),
 	}, nil
 }
 

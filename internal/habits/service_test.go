@@ -44,7 +44,7 @@ func TestService_GetDailyView(t *testing.T) {
 				return []HabitWithLog{}, nil
 			},
 		}
-		svc := NewService(repo)
+		svc := NewService(repo, nil)
 
 		_, err := svc.GetDailyView(context.Background(), "2025-01-31")
 		if err != nil {
@@ -53,7 +53,7 @@ func TestService_GetDailyView(t *testing.T) {
 	})
 
 	t.Run("returns error for invalid date", func(t *testing.T) {
-		svc := NewService(&mockRepo{})
+		svc := NewService(&mockRepo{}, nil)
 
 		_, err := svc.GetDailyView(context.Background(), "invalid-date")
 		if err == nil {
@@ -67,7 +67,7 @@ func TestService_GetDailyView(t *testing.T) {
 				return []HabitWithLog{}, nil
 			},
 		}
-		svc := NewService(repo)
+		svc := NewService(repo, nil)
 
 		got, err := svc.GetDailyView(context.Background(), "2025-01-31")
 		if err != nil {
@@ -86,7 +86,7 @@ func TestService_GetDailyView(t *testing.T) {
 				return []HabitWithLog{}, nil
 			},
 		}
-		svc := NewService(repo)
+		svc := NewService(repo, nil)
 
 		_, err := svc.GetDailyView(context.Background(), "")
 		if err != nil {
@@ -115,7 +115,7 @@ func TestService_LogHabit(t *testing.T) {
 				return nil
 			},
 		}
-		svc := NewService(mock)
+		svc := NewService(mock, nil)
 
 		req := LogUpsertRequest{HabitID: 5, Date: "2025-01-31", Value: 100.0}
 		err := svc.LogHabit(context.Background(), req)
@@ -136,7 +136,7 @@ func TestService_LogHabit(t *testing.T) {
 	})
 
 	t.Run("returns error for invalid date", func(t *testing.T) {
-		svc := NewService(&mockRepo{})
+		svc := NewService(&mockRepo{}, nil)
 
 		req := LogUpsertRequest{HabitID: 1, Date: "not-a-date", Value: 10.0}
 		err := svc.LogHabit(context.Background(), req)
@@ -159,7 +159,7 @@ func TestService_CreateHabit(t *testing.T) {
 				return CreateHabitResponse{ID: 1, Name: name, Description: description}, nil
 			},
 		}
-		svc := NewService(mock)
+		svc := NewService(mock, nil)
 
 		req := CreateHabitRequest{Name: "Exercise", Description: &desc}
 		got, err := svc.CreateHabit(context.Background(), req)
@@ -186,7 +186,7 @@ func TestService_CreateHabit(t *testing.T) {
 				return CreateHabitResponse{ID: 1, Name: name}, nil
 			},
 		}
-		svc := NewService(mock)
+		svc := NewService(mock, nil)
 
 		req := CreateHabitRequest{Name: "Exercise", Description: nil}
 		_, err := svc.CreateHabit(context.Background(), req)

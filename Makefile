@@ -1,4 +1,4 @@
-.PHONY: sqlc run build docker-build up setup-project pgcli-db
+.PHONY: sqlc run build docker-build up setup-project pgcli-db test
 
 # Colors
 RED=\033[0;31m
@@ -61,7 +61,7 @@ reset-logs:
 include .env
 
 INNER_TEST_DB_URL=postgresql://$(POSTGRES_USER):$(POSTGRES_PASSWORD)@db:5432/$(TEST_DB)?sslmode=disable
-OUTSIDE_TEST_DB_URL=postgresql://$(POSTGRES_USER):$(POSTGRES_PASSWORD)@localhost:5432/$(TEST_DB)?sslmode=disable
+OUTSIDE_TEST_DB_URL=postgresql://$(POSTGRES_USER):$(POSTGRES_PASSWORD)@127.0.0.1:5432/$(TEST_DB)?sslmode=disable
 
 test-db-setup:
 	@printf "$(CYAN)>>> Starting database...$(NC)\n"
@@ -82,7 +82,7 @@ test-db-cleanup:
 test-api-setup: test-db-setup
 	@printf "$(CYAN)>>> Rebuilding and restarting API with test database...$(NC)\n"
 	@docker compose stop api > /dev/null 2>&1 || true
-	@DATABASE_URL=$(INNER_TEST_DB_URL) docker compose up -d --wait api > /dev/null
+	@DATABASE_URL=$(INNER_TEST_DB_URL) docker compose up -d --wait --build api > /dev/null
 	@printf "$(GREEN)>>> API ready$(NC)\n"
 
 # All tests: silent, only prints pass/fail
@@ -90,7 +90,7 @@ test-silent: test-api-setup
 	@printf "$(CYAN)>>> Running all tests...$(NC)\n"
 	@go test -short ./internal/... > /dev/null 2>&1 || { printf "$(RED)>>> Unit tests failed$(NC)\n"; $(MAKE) test-db-cleanup --no-print-directory; exit 1; }
 	@TEST_DB_URL=$(OUTSIDE_TEST_DB_URL) go test -run Integration ./internal/... > /dev/null 2>&1 || { printf "$(RED)>>> Integration tests failed$(NC)\n"; $(MAKE) test-db-cleanup --no-print-directory; exit 1; }
-	@TEST_DB_URL=$(OUTSIDE_TEST_DB_URL) PORT=$(PORT) go test ./test/e2e/... > /dev/null 2>&1 || { printf "$(RED)>>> E2E tests failed$(NC)\n"; $(MAKE) test-db-cleanup --no-print-directory; exit 1; }
+	@TEST_DB_URL=$(OUTSIDE_TEST_DB_URL) PORT=$(PORT) PASSWORD=$(PASSWORD) TOTP_SECRET=$(TOTP_SECRET) go test ./test/e2e/... > /dev/null 2>&1 || { printf "$(RED)>>> E2E tests failed$(NC)\n"; $(MAKE) test-db-cleanup --no-print-directory; exit 1; }
 	@$(MAKE) test-db-cleanup --no-print-directory
 	@printf "$(GREEN)>>> All tests passed$(NC)\n"
 
@@ -108,18 +108,21 @@ test-integration: test-db-setup
 # E2E tests: require full stack (API + database)
 test-e2e: test-api-setup
 	@printf "$(CYAN)>>> Running e2e tests...$(NC)\n"
-	@TEST_DB_URL=$(OUTSIDE_TEST_DB_URL) PORT=$(PORT) go test ./test/e2e/... -v
+	@TEST_DB_URL=$(OUTSIDE_TEST_DB_URL) PORT=$(PORT) PASSWORD=$(PASSWORD) TOTP_SECRET=$(TOTP_SECRET) go test ./test/e2e/... -v
 	@$(MAKE) test-db-cleanup --no-print-directory
 
 # Coverage: run all tests and generate coverage report
 test-coverage: test-api-setup
 	@printf "$(CYAN)>>> Running all tests with coverage...$(NC)\n"
-	@TEST_DB_URL=$(OUTSIDE_TEST_DB_URL) PORT=$(PORT) go test -v $$(go list ./... | grep -v /internal/database/sqlc) -coverprofile=coverage.out
+	@TEST_DB_URL=$(OUTSIDE_TEST_DB_URL) PORT=$(PORT) PASSWORD=$(PASSWORD) TOTP_SECRET=$(TOTP_SECRET) go test -v $$(go list ./... | grep -v /internal/database/sqlc) -coverprofile=coverage.out
 	@$(MAKE) test-db-cleanup --no-print-directory
 	@printf "$(YELLOW)>>> Updating README with coverage table...$(NC)\n"
 	@uv run scripts/coverage.py
 	@printf "$(GREEN)>>> Coverage report updated$(NC)\n"
 
 # Run all tests
-test: test-unit test-integration test-e2e
+test:
+	@$(MAKE) test-unit --no-print-directory
+	@$(MAKE) test-integration --no-print-directory
+	@$(MAKE) test-e2e --no-print-directory
 	@printf "$(GREEN)>>> All tests passed$(NC)\n"

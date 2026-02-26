@@ -4,8 +4,10 @@ import (
 	"context"
 	"os"
 	"testing"
+	"time"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/pquerna/otp/totp"
 )
 
 func getDBURL(t *testing.T) string {
@@ -23,7 +25,37 @@ func getBaseURL(t *testing.T) string {
 	if port == "" {
 		t.Fatal("PORT is not set")
 	}
-	return "http://localhost:" + port
+	return "http://127.0.0.1:" + port
+}
+
+func getPassword() string {
+	if p := os.Getenv("PASSWORD"); p != "" {
+		return p
+	}
+	return "Abc123.."
+}
+
+func getTOTPSecret() string {
+	if s := os.Getenv("TOTP_SECRET"); s != "" {
+		return s
+	}
+	return "secret"
+}
+
+func authenticate(t *testing.T) *APIClient {
+	t.Helper()
+	client := NewAPIClient(t)
+
+	tmpToken := client.Login(t, getPassword())
+
+	code, err := totp.GenerateCode(getTOTPSecret(), time.Now())
+	if err != nil {
+		t.Fatalf("failed to generate totp code: %v", err)
+	}
+
+	fullToken := client.Login2FA(t, tmpToken, code)
+	client.SetToken(fullToken)
+	return client
 }
 
 func truncateTables(t *testing.T) {

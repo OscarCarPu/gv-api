@@ -24,7 +24,7 @@ func TestService_Login(t *testing.T) {
 			t.Fatalf("Login failed: %v", err)
 		}
 
-		err = svc.ValidateToken(token)
+		err = svc.ValidateToken(token, "tmp")
 		if err != nil {
 			t.Fatalf("ValidateToken failed: %v", err)
 		}
@@ -53,7 +53,7 @@ func TestService_Login2FA(t *testing.T) {
 			t.Fatalf("2FALogin failed: %v", err)
 		}
 
-		if err = svc.ValidateToken(token); err != nil {
+		if err = svc.ValidateToken(token, "full"); err != nil {
 			t.Fatalf("ValidateToken failed: %v", err)
 		}
 	})

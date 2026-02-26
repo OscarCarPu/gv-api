@@ -6,7 +6,7 @@ import (
 )
 
 type TokenValidator interface {
-	ValidateToken(tokenString string) error
+	ValidateToken(tokenString, kind string) error
 }
 
 type Middleware struct {
@@ -31,7 +31,7 @@ func (m *Middleware) Handle(next http.Handler) http.Handler {
 			return
 		}
 
-		err := m.authService.ValidateToken(token)
+		err := m.authService.ValidateToken(token, "full")
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusUnauthorized)
 			return

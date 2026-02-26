@@ -7,6 +7,9 @@ Un orquestador de vida integral desarrollado en Go, diseñado para centralizar d
 | File | Coverage | Comments |
 | :--- | :---: | :--- |
 | `gv-api/cmd/api/main.go` | ![skipped](https://img.shields.io/badge/SKIPPED-grey) | Entry point, no business logic |
+| `gv-api/internal/auth/handler.go` | ![100.0%](https://img.shields.io/badge/100.0%25-brightgreen) |  |
+| `gv-api/internal/auth/middleware.go` | ![92.8%](https://img.shields.io/badge/92.8%25-brightgreen) |  |
+| `gv-api/internal/auth/service.go` | ![96.0%](https://img.shields.io/badge/96.0%25-brightgreen) |  |
 | `gv-api/internal/config/config.go` | ![skipped](https://img.shields.io/badge/SKIPPED-grey) | Configuration boilerplate |
 | `gv-api/internal/database/db.go` | ![skipped](https://img.shields.io/badge/SKIPPED-grey) | Database boilerplate |
 | `gv-api/internal/habits/handler.go` | ![100.0%](https://img.shields.io/badge/100.0%25-brightgreen) |  |
@@ -15,7 +18,7 @@ Un orquestador de vida integral desarrollado en Go, diseñado para centralizar d
 | `gv-api/internal/response/response.go` | ![87.5%](https://img.shields.io/badge/87.5%25-brightgreen) |  |
 | `gv-api/test/e2e/client.go` | ![skipped](https://img.shields.io/badge/SKIPPED-grey) | E2E test infrastructure |
 | `gv-api/test/e2e/setup.go` | ![skipped](https://img.shields.io/badge/SKIPPED-grey) | E2E test infrastructure |
-| **Total** | ![98.2%](https://img.shields.io/badge/98.2%25-brightgreen) | Excludes boilerplate and test infra |
+| **Total** | ![97.5%](https://img.shields.io/badge/97.5%25-brightgreen) | Excludes boilerplate and test infra |
 
 ## Tecnologías
 

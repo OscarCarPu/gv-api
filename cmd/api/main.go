@@ -4,6 +4,8 @@ import (
 	"context"
 	"log"
 	"net/http"
+	"time"
+	_ "time/tzdata"
 
 	"gv-api/internal/auth"
 	"gv-api/internal/config"
@@ -32,12 +34,18 @@ func main() {
 	queries := sqlc.New(db)
 
 	// Habit Setup
+	loc, err := time.LoadLocation(cfg.Timezone)
+	if err != nil {
+		log.Fatalf("Failed to load timezone %q: %v", cfg.Timezone, err)
+	}
+
 	habitRepo := habits.NewRepository(queries)
-	habitService := habits.NewService(habitRepo)
+	habitService := habits.NewService(habitRepo, loc)
 	habitHandler := habits.NewHandler(habitService)
 
 	// Auth Setup
 	authService := auth.NewService(cfg, nil)
+	authHandler := auth.NewHandler(authService)
 	authMiddleware := auth.NewMiddleware(authService)
 
 	r := chi.NewRouter()

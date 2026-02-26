@@ -6,15 +6,19 @@ import (
 )
 
 type Service struct {
-	repo Repository
+	repo     Repository
+	location *time.Location
 }
 
-func NewService(repo Repository) *Service {
-	return &Service{repo: repo}
+func NewService(repo Repository, loc *time.Location) *Service {
+	if loc == nil {
+		loc = time.UTC
+	}
+	return &Service{repo: repo, location: loc}
 }
 
 func (s *Service) GetDailyView(ctx context.Context, dateStr string) ([]HabitWithLog, error) {
-	targetDate := time.Now()
+	targetDate := time.Now().In(s.location)
 
 	if dateStr != "" {
 		parsed, err := time.Parse("2006-01-02", dateStr)

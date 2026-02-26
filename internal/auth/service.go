@@ -16,6 +16,11 @@ var (
 	ErrInvalidCode     = errors.New("invalid 2fa code")
 )
 
+type Claims struct {
+	jwt.RegisteredClaims
+	Kind string `json:"kind"` // "tmp" or "full"
+}
+
 type TOTPValidator func(passcode string, secret string) bool
 
 type Service struct {
@@ -33,10 +38,13 @@ func NewService(cfg *config.Config, totpVal TOTPValidator) *Service {
 	}
 }
 
-func (s *Service) GenerateToken(expiringTime time.Duration) (string, error) {
-	claims := jwt.RegisteredClaims{
-		ExpiresAt: jwt.NewNumericDate(time.Now().Add(expiringTime)),
-		IssuedAt:  jwt.NewNumericDate(time.Now()),
+func (s *Service) GenerateToken(expiringTime time.Duration, kind string) (string, error) {
+	claims := Claims{
+		RegisteredClaims: jwt.RegisteredClaims{
+			ExpiresAt: jwt.NewNumericDate(time.Now().Add(expiringTime)),
+			IssuedAt:  jwt.NewNumericDate(time.Now()),
+		},
+		Kind: kind,
 	}
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
 	return token.SignedString([]byte(s.cfg.JwtSecret))
@@ -46,11 +54,12 @@ func (s *Service) Login(password string) (string, error) {
 	if password != s.cfg.Password {
 		return "", ErrInvalidPassword
 	}
-	return s.GenerateToken(time.Minute * 5)
+	return s.GenerateToken(time.Minute*5, "tmp")
 }
 
-func (s *Service) ValidateToken(tokenString string) error {
-	token, err := jwt.Parse(tokenString, func(token *jwt.Token) (any, error) {
+func (s *Service) ValidateToken(tokenString, kind string) error {
+	var claims Claims
+	token, err := jwt.ParseWithClaims(tokenString, &claims, func(token *jwt.Token) (any, error) {
 		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
 			return nil, jwt.ErrInvalidKeyType
 		}
@@ -61,11 +70,15 @@ func (s *Service) ValidateToken(tokenString string) error {
 		return ErrInvalidToken
 	}
 
+	if claims.Kind != kind {
+		return ErrInvalidToken
+	}
+
 	return nil
 }
 
 func (s *Service) Login2FA(tokenString, code string) (string, error) {
-	err := s.ValidateToken(tokenString)
+	err := s.ValidateToken(tokenString, "tmp")
 	if err != nil {
 		return "", err
 	}
@@ -75,5 +88,5 @@ func (s *Service) Login2FA(tokenString, code string) (string, error) {
 		return "", ErrInvalidCode
 	}
 
-	return s.GenerateToken(time.Hour * 24)
+	return s.GenerateToken(time.Hour*24, "full")
 }

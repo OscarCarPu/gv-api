@@ -8,11 +8,11 @@ import (
 )
 
 type MockAuthService struct {
-	mockValidateFunc func(token string) error
+	mockValidateFunc func(token, kind string) error
 }
 
-func (m *MockAuthService) ValidateToken(tokenString string) error {
-	return m.mockValidateFunc(tokenString)
+func (m *MockAuthService) ValidateToken(tokenString, kind string) error {
+	return m.mockValidateFunc(tokenString, kind)
 }
 
 func TestAuthMiddleware(t *testing.T) {
@@ -21,7 +21,7 @@ func TestAuthMiddleware(t *testing.T) {
 	})
 
 	mockSvc := &MockAuthService{
-		mockValidateFunc: func(token string) error {
+		mockValidateFunc: func(token, kind string) error {
 			if token == "my-secret-token" {
 				return nil
 			}
