@@ -15,9 +15,11 @@ services:
       interval: 10s
       timeout: 5s
       retries: 10
+    networks:
+      - gv
     restart: unless-stopped
 
-  api:
+  gv-api:
     build: .
     container_name: habits_api
     depends_on:
@@ -27,7 +29,13 @@ services:
       - .env
     ports:
       - "8080:8080"
+    networks:
+      - gv
     restart: unless-stopped
 
 volumes:
   postgres_data:
+
+networks:
+  gv:
+    external: true

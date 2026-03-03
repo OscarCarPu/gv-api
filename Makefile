@@ -81,8 +81,8 @@ test-db-cleanup:
 
 test-api-setup: test-db-setup
 	@printf "$(CYAN)>>> Rebuilding and restarting API with test database...$(NC)\n"
-	@docker compose stop api > /dev/null 2>&1 || true
-	@DATABASE_URL=$(INNER_TEST_DB_URL) docker compose up -d --wait --build api > /dev/null
+	@docker compose stop gv-api > /dev/null 2>&1 || true
+	@DATABASE_URL=$(INNER_TEST_DB_URL) docker compose up -d --wait --build gv-api > /dev/null
 	@printf "$(GREEN)>>> API ready$(NC)\n"
 
 # All tests: silent, only prints pass/fail
