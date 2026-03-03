@@ -21,7 +21,7 @@ Un orquestador de vida integral desarrollado en Go, diseñado para centralizar d
 | `gv-api/internal/tasks/service.go` | ![100.0%](https://img.shields.io/badge/100.0%25-brightgreen) |  |
 | `gv-api/test/e2e/client.go` | ![skipped](https://img.shields.io/badge/SKIPPED-grey) | E2E test infrastructure |
 | `gv-api/test/e2e/setup.go` | ![skipped](https://img.shields.io/badge/SKIPPED-grey) | E2E test infrastructure |
-| **Total** | ![98.0%](https://img.shields.io/badge/98.0%25-brightgreen) | Excludes boilerplate and test infra |
+| **Total** | ![98.6%](https://img.shields.io/badge/98.6%25-brightgreen) | Excludes boilerplate and test infra |
 
 ## Tecnologías
 

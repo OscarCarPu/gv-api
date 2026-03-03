@@ -12,7 +12,11 @@ import (
 type Querier interface {
 	CreateHabit(ctx context.Context, arg CreateHabitParams) (Habit, error)
 	CreateProject(ctx context.Context, arg CreateProjectParams) (CreateProjectRow, error)
+	CreateTask(ctx context.Context, arg CreateTaskParams) (CreateTaskRow, error)
+	CreateTimeEntry(ctx context.Context, arg CreateTimeEntryParams) (TimeEntry, error)
+	CreateTodo(ctx context.Context, arg CreateTodoParams) (CreateTodoRow, error)
 	GetHabitsWithLogs(ctx context.Context, logDate time.Time) ([]GetHabitsWithLogsRow, error)
+	GetRootProjects(ctx context.Context) ([]GetRootProjectsRow, error)
 	UpsertLog(ctx context.Context, arg UpsertLogParams) error
 }
 

@@ -71,7 +71,11 @@ func main() {
 		r.Get("/habits", habitHandler.GetDaily)
 		r.Post("/habits", habitHandler.CreateHabit)
 		r.Post("/habits/log", habitHandler.UpsertLog)
-		r.Post("/projects", taskHandler.CreateProject)
+		r.Get("/tasks/projects", taskHandler.GetRootProjects)
+		r.Post("/tasks/projects", taskHandler.CreateProject)
+		r.Post("/tasks/tasks", taskHandler.CreateTask)
+		r.Post("/tasks/todos", taskHandler.CreateTodo)
+		r.Post("/tasks/time-entries", taskHandler.CreateTimeEntry)
 	})
 
 	log.Printf("Starting server on port %s", cfg.Port)

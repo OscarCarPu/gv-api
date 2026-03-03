@@ -49,3 +49,140 @@ func (q *Queries) CreateProject(ctx context.Context, arg CreateProjectParams) (C
 	)
 	return i, err
 }
+
+const createTask = `-- name: CreateTask :one
+INSERT INTO tasks (project_id, name, description, due_at)
+VALUES ($1, $2, $3, $4)
+RETURNING id, project_id, name, description, due_at
+`
+
+type CreateTaskParams struct {
+	ProjectID   *int32      `db:"project_id" json:"project_id"`
+	Name        string      `db:"name" json:"name"`
+	Description *string     `db:"description" json:"description"`
+	DueAt       pgtype.Date `db:"due_at" json:"due_at"`
+}
+
+type CreateTaskRow struct {
+	ID          int32       `db:"id" json:"id"`
+	ProjectID   *int32      `db:"project_id" json:"project_id"`
+	Name        string      `db:"name" json:"name"`
+	Description *string     `db:"description" json:"description"`
+	DueAt       pgtype.Date `db:"due_at" json:"due_at"`
+}
+
+func (q *Queries) CreateTask(ctx context.Context, arg CreateTaskParams) (CreateTaskRow, error) {
+	row := q.db.QueryRow(ctx, createTask,
+		arg.ProjectID,
+		arg.Name,
+		arg.Description,
+		arg.DueAt,
+	)
+	var i CreateTaskRow
+	err := row.Scan(
+		&i.ID,
+		&i.ProjectID,
+		&i.Name,
+		&i.Description,
+		&i.DueAt,
+	)
+	return i, err
+}
+
+const createTimeEntry = `-- name: CreateTimeEntry :one
+INSERT INTO time_entries (task_id, started_at, finished_at, comment)
+VALUES ($1, $2, $3, $4)
+RETURNING id, task_id, started_at, finished_at, comment
+`
+
+type CreateTimeEntryParams struct {
+	TaskID     int32            `db:"task_id" json:"task_id"`
+	StartedAt  pgtype.Timestamp `db:"started_at" json:"started_at"`
+	FinishedAt pgtype.Timestamp `db:"finished_at" json:"finished_at"`
+	Comment    *string          `db:"comment" json:"comment"`
+}
+
+func (q *Queries) CreateTimeEntry(ctx context.Context, arg CreateTimeEntryParams) (TimeEntry, error) {
+	row := q.db.QueryRow(ctx, createTimeEntry,
+		arg.TaskID,
+		arg.StartedAt,
+		arg.FinishedAt,
+		arg.Comment,
+	)
+	var i TimeEntry
+	err := row.Scan(
+		&i.ID,
+		&i.TaskID,
+		&i.StartedAt,
+		&i.FinishedAt,
+		&i.Comment,
+	)
+	return i, err
+}
+
+const createTodo = `-- name: CreateTodo :one
+INSERT INTO todos (task_id, name)
+VALUES ($1, $2)
+RETURNING id, task_id, name
+`
+
+type CreateTodoParams struct {
+	TaskID int32  `db:"task_id" json:"task_id"`
+	Name   string `db:"name" json:"name"`
+}
+
+type CreateTodoRow struct {
+	ID     int32  `db:"id" json:"id"`
+	TaskID int32  `db:"task_id" json:"task_id"`
+	Name   string `db:"name" json:"name"`
+}
+
+func (q *Queries) CreateTodo(ctx context.Context, arg CreateTodoParams) (CreateTodoRow, error) {
+	row := q.db.QueryRow(ctx, createTodo, arg.TaskID, arg.Name)
+	var i CreateTodoRow
+	err := row.Scan(&i.ID, &i.TaskID, &i.Name)
+	return i, err
+}
+
+const getRootProjects = `-- name: GetRootProjects :many
+SELECT id, name, description, due_at, parent_id, started_at
+FROM projects
+WHERE parent_id IS NULL AND finished_at IS NULL
+ORDER BY name
+`
+
+type GetRootProjectsRow struct {
+	ID          int32            `db:"id" json:"id"`
+	Name        string           `db:"name" json:"name"`
+	Description *string          `db:"description" json:"description"`
+	DueAt       pgtype.Date      `db:"due_at" json:"due_at"`
+	ParentID    *int32           `db:"parent_id" json:"parent_id"`
+	StartedAt   pgtype.Timestamp `db:"started_at" json:"started_at"`
+}
+
+func (q *Queries) GetRootProjects(ctx context.Context) ([]GetRootProjectsRow, error) {
+	rows, err := q.db.Query(ctx, getRootProjects)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []GetRootProjectsRow{}
+	for rows.Next() {
+		var i GetRootProjectsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.Description,
+			&i.DueAt,
+			&i.ParentID,
+			&i.StartedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}

@@ -14,7 +14,11 @@ import (
 )
 
 type mockQuerier struct {
-	createProjectFn func(ctx context.Context, arg sqlc.CreateProjectParams) (sqlc.CreateProjectRow, error)
+	createProjectFn   func(ctx context.Context, arg sqlc.CreateProjectParams) (sqlc.CreateProjectRow, error)
+	createTaskFn      func(ctx context.Context, arg sqlc.CreateTaskParams) (sqlc.CreateTaskRow, error)
+	createTodoFn      func(ctx context.Context, arg sqlc.CreateTodoParams) (sqlc.CreateTodoRow, error)
+	createTimeEntryFn func(ctx context.Context, arg sqlc.CreateTimeEntryParams) (sqlc.TimeEntry, error)
+	getRootProjectsFn func(ctx context.Context) ([]sqlc.GetRootProjectsRow, error)
 }
 
 func (m *mockQuerier) CreateProject(ctx context.Context, arg sqlc.CreateProjectParams) (sqlc.CreateProjectRow, error) {
@@ -22,6 +26,34 @@ func (m *mockQuerier) CreateProject(ctx context.Context, arg sqlc.CreateProjectP
 		return m.createProjectFn(ctx, arg)
 	}
 	return sqlc.CreateProjectRow{}, nil
+}
+
+func (m *mockQuerier) CreateTask(ctx context.Context, arg sqlc.CreateTaskParams) (sqlc.CreateTaskRow, error) {
+	if m.createTaskFn != nil {
+		return m.createTaskFn(ctx, arg)
+	}
+	return sqlc.CreateTaskRow{}, nil
+}
+
+func (m *mockQuerier) CreateTodo(ctx context.Context, arg sqlc.CreateTodoParams) (sqlc.CreateTodoRow, error) {
+	if m.createTodoFn != nil {
+		return m.createTodoFn(ctx, arg)
+	}
+	return sqlc.CreateTodoRow{}, nil
+}
+
+func (m *mockQuerier) CreateTimeEntry(ctx context.Context, arg sqlc.CreateTimeEntryParams) (sqlc.TimeEntry, error) {
+	if m.createTimeEntryFn != nil {
+		return m.createTimeEntryFn(ctx, arg)
+	}
+	return sqlc.TimeEntry{}, nil
+}
+
+func (m *mockQuerier) GetRootProjects(ctx context.Context) ([]sqlc.GetRootProjectsRow, error) {
+	if m.getRootProjectsFn != nil {
+		return m.getRootProjectsFn(ctx)
+	}
+	return nil, nil
 }
 
 func (m *mockQuerier) CreateHabit(ctx context.Context, arg sqlc.CreateHabitParams) (sqlc.Habit, error) {
@@ -91,6 +123,214 @@ func TestRepository_CreateProject(t *testing.T) {
 		repo := NewRepository(mock)
 
 		_, err := repo.CreateProject(context.Background(), "fail", nil, nil, nil)
+		assert.Error(t, err)
+	})
+}
+
+func TestRepository_CreateTask(t *testing.T) {
+	t.Run("maps response correctly", func(t *testing.T) {
+		desc := "task desc"
+		projectID := int32(5)
+		dueDate := pgtype.Date{Time: time.Date(2026, 7, 1, 0, 0, 0, 0, time.UTC), Valid: true}
+
+		mock := &mockQuerier{
+			createTaskFn: func(ctx context.Context, arg sqlc.CreateTaskParams) (sqlc.CreateTaskRow, error) {
+				return sqlc.CreateTaskRow{
+					ID:          1,
+					ProjectID:   arg.ProjectID,
+					Name:        arg.Name,
+					Description: arg.Description,
+					DueAt:       dueDate,
+				}, nil
+			},
+		}
+		repo := NewRepository(mock)
+
+		dueAt := time.Date(2026, 7, 1, 0, 0, 0, 0, time.UTC)
+		got, err := repo.CreateTask(context.Background(), &projectID, "test task", &desc, &dueAt)
+		require.NoError(t, err)
+
+		assert.Equal(t, int32(1), got.ID)
+		assert.Equal(t, &projectID, got.ProjectID)
+		assert.Equal(t, "test task", got.Name)
+		assert.Equal(t, &desc, got.Description)
+		assert.Equal(t, &dueAt, got.DueAt)
+	})
+
+	t.Run("returns nil DueAt when date is invalid", func(t *testing.T) {
+		mock := &mockQuerier{
+			createTaskFn: func(ctx context.Context, arg sqlc.CreateTaskParams) (sqlc.CreateTaskRow, error) {
+				return sqlc.CreateTaskRow{
+					ID:   2,
+					Name: arg.Name,
+				}, nil
+			},
+		}
+		repo := NewRepository(mock)
+
+		got, err := repo.CreateTask(context.Background(), nil, "no date", nil, nil)
+		require.NoError(t, err)
+		assert.Nil(t, got.DueAt)
+	})
+
+	t.Run("returns error from querier", func(t *testing.T) {
+		mock := &mockQuerier{
+			createTaskFn: func(ctx context.Context, arg sqlc.CreateTaskParams) (sqlc.CreateTaskRow, error) {
+				return sqlc.CreateTaskRow{}, errors.New("db error")
+			},
+		}
+		repo := NewRepository(mock)
+
+		_, err := repo.CreateTask(context.Background(), nil, "fail", nil, nil)
+		assert.Error(t, err)
+	})
+}
+
+func TestRepository_CreateTodo(t *testing.T) {
+	t.Run("maps response correctly", func(t *testing.T) {
+		mock := &mockQuerier{
+			createTodoFn: func(ctx context.Context, arg sqlc.CreateTodoParams) (sqlc.CreateTodoRow, error) {
+				return sqlc.CreateTodoRow{
+					ID:     1,
+					TaskID: arg.TaskID,
+					Name:   arg.Name,
+				}, nil
+			},
+		}
+		repo := NewRepository(mock)
+
+		got, err := repo.CreateTodo(context.Background(), 5, "my todo")
+		require.NoError(t, err)
+
+		assert.Equal(t, int32(1), got.ID)
+		assert.Equal(t, int32(5), got.TaskID)
+		assert.Equal(t, "my todo", got.Name)
+	})
+
+	t.Run("returns error from querier", func(t *testing.T) {
+		mock := &mockQuerier{
+			createTodoFn: func(ctx context.Context, arg sqlc.CreateTodoParams) (sqlc.CreateTodoRow, error) {
+				return sqlc.CreateTodoRow{}, errors.New("db error")
+			},
+		}
+		repo := NewRepository(mock)
+
+		_, err := repo.CreateTodo(context.Background(), 1, "fail")
+		assert.Error(t, err)
+	})
+}
+
+func TestRepository_CreateTimeEntry(t *testing.T) {
+	t.Run("maps response correctly", func(t *testing.T) {
+		now := time.Date(2026, 3, 1, 9, 0, 0, 0, time.UTC)
+		later := time.Date(2026, 3, 1, 10, 0, 0, 0, time.UTC)
+		comment := "worked on feature"
+
+		mock := &mockQuerier{
+			createTimeEntryFn: func(ctx context.Context, arg sqlc.CreateTimeEntryParams) (sqlc.TimeEntry, error) {
+				return sqlc.TimeEntry{
+					ID:         1,
+					TaskID:     arg.TaskID,
+					StartedAt:  arg.StartedAt,
+					FinishedAt: arg.FinishedAt,
+					Comment:    arg.Comment,
+				}, nil
+			},
+		}
+		repo := NewRepository(mock)
+
+		got, err := repo.CreateTimeEntry(context.Background(), 3, now, &later, &comment)
+		require.NoError(t, err)
+
+		assert.Equal(t, int32(1), got.ID)
+		assert.Equal(t, int32(3), got.TaskID)
+		assert.Equal(t, now, got.StartedAt)
+		assert.Equal(t, &later, got.FinishedAt)
+		assert.Equal(t, &comment, got.Comment)
+	})
+
+	t.Run("returns nil FinishedAt when timestamp is invalid", func(t *testing.T) {
+		now := time.Date(2026, 3, 1, 9, 0, 0, 0, time.UTC)
+
+		mock := &mockQuerier{
+			createTimeEntryFn: func(ctx context.Context, arg sqlc.CreateTimeEntryParams) (sqlc.TimeEntry, error) {
+				return sqlc.TimeEntry{
+					ID:        2,
+					TaskID:    arg.TaskID,
+					StartedAt: arg.StartedAt,
+				}, nil
+			},
+		}
+		repo := NewRepository(mock)
+
+		got, err := repo.CreateTimeEntry(context.Background(), 3, now, nil, nil)
+		require.NoError(t, err)
+		assert.Nil(t, got.FinishedAt)
+	})
+
+	t.Run("returns error from querier", func(t *testing.T) {
+		now := time.Date(2026, 3, 1, 9, 0, 0, 0, time.UTC)
+
+		mock := &mockQuerier{
+			createTimeEntryFn: func(ctx context.Context, arg sqlc.CreateTimeEntryParams) (sqlc.TimeEntry, error) {
+				return sqlc.TimeEntry{}, errors.New("db error")
+			},
+		}
+		repo := NewRepository(mock)
+
+		_, err := repo.CreateTimeEntry(context.Background(), 1, now, nil, nil)
+		assert.Error(t, err)
+	})
+}
+
+func TestRepository_GetRootProjects(t *testing.T) {
+	t.Run("maps list correctly", func(t *testing.T) {
+		desc := "project desc"
+		dueDate := pgtype.Date{Time: time.Date(2026, 12, 31, 0, 0, 0, 0, time.UTC), Valid: true}
+
+		mock := &mockQuerier{
+			getRootProjectsFn: func(ctx context.Context) ([]sqlc.GetRootProjectsRow, error) {
+				return []sqlc.GetRootProjectsRow{
+					{ID: 1, Name: "Alpha", Description: &desc, DueAt: dueDate},
+					{ID: 2, Name: "Beta"},
+				}, nil
+			},
+		}
+		repo := NewRepository(mock)
+
+		got, err := repo.GetRootProjects(context.Background())
+		require.NoError(t, err)
+
+		require.Len(t, got, 2)
+		assert.Equal(t, "Alpha", got[0].Name)
+		assert.Equal(t, &desc, got[0].Description)
+		assert.NotNil(t, got[0].DueAt)
+		assert.Equal(t, "Beta", got[1].Name)
+		assert.Nil(t, got[1].DueAt)
+	})
+
+	t.Run("returns empty list", func(t *testing.T) {
+		mock := &mockQuerier{
+			getRootProjectsFn: func(ctx context.Context) ([]sqlc.GetRootProjectsRow, error) {
+				return []sqlc.GetRootProjectsRow{}, nil
+			},
+		}
+		repo := NewRepository(mock)
+
+		got, err := repo.GetRootProjects(context.Background())
+		require.NoError(t, err)
+		assert.Empty(t, got)
+	})
+
+	t.Run("returns error from querier", func(t *testing.T) {
+		mock := &mockQuerier{
+			getRootProjectsFn: func(ctx context.Context) ([]sqlc.GetRootProjectsRow, error) {
+				return nil, errors.New("db error")
+			},
+		}
+		repo := NewRepository(mock)
+
+		_, err := repo.GetRootProjects(context.Background())
 		assert.Error(t, err)
 	})
 }

@@ -43,6 +43,22 @@ func (m *mockQuerier) CreateProject(ctx context.Context, arg sqlc.CreateProjectP
 	return sqlc.CreateProjectRow{}, nil
 }
 
+func (m *mockQuerier) CreateTask(ctx context.Context, arg sqlc.CreateTaskParams) (sqlc.CreateTaskRow, error) {
+	return sqlc.CreateTaskRow{}, nil
+}
+
+func (m *mockQuerier) CreateTodo(ctx context.Context, arg sqlc.CreateTodoParams) (sqlc.CreateTodoRow, error) {
+	return sqlc.CreateTodoRow{}, nil
+}
+
+func (m *mockQuerier) CreateTimeEntry(ctx context.Context, arg sqlc.CreateTimeEntryParams) (sqlc.TimeEntry, error) {
+	return sqlc.TimeEntry{}, nil
+}
+
+func (m *mockQuerier) GetRootProjects(ctx context.Context) ([]sqlc.GetRootProjectsRow, error) {
+	return nil, nil
+}
+
 func TestRepository_GetHabitsWithLogs(t *testing.T) {
 	t.Run("maps rows to domain types", func(t *testing.T) {
 		desc := "Daily workout"
