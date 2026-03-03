@@ -9,7 +9,7 @@ This document provides details on the available endpoints for the GV-API.
 The API uses a two-step JWT authentication flow:
 
 1. **POST /login** — submit your password to receive a short-lived temporary token (`kind: tmp`, 5 min).
-2. **POST /login/2fa** — submit the temporary token and your TOTP code to receive a full daily token (`kind: full`, 24 h).
+2. **POST /login/2fa** — submit the temporary token and your TOTP code to receive a full month token (`kind: full`, 30 days).
 
 All protected endpoints require the full token in the `Authorization` header:
 
@@ -46,7 +46,7 @@ Error responses are JSON: `{"error": "<message>"}`.
 
 - **Method:** `POST`
 - **Endpoint:** `/login/2fa`
-- **Description:** Validates the temporary token and a TOTP code, returning a full 24-hour token that grants access to protected endpoints.
+- **Description:** Validates the temporary token and a TOTP code, returning a full month token that grants access to protected endpoints.
 - **Request Body:**
   ```json
   { "token": "<tmp-jwt>", "code": "123456" }

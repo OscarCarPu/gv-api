@@ -88,5 +88,5 @@ func (s *Service) Login2FA(tokenString, code string) (string, error) {
 		return "", ErrInvalidCode
 	}
 
-	return s.GenerateToken(time.Hour*24, "full")
+	return s.GenerateToken(time.Hour*24*30, "full")
 }
