@@ -6,6 +6,8 @@ package sqlc
 
 import (
 	"time"
+
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 type Habit struct {
@@ -18,4 +20,40 @@ type HabitLog struct {
 	HabitID int32     `db:"habit_id" json:"habit_id"`
 	LogDate time.Time `db:"log_date" json:"log_date"`
 	Value   float32   `db:"value" json:"value"`
+}
+
+type Project struct {
+	ID          int32            `db:"id" json:"id"`
+	ParentID    *int32           `db:"parent_id" json:"parent_id"`
+	Name        string           `db:"name" json:"name"`
+	Description *string          `db:"description" json:"description"`
+	DueAt       pgtype.Date      `db:"due_at" json:"due_at"`
+	StartedAt   pgtype.Timestamp `db:"started_at" json:"started_at"`
+	FinishedAt  pgtype.Timestamp `db:"finished_at" json:"finished_at"`
+}
+
+type Task struct {
+	ID          int32            `db:"id" json:"id"`
+	ProjectID   *int32           `db:"project_id" json:"project_id"`
+	Name        string           `db:"name" json:"name"`
+	Description *string          `db:"description" json:"description"`
+	IsDone      bool             `db:"is_done" json:"is_done"`
+	DueAt       pgtype.Date      `db:"due_at" json:"due_at"`
+	StartedAt   pgtype.Timestamp `db:"started_at" json:"started_at"`
+	FinishedAt  pgtype.Timestamp `db:"finished_at" json:"finished_at"`
+}
+
+type TimeEntry struct {
+	ID         int32            `db:"id" json:"id"`
+	TaskID     int32            `db:"task_id" json:"task_id"`
+	StartedAt  pgtype.Timestamp `db:"started_at" json:"started_at"`
+	FinishedAt pgtype.Timestamp `db:"finished_at" json:"finished_at"`
+	Comment    *string          `db:"comment" json:"comment"`
+}
+
+type Todo struct {
+	ID     int32  `db:"id" json:"id"`
+	TaskID int32  `db:"task_id" json:"task_id"`
+	Name   string `db:"name" json:"name"`
+	IsDone bool   `db:"is_done" json:"is_done"`
 }

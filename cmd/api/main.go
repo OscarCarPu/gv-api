@@ -12,6 +12,7 @@ import (
 	"gv-api/internal/database"
 	"gv-api/internal/database/sqlc"
 	"gv-api/internal/habits"
+	"gv-api/internal/tasks"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/cors"
@@ -43,6 +44,11 @@ func main() {
 	habitService := habits.NewService(habitRepo, loc)
 	habitHandler := habits.NewHandler(habitService)
 
+	// Tasks Setup
+	taskRepo := tasks.NewRepository(queries)
+	taskService := tasks.NewService(taskRepo, loc)
+	taskHandler := tasks.NewHandler(taskService)
+
 	// Auth Setup
 	authService := auth.NewService(cfg, nil)
 	authHandler := auth.NewHandler(authService)
@@ -65,6 +71,7 @@ func main() {
 		r.Get("/habits", habitHandler.GetDaily)
 		r.Post("/habits", habitHandler.CreateHabit)
 		r.Post("/habits/log", habitHandler.UpsertLog)
+		r.Post("/projects", taskHandler.CreateProject)
 	})
 
 	log.Printf("Starting server on port %s", cfg.Port)

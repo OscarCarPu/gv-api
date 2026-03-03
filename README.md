@@ -16,9 +16,12 @@ Un orquestador de vida integral desarrollado en Go, diseñado para centralizar d
 | `gv-api/internal/habits/repository.go` | ![100.0%](https://img.shields.io/badge/100.0%25-brightgreen) |  |
 | `gv-api/internal/habits/service.go` | ![100.0%](https://img.shields.io/badge/100.0%25-brightgreen) |  |
 | `gv-api/internal/response/response.go` | ![87.5%](https://img.shields.io/badge/87.5%25-brightgreen) |  |
+| `gv-api/internal/tasks/handler.go` | ![100.0%](https://img.shields.io/badge/100.0%25-brightgreen) |  |
+| `gv-api/internal/tasks/repository.go` | ![100.0%](https://img.shields.io/badge/100.0%25-brightgreen) |  |
+| `gv-api/internal/tasks/service.go` | ![100.0%](https://img.shields.io/badge/100.0%25-brightgreen) |  |
 | `gv-api/test/e2e/client.go` | ![skipped](https://img.shields.io/badge/SKIPPED-grey) | E2E test infrastructure |
 | `gv-api/test/e2e/setup.go` | ![skipped](https://img.shields.io/badge/SKIPPED-grey) | E2E test infrastructure |
-| **Total** | ![97.5%](https://img.shields.io/badge/97.5%25-brightgreen) | Excludes boilerplate and test infra |
+| **Total** | ![98.0%](https://img.shields.io/badge/98.0%25-brightgreen) | Excludes boilerplate and test infra |
 
 ## Tecnologías
 

@@ -4,6 +4,9 @@ import (
 	"context"
 	"testing"
 	"time"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 type mockRepo struct {
@@ -38,27 +41,21 @@ func TestService_GetDailyView(t *testing.T) {
 		want := time.Date(2025, 1, 31, 0, 0, 0, 0, time.UTC)
 		repo := &mockRepo{
 			getHabitsFn: func(ctx context.Context, got time.Time) ([]HabitWithLog, error) {
-				if !got.Equal(want) {
-					t.Errorf("got date %v, want %v", got, want)
-				}
+				assert.True(t, got.Equal(want))
 				return []HabitWithLog{}, nil
 			},
 		}
 		svc := NewService(repo, nil)
 
 		_, err := svc.GetDailyView(context.Background(), "2025-01-31")
-		if err != nil {
-			t.Fatalf("got error %v, want nil", err)
-		}
+		require.NoError(t, err)
 	})
 
 	t.Run("returns error for invalid date", func(t *testing.T) {
 		svc := NewService(&mockRepo{}, nil)
 
 		_, err := svc.GetDailyView(context.Background(), "invalid-date")
-		if err == nil {
-			t.Fatal("got nil, want error")
-		}
+		assert.Error(t, err)
 	})
 
 	t.Run("returns empty results", func(t *testing.T) {
@@ -70,12 +67,8 @@ func TestService_GetDailyView(t *testing.T) {
 		svc := NewService(repo, nil)
 
 		got, err := svc.GetDailyView(context.Background(), "2025-01-31")
-		if err != nil {
-			t.Fatalf("got error %v, want nil", err)
-		}
-		if len(got) != 0 {
-			t.Errorf("got %d results, want 0", len(got))
-		}
+		require.NoError(t, err)
+		assert.Empty(t, got)
 	})
 
 	t.Run("uses today when date is empty", func(t *testing.T) {
@@ -89,15 +82,11 @@ func TestService_GetDailyView(t *testing.T) {
 		svc := NewService(repo, nil)
 
 		_, err := svc.GetDailyView(context.Background(), "")
-		if err != nil {
-			t.Fatalf("got error %v, want nil", err)
-		}
+		require.NoError(t, err)
 
 		now := time.Now().UTC()
 		want := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC)
-		if !got.Equal(want) {
-			t.Errorf("got date %v, want %v", got, want)
-		}
+		assert.True(t, got.Equal(want))
 	})
 }
 
@@ -119,20 +108,12 @@ func TestService_LogHabit(t *testing.T) {
 
 		req := LogUpsertRequest{HabitID: 5, Date: "2025-01-31", Value: 100.0}
 		err := svc.LogHabit(context.Background(), req)
-		if err != nil {
-			t.Fatalf("got error %v, want nil", err)
-		}
+		require.NoError(t, err)
 
 		wantDate := time.Date(2025, 1, 31, 0, 0, 0, 0, time.UTC)
-		if gotHabitID != 5 {
-			t.Errorf("got habitID %d, want 5", gotHabitID)
-		}
-		if !gotDate.Equal(wantDate) {
-			t.Errorf("got date %v, want %v", gotDate, wantDate)
-		}
-		if gotValue != 100.0 {
-			t.Errorf("got value %f, want 100.0", gotValue)
-		}
+		assert.Equal(t, int32(5), gotHabitID)
+		assert.True(t, gotDate.Equal(wantDate))
+		assert.Equal(t, float32(100.0), gotValue)
 	})
 
 	t.Run("returns error for invalid date", func(t *testing.T) {
@@ -140,9 +121,7 @@ func TestService_LogHabit(t *testing.T) {
 
 		req := LogUpsertRequest{HabitID: 1, Date: "not-a-date", Value: 10.0}
 		err := svc.LogHabit(context.Background(), req)
-		if err == nil {
-			t.Fatal("got nil, want error")
-		}
+		assert.Error(t, err)
 	})
 }
 
@@ -163,18 +142,11 @@ func TestService_CreateHabit(t *testing.T) {
 
 		req := CreateHabitRequest{Name: "Exercise", Description: &desc}
 		got, err := svc.CreateHabit(context.Background(), req)
-		if err != nil {
-			t.Fatalf("got error %v, want nil", err)
-		}
-		if gotName != "Exercise" {
-			t.Errorf("got name %q, want %q", gotName, "Exercise")
-		}
-		if gotDesc == nil || *gotDesc != "test description" {
-			t.Errorf("got description %v, want %q", gotDesc, "test description")
-		}
-		if got.ID != 1 {
-			t.Errorf("got ID %d, want 1", got.ID)
-		}
+		require.NoError(t, err)
+
+		assert.Equal(t, "Exercise", gotName)
+		assert.Equal(t, &desc, gotDesc)
+		assert.Equal(t, int32(1), got.ID)
 	})
 
 	t.Run("handles nil description", func(t *testing.T) {
@@ -190,11 +162,7 @@ func TestService_CreateHabit(t *testing.T) {
 
 		req := CreateHabitRequest{Name: "Exercise", Description: nil}
 		_, err := svc.CreateHabit(context.Background(), req)
-		if err != nil {
-			t.Fatalf("got error %v, want nil", err)
-		}
-		if gotDesc != nil {
-			t.Errorf("got description %v, want nil", gotDesc)
-		}
+		require.NoError(t, err)
+		assert.Nil(t, gotDesc)
 	})
 }

@@ -9,23 +9,10 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
-
-// --- Test Helpers ---
-
-func assertStatus(t testing.TB, got, want int) {
-	t.Helper()
-	if got != want {
-		t.Errorf("got status %d, want %d", got, want)
-	}
-}
-
-func assertBodyContains(t testing.TB, body string, want string) {
-	t.Helper()
-	if !strings.Contains(body, want) {
-		t.Errorf("body %q does not contain %q", body, want)
-	}
-}
 
 // --- Mocks ---
 
@@ -80,13 +67,9 @@ func TestHandler_UpsertLog(t *testing.T) {
 
 		handler.UpsertLog(rec, req)
 
-		assertStatus(t, rec.Code, http.StatusOK)
-		if got.HabitID != 1 {
-			t.Errorf("got HabitID %d, want 1", got.HabitID)
-		}
-		if got.Value != 42.5 {
-			t.Errorf("got Value %f, want 42.5", got.Value)
-		}
+		assert.Equal(t, http.StatusOK, rec.Code)
+		assert.Equal(t, int32(1), got.HabitID)
+		assert.Equal(t, float32(42.5), got.Value)
 	})
 
 	errorCases := []struct {
@@ -125,8 +108,8 @@ func TestHandler_UpsertLog(t *testing.T) {
 
 			handler.UpsertLog(rec, req)
 
-			assertStatus(t, rec.Code, tc.wantStatus)
-			assertBodyContains(t, rec.Body.String(), tc.wantBody)
+			assert.Equal(t, tc.wantStatus, rec.Code)
+			assert.Contains(t, rec.Body.String(), tc.wantBody)
 		})
 	}
 }
@@ -150,33 +133,16 @@ func TestHandler_GetDaily(t *testing.T) {
 
 		handler.GetDaily(rec, req)
 
-		assertStatus(t, rec.Code, http.StatusOK)
-
-		got := rec.Header().Get("Content-Type")
-		want := "application/json"
-		if got != want {
-			t.Errorf("got Content-Type %q, want %q", got, want)
-		}
+		assert.Equal(t, http.StatusOK, rec.Code)
+		assert.Equal(t, "application/json", rec.Header().Get("Content-Type"))
 
 		var habits []HabitWithLog
-		if err := json.NewDecoder(rec.Body).Decode(&habits); err != nil {
-			t.Fatalf("failed to decode response: %v", err)
-		}
-		if len(habits) != 2 {
-			t.Fatalf("got %d habits, want 2", len(habits))
-		}
-		if habits[0].Name != "Exercise" {
-			t.Errorf("got name %q, want %q", habits[0].Name, "Exercise")
-		}
-		if habits[1].Name != "Reading" {
-			t.Errorf("got name %q, want %q", habits[1].Name, "Reading")
-		}
-		if habits[1].LogValue == nil {
-			t.Fatalf("got nil LogValue, want 42.5")
-		}
-		if *habits[1].LogValue != 42.5 {
-			t.Errorf("got LogValue %f, want 42.5", *habits[1].LogValue)
-		}
+		require.NoError(t, json.NewDecoder(rec.Body).Decode(&habits))
+		require.Len(t, habits, 2)
+		assert.Equal(t, "Exercise", habits[0].Name)
+		assert.Equal(t, "Reading", habits[1].Name)
+		require.NotNil(t, habits[1].LogValue)
+		assert.Equal(t, float32(42.5), *habits[1].LogValue)
 	})
 
 	t.Run("returns 500 when service fails", func(t *testing.T) {
@@ -192,7 +158,7 @@ func TestHandler_GetDaily(t *testing.T) {
 
 		handler.GetDaily(rec, req)
 
-		assertStatus(t, rec.Code, http.StatusInternalServerError)
+		assert.Equal(t, http.StatusInternalServerError, rec.Code)
 	})
 }
 
@@ -212,21 +178,13 @@ func TestHandler_CreateHabit(t *testing.T) {
 
 		handler.CreateHabit(rec, req)
 
-		assertStatus(t, rec.Code, http.StatusCreated)
+		assert.Equal(t, http.StatusCreated, rec.Code)
 
 		var got CreateHabitResponse
-		if err := json.NewDecoder(rec.Body).Decode(&got); err != nil {
-			t.Fatalf("failed to decode response: %v", err)
-		}
-		if got.ID != 1 {
-			t.Errorf("got ID %d, want 1", got.ID)
-		}
-		if got.Name != "Exercise" {
-			t.Errorf("got name %q, want %q", got.Name, "Exercise")
-		}
-		if got.Description == nil || *got.Description != desc {
-			t.Errorf("got description %v, want %q", got.Description, desc)
-		}
+		require.NoError(t, json.NewDecoder(rec.Body).Decode(&got))
+		assert.Equal(t, int32(1), got.ID)
+		assert.Equal(t, "Exercise", got.Name)
+		assert.Equal(t, &desc, got.Description)
 	})
 
 	errorCases := []struct {
@@ -272,8 +230,8 @@ func TestHandler_CreateHabit(t *testing.T) {
 
 			handler.CreateHabit(rec, req)
 
-			assertStatus(t, rec.Code, tc.wantStatus)
-			assertBodyContains(t, rec.Body.String(), tc.wantBody)
+			assert.Equal(t, tc.wantStatus, rec.Code)
+			assert.Contains(t, rec.Body.String(), tc.wantBody)
 		})
 	}
 }
