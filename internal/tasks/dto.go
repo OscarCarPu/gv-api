@@ -24,7 +24,7 @@ type CreateTaskRequest struct {
 	DueAt       *time.Time `json:"due_at"`
 }
 
-type CreateTaskResponse struct {
+type TaskResponse struct {
 	ID          int32      `json:"id"`
 	ProjectID   *int32     `json:"project_id"`
 	Name        string     `json:"name"`
@@ -37,7 +37,7 @@ type CreateTodoRequest struct {
 	Name   string `json:"name"`
 }
 
-type CreateTodoResponse struct {
+type TodoResponse struct {
 	ID     int32  `json:"id"`
 	TaskID int32  `json:"task_id"`
 	Name   string `json:"name"`
@@ -50,10 +50,15 @@ type CreateTimeEntryRequest struct {
 	Comment    *string    `json:"comment"`
 }
 
-type CreateTimeEntryResponse struct {
+type TimeEntryResponse struct {
 	ID         int32      `json:"id"`
 	TaskID     int32      `json:"task_id"`
 	StartedAt  time.Time  `json:"started_at"`
 	FinishedAt *time.Time `json:"finished_at"`
 	Comment    *string    `json:"comment"`
+}
+
+type FinishTimeEntryRequest struct {
+	ID         int32      `json:"-"`
+	FinishedAt *time.Time `json:"finished_at"`
 }

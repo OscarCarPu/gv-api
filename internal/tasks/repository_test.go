@@ -8,6 +8,7 @@ import (
 
 	"gv-api/internal/database/sqlc"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -18,6 +19,7 @@ type mockQuerier struct {
 	createTaskFn      func(ctx context.Context, arg sqlc.CreateTaskParams) (sqlc.CreateTaskRow, error)
 	createTodoFn      func(ctx context.Context, arg sqlc.CreateTodoParams) (sqlc.CreateTodoRow, error)
 	createTimeEntryFn func(ctx context.Context, arg sqlc.CreateTimeEntryParams) (sqlc.TimeEntry, error)
+	finishTimeEntryFn func(ctx context.Context, arg sqlc.FinishTimeEntryParams) (sqlc.TimeEntry, error)
 	getRootProjectsFn func(ctx context.Context) ([]sqlc.GetRootProjectsRow, error)
 }
 
@@ -45,6 +47,13 @@ func (m *mockQuerier) CreateTodo(ctx context.Context, arg sqlc.CreateTodoParams)
 func (m *mockQuerier) CreateTimeEntry(ctx context.Context, arg sqlc.CreateTimeEntryParams) (sqlc.TimeEntry, error) {
 	if m.createTimeEntryFn != nil {
 		return m.createTimeEntryFn(ctx, arg)
+	}
+	return sqlc.TimeEntry{}, nil
+}
+
+func (m *mockQuerier) FinishTimeEntry(ctx context.Context, arg sqlc.FinishTimeEntryParams) (sqlc.TimeEntry, error) {
+	if m.finishTimeEntryFn != nil {
+		return m.finishTimeEntryFn(ctx, arg)
 	}
 	return sqlc.TimeEntry{}, nil
 }
@@ -332,5 +341,60 @@ func TestRepository_GetRootProjects(t *testing.T) {
 
 		_, err := repo.GetRootProjects(context.Background())
 		assert.Error(t, err)
+	})
+}
+
+func TestRepository_FinishTimeEntry(t *testing.T) {
+	t.Run("maps response correctly", func(t *testing.T) {
+		startedAt := time.Date(2026, 3, 1, 9, 0, 0, 0, time.UTC)
+		finishedAt := time.Date(2026, 3, 1, 10, 0, 0, 0, time.UTC)
+		comment := "done"
+
+		mock := &mockQuerier{
+			finishTimeEntryFn: func(ctx context.Context, arg sqlc.FinishTimeEntryParams) (sqlc.TimeEntry, error) {
+				return sqlc.TimeEntry{
+					ID:         1,
+					TaskID:     3,
+					StartedAt:  pgtype.Timestamp{Time: startedAt, Valid: true},
+					FinishedAt: pgtype.Timestamp{Time: finishedAt, Valid: true},
+					Comment:    &comment,
+				}, nil
+			},
+		}
+		repo := NewRepository(mock)
+
+		got, err := repo.FinishTimeEntry(context.Background(), 1, finishedAt)
+		require.NoError(t, err)
+
+		assert.Equal(t, int32(1), got.ID)
+		assert.Equal(t, int32(3), got.TaskID)
+		assert.Equal(t, startedAt, got.StartedAt)
+		assert.Equal(t, &finishedAt, got.FinishedAt)
+		assert.Equal(t, &comment, got.Comment)
+	})
+
+	t.Run("returns ErrNotFound on pgx.ErrNoRows", func(t *testing.T) {
+		mock := &mockQuerier{
+			finishTimeEntryFn: func(ctx context.Context, arg sqlc.FinishTimeEntryParams) (sqlc.TimeEntry, error) {
+				return sqlc.TimeEntry{}, pgx.ErrNoRows
+			},
+		}
+		repo := NewRepository(mock)
+
+		_, err := repo.FinishTimeEntry(context.Background(), 999, time.Now())
+		assert.ErrorIs(t, err, ErrNotFound)
+	})
+
+	t.Run("returns error from querier", func(t *testing.T) {
+		mock := &mockQuerier{
+			finishTimeEntryFn: func(ctx context.Context, arg sqlc.FinishTimeEntryParams) (sqlc.TimeEntry, error) {
+				return sqlc.TimeEntry{}, errors.New("db error")
+			},
+		}
+		repo := NewRepository(mock)
+
+		_, err := repo.FinishTimeEntry(context.Background(), 1, time.Now())
+		assert.Error(t, err)
+		assert.NotErrorIs(t, err, ErrNotFound)
 	})
 }

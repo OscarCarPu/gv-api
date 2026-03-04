@@ -76,6 +76,7 @@ func main() {
 		r.Post("/tasks/tasks", taskHandler.CreateTask)
 		r.Post("/tasks/todos", taskHandler.CreateTodo)
 		r.Post("/tasks/time-entries", taskHandler.CreateTimeEntry)
+		r.Patch("/tasks/time-entries/{id}/finish", taskHandler.FinishTimeEntry)
 	})
 
 	log.Printf("Starting server on port %s", cfg.Port)

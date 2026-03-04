@@ -8,7 +8,9 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
+	"github.com/go-chi/chi/v5"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -17,9 +19,10 @@ import (
 
 type mockService struct {
 	createProjectFn   func(ctx context.Context, req CreateProjectRequest) (ProjectResponse, error)
-	createTaskFn      func(ctx context.Context, req CreateTaskRequest) (CreateTaskResponse, error)
-	createTodoFn      func(ctx context.Context, req CreateTodoRequest) (CreateTodoResponse, error)
-	createTimeEntryFn func(ctx context.Context, req CreateTimeEntryRequest) (CreateTimeEntryResponse, error)
+	createTaskFn      func(ctx context.Context, req CreateTaskRequest) (TaskResponse, error)
+	createTodoFn      func(ctx context.Context, req CreateTodoRequest) (TodoResponse, error)
+	createTimeEntryFn func(ctx context.Context, req CreateTimeEntryRequest) (TimeEntryResponse, error)
+	finishTimeEntryFn func(ctx context.Context, req FinishTimeEntryRequest) (TimeEntryResponse, error)
 	getRootProjectsFn func(ctx context.Context) ([]ProjectResponse, error)
 }
 
@@ -30,25 +33,32 @@ func (m *mockService) CreateProject(ctx context.Context, req CreateProjectReques
 	return ProjectResponse{}, nil
 }
 
-func (m *mockService) CreateTask(ctx context.Context, req CreateTaskRequest) (CreateTaskResponse, error) {
+func (m *mockService) CreateTask(ctx context.Context, req CreateTaskRequest) (TaskResponse, error) {
 	if m.createTaskFn != nil {
 		return m.createTaskFn(ctx, req)
 	}
-	return CreateTaskResponse{}, nil
+	return TaskResponse{}, nil
 }
 
-func (m *mockService) CreateTodo(ctx context.Context, req CreateTodoRequest) (CreateTodoResponse, error) {
+func (m *mockService) CreateTodo(ctx context.Context, req CreateTodoRequest) (TodoResponse, error) {
 	if m.createTodoFn != nil {
 		return m.createTodoFn(ctx, req)
 	}
-	return CreateTodoResponse{}, nil
+	return TodoResponse{}, nil
 }
 
-func (m *mockService) CreateTimeEntry(ctx context.Context, req CreateTimeEntryRequest) (CreateTimeEntryResponse, error) {
+func (m *mockService) CreateTimeEntry(ctx context.Context, req CreateTimeEntryRequest) (TimeEntryResponse, error) {
 	if m.createTimeEntryFn != nil {
 		return m.createTimeEntryFn(ctx, req)
 	}
-	return CreateTimeEntryResponse{}, nil
+	return TimeEntryResponse{}, nil
+}
+
+func (m *mockService) FinishTimeEntry(ctx context.Context, req FinishTimeEntryRequest) (TimeEntryResponse, error) {
+	if m.finishTimeEntryFn != nil {
+		return m.finishTimeEntryFn(ctx, req)
+	}
+	return TimeEntryResponse{}, nil
 }
 
 func (m *mockService) GetRootProjects(ctx context.Context) ([]ProjectResponse, error) {
@@ -138,8 +148,8 @@ func TestHandler_CreateTask(t *testing.T) {
 	t.Run("returns 201 with created task", func(t *testing.T) {
 		projectID := int32(1)
 		mock := &mockService{
-			createTaskFn: func(ctx context.Context, req CreateTaskRequest) (CreateTaskResponse, error) {
-				return CreateTaskResponse{ID: 1, ProjectID: req.ProjectID, Name: req.Name}, nil
+			createTaskFn: func(ctx context.Context, req CreateTaskRequest) (TaskResponse, error) {
+				return TaskResponse{ID: 1, ProjectID: req.ProjectID, Name: req.Name}, nil
 			},
 		}
 		handler := NewHandler(mock)
@@ -152,7 +162,7 @@ func TestHandler_CreateTask(t *testing.T) {
 
 		assert.Equal(t, http.StatusCreated, rec.Code)
 
-		var got CreateTaskResponse
+		var got TaskResponse
 		require.NoError(t, json.NewDecoder(rec.Body).Decode(&got))
 		assert.Equal(t, int32(1), got.ID)
 		assert.Equal(t, "My Task", got.Name)
@@ -185,8 +195,8 @@ func TestHandler_CreateTask(t *testing.T) {
 			body: `{"name": "My Task"}`,
 			setupMock: func() *mockService {
 				return &mockService{
-					createTaskFn: func(ctx context.Context, req CreateTaskRequest) (CreateTaskResponse, error) {
-						return CreateTaskResponse{}, errors.New("db error")
+					createTaskFn: func(ctx context.Context, req CreateTaskRequest) (TaskResponse, error) {
+						return TaskResponse{}, errors.New("db error")
 					},
 				}
 			},
@@ -211,8 +221,8 @@ func TestHandler_CreateTask(t *testing.T) {
 func TestHandler_CreateTodo(t *testing.T) {
 	t.Run("returns 201 with created todo", func(t *testing.T) {
 		mock := &mockService{
-			createTodoFn: func(ctx context.Context, req CreateTodoRequest) (CreateTodoResponse, error) {
-				return CreateTodoResponse{ID: 1, TaskID: req.TaskID, Name: req.Name}, nil
+			createTodoFn: func(ctx context.Context, req CreateTodoRequest) (TodoResponse, error) {
+				return TodoResponse{ID: 1, TaskID: req.TaskID, Name: req.Name}, nil
 			},
 		}
 		handler := NewHandler(mock)
@@ -225,7 +235,7 @@ func TestHandler_CreateTodo(t *testing.T) {
 
 		assert.Equal(t, http.StatusCreated, rec.Code)
 
-		var got CreateTodoResponse
+		var got TodoResponse
 		require.NoError(t, json.NewDecoder(rec.Body).Decode(&got))
 		assert.Equal(t, int32(1), got.ID)
 		assert.Equal(t, int32(5), got.TaskID)
@@ -265,8 +275,8 @@ func TestHandler_CreateTodo(t *testing.T) {
 			body: `{"task_id": 5, "name": "My Todo"}`,
 			setupMock: func() *mockService {
 				return &mockService{
-					createTodoFn: func(ctx context.Context, req CreateTodoRequest) (CreateTodoResponse, error) {
-						return CreateTodoResponse{}, errors.New("db error")
+					createTodoFn: func(ctx context.Context, req CreateTodoRequest) (TodoResponse, error) {
+						return TodoResponse{}, errors.New("db error")
 					},
 				}
 			},
@@ -291,8 +301,8 @@ func TestHandler_CreateTodo(t *testing.T) {
 func TestHandler_CreateTimeEntry(t *testing.T) {
 	t.Run("returns 201 with created time entry", func(t *testing.T) {
 		mock := &mockService{
-			createTimeEntryFn: func(ctx context.Context, req CreateTimeEntryRequest) (CreateTimeEntryResponse, error) {
-				return CreateTimeEntryResponse{ID: 1, TaskID: req.TaskID, StartedAt: req.StartedAt}, nil
+			createTimeEntryFn: func(ctx context.Context, req CreateTimeEntryRequest) (TimeEntryResponse, error) {
+				return TimeEntryResponse{ID: 1, TaskID: req.TaskID, StartedAt: req.StartedAt}, nil
 			},
 		}
 		handler := NewHandler(mock)
@@ -305,7 +315,7 @@ func TestHandler_CreateTimeEntry(t *testing.T) {
 
 		assert.Equal(t, http.StatusCreated, rec.Code)
 
-		var got CreateTimeEntryResponse
+		var got TimeEntryResponse
 		require.NoError(t, json.NewDecoder(rec.Body).Decode(&got))
 		assert.Equal(t, int32(1), got.ID)
 		assert.Equal(t, int32(3), got.TaskID)
@@ -344,8 +354,8 @@ func TestHandler_CreateTimeEntry(t *testing.T) {
 			body: `{"task_id": 3, "started_at": "2026-03-01T09:00:00Z"}`,
 			setupMock: func() *mockService {
 				return &mockService{
-					createTimeEntryFn: func(ctx context.Context, req CreateTimeEntryRequest) (CreateTimeEntryResponse, error) {
-						return CreateTimeEntryResponse{}, errors.New("db error")
+					createTimeEntryFn: func(ctx context.Context, req CreateTimeEntryRequest) (TimeEntryResponse, error) {
+						return TimeEntryResponse{}, errors.New("db error")
 					},
 				}
 			},
@@ -365,6 +375,93 @@ func TestHandler_CreateTimeEntry(t *testing.T) {
 			assert.Contains(t, rec.Body.String(), tc.wantBody)
 		})
 	}
+}
+
+func TestHandler_FinishTimeEntry(t *testing.T) {
+	t.Run("returns 200 with finished time entry", func(t *testing.T) {
+		now := time.Now()
+		mock := &mockService{
+			finishTimeEntryFn: func(ctx context.Context, req FinishTimeEntryRequest) (TimeEntryResponse, error) {
+				return TimeEntryResponse{ID: req.ID, TaskID: 3, StartedAt: now, FinishedAt: &now}, nil
+			},
+		}
+		handler := NewHandler(mock)
+
+		req := httptest.NewRequest(http.MethodPatch, "/tasks/time-entries/7/finish", nil)
+
+		rctx := chi.NewRouteContext()
+		rctx.URLParams.Add("id", "7")
+		req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
+
+		rec := httptest.NewRecorder()
+		handler.FinishTimeEntry(rec, req)
+
+		assert.Equal(t, http.StatusOK, rec.Code)
+
+		var got TimeEntryResponse
+		require.NoError(t, json.NewDecoder(rec.Body).Decode(&got))
+		assert.Equal(t, int32(7), got.ID)
+		assert.Equal(t, int32(3), got.TaskID)
+		assert.NotNil(t, got.FinishedAt)
+	})
+
+	t.Run("returns 400 for invalid id", func(t *testing.T) {
+		handler := NewHandler(&mockService{})
+
+		req := httptest.NewRequest(http.MethodPatch, "/tasks/time-entries/abc/finish", nil)
+
+		rctx := chi.NewRouteContext()
+		rctx.URLParams.Add("id", "abc")
+		req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
+
+		rec := httptest.NewRecorder()
+		handler.FinishTimeEntry(rec, req)
+
+		assert.Equal(t, http.StatusBadRequest, rec.Code)
+		assert.Contains(t, rec.Body.String(), "invalid time entry id")
+	})
+
+	t.Run("returns 404 when not found", func(t *testing.T) {
+		mock := &mockService{
+			finishTimeEntryFn: func(ctx context.Context, req FinishTimeEntryRequest) (TimeEntryResponse, error) {
+				return TimeEntryResponse{}, ErrNotFound
+			},
+		}
+		handler := NewHandler(mock)
+
+		req := httptest.NewRequest(http.MethodPatch, "/tasks/time-entries/999/finish", nil)
+
+		rctx := chi.NewRouteContext()
+		rctx.URLParams.Add("id", "999")
+		req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
+
+		rec := httptest.NewRecorder()
+		handler.FinishTimeEntry(rec, req)
+
+		assert.Equal(t, http.StatusNotFound, rec.Code)
+		assert.Contains(t, rec.Body.String(), "time entry not found")
+	})
+
+	t.Run("returns 500 when service fails", func(t *testing.T) {
+		mock := &mockService{
+			finishTimeEntryFn: func(ctx context.Context, req FinishTimeEntryRequest) (TimeEntryResponse, error) {
+				return TimeEntryResponse{}, errors.New("db error")
+			},
+		}
+		handler := NewHandler(mock)
+
+		req := httptest.NewRequest(http.MethodPatch, "/tasks/time-entries/1/finish", nil)
+
+		rctx := chi.NewRouteContext()
+		rctx.URLParams.Add("id", "1")
+		req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
+
+		rec := httptest.NewRecorder()
+		handler.FinishTimeEntry(rec, req)
+
+		assert.Equal(t, http.StatusInternalServerError, rec.Code)
+		assert.Contains(t, rec.Body.String(), "Failed to finish time entry")
+	})
 }
 
 func TestHandler_GetRootProjects(t *testing.T) {

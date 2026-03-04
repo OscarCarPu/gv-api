@@ -12,9 +12,10 @@ import (
 
 type mockRepo struct {
 	createProjectFn   func(ctx context.Context, name string, description *string, dueAt *time.Time, parentID *int32) (ProjectResponse, error)
-	createTaskFn      func(ctx context.Context, projectID *int32, name string, description *string, dueAt *time.Time) (CreateTaskResponse, error)
-	createTodoFn      func(ctx context.Context, taskID int32, name string) (CreateTodoResponse, error)
-	createTimeEntryFn func(ctx context.Context, taskID int32, startedAt time.Time, finishedAt *time.Time, comment *string) (CreateTimeEntryResponse, error)
+	createTaskFn      func(ctx context.Context, projectID *int32, name string, description *string, dueAt *time.Time) (TaskResponse, error)
+	createTodoFn      func(ctx context.Context, taskID int32, name string) (TodoResponse, error)
+	createTimeEntryFn func(ctx context.Context, taskID int32, startedAt time.Time, finishedAt *time.Time, comment *string) (TimeEntryResponse, error)
+	finishTimeEntryFn func(ctx context.Context, id int32, finishedAt time.Time) (TimeEntryResponse, error)
 	getRootProjectsFn func(ctx context.Context) ([]ProjectResponse, error)
 }
 
@@ -25,25 +26,32 @@ func (m *mockRepo) CreateProject(ctx context.Context, name string, description *
 	return ProjectResponse{}, nil
 }
 
-func (m *mockRepo) CreateTask(ctx context.Context, projectID *int32, name string, description *string, dueAt *time.Time) (CreateTaskResponse, error) {
+func (m *mockRepo) CreateTask(ctx context.Context, projectID *int32, name string, description *string, dueAt *time.Time) (TaskResponse, error) {
 	if m.createTaskFn != nil {
 		return m.createTaskFn(ctx, projectID, name, description, dueAt)
 	}
-	return CreateTaskResponse{}, nil
+	return TaskResponse{}, nil
 }
 
-func (m *mockRepo) CreateTodo(ctx context.Context, taskID int32, name string) (CreateTodoResponse, error) {
+func (m *mockRepo) CreateTodo(ctx context.Context, taskID int32, name string) (TodoResponse, error) {
 	if m.createTodoFn != nil {
 		return m.createTodoFn(ctx, taskID, name)
 	}
-	return CreateTodoResponse{}, nil
+	return TodoResponse{}, nil
 }
 
-func (m *mockRepo) CreateTimeEntry(ctx context.Context, taskID int32, startedAt time.Time, finishedAt *time.Time, comment *string) (CreateTimeEntryResponse, error) {
+func (m *mockRepo) CreateTimeEntry(ctx context.Context, taskID int32, startedAt time.Time, finishedAt *time.Time, comment *string) (TimeEntryResponse, error) {
 	if m.createTimeEntryFn != nil {
 		return m.createTimeEntryFn(ctx, taskID, startedAt, finishedAt, comment)
 	}
-	return CreateTimeEntryResponse{}, nil
+	return TimeEntryResponse{}, nil
+}
+
+func (m *mockRepo) FinishTimeEntry(ctx context.Context, id int32, finishedAt time.Time) (TimeEntryResponse, error) {
+	if m.finishTimeEntryFn != nil {
+		return m.finishTimeEntryFn(ctx, id, finishedAt)
+	}
+	return TimeEntryResponse{}, nil
 }
 
 func (m *mockRepo) GetRootProjects(ctx context.Context) ([]ProjectResponse, error) {
@@ -130,22 +138,22 @@ func TestService_CreateTask(t *testing.T) {
 	tests := []struct {
 		name    string
 		req     CreateTaskRequest
-		mockRes CreateTaskResponse
+		mockRes TaskResponse
 		mockErr error
-		wantRes CreateTaskResponse
+		wantRes TaskResponse
 		wantErr bool
 	}{
 		{
 			name:    "all fields provided",
 			req:     CreateTaskRequest{ProjectID: &projectID, Name: "My Task", Description: &desc, DueAt: &now},
-			mockRes: CreateTaskResponse{ID: 1, ProjectID: &projectID, Name: "My Task", Description: &desc, DueAt: &now},
-			wantRes: CreateTaskResponse{ID: 1, ProjectID: &projectID, Name: "My Task", Description: &desc, DueAt: &now},
+			mockRes: TaskResponse{ID: 1, ProjectID: &projectID, Name: "My Task", Description: &desc, DueAt: &now},
+			wantRes: TaskResponse{ID: 1, ProjectID: &projectID, Name: "My Task", Description: &desc, DueAt: &now},
 		},
 		{
 			name:    "name only",
 			req:     CreateTaskRequest{Name: "Minimal Task"},
-			mockRes: CreateTaskResponse{ID: 2, Name: "Minimal Task"},
-			wantRes: CreateTaskResponse{ID: 2, Name: "Minimal Task"},
+			mockRes: TaskResponse{ID: 2, Name: "Minimal Task"},
+			wantRes: TaskResponse{ID: 2, Name: "Minimal Task"},
 		},
 		{
 			name:    "repository error",
@@ -158,7 +166,7 @@ func TestService_CreateTask(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			mock := &mockRepo{
-				createTaskFn: func(ctx context.Context, projectID *int32, name string, description *string, dueAt *time.Time) (CreateTaskResponse, error) {
+				createTaskFn: func(ctx context.Context, projectID *int32, name string, description *string, dueAt *time.Time) (TaskResponse, error) {
 					return tt.mockRes, tt.mockErr
 				},
 			}
@@ -181,16 +189,16 @@ func TestService_CreateTodo(t *testing.T) {
 	tests := []struct {
 		name    string
 		req     CreateTodoRequest
-		mockRes CreateTodoResponse
+		mockRes TodoResponse
 		mockErr error
-		wantRes CreateTodoResponse
+		wantRes TodoResponse
 		wantErr bool
 	}{
 		{
 			name:    "success",
 			req:     CreateTodoRequest{TaskID: 1, Name: "My Todo"},
-			mockRes: CreateTodoResponse{ID: 1, TaskID: 1, Name: "My Todo"},
-			wantRes: CreateTodoResponse{ID: 1, TaskID: 1, Name: "My Todo"},
+			mockRes: TodoResponse{ID: 1, TaskID: 1, Name: "My Todo"},
+			wantRes: TodoResponse{ID: 1, TaskID: 1, Name: "My Todo"},
 		},
 		{
 			name:    "repository error",
@@ -203,7 +211,7 @@ func TestService_CreateTodo(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			mock := &mockRepo{
-				createTodoFn: func(ctx context.Context, taskID int32, name string) (CreateTodoResponse, error) {
+				createTodoFn: func(ctx context.Context, taskID int32, name string) (TodoResponse, error) {
 					return tt.mockRes, tt.mockErr
 				},
 			}
@@ -230,22 +238,22 @@ func TestService_CreateTimeEntry(t *testing.T) {
 	tests := []struct {
 		name    string
 		req     CreateTimeEntryRequest
-		mockRes CreateTimeEntryResponse
+		mockRes TimeEntryResponse
 		mockErr error
-		wantRes CreateTimeEntryResponse
+		wantRes TimeEntryResponse
 		wantErr bool
 	}{
 		{
 			name:    "all fields provided",
 			req:     CreateTimeEntryRequest{TaskID: 1, StartedAt: now, FinishedAt: &later, Comment: &comment},
-			mockRes: CreateTimeEntryResponse{ID: 1, TaskID: 1, StartedAt: now, FinishedAt: &later, Comment: &comment},
-			wantRes: CreateTimeEntryResponse{ID: 1, TaskID: 1, StartedAt: now, FinishedAt: &later, Comment: &comment},
+			mockRes: TimeEntryResponse{ID: 1, TaskID: 1, StartedAt: now, FinishedAt: &later, Comment: &comment},
+			wantRes: TimeEntryResponse{ID: 1, TaskID: 1, StartedAt: now, FinishedAt: &later, Comment: &comment},
 		},
 		{
 			name:    "required fields only",
 			req:     CreateTimeEntryRequest{TaskID: 1, StartedAt: now},
-			mockRes: CreateTimeEntryResponse{ID: 2, TaskID: 1, StartedAt: now},
-			wantRes: CreateTimeEntryResponse{ID: 2, TaskID: 1, StartedAt: now},
+			mockRes: TimeEntryResponse{ID: 2, TaskID: 1, StartedAt: now},
+			wantRes: TimeEntryResponse{ID: 2, TaskID: 1, StartedAt: now},
 		},
 		{
 			name:    "repository error",
@@ -258,7 +266,7 @@ func TestService_CreateTimeEntry(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			mock := &mockRepo{
-				createTimeEntryFn: func(ctx context.Context, taskID int32, startedAt time.Time, finishedAt *time.Time, comment *string) (CreateTimeEntryResponse, error) {
+				createTimeEntryFn: func(ctx context.Context, taskID int32, startedAt time.Time, finishedAt *time.Time, comment *string) (TimeEntryResponse, error) {
 					return tt.mockRes, tt.mockErr
 				},
 			}
@@ -324,4 +332,58 @@ func TestService_GetRootProjects(t *testing.T) {
 			assert.Len(t, got, tt.wantLen)
 		})
 	}
+}
+
+func TestService_FinishTimeEntry(t *testing.T) {
+	now := time.Date(2026, 3, 4, 12, 0, 0, 0, time.UTC)
+	startedAt := time.Date(2026, 3, 4, 9, 0, 0, 0, time.UTC)
+
+	t.Run("with explicit finished_at", func(t *testing.T) {
+		mock := &mockRepo{
+			finishTimeEntryFn: func(ctx context.Context, id int32, finishedAt time.Time) (TimeEntryResponse, error) {
+				assert.Equal(t, int32(1), id)
+				assert.Equal(t, now, finishedAt)
+				return TimeEntryResponse{ID: 1, TaskID: 3, StartedAt: startedAt, FinishedAt: &now}, nil
+			},
+		}
+
+		svc := NewService(mock, nil)
+		got, err := svc.FinishTimeEntry(context.Background(), FinishTimeEntryRequest{ID: 1, FinishedAt: &now})
+
+		require.NoError(t, err)
+		assert.Equal(t, int32(1), got.ID)
+		assert.Equal(t, &now, got.FinishedAt)
+	})
+
+	t.Run("without finished_at defaults to now", func(t *testing.T) {
+		var capturedFinishedAt time.Time
+		mock := &mockRepo{
+			finishTimeEntryFn: func(ctx context.Context, id int32, finishedAt time.Time) (TimeEntryResponse, error) {
+				capturedFinishedAt = finishedAt
+				return TimeEntryResponse{ID: 1, TaskID: 3, StartedAt: startedAt, FinishedAt: &finishedAt}, nil
+			},
+		}
+
+		svc := NewService(mock, time.UTC)
+		before := time.Now().In(time.UTC)
+		_, err := svc.FinishTimeEntry(context.Background(), FinishTimeEntryRequest{ID: 1})
+		after := time.Now().In(time.UTC)
+
+		require.NoError(t, err)
+		assert.False(t, capturedFinishedAt.Before(before))
+		assert.False(t, capturedFinishedAt.After(after))
+	})
+
+	t.Run("repository error", func(t *testing.T) {
+		mock := &mockRepo{
+			finishTimeEntryFn: func(ctx context.Context, id int32, finishedAt time.Time) (TimeEntryResponse, error) {
+				return TimeEntryResponse{}, errors.New("db error")
+			},
+		}
+
+		svc := NewService(mock, nil)
+		_, err := svc.FinishTimeEntry(context.Background(), FinishTimeEntryRequest{ID: 1})
+
+		require.Error(t, err)
+	})
 }

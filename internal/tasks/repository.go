@@ -2,18 +2,23 @@ package tasks
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	"gv-api/internal/database/sqlc"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+var ErrNotFound = errors.New("not found")
+
 type Repository interface {
 	CreateProject(ctx context.Context, name string, description *string, dueAt *time.Time, parentID *int32) (ProjectResponse, error)
-	CreateTask(ctx context.Context, projectID *int32, name string, description *string, dueAt *time.Time) (CreateTaskResponse, error)
-	CreateTodo(ctx context.Context, taskID int32, name string) (CreateTodoResponse, error)
-	CreateTimeEntry(ctx context.Context, taskID int32, startedAt time.Time, finishedAt *time.Time, comment *string) (CreateTimeEntryResponse, error)
+	CreateTask(ctx context.Context, projectID *int32, name string, description *string, dueAt *time.Time) (TaskResponse, error)
+	CreateTodo(ctx context.Context, taskID int32, name string) (TodoResponse, error)
+	CreateTimeEntry(ctx context.Context, taskID int32, startedAt time.Time, finishedAt *time.Time, comment *string) (TimeEntryResponse, error)
+	FinishTimeEntry(ctx context.Context, id int32, finishedAt time.Time) (TimeEntryResponse, error)
 	GetRootProjects(ctx context.Context) ([]ProjectResponse, error)
 }
 
@@ -56,7 +61,7 @@ func (r *PostgresRepository) CreateProject(ctx context.Context, name string, des
 	}, nil
 }
 
-func (r *PostgresRepository) CreateTask(ctx context.Context, projectID *int32, name string, description *string, dueAt *time.Time) (CreateTaskResponse, error) {
+func (r *PostgresRepository) CreateTask(ctx context.Context, projectID *int32, name string, description *string, dueAt *time.Time) (TaskResponse, error) {
 	var pgDueAt pgtype.Date
 	if dueAt != nil {
 		pgDueAt = pgtype.Date{Time: *dueAt, Valid: true}
@@ -69,7 +74,7 @@ func (r *PostgresRepository) CreateTask(ctx context.Context, projectID *int32, n
 		DueAt:       pgDueAt,
 	})
 	if err != nil {
-		return CreateTaskResponse{}, err
+		return TaskResponse{}, err
 	}
 
 	var respDueAt *time.Time
@@ -78,7 +83,7 @@ func (r *PostgresRepository) CreateTask(ctx context.Context, projectID *int32, n
 		respDueAt = &t
 	}
 
-	return CreateTaskResponse{
+	return TaskResponse{
 		ID:          row.ID,
 		ProjectID:   row.ProjectID,
 		Name:        row.Name,
@@ -87,23 +92,23 @@ func (r *PostgresRepository) CreateTask(ctx context.Context, projectID *int32, n
 	}, nil
 }
 
-func (r *PostgresRepository) CreateTodo(ctx context.Context, taskID int32, name string) (CreateTodoResponse, error) {
+func (r *PostgresRepository) CreateTodo(ctx context.Context, taskID int32, name string) (TodoResponse, error) {
 	row, err := r.q.CreateTodo(ctx, sqlc.CreateTodoParams{
 		TaskID: taskID,
 		Name:   name,
 	})
 	if err != nil {
-		return CreateTodoResponse{}, err
+		return TodoResponse{}, err
 	}
 
-	return CreateTodoResponse{
+	return TodoResponse{
 		ID:     row.ID,
 		TaskID: row.TaskID,
 		Name:   row.Name,
 	}, nil
 }
 
-func (r *PostgresRepository) CreateTimeEntry(ctx context.Context, taskID int32, startedAt time.Time, finishedAt *time.Time, comment *string) (CreateTimeEntryResponse, error) {
+func (r *PostgresRepository) CreateTimeEntry(ctx context.Context, taskID int32, startedAt time.Time, finishedAt *time.Time, comment *string) (TimeEntryResponse, error) {
 	pgStartedAt := pgtype.Timestamp{Time: startedAt, Valid: true}
 
 	var pgFinishedAt pgtype.Timestamp
@@ -118,7 +123,7 @@ func (r *PostgresRepository) CreateTimeEntry(ctx context.Context, taskID int32, 
 		Comment:    comment,
 	})
 	if err != nil {
-		return CreateTimeEntryResponse{}, err
+		return TimeEntryResponse{}, err
 	}
 
 	var respFinishedAt *time.Time
@@ -127,7 +132,36 @@ func (r *PostgresRepository) CreateTimeEntry(ctx context.Context, taskID int32, 
 		respFinishedAt = &t
 	}
 
-	return CreateTimeEntryResponse{
+	return TimeEntryResponse{
+		ID:         row.ID,
+		TaskID:     row.TaskID,
+		StartedAt:  row.StartedAt.Time,
+		FinishedAt: respFinishedAt,
+		Comment:    row.Comment,
+	}, nil
+}
+
+func (r *PostgresRepository) FinishTimeEntry(ctx context.Context, id int32, finishedAt time.Time) (TimeEntryResponse, error) {
+	pgFinishedAt := pgtype.Timestamp{Time: finishedAt, Valid: true}
+
+	row, err := r.q.FinishTimeEntry(ctx, sqlc.FinishTimeEntryParams{
+		ID:         id,
+		FinishedAt: pgFinishedAt,
+	})
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return TimeEntryResponse{}, ErrNotFound
+		}
+		return TimeEntryResponse{}, err
+	}
+
+	var respFinishedAt *time.Time
+	if row.FinishedAt.Valid {
+		t := row.FinishedAt.Time
+		respFinishedAt = &t
+	}
+
+	return TimeEntryResponse{
 		ID:         row.ID,
 		TaskID:     row.TaskID,
 		StartedAt:  row.StartedAt.Time,

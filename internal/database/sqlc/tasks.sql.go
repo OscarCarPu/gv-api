@@ -144,6 +144,30 @@ func (q *Queries) CreateTodo(ctx context.Context, arg CreateTodoParams) (CreateT
 	return i, err
 }
 
+const finishTimeEntry = `-- name: FinishTimeEntry :one
+UPDATE time_entries SET finished_at = $2
+WHERE id = $1
+RETURNING id, task_id, started_at, finished_at, comment
+`
+
+type FinishTimeEntryParams struct {
+	ID         int32            `db:"id" json:"id"`
+	FinishedAt pgtype.Timestamp `db:"finished_at" json:"finished_at"`
+}
+
+func (q *Queries) FinishTimeEntry(ctx context.Context, arg FinishTimeEntryParams) (TimeEntry, error) {
+	row := q.db.QueryRow(ctx, finishTimeEntry, arg.ID, arg.FinishedAt)
+	var i TimeEntry
+	err := row.Scan(
+		&i.ID,
+		&i.TaskID,
+		&i.StartedAt,
+		&i.FinishedAt,
+		&i.Comment,
+	)
+	return i, err
+}
+
 const getRootProjects = `-- name: GetRootProjects :many
 SELECT id, name, description, due_at, parent_id, started_at
 FROM projects

@@ -3,16 +3,21 @@ package tasks
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
+	"strconv"
 
 	"gv-api/internal/response"
+
+	"github.com/go-chi/chi/v5"
 )
 
 type ServiceInterface interface {
 	CreateProject(ctx context.Context, req CreateProjectRequest) (ProjectResponse, error)
-	CreateTask(ctx context.Context, req CreateTaskRequest) (CreateTaskResponse, error)
-	CreateTodo(ctx context.Context, req CreateTodoRequest) (CreateTodoResponse, error)
-	CreateTimeEntry(ctx context.Context, req CreateTimeEntryRequest) (CreateTimeEntryResponse, error)
+	CreateTask(ctx context.Context, req CreateTaskRequest) (TaskResponse, error)
+	CreateTodo(ctx context.Context, req CreateTodoRequest) (TodoResponse, error)
+	CreateTimeEntry(ctx context.Context, req CreateTimeEntryRequest) (TimeEntryResponse, error)
+	FinishTimeEntry(ctx context.Context, req FinishTimeEntryRequest) (TimeEntryResponse, error)
 	GetRootProjects(ctx context.Context) ([]ProjectResponse, error)
 }
 
@@ -116,6 +121,31 @@ func (h *Handler) CreateTimeEntry(w http.ResponseWriter, r *http.Request) {
 	}
 
 	response.JSON(w, http.StatusCreated, entry)
+}
+
+func (h *Handler) FinishTimeEntry(w http.ResponseWriter, r *http.Request) {
+	idStr := chi.URLParam(r, "id")
+	id, err := strconv.Atoi(idStr)
+	if err != nil {
+		response.Error(w, http.StatusBadRequest, "invalid time entry id")
+		return
+	}
+
+	var req FinishTimeEntryRequest
+	_ = json.NewDecoder(r.Body).Decode(&req)
+	req.ID = int32(id)
+
+	entry, err := h.service.FinishTimeEntry(r.Context(), req)
+	if err != nil {
+		if errors.Is(err, ErrNotFound) {
+			response.Error(w, http.StatusNotFound, "time entry not found")
+			return
+		}
+		response.Error(w, http.StatusInternalServerError, "Failed to finish time entry")
+		return
+	}
+
+	response.JSON(w, http.StatusOK, entry)
 }
 
 func (h *Handler) GetRootProjects(w http.ResponseWriter, r *http.Request) {
