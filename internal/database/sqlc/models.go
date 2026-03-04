@@ -37,7 +37,6 @@ type Task struct {
 	ProjectID   *int32           `db:"project_id" json:"project_id"`
 	Name        string           `db:"name" json:"name"`
 	Description *string          `db:"description" json:"description"`
-	IsDone      bool             `db:"is_done" json:"is_done"`
 	DueAt       pgtype.Date      `db:"due_at" json:"due_at"`
 	StartedAt   pgtype.Timestamp `db:"started_at" json:"started_at"`
 	FinishedAt  pgtype.Timestamp `db:"finished_at" json:"finished_at"`

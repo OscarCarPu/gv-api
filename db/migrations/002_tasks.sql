@@ -13,7 +13,6 @@ CREATE TABLE tasks (
     project_id INTEGER REFERENCES projects(id),
     name TEXT NOT NULL,
     description TEXT,
-    is_done BOOLEAN NOT NULL DEFAULT FALSE,
     due_at DATE,
     started_at TIMESTAMP,
     finished_at TIMESTAMP
