@@ -43,12 +43,12 @@ type CreateProjectRequest struct {
 }
 
 type ProjectResponse struct {
-	ID          int32   `json:"id"`
-	Name        string  `json:"name"`
-	Description *string `json:"description"`
-	ParentID    *int32  `json:"parent_id"`
-	StartedAt   *string `json:"started_at"`
-	FinishedAt  *string `json:"finished_at"`
+	ID          int32      `json:"id"`
+	Name        string     `json:"name"`
+	Description *string    `json:"description"`
+	ParentID    *int32     `json:"parent_id"`
+	StartedAt   *time.Time `json:"started_at"`
+	FinishedAt  *time.Time `json:"finished_at"`
 }
 
 type CreateTaskRequest struct {
@@ -58,12 +58,12 @@ type CreateTaskRequest struct {
 }
 
 type TaskResponse struct {
-	ID          int32   `json:"id"`
-	ProjectID   *int32  `json:"project_id"`
-	Name        string  `json:"name"`
-	Description *string `json:"description"`
-	StartedAt   *string `json:"started_at"`
-	FinishedAt  *string `json:"finished_at"`
+	ID          int32      `json:"id"`
+	ProjectID   *int32     `json:"project_id"`
+	Name        string     `json:"name"`
+	Description *string    `json:"description"`
+	StartedAt   *time.Time `json:"started_at"`
+	FinishedAt  *time.Time `json:"finished_at"`
 }
 
 type CreateTodoRequest struct {
@@ -79,34 +79,34 @@ type TodoResponse struct {
 }
 
 type CreateTimeEntryRequest struct {
-	TaskID     int32   `json:"task_id"`
-	StartedAt  string  `json:"started_at"`
-	FinishedAt *string `json:"finished_at,omitempty"`
-	Comment    *string `json:"comment,omitempty"`
+	TaskID     int32      `json:"task_id"`
+	StartedAt  time.Time  `json:"started_at"`
+	FinishedAt *time.Time `json:"finished_at,omitempty"`
+	Comment    *string    `json:"comment,omitempty"`
 }
 
 type TimeEntryResponse struct {
-	ID         int32   `json:"id"`
-	TaskID     int32   `json:"task_id"`
-	StartedAt  string  `json:"started_at"`
-	FinishedAt *string `json:"finished_at"`
-	Comment    *string `json:"comment"`
+	ID         int32      `json:"id"`
+	TaskID     int32      `json:"task_id"`
+	StartedAt  time.Time  `json:"started_at"`
+	FinishedAt *time.Time `json:"finished_at"`
+	Comment    *string    `json:"comment"`
 }
 
 type UpdateProjectRequest struct {
-	Name        *string `json:"name,omitempty"`
-	Description *string `json:"description,omitempty"`
-	ParentID    *int32  `json:"parent_id,omitempty"`
-	StartedAt   *string `json:"started_at,omitempty"`
-	FinishedAt  *string `json:"finished_at,omitempty"`
+	Name        *string    `json:"name,omitempty"`
+	Description *string    `json:"description,omitempty"`
+	ParentID    *int32     `json:"parent_id,omitempty"`
+	StartedAt   *time.Time `json:"started_at,omitempty"`
+	FinishedAt  *time.Time `json:"finished_at,omitempty"`
 }
 
 type UpdateTaskRequest struct {
-	Name        *string `json:"name,omitempty"`
-	Description *string `json:"description,omitempty"`
-	ProjectID   *int32  `json:"project_id,omitempty"`
-	StartedAt   *string `json:"started_at,omitempty"`
-	FinishedAt  *string `json:"finished_at,omitempty"`
+	Name        *string    `json:"name,omitempty"`
+	Description *string    `json:"description,omitempty"`
+	ProjectID   *int32     `json:"project_id,omitempty"`
+	StartedAt   *time.Time `json:"started_at,omitempty"`
+	FinishedAt  *time.Time `json:"finished_at,omitempty"`
 }
 
 type UpdateTodoRequest struct {
@@ -115,29 +115,29 @@ type UpdateTodoRequest struct {
 }
 
 type UpdateTimeEntryRequest struct {
-	StartedAt  *string `json:"started_at,omitempty"`
-	FinishedAt *string `json:"finished_at,omitempty"`
-	Comment    *string `json:"comment,omitempty"`
+	StartedAt  *time.Time `json:"started_at,omitempty"`
+	FinishedAt *time.Time `json:"finished_at,omitempty"`
+	Comment    *string    `json:"comment,omitempty"`
 }
 
 type TaskDetailResponse struct {
-	ID          int32   `json:"id"`
-	ProjectID   *int32  `json:"project_id"`
-	Name        string  `json:"name"`
-	Description *string `json:"description"`
-	StartedAt   *string `json:"started_at"`
-	FinishedAt  *string `json:"finished_at"`
-	TimeSpent   int64   `json:"time_spent"`
+	ID          int32      `json:"id"`
+	ProjectID   *int32     `json:"project_id"`
+	Name        string     `json:"name"`
+	Description *string    `json:"description"`
+	StartedAt   *time.Time `json:"started_at"`
+	FinishedAt  *time.Time `json:"finished_at"`
+	TimeSpent   int64      `json:"time_spent"`
 }
 
 type ProjectDetailResponse struct {
-	ID          int32   `json:"id"`
-	ParentID    *int32  `json:"parent_id"`
-	Name        string  `json:"name"`
-	Description *string `json:"description"`
-	StartedAt   *string `json:"started_at"`
-	FinishedAt  *string `json:"finished_at"`
-	TimeSpent   int64   `json:"time_spent"`
+	ID          int32      `json:"id"`
+	ParentID    *int32     `json:"parent_id"`
+	Name        string     `json:"name"`
+	Description *string    `json:"description"`
+	StartedAt   *time.Time `json:"started_at"`
+	FinishedAt  *time.Time `json:"finished_at"`
+	TimeSpent   int64      `json:"time_spent"`
 }
 
 type TaskTimeEntriesResponse struct {
@@ -150,8 +150,8 @@ type ProjectChildNode struct {
 	Type        string         `json:"type"`
 	Name        string         `json:"name"`
 	Description *string        `json:"description"`
-	StartedAt   *string        `json:"started_at"`
-	FinishedAt  *string        `json:"finished_at"`
+	StartedAt   *time.Time     `json:"started_at"`
+	FinishedAt  *time.Time     `json:"finished_at"`
 	TimeSpent   int64          `json:"time_spent"`
 	ParentID    *int32         `json:"parent_id,omitempty"`
 	ProjectID   *int32         `json:"project_id,omitempty"`

@@ -374,6 +374,7 @@ func (r *PostgresRepository) GetProjectChildren(ctx context.Context, projectID i
 				ID:     *row.TodoID,
 				TaskID: row.ID,
 				Name:   *row.TodoName,
+				IsDone: *row.TodoIsDone,
 			})
 		}
 	}

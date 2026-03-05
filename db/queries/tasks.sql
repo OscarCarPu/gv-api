@@ -92,7 +92,7 @@ WITH task_times AS (
 SELECT
     tt.id, tt.project_id, tt.name, tt.description, tt.due_at, tt.started_at, tt.finished_at,
     tt.time_spent,
-    td.id AS todo_id, td.name AS todo_name
+    td.id AS todo_id, td.name AS todo_name, td.is_done AS todo_is_done
 FROM task_times tt
 LEFT JOIN todos td ON td.task_id = tt.id
 ORDER BY tt.finished_at NULLS FIRST, tt.name, todo_id;

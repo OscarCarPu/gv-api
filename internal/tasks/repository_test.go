@@ -758,8 +758,9 @@ func TestRepository_GetProjectChildren(t *testing.T) {
 				pid2 := int32(2)
 				todoID := int32(10)
 				todoName := "My Todo"
+				todoDone := false
 				return []tasksdb.GetTasksByProjectIDsRow{
-					{ID: 1, ProjectID: &pid1, Name: "Task A", TimeSpent: 3600, TodoID: &todoID, TodoName: &todoName},
+					{ID: 1, ProjectID: &pid1, Name: "Task A", TimeSpent: 3600, TodoID: &todoID, TodoName: &todoName, TodoIsDone: &todoDone},
 					{ID: 2, ProjectID: &pid2, Name: "Task B", TimeSpent: 1800},
 				}, nil
 			},
@@ -796,9 +797,10 @@ func TestRepository_GetProjectChildren(t *testing.T) {
 				pid := int32(1)
 				todoID1, todoID2 := int32(10), int32(11)
 				todoName1, todoName2 := "Todo 1", "Todo 2"
+				todoDone := false
 				return []tasksdb.GetTasksByProjectIDsRow{
-					{ID: 1, ProjectID: &pid, Name: "Task", TimeSpent: 100, TodoID: &todoID1, TodoName: &todoName1},
-					{ID: 1, ProjectID: &pid, Name: "Task", TimeSpent: 100, TodoID: &todoID2, TodoName: &todoName2},
+					{ID: 1, ProjectID: &pid, Name: "Task", TimeSpent: 100, TodoID: &todoID1, TodoName: &todoName1, TodoIsDone: &todoDone},
+					{ID: 1, ProjectID: &pid, Name: "Task", TimeSpent: 100, TodoID: &todoID2, TodoName: &todoName2, TodoIsDone: &todoDone},
 				}, nil
 			},
 		}
