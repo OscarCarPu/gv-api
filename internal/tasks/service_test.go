@@ -19,6 +19,7 @@ type mockRepo struct {
 	finishTaskFn      func(ctx context.Context, id int32, finishedAt time.Time) (TaskResponse, error)
 	finishProjectFn   func(ctx context.Context, id int32, finishedAt time.Time) (ProjectResponse, error)
 	getRootProjectsFn func(ctx context.Context) ([]ProjectResponse, error)
+	getActiveTreeFn   func(ctx context.Context) ([]ActiveTreeNode, error)
 }
 
 func (m *mockRepo) CreateProject(ctx context.Context, name string, description *string, dueAt *time.Time, parentID *int32) (ProjectResponse, error) {
@@ -73,6 +74,13 @@ func (m *mockRepo) FinishProject(ctx context.Context, id int32, finishedAt time.
 func (m *mockRepo) GetRootProjects(ctx context.Context) ([]ProjectResponse, error) {
 	if m.getRootProjectsFn != nil {
 		return m.getRootProjectsFn(ctx)
+	}
+	return nil, nil
+}
+
+func (m *mockRepo) GetActiveTree(ctx context.Context) ([]ActiveTreeNode, error) {
+	if m.getActiveTreeFn != nil {
+		return m.getActiveTreeFn(ctx)
 	}
 	return nil, nil
 }
@@ -505,6 +513,38 @@ func TestService_FinishTimeEntry(t *testing.T) {
 
 		svc := NewService(mock, nil)
 		_, err := svc.FinishTimeEntry(context.Background(), FinishTimeEntryRequest{ID: 1})
+
+		require.Error(t, err)
+	})
+}
+
+func TestService_GetActiveTree(t *testing.T) {
+	t.Run("delegates to repo and returns result", func(t *testing.T) {
+		expected := []ActiveTreeNode{
+			{ID: 1, Type: "project", Name: "P1", Children: []ActiveTreeNode{}},
+		}
+		mock := &mockRepo{
+			getActiveTreeFn: func(ctx context.Context) ([]ActiveTreeNode, error) {
+				return expected, nil
+			},
+		}
+
+		svc := NewService(mock, nil)
+		got, err := svc.GetActiveTree(context.Background())
+
+		require.NoError(t, err)
+		assert.Equal(t, expected, got)
+	})
+
+	t.Run("propagates error", func(t *testing.T) {
+		mock := &mockRepo{
+			getActiveTreeFn: func(ctx context.Context) ([]ActiveTreeNode, error) {
+				return nil, errors.New("db error")
+			},
+		}
+
+		svc := NewService(mock, nil)
+		_, err := svc.GetActiveTree(context.Background())
 
 		require.Error(t, err)
 	})

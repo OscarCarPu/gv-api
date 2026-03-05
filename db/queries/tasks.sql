@@ -38,3 +38,15 @@ SELECT id, name, description, due_at, parent_id, started_at
 FROM projects
 WHERE parent_id IS NULL AND finished_at IS NULL
 ORDER BY name;
+
+-- name: GetActiveProjects :many
+SELECT id, parent_id, name
+FROM projects
+WHERE started_at IS NOT NULL AND finished_at IS NULL
+ORDER BY name;
+
+-- name: GetUnfinishedTasks :many
+SELECT id, project_id, name, started_at
+FROM tasks
+WHERE finished_at IS NULL
+ORDER BY name;

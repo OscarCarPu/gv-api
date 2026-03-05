@@ -57,6 +57,10 @@ func (s *Service) FinishProject(ctx context.Context, req FinishProjectRequest) (
 	return s.repo.FinishProject(ctx, req.ID, finishedAt)
 }
 
+func (s *Service) GetActiveTree(ctx context.Context) ([]ActiveTreeNode, error) {
+	return s.repo.GetActiveTree(ctx)
+}
+
 func (s *Service) GetRootProjects(ctx context.Context) ([]ProjectResponse, error) {
 	return s.repo.GetRootProjects(ctx)
 }

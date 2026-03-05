@@ -71,6 +71,7 @@ func main() {
 		r.Get("/habits", habitHandler.GetDaily)
 		r.Post("/habits", habitHandler.CreateHabit)
 		r.Post("/habits/log", habitHandler.UpsertLog)
+		r.Get("/tasks/tree", taskHandler.GetActiveTree)
 		r.Get("/tasks/projects", taskHandler.GetRootProjects)
 		r.Post("/tasks/projects", taskHandler.CreateProject)
 		r.Post("/tasks/tasks", taskHandler.CreateTask)

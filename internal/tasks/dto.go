@@ -76,3 +76,10 @@ type FinishProjectRequest struct {
 	ID         int32      `json:"-"`
 	FinishedAt *time.Time `json:"finished_at"`
 }
+
+type ActiveTreeNode struct {
+	ID       int32            `json:"id"`
+	Type     string           `json:"type"`
+	Name     string           `json:"name"`
+	Children []ActiveTreeNode `json:"children,omitempty"`
+}

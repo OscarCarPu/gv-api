@@ -220,6 +220,39 @@ func (q *Queries) FinishTimeEntry(ctx context.Context, arg FinishTimeEntryParams
 	return i, err
 }
 
+const getActiveProjects = `-- name: GetActiveProjects :many
+SELECT id, parent_id, name
+FROM projects
+WHERE started_at IS NOT NULL AND finished_at IS NULL
+ORDER BY name
+`
+
+type GetActiveProjectsRow struct {
+	ID       int32  `db:"id" json:"id"`
+	ParentID *int32 `db:"parent_id" json:"parent_id"`
+	Name     string `db:"name" json:"name"`
+}
+
+func (q *Queries) GetActiveProjects(ctx context.Context) ([]GetActiveProjectsRow, error) {
+	rows, err := q.db.Query(ctx, getActiveProjects)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []GetActiveProjectsRow{}
+	for rows.Next() {
+		var i GetActiveProjectsRow
+		if err := rows.Scan(&i.ID, &i.ParentID, &i.Name); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getRootProjects = `-- name: GetRootProjects :many
 SELECT id, name, description, due_at, parent_id, started_at
 FROM projects
@@ -251,6 +284,45 @@ func (q *Queries) GetRootProjects(ctx context.Context) ([]GetRootProjectsRow, er
 			&i.Description,
 			&i.DueAt,
 			&i.ParentID,
+			&i.StartedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const getUnfinishedTasks = `-- name: GetUnfinishedTasks :many
+SELECT id, project_id, name, started_at
+FROM tasks
+WHERE finished_at IS NULL
+ORDER BY name
+`
+
+type GetUnfinishedTasksRow struct {
+	ID        int32            `db:"id" json:"id"`
+	ProjectID *int32           `db:"project_id" json:"project_id"`
+	Name      string           `db:"name" json:"name"`
+	StartedAt pgtype.Timestamp `db:"started_at" json:"started_at"`
+}
+
+func (q *Queries) GetUnfinishedTasks(ctx context.Context) ([]GetUnfinishedTasksRow, error) {
+	rows, err := q.db.Query(ctx, getUnfinishedTasks)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []GetUnfinishedTasksRow{}
+	for rows.Next() {
+		var i GetUnfinishedTasksRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.ProjectID,
+			&i.Name,
 			&i.StartedAt,
 		); err != nil {
 			return nil, err

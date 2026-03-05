@@ -26,6 +26,7 @@ type mockService struct {
 	finishTaskFn      func(ctx context.Context, req FinishTaskRequest) (TaskResponse, error)
 	finishProjectFn   func(ctx context.Context, req FinishProjectRequest) (ProjectResponse, error)
 	getRootProjectsFn func(ctx context.Context) ([]ProjectResponse, error)
+	getActiveTreeFn   func(ctx context.Context) ([]ActiveTreeNode, error)
 }
 
 func (m *mockService) CreateProject(ctx context.Context, req CreateProjectRequest) (ProjectResponse, error) {
@@ -80,6 +81,13 @@ func (m *mockService) FinishProject(ctx context.Context, req FinishProjectReques
 func (m *mockService) GetRootProjects(ctx context.Context) ([]ProjectResponse, error) {
 	if m.getRootProjectsFn != nil {
 		return m.getRootProjectsFn(ctx)
+	}
+	return nil, nil
+}
+
+func (m *mockService) GetActiveTree(ctx context.Context) ([]ActiveTreeNode, error) {
+	if m.getActiveTreeFn != nil {
+		return m.getActiveTreeFn(ctx)
 	}
 	return nil, nil
 }
@@ -713,5 +721,73 @@ func TestHandler_GetRootProjects(t *testing.T) {
 
 		assert.Equal(t, http.StatusInternalServerError, rec.Code)
 		assert.Contains(t, rec.Body.String(), "Failed to get projects")
+	})
+}
+
+func TestHandler_GetActiveTree(t *testing.T) {
+	t.Run("returns 200 with tree nodes", func(t *testing.T) {
+		mock := &mockService{
+			getActiveTreeFn: func(ctx context.Context) ([]ActiveTreeNode, error) {
+				return []ActiveTreeNode{
+					{ID: 1, Type: "project", Name: "Project A", Children: []ActiveTreeNode{
+						{ID: 1, Type: "task", Name: "Task 1"},
+					}},
+					{ID: 2, Type: "task", Name: "Orphan Task"},
+				}, nil
+			},
+		}
+		handler := NewHandler(mock)
+
+		req := httptest.NewRequest(http.MethodGet, "/tasks/tree", nil)
+		rec := httptest.NewRecorder()
+
+		handler.GetActiveTree(rec, req)
+
+		assert.Equal(t, http.StatusOK, rec.Code)
+
+		var got []ActiveTreeNode
+		require.NoError(t, json.NewDecoder(rec.Body).Decode(&got))
+		assert.Len(t, got, 2)
+		assert.Equal(t, "project", got[0].Type)
+		assert.Len(t, got[0].Children, 1)
+		assert.Equal(t, "task", got[1].Type)
+		assert.Nil(t, got[1].Children)
+	})
+
+	t.Run("returns 200 with empty array", func(t *testing.T) {
+		mock := &mockService{
+			getActiveTreeFn: func(ctx context.Context) ([]ActiveTreeNode, error) {
+				return []ActiveTreeNode{}, nil
+			},
+		}
+		handler := NewHandler(mock)
+
+		req := httptest.NewRequest(http.MethodGet, "/tasks/tree", nil)
+		rec := httptest.NewRecorder()
+
+		handler.GetActiveTree(rec, req)
+
+		assert.Equal(t, http.StatusOK, rec.Code)
+
+		var got []ActiveTreeNode
+		require.NoError(t, json.NewDecoder(rec.Body).Decode(&got))
+		assert.Empty(t, got)
+	})
+
+	t.Run("returns 500 when service fails", func(t *testing.T) {
+		mock := &mockService{
+			getActiveTreeFn: func(ctx context.Context) ([]ActiveTreeNode, error) {
+				return nil, errors.New("db error")
+			},
+		}
+		handler := NewHandler(mock)
+
+		req := httptest.NewRequest(http.MethodGet, "/tasks/tree", nil)
+		rec := httptest.NewRecorder()
+
+		handler.GetActiveTree(rec, req)
+
+		assert.Equal(t, http.StatusInternalServerError, rec.Code)
+		assert.Contains(t, rec.Body.String(), "Failed to get active tree")
 	})
 }

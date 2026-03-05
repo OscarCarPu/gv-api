@@ -21,6 +21,7 @@ type ServiceInterface interface {
 	FinishTask(ctx context.Context, req FinishTaskRequest) (TaskResponse, error)
 	FinishProject(ctx context.Context, req FinishProjectRequest) (ProjectResponse, error)
 	GetRootProjects(ctx context.Context) ([]ProjectResponse, error)
+	GetActiveTree(ctx context.Context) ([]ActiveTreeNode, error)
 }
 
 type Handler struct {
@@ -198,6 +199,16 @@ func (h *Handler) FinishProject(w http.ResponseWriter, r *http.Request) {
 	}
 
 	response.JSON(w, http.StatusOK, project)
+}
+
+func (h *Handler) GetActiveTree(w http.ResponseWriter, r *http.Request) {
+	tree, err := h.service.GetActiveTree(r.Context())
+	if err != nil {
+		response.Error(w, http.StatusInternalServerError, "Failed to get active tree")
+		return
+	}
+
+	response.JSON(w, http.StatusOK, tree)
 }
 
 func (h *Handler) GetRootProjects(w http.ResponseWriter, r *http.Request) {

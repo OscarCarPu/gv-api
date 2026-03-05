@@ -18,8 +18,10 @@ type Querier interface {
 	FinishProject(ctx context.Context, arg FinishProjectParams) (Project, error)
 	FinishTask(ctx context.Context, arg FinishTaskParams) (Task, error)
 	FinishTimeEntry(ctx context.Context, arg FinishTimeEntryParams) (TimeEntry, error)
+	GetActiveProjects(ctx context.Context) ([]GetActiveProjectsRow, error)
 	GetHabitsWithLogs(ctx context.Context, logDate time.Time) ([]GetHabitsWithLogsRow, error)
 	GetRootProjects(ctx context.Context) ([]GetRootProjectsRow, error)
+	GetUnfinishedTasks(ctx context.Context) ([]GetUnfinishedTasksRow, error)
 	UpsertLog(ctx context.Context, arg UpsertLogParams) error
 }
 

@@ -22,7 +22,9 @@ type mockQuerier struct {
 	finishTimeEntryFn func(ctx context.Context, arg sqlc.FinishTimeEntryParams) (sqlc.TimeEntry, error)
 	finishTaskFn      func(ctx context.Context, arg sqlc.FinishTaskParams) (sqlc.Task, error)
 	finishProjectFn   func(ctx context.Context, arg sqlc.FinishProjectParams) (sqlc.Project, error)
-	getRootProjectsFn func(ctx context.Context) ([]sqlc.GetRootProjectsRow, error)
+	getRootProjectsFn    func(ctx context.Context) ([]sqlc.GetRootProjectsRow, error)
+	getActiveProjectsFn  func(ctx context.Context) ([]sqlc.GetActiveProjectsRow, error)
+	getUnfinishedTasksFn func(ctx context.Context) ([]sqlc.GetUnfinishedTasksRow, error)
 }
 
 func (m *mockQuerier) CreateProject(ctx context.Context, arg sqlc.CreateProjectParams) (sqlc.CreateProjectRow, error) {
@@ -77,6 +79,20 @@ func (m *mockQuerier) FinishProject(ctx context.Context, arg sqlc.FinishProjectP
 func (m *mockQuerier) GetRootProjects(ctx context.Context) ([]sqlc.GetRootProjectsRow, error) {
 	if m.getRootProjectsFn != nil {
 		return m.getRootProjectsFn(ctx)
+	}
+	return nil, nil
+}
+
+func (m *mockQuerier) GetActiveProjects(ctx context.Context) ([]sqlc.GetActiveProjectsRow, error) {
+	if m.getActiveProjectsFn != nil {
+		return m.getActiveProjectsFn(ctx)
+	}
+	return nil, nil
+}
+
+func (m *mockQuerier) GetUnfinishedTasks(ctx context.Context) ([]sqlc.GetUnfinishedTasksRow, error) {
+	if m.getUnfinishedTasksFn != nil {
+		return m.getUnfinishedTasksFn(ctx)
 	}
 	return nil, nil
 }
@@ -536,5 +552,146 @@ func TestRepository_FinishTimeEntry(t *testing.T) {
 		_, err := repo.FinishTimeEntry(context.Background(), 1, time.Now())
 		assert.Error(t, err)
 		assert.NotErrorIs(t, err, ErrNotFound)
+	})
+}
+
+func TestRepository_GetActiveTree(t *testing.T) {
+	parentID1 := int32(1)
+	projectID1 := int32(1)
+	projectID2 := int32(2)
+
+	t.Run("projects with nested sub-projects and tasks", func(t *testing.T) {
+		mock := &mockQuerier{
+			getActiveProjectsFn: func(ctx context.Context) ([]sqlc.GetActiveProjectsRow, error) {
+				return []sqlc.GetActiveProjectsRow{
+					{ID: 1, Name: "Parent Project"},
+					{ID: 2, ParentID: &parentID1, Name: "Child Project"},
+				}, nil
+			},
+			getUnfinishedTasksFn: func(ctx context.Context) ([]sqlc.GetUnfinishedTasksRow, error) {
+				return []sqlc.GetUnfinishedTasksRow{
+					{ID: 1, ProjectID: &projectID1, Name: "Task A", StartedAt: pgtype.Timestamp{Time: time.Now(), Valid: true}},
+					{ID: 2, ProjectID: &projectID2, Name: "Task B"},
+				}, nil
+			},
+		}
+		repo := NewRepository(mock)
+
+		got, err := repo.GetActiveTree(context.Background())
+		require.NoError(t, err)
+
+		require.Len(t, got, 1)
+		assert.Equal(t, "Parent Project", got[0].Name)
+		assert.Equal(t, "project", got[0].Type)
+
+		// Children: sub-project first, then started task
+		require.Len(t, got[0].Children, 2)
+		assert.Equal(t, "Child Project", got[0].Children[0].Name)
+		assert.Equal(t, "project", got[0].Children[0].Type)
+		assert.Equal(t, "Task A", got[0].Children[1].Name)
+		assert.Equal(t, "task", got[0].Children[1].Type)
+
+		// Child project has its own task
+		require.Len(t, got[0].Children[0].Children, 1)
+		assert.Equal(t, "Task B", got[0].Children[0].Children[0].Name)
+	})
+
+	t.Run("orphan tasks at root level", func(t *testing.T) {
+		mock := &mockQuerier{
+			getActiveProjectsFn: func(ctx context.Context) ([]sqlc.GetActiveProjectsRow, error) {
+				return []sqlc.GetActiveProjectsRow{}, nil
+			},
+			getUnfinishedTasksFn: func(ctx context.Context) ([]sqlc.GetUnfinishedTasksRow, error) {
+				return []sqlc.GetUnfinishedTasksRow{
+					{ID: 1, Name: "Orphan Started", StartedAt: pgtype.Timestamp{Time: time.Now(), Valid: true}},
+					{ID: 2, Name: "Orphan Unstarted"},
+				}, nil
+			},
+		}
+		repo := NewRepository(mock)
+
+		got, err := repo.GetActiveTree(context.Background())
+		require.NoError(t, err)
+
+		require.Len(t, got, 2)
+		assert.Equal(t, "Orphan Started", got[0].Name)
+		assert.Equal(t, "Orphan Unstarted", got[1].Name)
+	})
+
+	t.Run("empty tree", func(t *testing.T) {
+		mock := &mockQuerier{
+			getActiveProjectsFn: func(ctx context.Context) ([]sqlc.GetActiveProjectsRow, error) {
+				return []sqlc.GetActiveProjectsRow{}, nil
+			},
+			getUnfinishedTasksFn: func(ctx context.Context) ([]sqlc.GetUnfinishedTasksRow, error) {
+				return []sqlc.GetUnfinishedTasksRow{}, nil
+			},
+		}
+		repo := NewRepository(mock)
+
+		got, err := repo.GetActiveTree(context.Background())
+		require.NoError(t, err)
+		assert.Empty(t, got)
+		assert.NotNil(t, got)
+	})
+
+	t.Run("ordering: projects before started tasks before unstarted tasks", func(t *testing.T) {
+		mock := &mockQuerier{
+			getActiveProjectsFn: func(ctx context.Context) ([]sqlc.GetActiveProjectsRow, error) {
+				return []sqlc.GetActiveProjectsRow{
+					{ID: 1, Name: "Project"},
+				}, nil
+			},
+			getUnfinishedTasksFn: func(ctx context.Context) ([]sqlc.GetUnfinishedTasksRow, error) {
+				return []sqlc.GetUnfinishedTasksRow{
+					{ID: 1, Name: "Unstarted Orphan"},
+					{ID: 2, Name: "Started Orphan", StartedAt: pgtype.Timestamp{Time: time.Now(), Valid: true}},
+					{ID: 3, ProjectID: &projectID1, Name: "Unstarted Child"},
+					{ID: 4, ProjectID: &projectID1, Name: "Started Child", StartedAt: pgtype.Timestamp{Time: time.Now(), Valid: true}},
+				}, nil
+			},
+		}
+		repo := NewRepository(mock)
+
+		got, err := repo.GetActiveTree(context.Background())
+		require.NoError(t, err)
+
+		// Root: project first, then started orphan, then unstarted orphan
+		require.Len(t, got, 3)
+		assert.Equal(t, "project", got[0].Type)
+		assert.Equal(t, "Started Orphan", got[1].Name)
+		assert.Equal(t, "Unstarted Orphan", got[2].Name)
+
+		// Project children: started task first, then unstarted
+		require.Len(t, got[0].Children, 2)
+		assert.Equal(t, "Started Child", got[0].Children[0].Name)
+		assert.Equal(t, "Unstarted Child", got[0].Children[1].Name)
+	})
+
+	t.Run("error from GetActiveProjects propagates", func(t *testing.T) {
+		mock := &mockQuerier{
+			getActiveProjectsFn: func(ctx context.Context) ([]sqlc.GetActiveProjectsRow, error) {
+				return nil, errors.New("db error")
+			},
+		}
+		repo := NewRepository(mock)
+
+		_, err := repo.GetActiveTree(context.Background())
+		assert.Error(t, err)
+	})
+
+	t.Run("error from GetUnfinishedTasks propagates", func(t *testing.T) {
+		mock := &mockQuerier{
+			getActiveProjectsFn: func(ctx context.Context) ([]sqlc.GetActiveProjectsRow, error) {
+				return []sqlc.GetActiveProjectsRow{}, nil
+			},
+			getUnfinishedTasksFn: func(ctx context.Context) ([]sqlc.GetUnfinishedTasksRow, error) {
+				return nil, errors.New("db error")
+			},
+		}
+		repo := NewRepository(mock)
+
+		_, err := repo.GetActiveTree(context.Background())
+		assert.Error(t, err)
 	})
 }
