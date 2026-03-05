@@ -22,14 +22,14 @@ type mockService struct {
 	createTaskFn      func(ctx context.Context, req CreateTaskRequest) (TaskResponse, error)
 	createTodoFn      func(ctx context.Context, req CreateTodoRequest) (TodoResponse, error)
 	createTimeEntryFn func(ctx context.Context, req CreateTimeEntryRequest) (TimeEntryResponse, error)
-	finishTimeEntryFn func(ctx context.Context, req FinishTimeEntryRequest) (TimeEntryResponse, error)
-	finishTaskFn      func(ctx context.Context, req FinishTaskRequest) (TaskResponse, error)
-	finishProjectFn   func(ctx context.Context, req FinishProjectRequest) (ProjectResponse, error)
+	updateProjectFn   func(ctx context.Context, req UpdateProjectRequest) (ProjectResponse, error)
+	updateTaskFn      func(ctx context.Context, req UpdateTaskRequest) (TaskResponse, error)
+	updateTodoFn      func(ctx context.Context, req UpdateTodoRequest) (TodoResponse, error)
+	updateTimeEntryFn func(ctx context.Context, req UpdateTimeEntryRequest) (TimeEntryResponse, error)
 	getRootProjectsFn    func(ctx context.Context) ([]ProjectResponse, error)
 	getActiveTreeFn      func(ctx context.Context) ([]ActiveTreeNode, error)
 	getProjectChildrenFn   func(ctx context.Context, projectID int32) (ProjectChildrenResponse, error)
 	getTaskTimeEntriesFn   func(ctx context.Context, taskID int32) (TaskTimeEntriesResponse, error)
-	toggleTodoFn           func(ctx context.Context, id int32) (TodoResponse, error)
 }
 
 func (m *mockService) CreateProject(ctx context.Context, req CreateProjectRequest) (ProjectResponse, error) {
@@ -60,25 +60,32 @@ func (m *mockService) CreateTimeEntry(ctx context.Context, req CreateTimeEntryRe
 	return TimeEntryResponse{}, nil
 }
 
-func (m *mockService) FinishTimeEntry(ctx context.Context, req FinishTimeEntryRequest) (TimeEntryResponse, error) {
-	if m.finishTimeEntryFn != nil {
-		return m.finishTimeEntryFn(ctx, req)
+func (m *mockService) UpdateProject(ctx context.Context, req UpdateProjectRequest) (ProjectResponse, error) {
+	if m.updateProjectFn != nil {
+		return m.updateProjectFn(ctx, req)
 	}
-	return TimeEntryResponse{}, nil
+	return ProjectResponse{}, nil
 }
 
-func (m *mockService) FinishTask(ctx context.Context, req FinishTaskRequest) (TaskResponse, error) {
-	if m.finishTaskFn != nil {
-		return m.finishTaskFn(ctx, req)
+func (m *mockService) UpdateTask(ctx context.Context, req UpdateTaskRequest) (TaskResponse, error) {
+	if m.updateTaskFn != nil {
+		return m.updateTaskFn(ctx, req)
 	}
 	return TaskResponse{}, nil
 }
 
-func (m *mockService) FinishProject(ctx context.Context, req FinishProjectRequest) (ProjectResponse, error) {
-	if m.finishProjectFn != nil {
-		return m.finishProjectFn(ctx, req)
+func (m *mockService) UpdateTodo(ctx context.Context, req UpdateTodoRequest) (TodoResponse, error) {
+	if m.updateTodoFn != nil {
+		return m.updateTodoFn(ctx, req)
 	}
-	return ProjectResponse{}, nil
+	return TodoResponse{}, nil
+}
+
+func (m *mockService) UpdateTimeEntry(ctx context.Context, req UpdateTimeEntryRequest) (TimeEntryResponse, error) {
+	if m.updateTimeEntryFn != nil {
+		return m.updateTimeEntryFn(ctx, req)
+	}
+	return TimeEntryResponse{}, nil
 }
 
 func (m *mockService) GetRootProjects(ctx context.Context) ([]ProjectResponse, error) {
@@ -107,13 +114,6 @@ func (m *mockService) GetTaskTimeEntries(ctx context.Context, taskID int32) (Tas
 		return m.getTaskTimeEntriesFn(ctx, taskID)
 	}
 	return TaskTimeEntriesResponse{}, nil
-}
-
-func (m *mockService) ToggleTodo(ctx context.Context, id int32) (TodoResponse, error) {
-	if m.toggleTodoFn != nil {
-		return m.toggleTodoFn(ctx, id)
-	}
-	return TodoResponse{}, nil
 }
 
 // --- Handler Tests ---
@@ -425,27 +425,118 @@ func TestHandler_CreateTimeEntry(t *testing.T) {
 	}
 }
 
-func TestHandler_FinishTask(t *testing.T) {
-	t.Run("returns 200 with finished task", func(t *testing.T) {
+func TestHandler_UpdateProject(t *testing.T) {
+	t.Run("returns 200 with updated project", func(t *testing.T) {
+		now := time.Now()
+		name := "updated name"
+		mock := &mockService{
+			updateProjectFn: func(ctx context.Context, req UpdateProjectRequest) (ProjectResponse, error) {
+				assert.Equal(t, int32(5), req.ID)
+				assert.Equal(t, &name, req.Name)
+				return ProjectResponse{ID: 5, Name: name, FinishedAt: &now}, nil
+			},
+		}
+		handler := NewHandler(mock)
+
+		body := `{"name": "updated name"}`
+		req := httptest.NewRequest(http.MethodPatch, "/tasks/projects/5", strings.NewReader(body))
+		rctx := chi.NewRouteContext()
+		rctx.URLParams.Add("id", "5")
+		req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
+
+		rec := httptest.NewRecorder()
+		handler.UpdateProject(rec, req)
+
+		assert.Equal(t, http.StatusOK, rec.Code)
+
+		var got ProjectResponse
+		require.NoError(t, json.NewDecoder(rec.Body).Decode(&got))
+		assert.Equal(t, int32(5), got.ID)
+		assert.Equal(t, "updated name", got.Name)
+	})
+
+	t.Run("returns 400 for invalid id", func(t *testing.T) {
+		handler := NewHandler(&mockService{})
+		req := httptest.NewRequest(http.MethodPatch, "/tasks/projects/abc", strings.NewReader(`{}`))
+		rctx := chi.NewRouteContext()
+		rctx.URLParams.Add("id", "abc")
+		req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
+
+		rec := httptest.NewRecorder()
+		handler.UpdateProject(rec, req)
+		assert.Equal(t, http.StatusBadRequest, rec.Code)
+		assert.Contains(t, rec.Body.String(), "invalid project id")
+	})
+
+	t.Run("returns 400 for invalid body", func(t *testing.T) {
+		handler := NewHandler(&mockService{})
+		req := httptest.NewRequest(http.MethodPatch, "/tasks/projects/1", strings.NewReader("not json"))
+		rctx := chi.NewRouteContext()
+		rctx.URLParams.Add("id", "1")
+		req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
+
+		rec := httptest.NewRecorder()
+		handler.UpdateProject(rec, req)
+		assert.Equal(t, http.StatusBadRequest, rec.Code)
+		assert.Contains(t, rec.Body.String(), "Invalid Body")
+	})
+
+	t.Run("returns 404 when not found", func(t *testing.T) {
+		mock := &mockService{
+			updateProjectFn: func(ctx context.Context, req UpdateProjectRequest) (ProjectResponse, error) {
+				return ProjectResponse{}, ErrNotFound
+			},
+		}
+		handler := NewHandler(mock)
+		req := httptest.NewRequest(http.MethodPatch, "/tasks/projects/999", strings.NewReader(`{}`))
+		rctx := chi.NewRouteContext()
+		rctx.URLParams.Add("id", "999")
+		req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
+
+		rec := httptest.NewRecorder()
+		handler.UpdateProject(rec, req)
+		assert.Equal(t, http.StatusNotFound, rec.Code)
+		assert.Contains(t, rec.Body.String(), "project not found")
+	})
+
+	t.Run("returns 500 when service fails", func(t *testing.T) {
+		mock := &mockService{
+			updateProjectFn: func(ctx context.Context, req UpdateProjectRequest) (ProjectResponse, error) {
+				return ProjectResponse{}, errors.New("db error")
+			},
+		}
+		handler := NewHandler(mock)
+		req := httptest.NewRequest(http.MethodPatch, "/tasks/projects/1", strings.NewReader(`{}`))
+		rctx := chi.NewRouteContext()
+		rctx.URLParams.Add("id", "1")
+		req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
+
+		rec := httptest.NewRecorder()
+		handler.UpdateProject(rec, req)
+		assert.Equal(t, http.StatusInternalServerError, rec.Code)
+		assert.Contains(t, rec.Body.String(), "Failed to update project")
+	})
+}
+
+func TestHandler_UpdateTask(t *testing.T) {
+	t.Run("returns 200 with updated task", func(t *testing.T) {
 		now := time.Now()
 		mock := &mockService{
-			finishTaskFn: func(ctx context.Context, req FinishTaskRequest) (TaskResponse, error) {
+			updateTaskFn: func(ctx context.Context, req UpdateTaskRequest) (TaskResponse, error) {
 				return TaskResponse{ID: req.ID, Name: "test task", FinishedAt: &now}, nil
 			},
 		}
 		handler := NewHandler(mock)
 
-		req := httptest.NewRequest(http.MethodPatch, "/tasks/tasks/7/finish", nil)
-
+		req := httptest.NewRequest(http.MethodPatch, "/tasks/tasks/7", strings.NewReader(`{"finished_at": "2026-03-01T17:00:00Z"}`))
 		rctx := chi.NewRouteContext()
 		rctx.URLParams.Add("id", "7")
 		req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
 
 		rec := httptest.NewRecorder()
-		handler.FinishTask(rec, req)
+		handler.UpdateTask(rec, req)
 
 		assert.Equal(t, http.StatusOK, rec.Code)
-
 		var got TaskResponse
 		require.NoError(t, json.NewDecoder(rec.Body).Decode(&got))
 		assert.Equal(t, int32(7), got.ID)
@@ -454,233 +545,203 @@ func TestHandler_FinishTask(t *testing.T) {
 
 	t.Run("returns 400 for invalid id", func(t *testing.T) {
 		handler := NewHandler(&mockService{})
-
-		req := httptest.NewRequest(http.MethodPatch, "/tasks/tasks/abc/finish", nil)
-
+		req := httptest.NewRequest(http.MethodPatch, "/tasks/tasks/abc", strings.NewReader(`{}`))
 		rctx := chi.NewRouteContext()
 		rctx.URLParams.Add("id", "abc")
 		req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
 
 		rec := httptest.NewRecorder()
-		handler.FinishTask(rec, req)
-
+		handler.UpdateTask(rec, req)
 		assert.Equal(t, http.StatusBadRequest, rec.Code)
 		assert.Contains(t, rec.Body.String(), "invalid task id")
 	})
 
 	t.Run("returns 404 when not found", func(t *testing.T) {
 		mock := &mockService{
-			finishTaskFn: func(ctx context.Context, req FinishTaskRequest) (TaskResponse, error) {
+			updateTaskFn: func(ctx context.Context, req UpdateTaskRequest) (TaskResponse, error) {
 				return TaskResponse{}, ErrNotFound
 			},
 		}
 		handler := NewHandler(mock)
-
-		req := httptest.NewRequest(http.MethodPatch, "/tasks/tasks/999/finish", nil)
-
+		req := httptest.NewRequest(http.MethodPatch, "/tasks/tasks/999", strings.NewReader(`{}`))
 		rctx := chi.NewRouteContext()
 		rctx.URLParams.Add("id", "999")
 		req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
 
 		rec := httptest.NewRecorder()
-		handler.FinishTask(rec, req)
-
+		handler.UpdateTask(rec, req)
 		assert.Equal(t, http.StatusNotFound, rec.Code)
 		assert.Contains(t, rec.Body.String(), "task not found")
 	})
 
 	t.Run("returns 500 when service fails", func(t *testing.T) {
 		mock := &mockService{
-			finishTaskFn: func(ctx context.Context, req FinishTaskRequest) (TaskResponse, error) {
+			updateTaskFn: func(ctx context.Context, req UpdateTaskRequest) (TaskResponse, error) {
 				return TaskResponse{}, errors.New("db error")
 			},
 		}
 		handler := NewHandler(mock)
-
-		req := httptest.NewRequest(http.MethodPatch, "/tasks/tasks/1/finish", nil)
-
+		req := httptest.NewRequest(http.MethodPatch, "/tasks/tasks/1", strings.NewReader(`{}`))
 		rctx := chi.NewRouteContext()
 		rctx.URLParams.Add("id", "1")
 		req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
 
 		rec := httptest.NewRecorder()
-		handler.FinishTask(rec, req)
-
+		handler.UpdateTask(rec, req)
 		assert.Equal(t, http.StatusInternalServerError, rec.Code)
-		assert.Contains(t, rec.Body.String(), "Failed to finish task")
+		assert.Contains(t, rec.Body.String(), "Failed to update task")
 	})
 }
 
-func TestHandler_FinishProject(t *testing.T) {
-	t.Run("returns 200 with finished project", func(t *testing.T) {
-		now := time.Now()
+func TestHandler_UpdateTodo(t *testing.T) {
+	t.Run("returns 200 with updated todo", func(t *testing.T) {
+		isDone := true
 		mock := &mockService{
-			finishProjectFn: func(ctx context.Context, req FinishProjectRequest) (ProjectResponse, error) {
-				return ProjectResponse{ID: req.ID, Name: "test project", FinishedAt: &now}, nil
+			updateTodoFn: func(ctx context.Context, req UpdateTodoRequest) (TodoResponse, error) {
+				assert.Equal(t, int32(3), req.ID)
+				assert.Equal(t, &isDone, req.IsDone)
+				return TodoResponse{ID: 3, TaskID: 5, Name: "My Todo", IsDone: true}, nil
 			},
 		}
 		handler := NewHandler(mock)
 
-		req := httptest.NewRequest(http.MethodPatch, "/tasks/projects/5/finish", nil)
-
+		req := httptest.NewRequest(http.MethodPatch, "/tasks/todos/3", strings.NewReader(`{"is_done": true}`))
 		rctx := chi.NewRouteContext()
-		rctx.URLParams.Add("id", "5")
+		rctx.URLParams.Add("id", "3")
 		req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
 
 		rec := httptest.NewRecorder()
-		handler.FinishProject(rec, req)
+		handler.UpdateTodo(rec, req)
 
 		assert.Equal(t, http.StatusOK, rec.Code)
-
-		var got ProjectResponse
+		var got TodoResponse
 		require.NoError(t, json.NewDecoder(rec.Body).Decode(&got))
-		assert.Equal(t, int32(5), got.ID)
-		assert.NotNil(t, got.FinishedAt)
+		assert.Equal(t, int32(3), got.ID)
+		assert.True(t, got.IsDone)
 	})
 
 	t.Run("returns 400 for invalid id", func(t *testing.T) {
 		handler := NewHandler(&mockService{})
-
-		req := httptest.NewRequest(http.MethodPatch, "/tasks/projects/abc/finish", nil)
-
+		req := httptest.NewRequest(http.MethodPatch, "/tasks/todos/abc", strings.NewReader(`{}`))
 		rctx := chi.NewRouteContext()
 		rctx.URLParams.Add("id", "abc")
 		req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
 
 		rec := httptest.NewRecorder()
-		handler.FinishProject(rec, req)
-
+		handler.UpdateTodo(rec, req)
 		assert.Equal(t, http.StatusBadRequest, rec.Code)
-		assert.Contains(t, rec.Body.String(), "invalid project id")
+		assert.Contains(t, rec.Body.String(), "invalid todo id")
 	})
 
 	t.Run("returns 404 when not found", func(t *testing.T) {
 		mock := &mockService{
-			finishProjectFn: func(ctx context.Context, req FinishProjectRequest) (ProjectResponse, error) {
-				return ProjectResponse{}, ErrNotFound
+			updateTodoFn: func(ctx context.Context, req UpdateTodoRequest) (TodoResponse, error) {
+				return TodoResponse{}, ErrNotFound
 			},
 		}
 		handler := NewHandler(mock)
-
-		req := httptest.NewRequest(http.MethodPatch, "/tasks/projects/999/finish", nil)
-
+		req := httptest.NewRequest(http.MethodPatch, "/tasks/todos/999", strings.NewReader(`{}`))
 		rctx := chi.NewRouteContext()
 		rctx.URLParams.Add("id", "999")
 		req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
 
 		rec := httptest.NewRecorder()
-		handler.FinishProject(rec, req)
-
+		handler.UpdateTodo(rec, req)
 		assert.Equal(t, http.StatusNotFound, rec.Code)
-		assert.Contains(t, rec.Body.String(), "project not found")
+		assert.Contains(t, rec.Body.String(), "todo not found")
 	})
 
 	t.Run("returns 500 when service fails", func(t *testing.T) {
 		mock := &mockService{
-			finishProjectFn: func(ctx context.Context, req FinishProjectRequest) (ProjectResponse, error) {
-				return ProjectResponse{}, errors.New("db error")
+			updateTodoFn: func(ctx context.Context, req UpdateTodoRequest) (TodoResponse, error) {
+				return TodoResponse{}, errors.New("db error")
 			},
 		}
 		handler := NewHandler(mock)
-
-		req := httptest.NewRequest(http.MethodPatch, "/tasks/projects/1/finish", nil)
-
+		req := httptest.NewRequest(http.MethodPatch, "/tasks/todos/1", strings.NewReader(`{}`))
 		rctx := chi.NewRouteContext()
 		rctx.URLParams.Add("id", "1")
 		req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
 
 		rec := httptest.NewRecorder()
-		handler.FinishProject(rec, req)
-
+		handler.UpdateTodo(rec, req)
 		assert.Equal(t, http.StatusInternalServerError, rec.Code)
-		assert.Contains(t, rec.Body.String(), "Failed to finish project")
+		assert.Contains(t, rec.Body.String(), "Failed to update todo")
 	})
 }
 
-func TestHandler_FinishTimeEntry(t *testing.T) {
-	t.Run("returns 200 with finished time entry", func(t *testing.T) {
+func TestHandler_UpdateTimeEntry(t *testing.T) {
+	t.Run("returns 200 with updated time entry", func(t *testing.T) {
 		now := time.Now()
 		mock := &mockService{
-			finishTimeEntryFn: func(ctx context.Context, req FinishTimeEntryRequest) (TimeEntryResponse, error) {
+			updateTimeEntryFn: func(ctx context.Context, req UpdateTimeEntryRequest) (TimeEntryResponse, error) {
 				return TimeEntryResponse{ID: req.ID, TaskID: 3, StartedAt: now, FinishedAt: &now}, nil
 			},
 		}
 		handler := NewHandler(mock)
 
-		req := httptest.NewRequest(http.MethodPatch, "/tasks/time-entries/7/finish", nil)
-
+		req := httptest.NewRequest(http.MethodPatch, "/tasks/time-entries/7", strings.NewReader(`{"finished_at": "2026-03-01T17:00:00Z"}`))
 		rctx := chi.NewRouteContext()
 		rctx.URLParams.Add("id", "7")
 		req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
 
 		rec := httptest.NewRecorder()
-		handler.FinishTimeEntry(rec, req)
+		handler.UpdateTimeEntry(rec, req)
 
 		assert.Equal(t, http.StatusOK, rec.Code)
-
 		var got TimeEntryResponse
 		require.NoError(t, json.NewDecoder(rec.Body).Decode(&got))
 		assert.Equal(t, int32(7), got.ID)
-		assert.Equal(t, int32(3), got.TaskID)
 		assert.NotNil(t, got.FinishedAt)
 	})
 
 	t.Run("returns 400 for invalid id", func(t *testing.T) {
 		handler := NewHandler(&mockService{})
-
-		req := httptest.NewRequest(http.MethodPatch, "/tasks/time-entries/abc/finish", nil)
-
+		req := httptest.NewRequest(http.MethodPatch, "/tasks/time-entries/abc", strings.NewReader(`{}`))
 		rctx := chi.NewRouteContext()
 		rctx.URLParams.Add("id", "abc")
 		req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
 
 		rec := httptest.NewRecorder()
-		handler.FinishTimeEntry(rec, req)
-
+		handler.UpdateTimeEntry(rec, req)
 		assert.Equal(t, http.StatusBadRequest, rec.Code)
 		assert.Contains(t, rec.Body.String(), "invalid time entry id")
 	})
 
 	t.Run("returns 404 when not found", func(t *testing.T) {
 		mock := &mockService{
-			finishTimeEntryFn: func(ctx context.Context, req FinishTimeEntryRequest) (TimeEntryResponse, error) {
+			updateTimeEntryFn: func(ctx context.Context, req UpdateTimeEntryRequest) (TimeEntryResponse, error) {
 				return TimeEntryResponse{}, ErrNotFound
 			},
 		}
 		handler := NewHandler(mock)
-
-		req := httptest.NewRequest(http.MethodPatch, "/tasks/time-entries/999/finish", nil)
-
+		req := httptest.NewRequest(http.MethodPatch, "/tasks/time-entries/999", strings.NewReader(`{}`))
 		rctx := chi.NewRouteContext()
 		rctx.URLParams.Add("id", "999")
 		req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
 
 		rec := httptest.NewRecorder()
-		handler.FinishTimeEntry(rec, req)
-
+		handler.UpdateTimeEntry(rec, req)
 		assert.Equal(t, http.StatusNotFound, rec.Code)
 		assert.Contains(t, rec.Body.String(), "time entry not found")
 	})
 
 	t.Run("returns 500 when service fails", func(t *testing.T) {
 		mock := &mockService{
-			finishTimeEntryFn: func(ctx context.Context, req FinishTimeEntryRequest) (TimeEntryResponse, error) {
+			updateTimeEntryFn: func(ctx context.Context, req UpdateTimeEntryRequest) (TimeEntryResponse, error) {
 				return TimeEntryResponse{}, errors.New("db error")
 			},
 		}
 		handler := NewHandler(mock)
-
-		req := httptest.NewRequest(http.MethodPatch, "/tasks/time-entries/1/finish", nil)
-
+		req := httptest.NewRequest(http.MethodPatch, "/tasks/time-entries/1", strings.NewReader(`{}`))
 		rctx := chi.NewRouteContext()
 		rctx.URLParams.Add("id", "1")
 		req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
 
 		rec := httptest.NewRecorder()
-		handler.FinishTimeEntry(rec, req)
-
+		handler.UpdateTimeEntry(rec, req)
 		assert.Equal(t, http.StatusInternalServerError, rec.Code)
-		assert.Contains(t, rec.Body.String(), "Failed to finish time entry")
+		assert.Contains(t, rec.Body.String(), "Failed to update time entry")
 	})
 }
 
@@ -1011,88 +1072,5 @@ func TestHandler_GetTaskTimeEntries(t *testing.T) {
 
 		assert.Equal(t, http.StatusInternalServerError, rec.Code)
 		assert.Contains(t, rec.Body.String(), "Failed to get task time entries")
-	})
-}
-
-func TestHandler_ToggleTodo(t *testing.T) {
-	t.Run("returns 200 with toggled todo", func(t *testing.T) {
-		mock := &mockService{
-			toggleTodoFn: func(ctx context.Context, id int32) (TodoResponse, error) {
-				return TodoResponse{ID: id, TaskID: 5, Name: "My Todo", IsDone: true}, nil
-			},
-		}
-		handler := NewHandler(mock)
-
-		req := httptest.NewRequest(http.MethodPatch, "/tasks/todos/3/toggle", nil)
-		rctx := chi.NewRouteContext()
-		rctx.URLParams.Add("id", "3")
-		req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
-
-		rec := httptest.NewRecorder()
-		handler.ToggleTodo(rec, req)
-
-		assert.Equal(t, http.StatusOK, rec.Code)
-
-		var got TodoResponse
-		require.NoError(t, json.NewDecoder(rec.Body).Decode(&got))
-		assert.Equal(t, int32(3), got.ID)
-		assert.Equal(t, int32(5), got.TaskID)
-		assert.Equal(t, "My Todo", got.Name)
-		assert.True(t, got.IsDone)
-	})
-
-	t.Run("returns 400 for invalid id", func(t *testing.T) {
-		handler := NewHandler(&mockService{})
-
-		req := httptest.NewRequest(http.MethodPatch, "/tasks/todos/abc/toggle", nil)
-		rctx := chi.NewRouteContext()
-		rctx.URLParams.Add("id", "abc")
-		req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
-
-		rec := httptest.NewRecorder()
-		handler.ToggleTodo(rec, req)
-
-		assert.Equal(t, http.StatusBadRequest, rec.Code)
-		assert.Contains(t, rec.Body.String(), "invalid todo id")
-	})
-
-	t.Run("returns 404 when not found", func(t *testing.T) {
-		mock := &mockService{
-			toggleTodoFn: func(ctx context.Context, id int32) (TodoResponse, error) {
-				return TodoResponse{}, ErrNotFound
-			},
-		}
-		handler := NewHandler(mock)
-
-		req := httptest.NewRequest(http.MethodPatch, "/tasks/todos/999/toggle", nil)
-		rctx := chi.NewRouteContext()
-		rctx.URLParams.Add("id", "999")
-		req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
-
-		rec := httptest.NewRecorder()
-		handler.ToggleTodo(rec, req)
-
-		assert.Equal(t, http.StatusNotFound, rec.Code)
-		assert.Contains(t, rec.Body.String(), "todo not found")
-	})
-
-	t.Run("returns 500 when service fails", func(t *testing.T) {
-		mock := &mockService{
-			toggleTodoFn: func(ctx context.Context, id int32) (TodoResponse, error) {
-				return TodoResponse{}, errors.New("db error")
-			},
-		}
-		handler := NewHandler(mock)
-
-		req := httptest.NewRequest(http.MethodPatch, "/tasks/todos/1/toggle", nil)
-		rctx := chi.NewRouteContext()
-		rctx.URLParams.Add("id", "1")
-		req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
-
-		rec := httptest.NewRecorder()
-		handler.ToggleTodo(rec, req)
-
-		assert.Equal(t, http.StatusInternalServerError, rec.Code)
-		assert.Contains(t, rec.Body.String(), "Failed to toggle todo")
 	})
 }

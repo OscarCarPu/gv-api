@@ -18,19 +18,34 @@ INSERT INTO time_entries (task_id, started_at, finished_at, comment)
 VALUES ($1, $2, $3, $4)
 RETURNING id, task_id, started_at, finished_at, comment;
 
--- name: FinishTimeEntry :one
-UPDATE time_entries SET finished_at = $2
-WHERE id = $1
+-- name: UpdateTimeEntry :one
+UPDATE time_entries SET
+    started_at  = CASE WHEN @set_started_at::bool  THEN @started_at::timestamp  ELSE started_at END,
+    finished_at = CASE WHEN @set_finished_at::bool  THEN @finished_at::timestamp ELSE finished_at END,
+    comment     = CASE WHEN @set_comment::bool      THEN @comment::text          ELSE comment END
+WHERE id = @id
 RETURNING id, task_id, started_at, finished_at, comment;
 
--- name: FinishTask :one
-UPDATE tasks SET finished_at = $2
-WHERE id = $1
+-- name: UpdateTask :one
+UPDATE tasks SET
+    name        = CASE WHEN @set_name::bool        THEN @name::text             ELSE name END,
+    description = CASE WHEN @set_description::bool  THEN @description::text      ELSE description END,
+    due_at      = CASE WHEN @set_due_at::bool       THEN @due_at::date           ELSE due_at END,
+    project_id  = CASE WHEN @set_project_id::bool   THEN @project_id::int        ELSE project_id END,
+    started_at  = CASE WHEN @set_started_at::bool   THEN @started_at::timestamp  ELSE started_at END,
+    finished_at = CASE WHEN @set_finished_at::bool  THEN @finished_at::timestamp ELSE finished_at END
+WHERE id = @id
 RETURNING id, project_id, name, description, due_at, started_at, finished_at;
 
--- name: FinishProject :one
-UPDATE projects SET finished_at = $2
-WHERE id = $1
+-- name: UpdateProject :one
+UPDATE projects SET
+    name        = CASE WHEN @set_name::bool        THEN @name::text             ELSE name END,
+    description = CASE WHEN @set_description::bool  THEN @description::text      ELSE description END,
+    due_at      = CASE WHEN @set_due_at::bool       THEN @due_at::date           ELSE due_at END,
+    parent_id   = CASE WHEN @set_parent_id::bool    THEN @parent_id::int         ELSE parent_id END,
+    started_at  = CASE WHEN @set_started_at::bool   THEN @started_at::timestamp  ELSE started_at END,
+    finished_at = CASE WHEN @set_finished_at::bool  THEN @finished_at::timestamp ELSE finished_at END
+WHERE id = @id
 RETURNING id, parent_id, name, description, due_at, started_at, finished_at;
 
 -- name: GetRootProjects :many
@@ -82,9 +97,11 @@ FROM task_times tt
 LEFT JOIN todos td ON td.task_id = tt.id
 ORDER BY tt.finished_at NULLS FIRST, tt.name, todo_id;
 
--- name: ToggleTodo :one
-UPDATE todos SET is_done = NOT is_done
-WHERE id = $1
+-- name: UpdateTodo :one
+UPDATE todos SET
+    name    = CASE WHEN @set_name::bool    THEN @name::text ELSE name END,
+    is_done = CASE WHEN @set_is_done::bool THEN @is_done::bool ELSE is_done END
+WHERE id = @id
 RETURNING id, task_id, name, is_done;
 
 -- name: GetTimeEntriesByTaskID :many

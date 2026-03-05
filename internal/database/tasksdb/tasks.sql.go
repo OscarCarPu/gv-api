@@ -7,6 +7,7 @@ package tasksdb
 
 import (
 	"context"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgtype"
 )
@@ -141,82 +142,6 @@ func (q *Queries) CreateTodo(ctx context.Context, arg CreateTodoParams) (CreateT
 	row := q.db.QueryRow(ctx, createTodo, arg.TaskID, arg.Name)
 	var i CreateTodoRow
 	err := row.Scan(&i.ID, &i.TaskID, &i.Name)
-	return i, err
-}
-
-const finishProject = `-- name: FinishProject :one
-UPDATE projects SET finished_at = $2
-WHERE id = $1
-RETURNING id, parent_id, name, description, due_at, started_at, finished_at
-`
-
-type FinishProjectParams struct {
-	ID         int32            `db:"id" json:"id"`
-	FinishedAt pgtype.Timestamp `db:"finished_at" json:"finished_at"`
-}
-
-func (q *Queries) FinishProject(ctx context.Context, arg FinishProjectParams) (Project, error) {
-	row := q.db.QueryRow(ctx, finishProject, arg.ID, arg.FinishedAt)
-	var i Project
-	err := row.Scan(
-		&i.ID,
-		&i.ParentID,
-		&i.Name,
-		&i.Description,
-		&i.DueAt,
-		&i.StartedAt,
-		&i.FinishedAt,
-	)
-	return i, err
-}
-
-const finishTask = `-- name: FinishTask :one
-UPDATE tasks SET finished_at = $2
-WHERE id = $1
-RETURNING id, project_id, name, description, due_at, started_at, finished_at
-`
-
-type FinishTaskParams struct {
-	ID         int32            `db:"id" json:"id"`
-	FinishedAt pgtype.Timestamp `db:"finished_at" json:"finished_at"`
-}
-
-func (q *Queries) FinishTask(ctx context.Context, arg FinishTaskParams) (Task, error) {
-	row := q.db.QueryRow(ctx, finishTask, arg.ID, arg.FinishedAt)
-	var i Task
-	err := row.Scan(
-		&i.ID,
-		&i.ProjectID,
-		&i.Name,
-		&i.Description,
-		&i.DueAt,
-		&i.StartedAt,
-		&i.FinishedAt,
-	)
-	return i, err
-}
-
-const finishTimeEntry = `-- name: FinishTimeEntry :one
-UPDATE time_entries SET finished_at = $2
-WHERE id = $1
-RETURNING id, task_id, started_at, finished_at, comment
-`
-
-type FinishTimeEntryParams struct {
-	ID         int32            `db:"id" json:"id"`
-	FinishedAt pgtype.Timestamp `db:"finished_at" json:"finished_at"`
-}
-
-func (q *Queries) FinishTimeEntry(ctx context.Context, arg FinishTimeEntryParams) (TimeEntry, error) {
-	row := q.db.QueryRow(ctx, finishTimeEntry, arg.ID, arg.FinishedAt)
-	var i TimeEntry
-	err := row.Scan(
-		&i.ID,
-		&i.TaskID,
-		&i.StartedAt,
-		&i.FinishedAt,
-		&i.Comment,
-	)
 	return i, err
 }
 
@@ -518,14 +443,184 @@ func (q *Queries) GetUnfinishedTasks(ctx context.Context) ([]GetUnfinishedTasksR
 	return items, nil
 }
 
-const toggleTodo = `-- name: ToggleTodo :one
-UPDATE todos SET is_done = NOT is_done
-WHERE id = $1
+const updateProject = `-- name: UpdateProject :one
+UPDATE projects SET
+    name        = CASE WHEN $1::bool        THEN $2::text             ELSE name END,
+    description = CASE WHEN $3::bool  THEN $4::text      ELSE description END,
+    due_at      = CASE WHEN $5::bool       THEN $6::date           ELSE due_at END,
+    parent_id   = CASE WHEN $7::bool    THEN $8::int         ELSE parent_id END,
+    started_at  = CASE WHEN $9::bool   THEN $10::timestamp  ELSE started_at END,
+    finished_at = CASE WHEN $11::bool  THEN $12::timestamp ELSE finished_at END
+WHERE id = $13
+RETURNING id, parent_id, name, description, due_at, started_at, finished_at
+`
+
+type UpdateProjectParams struct {
+	SetName        bool             `db:"set_name" json:"set_name"`
+	Name           string           `db:"name" json:"name"`
+	SetDescription bool             `db:"set_description" json:"set_description"`
+	Description    string           `db:"description" json:"description"`
+	SetDueAt       bool             `db:"set_due_at" json:"set_due_at"`
+	DueAt          time.Time        `db:"due_at" json:"due_at"`
+	SetParentID    bool             `db:"set_parent_id" json:"set_parent_id"`
+	ParentID       int32            `db:"parent_id" json:"parent_id"`
+	SetStartedAt   bool             `db:"set_started_at" json:"set_started_at"`
+	StartedAt      pgtype.Timestamp `db:"started_at" json:"started_at"`
+	SetFinishedAt  bool             `db:"set_finished_at" json:"set_finished_at"`
+	FinishedAt     pgtype.Timestamp `db:"finished_at" json:"finished_at"`
+	ID             int32            `db:"id" json:"id"`
+}
+
+func (q *Queries) UpdateProject(ctx context.Context, arg UpdateProjectParams) (Project, error) {
+	row := q.db.QueryRow(ctx, updateProject,
+		arg.SetName,
+		arg.Name,
+		arg.SetDescription,
+		arg.Description,
+		arg.SetDueAt,
+		arg.DueAt,
+		arg.SetParentID,
+		arg.ParentID,
+		arg.SetStartedAt,
+		arg.StartedAt,
+		arg.SetFinishedAt,
+		arg.FinishedAt,
+		arg.ID,
+	)
+	var i Project
+	err := row.Scan(
+		&i.ID,
+		&i.ParentID,
+		&i.Name,
+		&i.Description,
+		&i.DueAt,
+		&i.StartedAt,
+		&i.FinishedAt,
+	)
+	return i, err
+}
+
+const updateTask = `-- name: UpdateTask :one
+UPDATE tasks SET
+    name        = CASE WHEN $1::bool        THEN $2::text             ELSE name END,
+    description = CASE WHEN $3::bool  THEN $4::text      ELSE description END,
+    due_at      = CASE WHEN $5::bool       THEN $6::date           ELSE due_at END,
+    project_id  = CASE WHEN $7::bool   THEN $8::int        ELSE project_id END,
+    started_at  = CASE WHEN $9::bool   THEN $10::timestamp  ELSE started_at END,
+    finished_at = CASE WHEN $11::bool  THEN $12::timestamp ELSE finished_at END
+WHERE id = $13
+RETURNING id, project_id, name, description, due_at, started_at, finished_at
+`
+
+type UpdateTaskParams struct {
+	SetName        bool             `db:"set_name" json:"set_name"`
+	Name           string           `db:"name" json:"name"`
+	SetDescription bool             `db:"set_description" json:"set_description"`
+	Description    string           `db:"description" json:"description"`
+	SetDueAt       bool             `db:"set_due_at" json:"set_due_at"`
+	DueAt          time.Time        `db:"due_at" json:"due_at"`
+	SetProjectID   bool             `db:"set_project_id" json:"set_project_id"`
+	ProjectID      int32            `db:"project_id" json:"project_id"`
+	SetStartedAt   bool             `db:"set_started_at" json:"set_started_at"`
+	StartedAt      pgtype.Timestamp `db:"started_at" json:"started_at"`
+	SetFinishedAt  bool             `db:"set_finished_at" json:"set_finished_at"`
+	FinishedAt     pgtype.Timestamp `db:"finished_at" json:"finished_at"`
+	ID             int32            `db:"id" json:"id"`
+}
+
+func (q *Queries) UpdateTask(ctx context.Context, arg UpdateTaskParams) (Task, error) {
+	row := q.db.QueryRow(ctx, updateTask,
+		arg.SetName,
+		arg.Name,
+		arg.SetDescription,
+		arg.Description,
+		arg.SetDueAt,
+		arg.DueAt,
+		arg.SetProjectID,
+		arg.ProjectID,
+		arg.SetStartedAt,
+		arg.StartedAt,
+		arg.SetFinishedAt,
+		arg.FinishedAt,
+		arg.ID,
+	)
+	var i Task
+	err := row.Scan(
+		&i.ID,
+		&i.ProjectID,
+		&i.Name,
+		&i.Description,
+		&i.DueAt,
+		&i.StartedAt,
+		&i.FinishedAt,
+	)
+	return i, err
+}
+
+const updateTimeEntry = `-- name: UpdateTimeEntry :one
+UPDATE time_entries SET
+    started_at  = CASE WHEN $1::bool  THEN $2::timestamp  ELSE started_at END,
+    finished_at = CASE WHEN $3::bool  THEN $4::timestamp ELSE finished_at END,
+    comment     = CASE WHEN $5::bool      THEN $6::text          ELSE comment END
+WHERE id = $7
+RETURNING id, task_id, started_at, finished_at, comment
+`
+
+type UpdateTimeEntryParams struct {
+	SetStartedAt  bool             `db:"set_started_at" json:"set_started_at"`
+	StartedAt     pgtype.Timestamp `db:"started_at" json:"started_at"`
+	SetFinishedAt bool             `db:"set_finished_at" json:"set_finished_at"`
+	FinishedAt    pgtype.Timestamp `db:"finished_at" json:"finished_at"`
+	SetComment    bool             `db:"set_comment" json:"set_comment"`
+	Comment       string           `db:"comment" json:"comment"`
+	ID            int32            `db:"id" json:"id"`
+}
+
+func (q *Queries) UpdateTimeEntry(ctx context.Context, arg UpdateTimeEntryParams) (TimeEntry, error) {
+	row := q.db.QueryRow(ctx, updateTimeEntry,
+		arg.SetStartedAt,
+		arg.StartedAt,
+		arg.SetFinishedAt,
+		arg.FinishedAt,
+		arg.SetComment,
+		arg.Comment,
+		arg.ID,
+	)
+	var i TimeEntry
+	err := row.Scan(
+		&i.ID,
+		&i.TaskID,
+		&i.StartedAt,
+		&i.FinishedAt,
+		&i.Comment,
+	)
+	return i, err
+}
+
+const updateTodo = `-- name: UpdateTodo :one
+UPDATE todos SET
+    name    = CASE WHEN $1::bool    THEN $2::text ELSE name END,
+    is_done = CASE WHEN $3::bool THEN $4::bool ELSE is_done END
+WHERE id = $5
 RETURNING id, task_id, name, is_done
 `
 
-func (q *Queries) ToggleTodo(ctx context.Context, id int32) (Todo, error) {
-	row := q.db.QueryRow(ctx, toggleTodo, id)
+type UpdateTodoParams struct {
+	SetName   bool   `db:"set_name" json:"set_name"`
+	Name      string `db:"name" json:"name"`
+	SetIsDone bool   `db:"set_is_done" json:"set_is_done"`
+	IsDone    bool   `db:"is_done" json:"is_done"`
+	ID        int32  `db:"id" json:"id"`
+}
+
+func (q *Queries) UpdateTodo(ctx context.Context, arg UpdateTodoParams) (Todo, error) {
+	row := q.db.QueryRow(ctx, updateTodo,
+		arg.SetName,
+		arg.Name,
+		arg.SetIsDone,
+		arg.IsDone,
+		arg.ID,
+	)
 	var i Todo
 	err := row.Scan(
 		&i.ID,

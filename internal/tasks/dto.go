@@ -63,19 +63,37 @@ type TimeEntryResponse struct {
 	Comment    *string    `json:"comment"`
 }
 
-type FinishTimeEntryRequest struct {
-	ID         int32      `json:"-"`
-	FinishedAt *time.Time `json:"finished_at"`
+type UpdateProjectRequest struct {
+	ID          int32      `json:"-"`
+	Name        *string    `json:"name"`
+	Description *string    `json:"description"`
+	DueAt       *time.Time `json:"due_at"`
+	ParentID    *int32     `json:"parent_id"`
+	StartedAt   *time.Time `json:"started_at"`
+	FinishedAt  *time.Time `json:"finished_at"`
 }
 
-type FinishTaskRequest struct {
-	ID         int32      `json:"-"`
-	FinishedAt *time.Time `json:"finished_at"`
+type UpdateTaskRequest struct {
+	ID          int32      `json:"-"`
+	Name        *string    `json:"name"`
+	Description *string    `json:"description"`
+	DueAt       *time.Time `json:"due_at"`
+	ProjectID   *int32     `json:"project_id"`
+	StartedAt   *time.Time `json:"started_at"`
+	FinishedAt  *time.Time `json:"finished_at"`
 }
 
-type FinishProjectRequest struct {
+type UpdateTodoRequest struct {
+	ID     int32  `json:"-"`
+	Name   *string `json:"name"`
+	IsDone *bool   `json:"is_done"`
+}
+
+type UpdateTimeEntryRequest struct {
 	ID         int32      `json:"-"`
+	StartedAt  *time.Time `json:"started_at"`
 	FinishedAt *time.Time `json:"finished_at"`
+	Comment    *string    `json:"comment"`
 }
 
 type TaskTimeEntriesResponse struct {

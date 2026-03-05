@@ -33,32 +33,20 @@ func (s *Service) CreateTimeEntry(ctx context.Context, req CreateTimeEntryReques
 	return s.repo.CreateTimeEntry(ctx, req.TaskID, req.StartedAt, req.FinishedAt, req.Comment)
 }
 
-func (s *Service) FinishTimeEntry(ctx context.Context, req FinishTimeEntryRequest) (TimeEntryResponse, error) {
-	finishedAt := time.Now().In(s.location)
-	if req.FinishedAt != nil {
-		finishedAt = *req.FinishedAt
-	}
-	return s.repo.FinishTimeEntry(ctx, req.ID, finishedAt)
+func (s *Service) UpdateProject(ctx context.Context, req UpdateProjectRequest) (ProjectResponse, error) {
+	return s.repo.UpdateProject(ctx, req)
 }
 
-func (s *Service) FinishTask(ctx context.Context, req FinishTaskRequest) (TaskResponse, error) {
-	finishedAt := time.Now().In(s.location)
-	if req.FinishedAt != nil {
-		finishedAt = *req.FinishedAt
-	}
-	return s.repo.FinishTask(ctx, req.ID, finishedAt)
+func (s *Service) UpdateTask(ctx context.Context, req UpdateTaskRequest) (TaskResponse, error) {
+	return s.repo.UpdateTask(ctx, req)
 }
 
-func (s *Service) FinishProject(ctx context.Context, req FinishProjectRequest) (ProjectResponse, error) {
-	finishedAt := time.Now().In(s.location)
-	if req.FinishedAt != nil {
-		finishedAt = *req.FinishedAt
-	}
-	return s.repo.FinishProject(ctx, req.ID, finishedAt)
+func (s *Service) UpdateTodo(ctx context.Context, req UpdateTodoRequest) (TodoResponse, error) {
+	return s.repo.UpdateTodo(ctx, req)
 }
 
-func (s *Service) ToggleTodo(ctx context.Context, id int32) (TodoResponse, error) {
-	return s.repo.ToggleTodo(ctx, id)
+func (s *Service) UpdateTimeEntry(ctx context.Context, req UpdateTimeEntryRequest) (TimeEntryResponse, error) {
+	return s.repo.UpdateTimeEntry(ctx, req)
 }
 
 func (s *Service) GetActiveTree(ctx context.Context) ([]ActiveTreeNode, error) {

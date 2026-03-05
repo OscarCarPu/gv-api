@@ -18,14 +18,14 @@ type ServiceInterface interface {
 	CreateTask(ctx context.Context, req CreateTaskRequest) (TaskResponse, error)
 	CreateTodo(ctx context.Context, req CreateTodoRequest) (TodoResponse, error)
 	CreateTimeEntry(ctx context.Context, req CreateTimeEntryRequest) (TimeEntryResponse, error)
-	FinishTimeEntry(ctx context.Context, req FinishTimeEntryRequest) (TimeEntryResponse, error)
-	FinishTask(ctx context.Context, req FinishTaskRequest) (TaskResponse, error)
-	FinishProject(ctx context.Context, req FinishProjectRequest) (ProjectResponse, error)
+	UpdateProject(ctx context.Context, req UpdateProjectRequest) (ProjectResponse, error)
+	UpdateTask(ctx context.Context, req UpdateTaskRequest) (TaskResponse, error)
+	UpdateTodo(ctx context.Context, req UpdateTodoRequest) (TodoResponse, error)
+	UpdateTimeEntry(ctx context.Context, req UpdateTimeEntryRequest) (TimeEntryResponse, error)
 	GetRootProjects(ctx context.Context) ([]ProjectResponse, error)
 	GetActiveTree(ctx context.Context) ([]ActiveTreeNode, error)
 	GetProjectChildren(ctx context.Context, projectID int32) (ProjectChildrenResponse, error)
 	GetTaskTimeEntries(ctx context.Context, taskID int32) (TaskTimeEntriesResponse, error)
-	ToggleTodo(ctx context.Context, id int32) (TodoResponse, error)
 }
 
 type Handler struct {
@@ -139,76 +139,112 @@ func (h *Handler) CreateTimeEntry(w http.ResponseWriter, r *http.Request) {
 	response.JSON(w, http.StatusCreated, entry)
 }
 
-func (h *Handler) FinishTimeEntry(w http.ResponseWriter, r *http.Request) {
-	id, err := parseIDParam(r, "time entry")
-	if err != nil {
-		response.Error(w, http.StatusBadRequest, err.Error())
-		return
-	}
-
-	var req FinishTimeEntryRequest
-	_ = json.NewDecoder(r.Body).Decode(&req)
-	req.ID = id
-
-	entry, err := h.service.FinishTimeEntry(r.Context(), req)
-	if err != nil {
-		if errors.Is(err, ErrNotFound) {
-			response.Error(w, http.StatusNotFound, "time entry not found")
-			return
-		}
-		response.Error(w, http.StatusInternalServerError, "Failed to finish time entry")
-		return
-	}
-
-	response.JSON(w, http.StatusOK, entry)
-}
-
-func (h *Handler) FinishTask(w http.ResponseWriter, r *http.Request) {
-	id, err := parseIDParam(r, "task")
-	if err != nil {
-		response.Error(w, http.StatusBadRequest, err.Error())
-		return
-	}
-
-	var req FinishTaskRequest
-	_ = json.NewDecoder(r.Body).Decode(&req)
-	req.ID = id
-
-	task, err := h.service.FinishTask(r.Context(), req)
-	if err != nil {
-		if errors.Is(err, ErrNotFound) {
-			response.Error(w, http.StatusNotFound, "task not found")
-			return
-		}
-		response.Error(w, http.StatusInternalServerError, "Failed to finish task")
-		return
-	}
-
-	response.JSON(w, http.StatusOK, task)
-}
-
-func (h *Handler) FinishProject(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) UpdateProject(w http.ResponseWriter, r *http.Request) {
 	id, err := parseIDParam(r, "project")
 	if err != nil {
 		response.Error(w, http.StatusBadRequest, err.Error())
 		return
 	}
 
-	var req FinishProjectRequest
-	_ = json.NewDecoder(r.Body).Decode(&req)
+	var req UpdateProjectRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		response.Error(w, http.StatusBadRequest, "Invalid Body")
+		return
+	}
 	req.ID = id
 
-	project, err := h.service.FinishProject(r.Context(), req)
+	project, err := h.service.UpdateProject(r.Context(), req)
 	if err != nil {
 		if errors.Is(err, ErrNotFound) {
 			response.Error(w, http.StatusNotFound, "project not found")
 			return
 		}
-		response.Error(w, http.StatusInternalServerError, "Failed to finish project")
+		response.Error(w, http.StatusInternalServerError, "Failed to update project")
 		return
 	}
 
 	response.JSON(w, http.StatusOK, project)
+}
+
+func (h *Handler) UpdateTask(w http.ResponseWriter, r *http.Request) {
+	id, err := parseIDParam(r, "task")
+	if err != nil {
+		response.Error(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	var req UpdateTaskRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		response.Error(w, http.StatusBadRequest, "Invalid Body")
+		return
+	}
+	req.ID = id
+
+	task, err := h.service.UpdateTask(r.Context(), req)
+	if err != nil {
+		if errors.Is(err, ErrNotFound) {
+			response.Error(w, http.StatusNotFound, "task not found")
+			return
+		}
+		response.Error(w, http.StatusInternalServerError, "Failed to update task")
+		return
+	}
+
+	response.JSON(w, http.StatusOK, task)
+}
+
+func (h *Handler) UpdateTodo(w http.ResponseWriter, r *http.Request) {
+	id, err := parseIDParam(r, "todo")
+	if err != nil {
+		response.Error(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	var req UpdateTodoRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		response.Error(w, http.StatusBadRequest, "Invalid Body")
+		return
+	}
+	req.ID = id
+
+	todo, err := h.service.UpdateTodo(r.Context(), req)
+	if err != nil {
+		if errors.Is(err, ErrNotFound) {
+			response.Error(w, http.StatusNotFound, "todo not found")
+			return
+		}
+		response.Error(w, http.StatusInternalServerError, "Failed to update todo")
+		return
+	}
+
+	response.JSON(w, http.StatusOK, todo)
+}
+
+func (h *Handler) UpdateTimeEntry(w http.ResponseWriter, r *http.Request) {
+	id, err := parseIDParam(r, "time entry")
+	if err != nil {
+		response.Error(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	var req UpdateTimeEntryRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		response.Error(w, http.StatusBadRequest, "Invalid Body")
+		return
+	}
+	req.ID = id
+
+	entry, err := h.service.UpdateTimeEntry(r.Context(), req)
+	if err != nil {
+		if errors.Is(err, ErrNotFound) {
+			response.Error(w, http.StatusNotFound, "time entry not found")
+			return
+		}
+		response.Error(w, http.StatusInternalServerError, "Failed to update time entry")
+		return
+	}
+
+	response.JSON(w, http.StatusOK, entry)
 }
 
 func (h *Handler) GetActiveTree(w http.ResponseWriter, r *http.Request) {
@@ -271,22 +307,3 @@ func (h *Handler) GetRootProjects(w http.ResponseWriter, r *http.Request) {
 	response.JSON(w, http.StatusOK, projects)
 }
 
-func (h *Handler) ToggleTodo(w http.ResponseWriter, r *http.Request) {
-	id, err := parseIDParam(r, "todo")
-	if err != nil {
-		response.Error(w, http.StatusBadRequest, err.Error())
-		return
-	}
-
-	todo, err := h.service.ToggleTodo(r.Context(), id)
-	if err != nil {
-		if errors.Is(err, ErrNotFound) {
-			response.Error(w, http.StatusNotFound, "todo not found")
-			return
-		}
-		response.Error(w, http.StatusInternalServerError, "Failed to toggle todo")
-		return
-	}
-
-	response.JSON(w, http.StatusOK, todo)
-}

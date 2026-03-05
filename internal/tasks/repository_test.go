@@ -19,16 +19,16 @@ type mockQuerier struct {
 	createTaskFn                 func(ctx context.Context, arg tasksdb.CreateTaskParams) (tasksdb.CreateTaskRow, error)
 	createTodoFn                 func(ctx context.Context, arg tasksdb.CreateTodoParams) (tasksdb.CreateTodoRow, error)
 	createTimeEntryFn            func(ctx context.Context, arg tasksdb.CreateTimeEntryParams) (tasksdb.TimeEntry, error)
-	finishTimeEntryFn            func(ctx context.Context, arg tasksdb.FinishTimeEntryParams) (tasksdb.TimeEntry, error)
-	finishTaskFn                 func(ctx context.Context, arg tasksdb.FinishTaskParams) (tasksdb.Task, error)
-	finishProjectFn              func(ctx context.Context, arg tasksdb.FinishProjectParams) (tasksdb.Project, error)
+	updateProjectFn              func(ctx context.Context, arg tasksdb.UpdateProjectParams) (tasksdb.Project, error)
+	updateTaskFn                 func(ctx context.Context, arg tasksdb.UpdateTaskParams) (tasksdb.Task, error)
+	updateTodoFn                 func(ctx context.Context, arg tasksdb.UpdateTodoParams) (tasksdb.Todo, error)
+	updateTimeEntryFn            func(ctx context.Context, arg tasksdb.UpdateTimeEntryParams) (tasksdb.TimeEntry, error)
 	getRootProjectsFn            func(ctx context.Context) ([]tasksdb.GetRootProjectsRow, error)
 	getActiveProjectsFn          func(ctx context.Context) ([]tasksdb.GetActiveProjectsRow, error)
 	getUnfinishedTasksFn         func(ctx context.Context) ([]tasksdb.GetUnfinishedTasksRow, error)
 	getProjectWithDescendantsFn  func(ctx context.Context, id int32) ([]tasksdb.GetProjectWithDescendantsRow, error)
 	getTasksByProjectIDsFn       func(ctx context.Context, projectIds []int32) ([]tasksdb.GetTasksByProjectIDsRow, error)
 	getTimeEntriesByTaskIDFn     func(ctx context.Context, id int32) ([]tasksdb.GetTimeEntriesByTaskIDRow, error)
-	toggleTodoFn                 func(ctx context.Context, id int32) (tasksdb.Todo, error)
 }
 
 func (m *mockQuerier) CreateProject(ctx context.Context, arg tasksdb.CreateProjectParams) (tasksdb.CreateProjectRow, error) {
@@ -59,25 +59,32 @@ func (m *mockQuerier) CreateTimeEntry(ctx context.Context, arg tasksdb.CreateTim
 	return tasksdb.TimeEntry{}, nil
 }
 
-func (m *mockQuerier) FinishTimeEntry(ctx context.Context, arg tasksdb.FinishTimeEntryParams) (tasksdb.TimeEntry, error) {
-	if m.finishTimeEntryFn != nil {
-		return m.finishTimeEntryFn(ctx, arg)
+func (m *mockQuerier) UpdateProject(ctx context.Context, arg tasksdb.UpdateProjectParams) (tasksdb.Project, error) {
+	if m.updateProjectFn != nil {
+		return m.updateProjectFn(ctx, arg)
 	}
-	return tasksdb.TimeEntry{}, nil
+	return tasksdb.Project{}, nil
 }
 
-func (m *mockQuerier) FinishTask(ctx context.Context, arg tasksdb.FinishTaskParams) (tasksdb.Task, error) {
-	if m.finishTaskFn != nil {
-		return m.finishTaskFn(ctx, arg)
+func (m *mockQuerier) UpdateTask(ctx context.Context, arg tasksdb.UpdateTaskParams) (tasksdb.Task, error) {
+	if m.updateTaskFn != nil {
+		return m.updateTaskFn(ctx, arg)
 	}
 	return tasksdb.Task{}, nil
 }
 
-func (m *mockQuerier) FinishProject(ctx context.Context, arg tasksdb.FinishProjectParams) (tasksdb.Project, error) {
-	if m.finishProjectFn != nil {
-		return m.finishProjectFn(ctx, arg)
+func (m *mockQuerier) UpdateTodo(ctx context.Context, arg tasksdb.UpdateTodoParams) (tasksdb.Todo, error) {
+	if m.updateTodoFn != nil {
+		return m.updateTodoFn(ctx, arg)
 	}
-	return tasksdb.Project{}, nil
+	return tasksdb.Todo{}, nil
+}
+
+func (m *mockQuerier) UpdateTimeEntry(ctx context.Context, arg tasksdb.UpdateTimeEntryParams) (tasksdb.TimeEntry, error) {
+	if m.updateTimeEntryFn != nil {
+		return m.updateTimeEntryFn(ctx, arg)
+	}
+	return tasksdb.TimeEntry{}, nil
 }
 
 func (m *mockQuerier) GetRootProjects(ctx context.Context) ([]tasksdb.GetRootProjectsRow, error) {
@@ -120,13 +127,6 @@ func (m *mockQuerier) GetTimeEntriesByTaskID(ctx context.Context, id int32) ([]t
 		return m.getTimeEntriesByTaskIDFn(ctx, id)
 	}
 	return nil, nil
-}
-
-func (m *mockQuerier) ToggleTodo(ctx context.Context, id int32) (tasksdb.Todo, error) {
-	if m.toggleTodoFn != nil {
-		return m.toggleTodoFn(ctx, id)
-	}
-	return tasksdb.Todo{}, nil
 }
 
 func TestRepository_CreateProject(t *testing.T) {
@@ -396,8 +396,77 @@ func TestRepository_GetRootProjects(t *testing.T) {
 	})
 }
 
-func TestRepository_FinishTask(t *testing.T) {
-	t.Run("maps response correctly", func(t *testing.T) {
+func TestRepository_UpdateProject(t *testing.T) {
+	t.Run("maps response correctly with partial update", func(t *testing.T) {
+		desc := "project desc"
+		parentID := int32(2)
+		startedAt := time.Date(2026, 3, 1, 9, 0, 0, 0, time.UTC)
+		finishedAt := time.Date(2026, 3, 1, 17, 0, 0, 0, time.UTC)
+		dueDate := pgtype.Date{Time: time.Date(2026, 6, 15, 0, 0, 0, 0, time.UTC), Valid: true}
+		name := "updated"
+
+		mock := &mockQuerier{
+			updateProjectFn: func(ctx context.Context, arg tasksdb.UpdateProjectParams) (tasksdb.Project, error) {
+				assert.True(t, arg.SetName)
+				assert.Equal(t, "updated", arg.Name)
+				assert.False(t, arg.SetDescription)
+				assert.True(t, arg.SetFinishedAt)
+				return tasksdb.Project{
+					ID:          1,
+					ParentID:    &parentID,
+					Name:        "updated",
+					Description: &desc,
+					DueAt:       dueDate,
+					StartedAt:   pgtype.Timestamp{Time: startedAt, Valid: true},
+					FinishedAt:  pgtype.Timestamp{Time: finishedAt, Valid: true},
+				}, nil
+			},
+		}
+		repo := NewRepository(mock)
+
+		got, err := repo.UpdateProject(context.Background(), UpdateProjectRequest{
+			ID:         1,
+			Name:       &name,
+			FinishedAt: &finishedAt,
+		})
+		require.NoError(t, err)
+
+		assert.Equal(t, int32(1), got.ID)
+		assert.Equal(t, &parentID, got.ParentID)
+		assert.Equal(t, "updated", got.Name)
+		assert.Equal(t, &desc, got.Description)
+		dueAt := time.Date(2026, 6, 15, 0, 0, 0, 0, time.UTC)
+		assert.Equal(t, &dueAt, got.DueAt)
+		assert.Equal(t, &startedAt, got.StartedAt)
+		assert.Equal(t, &finishedAt, got.FinishedAt)
+	})
+
+	t.Run("returns ErrNotFound on pgx.ErrNoRows", func(t *testing.T) {
+		mock := &mockQuerier{
+			updateProjectFn: func(ctx context.Context, arg tasksdb.UpdateProjectParams) (tasksdb.Project, error) {
+				return tasksdb.Project{}, pgx.ErrNoRows
+			},
+		}
+		repo := NewRepository(mock)
+		_, err := repo.UpdateProject(context.Background(), UpdateProjectRequest{ID: 999})
+		assert.ErrorIs(t, err, ErrNotFound)
+	})
+
+	t.Run("returns error from querier", func(t *testing.T) {
+		mock := &mockQuerier{
+			updateProjectFn: func(ctx context.Context, arg tasksdb.UpdateProjectParams) (tasksdb.Project, error) {
+				return tasksdb.Project{}, errors.New("db error")
+			},
+		}
+		repo := NewRepository(mock)
+		_, err := repo.UpdateProject(context.Background(), UpdateProjectRequest{ID: 1})
+		assert.Error(t, err)
+		assert.NotErrorIs(t, err, ErrNotFound)
+	})
+}
+
+func TestRepository_UpdateTask(t *testing.T) {
+	t.Run("maps response correctly with partial update", func(t *testing.T) {
 		desc := "task desc"
 		projectID := int32(5)
 		startedAt := time.Date(2026, 3, 1, 9, 0, 0, 0, time.UTC)
@@ -405,7 +474,9 @@ func TestRepository_FinishTask(t *testing.T) {
 		dueDate := pgtype.Date{Time: time.Date(2026, 7, 1, 0, 0, 0, 0, time.UTC), Valid: true}
 
 		mock := &mockQuerier{
-			finishTaskFn: func(ctx context.Context, arg tasksdb.FinishTaskParams) (tasksdb.Task, error) {
+			updateTaskFn: func(ctx context.Context, arg tasksdb.UpdateTaskParams) (tasksdb.Task, error) {
+				assert.True(t, arg.SetFinishedAt)
+				assert.False(t, arg.SetName)
 				return tasksdb.Task{
 					ID:          1,
 					ProjectID:   &projectID,
@@ -419,7 +490,7 @@ func TestRepository_FinishTask(t *testing.T) {
 		}
 		repo := NewRepository(mock)
 
-		got, err := repo.FinishTask(context.Background(), 1, finishedAt)
+		got, err := repo.UpdateTask(context.Background(), UpdateTaskRequest{ID: 1, FinishedAt: &finishedAt})
 		require.NoError(t, err)
 
 		assert.Equal(t, int32(1), got.ID)
@@ -434,100 +505,91 @@ func TestRepository_FinishTask(t *testing.T) {
 
 	t.Run("returns ErrNotFound on pgx.ErrNoRows", func(t *testing.T) {
 		mock := &mockQuerier{
-			finishTaskFn: func(ctx context.Context, arg tasksdb.FinishTaskParams) (tasksdb.Task, error) {
+			updateTaskFn: func(ctx context.Context, arg tasksdb.UpdateTaskParams) (tasksdb.Task, error) {
 				return tasksdb.Task{}, pgx.ErrNoRows
 			},
 		}
 		repo := NewRepository(mock)
-
-		_, err := repo.FinishTask(context.Background(), 999, time.Now())
+		_, err := repo.UpdateTask(context.Background(), UpdateTaskRequest{ID: 999})
 		assert.ErrorIs(t, err, ErrNotFound)
 	})
 
 	t.Run("returns error from querier", func(t *testing.T) {
 		mock := &mockQuerier{
-			finishTaskFn: func(ctx context.Context, arg tasksdb.FinishTaskParams) (tasksdb.Task, error) {
+			updateTaskFn: func(ctx context.Context, arg tasksdb.UpdateTaskParams) (tasksdb.Task, error) {
 				return tasksdb.Task{}, errors.New("db error")
 			},
 		}
 		repo := NewRepository(mock)
-
-		_, err := repo.FinishTask(context.Background(), 1, time.Now())
+		_, err := repo.UpdateTask(context.Background(), UpdateTaskRequest{ID: 1})
 		assert.Error(t, err)
 		assert.NotErrorIs(t, err, ErrNotFound)
 	})
 }
 
-func TestRepository_FinishProject(t *testing.T) {
+func TestRepository_UpdateTodo(t *testing.T) {
 	t.Run("maps response correctly", func(t *testing.T) {
-		desc := "project desc"
-		parentID := int32(2)
-		startedAt := time.Date(2026, 3, 1, 9, 0, 0, 0, time.UTC)
-		finishedAt := time.Date(2026, 3, 1, 17, 0, 0, 0, time.UTC)
-		dueDate := pgtype.Date{Time: time.Date(2026, 6, 15, 0, 0, 0, 0, time.UTC), Valid: true}
-
+		isDone := true
 		mock := &mockQuerier{
-			finishProjectFn: func(ctx context.Context, arg tasksdb.FinishProjectParams) (tasksdb.Project, error) {
-				return tasksdb.Project{
-					ID:          1,
-					ParentID:    &parentID,
-					Name:        "test project",
-					Description: &desc,
-					DueAt:       dueDate,
-					StartedAt:   pgtype.Timestamp{Time: startedAt, Valid: true},
-					FinishedAt:  pgtype.Timestamp{Time: finishedAt, Valid: true},
+			updateTodoFn: func(ctx context.Context, arg tasksdb.UpdateTodoParams) (tasksdb.Todo, error) {
+				assert.Equal(t, int32(3), arg.ID)
+				assert.True(t, arg.SetIsDone)
+				assert.True(t, arg.IsDone)
+				assert.False(t, arg.SetName)
+				return tasksdb.Todo{
+					ID:     3,
+					TaskID: 5,
+					Name:   "My Todo",
+					IsDone: true,
 				}, nil
 			},
 		}
 		repo := NewRepository(mock)
 
-		got, err := repo.FinishProject(context.Background(), 1, finishedAt)
+		got, err := repo.UpdateTodo(context.Background(), UpdateTodoRequest{ID: 3, IsDone: &isDone})
 		require.NoError(t, err)
 
-		assert.Equal(t, int32(1), got.ID)
-		assert.Equal(t, &parentID, got.ParentID)
-		assert.Equal(t, "test project", got.Name)
-		assert.Equal(t, &desc, got.Description)
-		dueAt := time.Date(2026, 6, 15, 0, 0, 0, 0, time.UTC)
-		assert.Equal(t, &dueAt, got.DueAt)
-		assert.Equal(t, &startedAt, got.StartedAt)
-		assert.Equal(t, &finishedAt, got.FinishedAt)
+		assert.Equal(t, int32(3), got.ID)
+		assert.Equal(t, int32(5), got.TaskID)
+		assert.Equal(t, "My Todo", got.Name)
+		assert.True(t, got.IsDone)
 	})
 
 	t.Run("returns ErrNotFound on pgx.ErrNoRows", func(t *testing.T) {
 		mock := &mockQuerier{
-			finishProjectFn: func(ctx context.Context, arg tasksdb.FinishProjectParams) (tasksdb.Project, error) {
-				return tasksdb.Project{}, pgx.ErrNoRows
+			updateTodoFn: func(ctx context.Context, arg tasksdb.UpdateTodoParams) (tasksdb.Todo, error) {
+				return tasksdb.Todo{}, pgx.ErrNoRows
 			},
 		}
 		repo := NewRepository(mock)
-
-		_, err := repo.FinishProject(context.Background(), 999, time.Now())
+		_, err := repo.UpdateTodo(context.Background(), UpdateTodoRequest{ID: 999})
 		assert.ErrorIs(t, err, ErrNotFound)
 	})
 
 	t.Run("returns error from querier", func(t *testing.T) {
 		mock := &mockQuerier{
-			finishProjectFn: func(ctx context.Context, arg tasksdb.FinishProjectParams) (tasksdb.Project, error) {
-				return tasksdb.Project{}, errors.New("db error")
+			updateTodoFn: func(ctx context.Context, arg tasksdb.UpdateTodoParams) (tasksdb.Todo, error) {
+				return tasksdb.Todo{}, errors.New("db error")
 			},
 		}
 		repo := NewRepository(mock)
-
-		_, err := repo.FinishProject(context.Background(), 1, time.Now())
+		_, err := repo.UpdateTodo(context.Background(), UpdateTodoRequest{ID: 1})
 		assert.Error(t, err)
 		assert.NotErrorIs(t, err, ErrNotFound)
 	})
 }
 
-func TestRepository_FinishTimeEntry(t *testing.T) {
-	t.Run("maps response correctly", func(t *testing.T) {
+func TestRepository_UpdateTimeEntry(t *testing.T) {
+	t.Run("maps response correctly with partial update", func(t *testing.T) {
 		startedAt := time.Date(2026, 3, 1, 9, 0, 0, 0, time.UTC)
 		finishedAt := time.Date(2026, 3, 1, 10, 0, 0, 0, time.UTC)
 		comment := "done"
 
 		mock := &mockQuerier{
-			finishTimeEntryFn: func(ctx context.Context, arg tasksdb.FinishTimeEntryParams) (tasksdb.TimeEntry, error) {
+			updateTimeEntryFn: func(ctx context.Context, arg tasksdb.UpdateTimeEntryParams) (tasksdb.TimeEntry, error) {
+				assert.True(t, arg.SetFinishedAt)
+				assert.False(t, arg.SetStartedAt)
+				assert.False(t, arg.SetComment)
 				return tasksdb.TimeEntry{
 					ID:         1,
 					TaskID:     3,
@@ -539,7 +601,7 @@ func TestRepository_FinishTimeEntry(t *testing.T) {
 		}
 		repo := NewRepository(mock)
 
-		got, err := repo.FinishTimeEntry(context.Background(), 1, finishedAt)
+		got, err := repo.UpdateTimeEntry(context.Background(), UpdateTimeEntryRequest{ID: 1, FinishedAt: &finishedAt})
 		require.NoError(t, err)
 
 		assert.Equal(t, int32(1), got.ID)
@@ -551,25 +613,23 @@ func TestRepository_FinishTimeEntry(t *testing.T) {
 
 	t.Run("returns ErrNotFound on pgx.ErrNoRows", func(t *testing.T) {
 		mock := &mockQuerier{
-			finishTimeEntryFn: func(ctx context.Context, arg tasksdb.FinishTimeEntryParams) (tasksdb.TimeEntry, error) {
+			updateTimeEntryFn: func(ctx context.Context, arg tasksdb.UpdateTimeEntryParams) (tasksdb.TimeEntry, error) {
 				return tasksdb.TimeEntry{}, pgx.ErrNoRows
 			},
 		}
 		repo := NewRepository(mock)
-
-		_, err := repo.FinishTimeEntry(context.Background(), 999, time.Now())
+		_, err := repo.UpdateTimeEntry(context.Background(), UpdateTimeEntryRequest{ID: 999})
 		assert.ErrorIs(t, err, ErrNotFound)
 	})
 
 	t.Run("returns error from querier", func(t *testing.T) {
 		mock := &mockQuerier{
-			finishTimeEntryFn: func(ctx context.Context, arg tasksdb.FinishTimeEntryParams) (tasksdb.TimeEntry, error) {
+			updateTimeEntryFn: func(ctx context.Context, arg tasksdb.UpdateTimeEntryParams) (tasksdb.TimeEntry, error) {
 				return tasksdb.TimeEntry{}, errors.New("db error")
 			},
 		}
 		repo := NewRepository(mock)
-
-		_, err := repo.FinishTimeEntry(context.Background(), 1, time.Now())
+		_, err := repo.UpdateTimeEntry(context.Background(), UpdateTimeEntryRequest{ID: 1})
 		assert.Error(t, err)
 		assert.NotErrorIs(t, err, ErrNotFound)
 	})
@@ -709,12 +769,10 @@ func TestRepository_GetProjectChildren(t *testing.T) {
 		got, err := repo.GetProjectChildren(context.Background(), 1)
 		require.NoError(t, err)
 
-		// Root project
 		assert.Equal(t, int32(1), got.Project.ID)
 		assert.Equal(t, "Root", got.Project.Name)
-		assert.Equal(t, int64(5400), got.Project.TimeSpent) // 3600 (own) + 1800 (sub-project)
+		assert.Equal(t, int64(5400), got.Project.TimeSpent)
 
-		// Children: sub-project first, then task
 		require.Len(t, got.Children, 2)
 		assert.Equal(t, "project", got.Children[0].Type)
 		assert.Equal(t, "Sub-Project", got.Children[0].Name)
@@ -800,9 +858,7 @@ func TestRepository_GetProjectChildren(t *testing.T) {
 		got, err := repo.GetProjectChildren(context.Background(), 1)
 		require.NoError(t, err)
 
-		// Root should have 500 (from grandchild → child → root)
 		assert.Equal(t, int64(500), got.Project.TimeSpent)
-		// Direct child should have 500 (from grandchild)
 		require.Len(t, got.Children, 1)
 		assert.Equal(t, int64(500), got.Children[0].TimeSpent)
 	})
@@ -818,9 +874,7 @@ func TestRepository_GetProjectChildren(t *testing.T) {
 			getTasksByProjectIDsFn: func(ctx context.Context, projectIds []int32) ([]tasksdb.GetTasksByProjectIDsRow, error) {
 				pid := int32(1)
 				return []tasksdb.GetTasksByProjectIDsRow{
-					// Unfinished task first (NULLS FIRST ordering from SQL)
 					{ID: 1, ProjectID: &pid, Name: "Active Task", TimeSpent: 0},
-					// Finished task
 					{ID: 2, ProjectID: &pid, Name: "Done Task", TimeSpent: 100, FinishedAt: finishedAt},
 				}, nil
 			},
@@ -982,55 +1036,6 @@ func TestRepository_GetTaskTimeEntries(t *testing.T) {
 		repo := NewRepository(mock)
 
 		_, err := repo.GetTaskTimeEntries(context.Background(), 1)
-		assert.Error(t, err)
-		assert.NotErrorIs(t, err, ErrNotFound)
-	})
-}
-
-func TestRepository_ToggleTodo(t *testing.T) {
-	t.Run("maps response correctly", func(t *testing.T) {
-		mock := &mockQuerier{
-			toggleTodoFn: func(ctx context.Context, id int32) (tasksdb.Todo, error) {
-				return tasksdb.Todo{
-					ID:     id,
-					TaskID: 5,
-					Name:   "My Todo",
-					IsDone: true,
-				}, nil
-			},
-		}
-		repo := NewRepository(mock)
-
-		got, err := repo.ToggleTodo(context.Background(), 3)
-		require.NoError(t, err)
-
-		assert.Equal(t, int32(3), got.ID)
-		assert.Equal(t, int32(5), got.TaskID)
-		assert.Equal(t, "My Todo", got.Name)
-		assert.True(t, got.IsDone)
-	})
-
-	t.Run("returns ErrNotFound on pgx.ErrNoRows", func(t *testing.T) {
-		mock := &mockQuerier{
-			toggleTodoFn: func(ctx context.Context, id int32) (tasksdb.Todo, error) {
-				return tasksdb.Todo{}, pgx.ErrNoRows
-			},
-		}
-		repo := NewRepository(mock)
-
-		_, err := repo.ToggleTodo(context.Background(), 999)
-		assert.ErrorIs(t, err, ErrNotFound)
-	})
-
-	t.Run("returns error from querier", func(t *testing.T) {
-		mock := &mockQuerier{
-			toggleTodoFn: func(ctx context.Context, id int32) (tasksdb.Todo, error) {
-				return tasksdb.Todo{}, errors.New("db error")
-			},
-		}
-		repo := NewRepository(mock)
-
-		_, err := repo.ToggleTodo(context.Background(), 1)
 		assert.Error(t, err)
 		assert.NotErrorIs(t, err, ErrNotFound)
 	})

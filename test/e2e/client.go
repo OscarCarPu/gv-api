@@ -93,8 +93,31 @@ type TimeEntryResponse struct {
 	Comment    *string `json:"comment"`
 }
 
-type FinishRequest struct {
+type UpdateProjectRequest struct {
+	Name        *string `json:"name,omitempty"`
+	Description *string `json:"description,omitempty"`
+	ParentID    *int32  `json:"parent_id,omitempty"`
+	StartedAt   *string `json:"started_at,omitempty"`
+	FinishedAt  *string `json:"finished_at,omitempty"`
+}
+
+type UpdateTaskRequest struct {
+	Name        *string `json:"name,omitempty"`
+	Description *string `json:"description,omitempty"`
+	ProjectID   *int32  `json:"project_id,omitempty"`
+	StartedAt   *string `json:"started_at,omitempty"`
+	FinishedAt  *string `json:"finished_at,omitempty"`
+}
+
+type UpdateTodoRequest struct {
+	Name   *string `json:"name,omitempty"`
+	IsDone *bool   `json:"is_done,omitempty"`
+}
+
+type UpdateTimeEntryRequest struct {
+	StartedAt  *string `json:"started_at,omitempty"`
 	FinishedAt *string `json:"finished_at,omitempty"`
+	Comment    *string `json:"comment,omitempty"`
 }
 
 type TaskDetailResponse struct {
@@ -313,17 +336,17 @@ func (c *APIClient) GetProjectChildren(t *testing.T, id int32) ProjectChildrenRe
 	return out
 }
 
-func (c *APIClient) FinishProject(t *testing.T, id int32, req FinishRequest) ProjectResponse {
+func (c *APIClient) UpdateProject(t *testing.T, id int32, req UpdateProjectRequest) ProjectResponse {
 	t.Helper()
 	body, _ := json.Marshal(req)
-	resp := c.do(t, http.MethodPatch, fmt.Sprintf("/tasks/projects/%d/finish", id), body)
+	resp := c.do(t, http.MethodPatch, fmt.Sprintf("/tasks/projects/%d", id), body)
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("FinishProject: got status %d, want 200", resp.StatusCode)
+		t.Fatalf("UpdateProject: got status %d, want 200", resp.StatusCode)
 	}
 	var out ProjectResponse
 	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
-		t.Fatalf("FinishProject: decode: %v", err)
+		t.Fatalf("UpdateProject: decode: %v", err)
 	}
 	return out
 }
@@ -357,17 +380,17 @@ func (c *APIClient) GetTaskTimeEntries(t *testing.T, id int32) TaskTimeEntriesRe
 	return out
 }
 
-func (c *APIClient) FinishTask(t *testing.T, id int32, req FinishRequest) TaskResponse {
+func (c *APIClient) UpdateTask(t *testing.T, id int32, req UpdateTaskRequest) TaskResponse {
 	t.Helper()
 	body, _ := json.Marshal(req)
-	resp := c.do(t, http.MethodPatch, fmt.Sprintf("/tasks/tasks/%d/finish", id), body)
+	resp := c.do(t, http.MethodPatch, fmt.Sprintf("/tasks/tasks/%d", id), body)
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("FinishTask: got status %d, want 200", resp.StatusCode)
+		t.Fatalf("UpdateTask: got status %d, want 200", resp.StatusCode)
 	}
 	var out TaskResponse
 	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
-		t.Fatalf("FinishTask: decode: %v", err)
+		t.Fatalf("UpdateTask: decode: %v", err)
 	}
 	return out
 }
@@ -387,16 +410,17 @@ func (c *APIClient) CreateTodo(t *testing.T, req CreateTodoRequest) TodoResponse
 	return out
 }
 
-func (c *APIClient) ToggleTodo(t *testing.T, id int32) TodoResponse {
+func (c *APIClient) UpdateTodo(t *testing.T, id int32, req UpdateTodoRequest) TodoResponse {
 	t.Helper()
-	resp := c.do(t, http.MethodPatch, fmt.Sprintf("/tasks/todos/%d/toggle", id), nil)
+	body, _ := json.Marshal(req)
+	resp := c.do(t, http.MethodPatch, fmt.Sprintf("/tasks/todos/%d", id), body)
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("ToggleTodo: got status %d, want 200", resp.StatusCode)
+		t.Fatalf("UpdateTodo: got status %d, want 200", resp.StatusCode)
 	}
 	var out TodoResponse
 	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
-		t.Fatalf("ToggleTodo: decode: %v", err)
+		t.Fatalf("UpdateTodo: decode: %v", err)
 	}
 	return out
 }
@@ -416,17 +440,17 @@ func (c *APIClient) CreateTimeEntry(t *testing.T, req CreateTimeEntryRequest) Ti
 	return out
 }
 
-func (c *APIClient) FinishTimeEntry(t *testing.T, id int32, req FinishRequest) TimeEntryResponse {
+func (c *APIClient) UpdateTimeEntry(t *testing.T, id int32, req UpdateTimeEntryRequest) TimeEntryResponse {
 	t.Helper()
 	body, _ := json.Marshal(req)
-	resp := c.do(t, http.MethodPatch, fmt.Sprintf("/tasks/time-entries/%d/finish", id), body)
+	resp := c.do(t, http.MethodPatch, fmt.Sprintf("/tasks/time-entries/%d", id), body)
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("FinishTimeEntry: got status %d, want 200", resp.StatusCode)
+		t.Fatalf("UpdateTimeEntry: got status %d, want 200", resp.StatusCode)
 	}
 	var out TimeEntryResponse
 	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
-		t.Fatalf("FinishTimeEntry: decode: %v", err)
+		t.Fatalf("UpdateTimeEntry: decode: %v", err)
 	}
 	return out
 }

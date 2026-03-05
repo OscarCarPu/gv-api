@@ -20,15 +20,15 @@ type Repository interface {
 	CreateTask(ctx context.Context, projectID *int32, name string, description *string, dueAt *time.Time) (TaskResponse, error)
 	CreateTodo(ctx context.Context, taskID int32, name string) (TodoResponse, error)
 	CreateTimeEntry(ctx context.Context, taskID int32, startedAt time.Time, finishedAt *time.Time, comment *string) (TimeEntryResponse, error)
-	FinishTimeEntry(ctx context.Context, id int32, finishedAt time.Time) (TimeEntryResponse, error)
-	FinishTask(ctx context.Context, id int32, finishedAt time.Time) (TaskResponse, error)
-	FinishProject(ctx context.Context, id int32, finishedAt time.Time) (ProjectResponse, error)
+	UpdateProject(ctx context.Context, req UpdateProjectRequest) (ProjectResponse, error)
+	UpdateTask(ctx context.Context, req UpdateTaskRequest) (TaskResponse, error)
+	UpdateTodo(ctx context.Context, req UpdateTodoRequest) (TodoResponse, error)
+	UpdateTimeEntry(ctx context.Context, req UpdateTimeEntryRequest) (TimeEntryResponse, error)
 	GetRootProjects(ctx context.Context) ([]ProjectResponse, error)
 	GetActiveProjects(ctx context.Context) ([]ActiveProject, error)
 	GetUnfinishedTasks(ctx context.Context) ([]UnfinishedTask, error)
 	GetProjectChildren(ctx context.Context, projectID int32) (ProjectChildrenResponse, error)
 	GetTaskTimeEntries(ctx context.Context, taskID int32) (TaskTimeEntriesResponse, error)
-	ToggleTodo(ctx context.Context, id int32) (TodoResponse, error)
 }
 
 type PostgresRepository struct {
@@ -121,8 +121,110 @@ func (r *PostgresRepository) CreateTodo(ctx context.Context, taskID int32, name 
 	}, nil
 }
 
-func (r *PostgresRepository) ToggleTodo(ctx context.Context, id int32) (TodoResponse, error) {
-	row, err := r.q.ToggleTodo(ctx, id)
+func (r *PostgresRepository) UpdateProject(ctx context.Context, req UpdateProjectRequest) (ProjectResponse, error) {
+	params := tasksdb.UpdateProjectParams{ID: req.ID}
+	if req.Name != nil {
+		params.SetName = true
+		params.Name = *req.Name
+	}
+	if req.Description != nil {
+		params.SetDescription = true
+		params.Description = *req.Description
+	}
+	if req.DueAt != nil {
+		params.SetDueAt = true
+		params.DueAt = *req.DueAt
+	}
+	if req.ParentID != nil {
+		params.SetParentID = true
+		params.ParentID = *req.ParentID
+	}
+	if req.StartedAt != nil {
+		params.SetStartedAt = true
+		params.StartedAt = pgtype.Timestamp{Time: *req.StartedAt, Valid: true}
+	}
+	if req.FinishedAt != nil {
+		params.SetFinishedAt = true
+		params.FinishedAt = pgtype.Timestamp{Time: *req.FinishedAt, Valid: true}
+	}
+
+	row, err := r.q.UpdateProject(ctx, params)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return ProjectResponse{}, ErrNotFound
+		}
+		return ProjectResponse{}, err
+	}
+
+	return ProjectResponse{
+		ID:          row.ID,
+		Name:        row.Name,
+		Description: row.Description,
+		DueAt:       pgDateToPtr(row.DueAt),
+		ParentID:    row.ParentID,
+		StartedAt:   pgTimestampToPtr(row.StartedAt),
+		FinishedAt:  pgTimestampToPtr(row.FinishedAt),
+	}, nil
+}
+
+func (r *PostgresRepository) UpdateTask(ctx context.Context, req UpdateTaskRequest) (TaskResponse, error) {
+	params := tasksdb.UpdateTaskParams{ID: req.ID}
+	if req.Name != nil {
+		params.SetName = true
+		params.Name = *req.Name
+	}
+	if req.Description != nil {
+		params.SetDescription = true
+		params.Description = *req.Description
+	}
+	if req.DueAt != nil {
+		params.SetDueAt = true
+		params.DueAt = *req.DueAt
+	}
+	if req.ProjectID != nil {
+		params.SetProjectID = true
+		params.ProjectID = *req.ProjectID
+	}
+	if req.StartedAt != nil {
+		params.SetStartedAt = true
+		params.StartedAt = pgtype.Timestamp{Time: *req.StartedAt, Valid: true}
+	}
+	if req.FinishedAt != nil {
+		params.SetFinishedAt = true
+		params.FinishedAt = pgtype.Timestamp{Time: *req.FinishedAt, Valid: true}
+	}
+
+	row, err := r.q.UpdateTask(ctx, params)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return TaskResponse{}, ErrNotFound
+		}
+		return TaskResponse{}, err
+	}
+
+	return TaskResponse{
+		ID:          row.ID,
+		ProjectID:   row.ProjectID,
+		Name:        row.Name,
+		Description: row.Description,
+		DueAt:       pgDateToPtr(row.DueAt),
+		StartedAt:   pgTimestampToPtr(row.StartedAt),
+		FinishedAt:  pgTimestampToPtr(row.FinishedAt),
+	}, nil
+}
+
+func (r *PostgresRepository) UpdateTodo(ctx context.Context, req UpdateTodoRequest) (TodoResponse, error) {
+	params := tasksdb.UpdateTodoParams{ID: req.ID}
+	if req.Name != nil {
+		params.SetName = true
+		params.Name = *req.Name
+	}
+	if req.IsDone != nil {
+		params.SetIsDone = true
+		params.IsDone = *req.IsDone
+	}
+
+	row, err := r.q.UpdateTodo(ctx, params)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return TodoResponse{}, ErrNotFound
@@ -135,6 +237,38 @@ func (r *PostgresRepository) ToggleTodo(ctx context.Context, id int32) (TodoResp
 		TaskID: row.TaskID,
 		Name:   row.Name,
 		IsDone: row.IsDone,
+	}, nil
+}
+
+func (r *PostgresRepository) UpdateTimeEntry(ctx context.Context, req UpdateTimeEntryRequest) (TimeEntryResponse, error) {
+	params := tasksdb.UpdateTimeEntryParams{ID: req.ID}
+	if req.StartedAt != nil {
+		params.SetStartedAt = true
+		params.StartedAt = pgtype.Timestamp{Time: *req.StartedAt, Valid: true}
+	}
+	if req.FinishedAt != nil {
+		params.SetFinishedAt = true
+		params.FinishedAt = pgtype.Timestamp{Time: *req.FinishedAt, Valid: true}
+	}
+	if req.Comment != nil {
+		params.SetComment = true
+		params.Comment = *req.Comment
+	}
+
+	row, err := r.q.UpdateTimeEntry(ctx, params)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return TimeEntryResponse{}, ErrNotFound
+		}
+		return TimeEntryResponse{}, err
+	}
+
+	return TimeEntryResponse{
+		ID:         row.ID,
+		TaskID:     row.TaskID,
+		StartedAt:  row.StartedAt.Time,
+		FinishedAt: pgTimestampToPtr(row.FinishedAt),
+		Comment:    row.Comment,
 	}, nil
 }
 
@@ -165,78 +299,6 @@ func (r *PostgresRepository) CreateTimeEntry(ctx context.Context, taskID int32, 
 	}, nil
 }
 
-func (r *PostgresRepository) FinishTimeEntry(ctx context.Context, id int32, finishedAt time.Time) (TimeEntryResponse, error) {
-	pgFinishedAt := pgtype.Timestamp{Time: finishedAt, Valid: true}
-
-	row, err := r.q.FinishTimeEntry(ctx, tasksdb.FinishTimeEntryParams{
-		ID:         id,
-		FinishedAt: pgFinishedAt,
-	})
-	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			return TimeEntryResponse{}, ErrNotFound
-		}
-		return TimeEntryResponse{}, err
-	}
-
-	return TimeEntryResponse{
-		ID:         row.ID,
-		TaskID:     row.TaskID,
-		StartedAt:  row.StartedAt.Time,
-		FinishedAt: pgTimestampToPtr(row.FinishedAt),
-		Comment:    row.Comment,
-	}, nil
-}
-
-func (r *PostgresRepository) FinishTask(ctx context.Context, id int32, finishedAt time.Time) (TaskResponse, error) {
-	pgFinishedAt := pgtype.Timestamp{Time: finishedAt, Valid: true}
-
-	row, err := r.q.FinishTask(ctx, tasksdb.FinishTaskParams{
-		ID:         id,
-		FinishedAt: pgFinishedAt,
-	})
-	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			return TaskResponse{}, ErrNotFound
-		}
-		return TaskResponse{}, err
-	}
-
-	return TaskResponse{
-		ID:          row.ID,
-		ProjectID:   row.ProjectID,
-		Name:        row.Name,
-		Description: row.Description,
-		DueAt:       pgDateToPtr(row.DueAt),
-		StartedAt:   pgTimestampToPtr(row.StartedAt),
-		FinishedAt:  pgTimestampToPtr(row.FinishedAt),
-	}, nil
-}
-
-func (r *PostgresRepository) FinishProject(ctx context.Context, id int32, finishedAt time.Time) (ProjectResponse, error) {
-	pgFinishedAt := pgtype.Timestamp{Time: finishedAt, Valid: true}
-
-	row, err := r.q.FinishProject(ctx, tasksdb.FinishProjectParams{
-		ID:         id,
-		FinishedAt: pgFinishedAt,
-	})
-	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			return ProjectResponse{}, ErrNotFound
-		}
-		return ProjectResponse{}, err
-	}
-
-	return ProjectResponse{
-		ID:          row.ID,
-		Name:        row.Name,
-		Description: row.Description,
-		DueAt:       pgDateToPtr(row.DueAt),
-		ParentID:    row.ParentID,
-		StartedAt:   pgTimestampToPtr(row.StartedAt),
-		FinishedAt:  pgTimestampToPtr(row.FinishedAt),
-	}, nil
-}
 
 func (r *PostgresRepository) GetActiveProjects(ctx context.Context) ([]ActiveProject, error) {
 	rows, err := r.q.GetActiveProjects(ctx)
