@@ -83,10 +83,10 @@ LEFT JOIN todos td ON td.task_id = tt.id
 ORDER BY tt.finished_at NULLS FIRST, tt.name, todo_id;
 
 -- name: GetTimeEntriesByTaskID :many
-SELECT id, task_id, started_at, finished_at, comment
-FROM time_entries
-WHERE task_id = $1
-ORDER BY started_at;
-
--- name: TaskExists :one
-SELECT EXISTS(SELECT 1 FROM tasks WHERE id = $1);
+SELECT
+    t.id AS task_id, t.project_id, t.name, t.description, t.due_at, t.started_at AS task_started_at, t.finished_at AS task_finished_at,
+    te.id AS time_entry_id, te.started_at AS entry_started_at, te.finished_at AS entry_finished_at, te.comment
+FROM tasks t
+LEFT JOIN time_entries te ON te.task_id = t.id
+WHERE t.id = $1
+ORDER BY te.started_at;

@@ -78,8 +78,19 @@ type FinishProjectRequest struct {
 }
 
 type TaskTimeEntriesResponse struct {
-	TotalTimeSpent int64               `json:"total_time_spent"`
-	Entries        []TimeEntryResponse `json:"entries"`
+	Task        TaskDetailResponse  `json:"task"`
+	TimeEntries []TimeEntryResponse `json:"time_entries"`
+}
+
+type TaskDetailResponse struct {
+	ID          int32      `json:"id"`
+	ProjectID   *int32     `json:"project_id"`
+	Name        string     `json:"name"`
+	Description *string    `json:"description"`
+	DueAt       *time.Time `json:"due_at"`
+	StartedAt   *time.Time `json:"started_at"`
+	FinishedAt  *time.Time `json:"finished_at"`
+	TimeSpent   int64      `json:"time_spent"`
 }
 
 type ActiveTreeNode struct {

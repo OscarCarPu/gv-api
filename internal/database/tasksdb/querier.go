@@ -20,9 +20,8 @@ type Querier interface {
 	GetProjectWithDescendants(ctx context.Context, id int32) ([]GetProjectWithDescendantsRow, error)
 	GetRootProjects(ctx context.Context) ([]GetRootProjectsRow, error)
 	GetTasksByProjectIDs(ctx context.Context, projectIds []int32) ([]GetTasksByProjectIDsRow, error)
-	GetTimeEntriesByTaskID(ctx context.Context, taskID int32) ([]TimeEntry, error)
+	GetTimeEntriesByTaskID(ctx context.Context, id int32) ([]GetTimeEntriesByTaskIDRow, error)
 	GetUnfinishedTasks(ctx context.Context) ([]GetUnfinishedTasksRow, error)
-	TaskExists(ctx context.Context, id int32) (bool, error)
 }
 
 var _ Querier = (*Queries)(nil)

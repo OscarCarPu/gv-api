@@ -532,37 +532,63 @@ func (r *PostgresRepository) GetTaskTimeEntries(ctx context.Context, taskID int3
 	}
 
 	if len(rows) == 0 {
-		exists, err := r.q.TaskExists(ctx, taskID)
-		if err != nil {
-			return TaskTimeEntriesResponse{}, err
-		}
-		if !exists {
-			return TaskTimeEntriesResponse{}, ErrNotFound
-		}
-		return TaskTimeEntriesResponse{Entries: []TimeEntryResponse{}}, nil
+		return TaskTimeEntriesResponse{}, ErrNotFound
 	}
 
-	entries := make([]TimeEntryResponse, len(rows))
-	var totalTimeSpent int64
-	for i, row := range rows {
-		var finishedAt *time.Time
-		if row.FinishedAt.Valid {
-			t := row.FinishedAt.Time
-			finishedAt = &t
-			totalTimeSpent += int64(row.FinishedAt.Time.Sub(row.StartedAt.Time).Seconds())
+	first := rows[0]
+	var dueAt *time.Time
+	if first.DueAt.Valid {
+		t := first.DueAt.Time
+		dueAt = &t
+	}
+	var taskStartedAt *time.Time
+	if first.TaskStartedAt.Valid {
+		t := first.TaskStartedAt.Time
+		taskStartedAt = &t
+	}
+	var taskFinishedAt *time.Time
+	if first.TaskFinishedAt.Valid {
+		t := first.TaskFinishedAt.Time
+		taskFinishedAt = &t
+	}
+
+	var entries []TimeEntryResponse
+	var timeSpent int64
+	for _, row := range rows {
+		if row.TimeEntryID == nil {
+			continue
 		}
-		entries[i] = TimeEntryResponse{
-			ID:         row.ID,
+		var finishedAt *time.Time
+		if row.EntryFinishedAt.Valid {
+			t := row.EntryFinishedAt.Time
+			finishedAt = &t
+			timeSpent += int64(row.EntryFinishedAt.Time.Sub(row.EntryStartedAt.Time).Seconds())
+		}
+		entries = append(entries, TimeEntryResponse{
+			ID:         *row.TimeEntryID,
 			TaskID:     row.TaskID,
-			StartedAt:  row.StartedAt.Time,
+			StartedAt:  row.EntryStartedAt.Time,
 			FinishedAt: finishedAt,
 			Comment:    row.Comment,
-		}
+		})
+	}
+
+	if entries == nil {
+		entries = []TimeEntryResponse{}
 	}
 
 	return TaskTimeEntriesResponse{
-		TotalTimeSpent: totalTimeSpent,
-		Entries:        entries,
+		Task: TaskDetailResponse{
+			ID:          first.TaskID,
+			ProjectID:   first.ProjectID,
+			Name:        first.Name,
+			Description: first.Description,
+			DueAt:       dueAt,
+			StartedAt:   taskStartedAt,
+			FinishedAt:  taskFinishedAt,
+			TimeSpent:   timeSpent,
+		},
+		TimeEntries: entries,
 	}, nil
 }
 

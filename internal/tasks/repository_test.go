@@ -27,8 +27,7 @@ type mockQuerier struct {
 	getUnfinishedTasksFn         func(ctx context.Context) ([]tasksdb.GetUnfinishedTasksRow, error)
 	getProjectWithDescendantsFn  func(ctx context.Context, id int32) ([]tasksdb.GetProjectWithDescendantsRow, error)
 	getTasksByProjectIDsFn       func(ctx context.Context, projectIds []int32) ([]tasksdb.GetTasksByProjectIDsRow, error)
-	getTimeEntriesByTaskIDFn     func(ctx context.Context, taskID int32) ([]tasksdb.TimeEntry, error)
-	taskExistsFn                 func(ctx context.Context, id int32) (bool, error)
+	getTimeEntriesByTaskIDFn     func(ctx context.Context, id int32) ([]tasksdb.GetTimeEntriesByTaskIDRow, error)
 }
 
 func (m *mockQuerier) CreateProject(ctx context.Context, arg tasksdb.CreateProjectParams) (tasksdb.CreateProjectRow, error) {
@@ -115,18 +114,11 @@ func (m *mockQuerier) GetTasksByProjectIDs(ctx context.Context, projectIds []int
 	return nil, nil
 }
 
-func (m *mockQuerier) GetTimeEntriesByTaskID(ctx context.Context, taskID int32) ([]tasksdb.TimeEntry, error) {
+func (m *mockQuerier) GetTimeEntriesByTaskID(ctx context.Context, id int32) ([]tasksdb.GetTimeEntriesByTaskIDRow, error) {
 	if m.getTimeEntriesByTaskIDFn != nil {
-		return m.getTimeEntriesByTaskIDFn(ctx, taskID)
+		return m.getTimeEntriesByTaskIDFn(ctx, id)
 	}
 	return nil, nil
-}
-
-func (m *mockQuerier) TaskExists(ctx context.Context, id int32) (bool, error) {
-	if m.taskExistsFn != nil {
-		return m.taskExistsFn(ctx, id)
-	}
-	return false, nil
 }
 
 

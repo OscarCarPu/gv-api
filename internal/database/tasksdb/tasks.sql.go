@@ -414,26 +414,49 @@ func (q *Queries) GetTasksByProjectIDs(ctx context.Context, projectIds []int32) 
 }
 
 const getTimeEntriesByTaskID = `-- name: GetTimeEntriesByTaskID :many
-SELECT id, task_id, started_at, finished_at, comment
-FROM time_entries
-WHERE task_id = $1
-ORDER BY started_at
+SELECT
+    t.id AS task_id, t.project_id, t.name, t.description, t.due_at, t.started_at AS task_started_at, t.finished_at AS task_finished_at,
+    te.id AS time_entry_id, te.started_at AS entry_started_at, te.finished_at AS entry_finished_at, te.comment
+FROM tasks t
+LEFT JOIN time_entries te ON te.task_id = t.id
+WHERE t.id = $1
+ORDER BY te.started_at
 `
 
-func (q *Queries) GetTimeEntriesByTaskID(ctx context.Context, taskID int32) ([]TimeEntry, error) {
-	rows, err := q.db.Query(ctx, getTimeEntriesByTaskID, taskID)
+type GetTimeEntriesByTaskIDRow struct {
+	TaskID          int32            `db:"task_id" json:"task_id"`
+	ProjectID       *int32           `db:"project_id" json:"project_id"`
+	Name            string           `db:"name" json:"name"`
+	Description     *string          `db:"description" json:"description"`
+	DueAt           pgtype.Date      `db:"due_at" json:"due_at"`
+	TaskStartedAt   pgtype.Timestamp `db:"task_started_at" json:"task_started_at"`
+	TaskFinishedAt  pgtype.Timestamp `db:"task_finished_at" json:"task_finished_at"`
+	TimeEntryID     *int32           `db:"time_entry_id" json:"time_entry_id"`
+	EntryStartedAt  pgtype.Timestamp `db:"entry_started_at" json:"entry_started_at"`
+	EntryFinishedAt pgtype.Timestamp `db:"entry_finished_at" json:"entry_finished_at"`
+	Comment         *string          `db:"comment" json:"comment"`
+}
+
+func (q *Queries) GetTimeEntriesByTaskID(ctx context.Context, id int32) ([]GetTimeEntriesByTaskIDRow, error) {
+	rows, err := q.db.Query(ctx, getTimeEntriesByTaskID, id)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	items := []TimeEntry{}
+	items := []GetTimeEntriesByTaskIDRow{}
 	for rows.Next() {
-		var i TimeEntry
+		var i GetTimeEntriesByTaskIDRow
 		if err := rows.Scan(
-			&i.ID,
 			&i.TaskID,
-			&i.StartedAt,
-			&i.FinishedAt,
+			&i.ProjectID,
+			&i.Name,
+			&i.Description,
+			&i.DueAt,
+			&i.TaskStartedAt,
+			&i.TaskFinishedAt,
+			&i.TimeEntryID,
+			&i.EntryStartedAt,
+			&i.EntryFinishedAt,
 			&i.Comment,
 		); err != nil {
 			return nil, err
@@ -483,15 +506,4 @@ func (q *Queries) GetUnfinishedTasks(ctx context.Context) ([]GetUnfinishedTasksR
 		return nil, err
 	}
 	return items, nil
-}
-
-const taskExists = `-- name: TaskExists :one
-SELECT EXISTS(SELECT 1 FROM tasks WHERE id = $1)
-`
-
-func (q *Queries) TaskExists(ctx context.Context, id int32) (bool, error) {
-	row := q.db.QueryRow(ctx, taskExists, id)
-	var exists bool
-	err := row.Scan(&exists)
-	return exists, err
 }

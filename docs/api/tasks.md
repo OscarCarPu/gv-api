@@ -308,49 +308,49 @@
   - **Code:** `200 OK`
   - **Content:**
     ```json
- {
-  "project": {
-    "id": 1,
-    "parent_id": null,
-    "name": "My Project",
-    "description": "This is my project.",
-    "due_at": "2025-01-01",
-    "started_at": "2024-12-01T08:00:00Z",
-    "finished_at": null,
-    "time_spent": 7200
-  },
-  "children": [
     {
-      "id": 2,
-      "type": "project",
-      "parent_id": 1,
-      "name": "Sub-Project",
-      "description": "A sub-project.",
-      "due_at": "2025-06-01",
-      "started_at": "2025-01-15T08:00:00Z",
-      "finished_at": null,
-      "time_spent": 7200
-    },
-    {
-      "id": 1,
-      "type": "task",
-      "project_id": 1,
-      "name": "My Task",
-      "description": "Task description.",
-      "due_at": "2025-06-01",
-      "started_at": "2025-02-15T08:00:00Z",
-      "finished_at": null,
-      "time_spent": 5400,
-      "todos": [
+      "project": {
+        "id": 1,
+        "parent_id": null,
+        "name": "My Project",
+        "description": "This is my project.",
+        "due_at": "2025-01-01",
+        "started_at": "2024-12-01T08:00:00Z",
+        "finished_at": null,
+        "time_spent": 7200
+      },
+      "children": [
+        {
+          "id": 2,
+          "type": "project",
+          "parent_id": 1,
+          "name": "Sub-Project",
+          "description": "A sub-project.",
+          "due_at": "2025-06-01",
+          "started_at": "2025-01-15T08:00:00Z",
+          "finished_at": null,
+          "time_spent": 7200
+        },
         {
           "id": 1,
-          "task_id": 1,
-          "name": "My Todo"
+          "type": "task",
+          "project_id": 1,
+          "name": "My Task",
+          "description": "Task description.",
+          "due_at": "2025-06-01",
+          "started_at": "2025-02-15T08:00:00Z",
+          "finished_at": null,
+          "time_spent": 5400,
+          "todos": [
+            {
+              "id": 1,
+              "task_id": 1,
+              "name": "My Todo"
+            }
+          ]
         }
       ]
     }
-  ]
-} 
     ```
 - **Error Responses:**
   - **Code:** `404 Not Found`
@@ -362,14 +362,23 @@
 
 - **Method:** `GET`
 - **Endpoint:** `/tasks/tasks/:id/time-entries`
-- **Description:** Returns all time entries for the given task, along with the total time spent in seconds.
+- **Description:** Returns the task details and all its time entries, along with the total time spent in seconds.
 - **Success Response:**
   - **Code:** `200 OK`
   - **Content:**
     ```json
     {
-      "total_time_spent": 5400,
-      "entries": [
+      "task": {
+        "id": 1,
+        "project_id": 5,
+        "name": "Implement feature X",
+        "description": "...",
+        "due_at": "2025-04-01T00:00:00Z",
+        "started_at": "2025-03-01T09:00:00Z",
+        "finished_at": null,
+        "time_spent": 5400
+      },
+      "time_entries": [
         {
           "id": 1,
           "task_id": 1,
