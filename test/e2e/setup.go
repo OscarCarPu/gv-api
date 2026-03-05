@@ -67,7 +67,7 @@ func truncateTables(t *testing.T) {
 	}
 	defer conn.Close(ctx)
 
-	_, err = conn.Exec(ctx, "TRUNCATE habits, habit_logs CASCADE")
+	_, err = conn.Exec(ctx, "TRUNCATE habits, habit_logs, projects, tasks, todos, time_entries CASCADE")
 	if err != nil {
 		t.Fatalf("failed to truncate tables: %v", err)
 	}

@@ -34,6 +34,119 @@ type LogRequest struct {
 	Value   float32 `json:"value"`
 }
 
+// Tasks DTOs
+
+type CreateProjectRequest struct {
+	Name        string  `json:"name"`
+	Description *string `json:"description"`
+	ParentID    *int32  `json:"parent_id,omitempty"`
+}
+
+type ProjectResponse struct {
+	ID          int32   `json:"id"`
+	Name        string  `json:"name"`
+	Description *string `json:"description"`
+	ParentID    *int32  `json:"parent_id"`
+	StartedAt   *string `json:"started_at"`
+	FinishedAt  *string `json:"finished_at"`
+}
+
+type CreateTaskRequest struct {
+	ProjectID   *int32  `json:"project_id,omitempty"`
+	Name        string  `json:"name"`
+	Description *string `json:"description"`
+}
+
+type TaskResponse struct {
+	ID          int32   `json:"id"`
+	ProjectID   *int32  `json:"project_id"`
+	Name        string  `json:"name"`
+	Description *string `json:"description"`
+	StartedAt   *string `json:"started_at"`
+	FinishedAt  *string `json:"finished_at"`
+}
+
+type CreateTodoRequest struct {
+	TaskID int32  `json:"task_id"`
+	Name   string `json:"name"`
+}
+
+type TodoResponse struct {
+	ID     int32  `json:"id"`
+	TaskID int32  `json:"task_id"`
+	Name   string `json:"name"`
+	IsDone bool   `json:"is_done"`
+}
+
+type CreateTimeEntryRequest struct {
+	TaskID     int32   `json:"task_id"`
+	StartedAt  string  `json:"started_at"`
+	FinishedAt *string `json:"finished_at,omitempty"`
+	Comment    *string `json:"comment,omitempty"`
+}
+
+type TimeEntryResponse struct {
+	ID         int32   `json:"id"`
+	TaskID     int32   `json:"task_id"`
+	StartedAt  string  `json:"started_at"`
+	FinishedAt *string `json:"finished_at"`
+	Comment    *string `json:"comment"`
+}
+
+type FinishRequest struct {
+	FinishedAt *string `json:"finished_at,omitempty"`
+}
+
+type TaskDetailResponse struct {
+	ID          int32   `json:"id"`
+	ProjectID   *int32  `json:"project_id"`
+	Name        string  `json:"name"`
+	Description *string `json:"description"`
+	StartedAt   *string `json:"started_at"`
+	FinishedAt  *string `json:"finished_at"`
+	TimeSpent   int64   `json:"time_spent"`
+}
+
+type ProjectDetailResponse struct {
+	ID          int32   `json:"id"`
+	ParentID    *int32  `json:"parent_id"`
+	Name        string  `json:"name"`
+	Description *string `json:"description"`
+	StartedAt   *string `json:"started_at"`
+	FinishedAt  *string `json:"finished_at"`
+	TimeSpent   int64   `json:"time_spent"`
+}
+
+type TaskTimeEntriesResponse struct {
+	Task        TaskDetailResponse  `json:"task"`
+	TimeEntries []TimeEntryResponse `json:"time_entries"`
+}
+
+type ProjectChildNode struct {
+	ID          int32          `json:"id"`
+	Type        string         `json:"type"`
+	Name        string         `json:"name"`
+	Description *string        `json:"description"`
+	StartedAt   *string        `json:"started_at"`
+	FinishedAt  *string        `json:"finished_at"`
+	TimeSpent   int64          `json:"time_spent"`
+	ParentID    *int32         `json:"parent_id,omitempty"`
+	ProjectID   *int32         `json:"project_id,omitempty"`
+	Todos       []TodoResponse `json:"todos,omitempty"`
+}
+
+type ProjectChildrenResponse struct {
+	Project  ProjectDetailResponse `json:"project"`
+	Children []ProjectChildNode    `json:"children"`
+}
+
+type ActiveTreeNode struct {
+	ID       int32            `json:"id"`
+	Type     string           `json:"type"`
+	Name     string           `json:"name"`
+	Children []ActiveTreeNode `json:"children,omitempty"`
+}
+
 // APIClient is a test driver that wraps HTTP calls to the API.
 type APIClient struct {
 	baseURL string
@@ -153,4 +266,181 @@ func (c *APIClient) GetDailyView(t *testing.T, date string) []HabitWithLog {
 		t.Fatalf("failed to decode response: %v", err)
 	}
 	return habits
+}
+
+// Tasks client methods
+
+func (c *APIClient) CreateProject(t *testing.T, req CreateProjectRequest) ProjectResponse {
+	t.Helper()
+	body, _ := json.Marshal(req)
+	resp := c.do(t, http.MethodPost, "/tasks/projects", body)
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusCreated {
+		t.Fatalf("CreateProject: got status %d, want 201", resp.StatusCode)
+	}
+	var out ProjectResponse
+	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+		t.Fatalf("CreateProject: decode: %v", err)
+	}
+	return out
+}
+
+func (c *APIClient) GetRootProjects(t *testing.T) []ProjectResponse {
+	t.Helper()
+	resp := c.do(t, http.MethodGet, "/tasks/projects", nil)
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("GetRootProjects: got status %d, want 200", resp.StatusCode)
+	}
+	var out []ProjectResponse
+	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+		t.Fatalf("GetRootProjects: decode: %v", err)
+	}
+	return out
+}
+
+func (c *APIClient) GetProjectChildren(t *testing.T, id int32) ProjectChildrenResponse {
+	t.Helper()
+	resp := c.do(t, http.MethodGet, fmt.Sprintf("/tasks/projects/%d/children", id), nil)
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("GetProjectChildren: got status %d, want 200", resp.StatusCode)
+	}
+	var out ProjectChildrenResponse
+	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+		t.Fatalf("GetProjectChildren: decode: %v", err)
+	}
+	return out
+}
+
+func (c *APIClient) FinishProject(t *testing.T, id int32, req FinishRequest) ProjectResponse {
+	t.Helper()
+	body, _ := json.Marshal(req)
+	resp := c.do(t, http.MethodPatch, fmt.Sprintf("/tasks/projects/%d/finish", id), body)
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("FinishProject: got status %d, want 200", resp.StatusCode)
+	}
+	var out ProjectResponse
+	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+		t.Fatalf("FinishProject: decode: %v", err)
+	}
+	return out
+}
+
+func (c *APIClient) CreateTask(t *testing.T, req CreateTaskRequest) TaskResponse {
+	t.Helper()
+	body, _ := json.Marshal(req)
+	resp := c.do(t, http.MethodPost, "/tasks/tasks", body)
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusCreated {
+		t.Fatalf("CreateTask: got status %d, want 201", resp.StatusCode)
+	}
+	var out TaskResponse
+	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+		t.Fatalf("CreateTask: decode: %v", err)
+	}
+	return out
+}
+
+func (c *APIClient) GetTaskTimeEntries(t *testing.T, id int32) TaskTimeEntriesResponse {
+	t.Helper()
+	resp := c.do(t, http.MethodGet, fmt.Sprintf("/tasks/tasks/%d/time-entries", id), nil)
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("GetTaskTimeEntries: got status %d, want 200", resp.StatusCode)
+	}
+	var out TaskTimeEntriesResponse
+	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+		t.Fatalf("GetTaskTimeEntries: decode: %v", err)
+	}
+	return out
+}
+
+func (c *APIClient) FinishTask(t *testing.T, id int32, req FinishRequest) TaskResponse {
+	t.Helper()
+	body, _ := json.Marshal(req)
+	resp := c.do(t, http.MethodPatch, fmt.Sprintf("/tasks/tasks/%d/finish", id), body)
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("FinishTask: got status %d, want 200", resp.StatusCode)
+	}
+	var out TaskResponse
+	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+		t.Fatalf("FinishTask: decode: %v", err)
+	}
+	return out
+}
+
+func (c *APIClient) CreateTodo(t *testing.T, req CreateTodoRequest) TodoResponse {
+	t.Helper()
+	body, _ := json.Marshal(req)
+	resp := c.do(t, http.MethodPost, "/tasks/todos", body)
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusCreated {
+		t.Fatalf("CreateTodo: got status %d, want 201", resp.StatusCode)
+	}
+	var out TodoResponse
+	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+		t.Fatalf("CreateTodo: decode: %v", err)
+	}
+	return out
+}
+
+func (c *APIClient) ToggleTodo(t *testing.T, id int32) TodoResponse {
+	t.Helper()
+	resp := c.do(t, http.MethodPatch, fmt.Sprintf("/tasks/todos/%d/toggle", id), nil)
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("ToggleTodo: got status %d, want 200", resp.StatusCode)
+	}
+	var out TodoResponse
+	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+		t.Fatalf("ToggleTodo: decode: %v", err)
+	}
+	return out
+}
+
+func (c *APIClient) CreateTimeEntry(t *testing.T, req CreateTimeEntryRequest) TimeEntryResponse {
+	t.Helper()
+	body, _ := json.Marshal(req)
+	resp := c.do(t, http.MethodPost, "/tasks/time-entries", body)
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusCreated {
+		t.Fatalf("CreateTimeEntry: got status %d, want 201", resp.StatusCode)
+	}
+	var out TimeEntryResponse
+	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+		t.Fatalf("CreateTimeEntry: decode: %v", err)
+	}
+	return out
+}
+
+func (c *APIClient) FinishTimeEntry(t *testing.T, id int32, req FinishRequest) TimeEntryResponse {
+	t.Helper()
+	body, _ := json.Marshal(req)
+	resp := c.do(t, http.MethodPatch, fmt.Sprintf("/tasks/time-entries/%d/finish", id), body)
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("FinishTimeEntry: got status %d, want 200", resp.StatusCode)
+	}
+	var out TimeEntryResponse
+	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+		t.Fatalf("FinishTimeEntry: decode: %v", err)
+	}
+	return out
+}
+
+func (c *APIClient) GetActiveTree(t *testing.T) []ActiveTreeNode {
+	t.Helper()
+	resp := c.do(t, http.MethodGet, "/tasks/tree", nil)
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("GetActiveTree: got status %d, want 200", resp.StatusCode)
+	}
+	var out []ActiveTreeNode
+	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+		t.Fatalf("GetActiveTree: decode: %v", err)
+	}
+	return out
 }

@@ -65,24 +65,27 @@ OUTSIDE_TEST_DB_URL=postgresql://$(POSTGRES_USER):$(POSTGRES_PASSWORD)@127.0.0.1
 
 test-db-setup:
 	@printf "$(CYAN)>>> Starting database...$(NC)\n"
+	@docker compose stop gv-api > /dev/null 2>&1 || true
 	@docker compose up -d --wait db > /dev/null
 	@printf "$(YELLOW)>>> Dropping test database if exists...$(NC)\n"
 	@docker compose exec -T db psql -U $(POSTGRES_USER) -d postgres -c "DROP DATABASE IF EXISTS \"$(TEST_DB)\";" > /dev/null 2>&1
 	@printf "$(YELLOW)>>> Creating test database...$(NC)\n"
 	@docker compose exec -T db psql -U $(POSTGRES_USER) -d postgres -c "CREATE DATABASE \"$(TEST_DB)\";" > /dev/null
 	@printf "$(YELLOW)>>> Running migrations...$(NC)\n"
-	@docker compose exec -T db psql -U $(POSTGRES_USER) -d $(TEST_DB) -f /docker-entrypoint-initdb.d/001_habits.sql > /dev/null
+	@docker compose exec -T db bash -c 'for f in $$(ls /docker-entrypoint-initdb.d/*.sql | sort); do psql -U $(POSTGRES_USER) -d $(TEST_DB) -f "$$f"; done' > /dev/null
 	@printf "$(GREEN)>>> Test database ready$(NC)\n"
 
 test-db-cleanup:
 	@printf "$(YELLOW)>>> Cleaning up test database...$(NC)\n"
+	@docker compose stop gv-api > /dev/null 2>&1 || true
 	@docker compose exec -T db psql -U $(POSTGRES_USER) -d postgres -c "DROP DATABASE IF EXISTS \"$(TEST_DB)\";" > /dev/null 2>&1
+	@docker compose up -d --wait gv-api > /dev/null 2>&1 || true
 	@printf "$(GREEN)>>> Cleanup complete$(NC)\n"
 
 test-api-setup: test-db-setup
 	@printf "$(CYAN)>>> Rebuilding and restarting API with test database...$(NC)\n"
 	@docker compose stop gv-api > /dev/null 2>&1 || true
-	@DATABASE_URL=$(INNER_TEST_DB_URL) docker compose up -d --wait --build gv-api > /dev/null
+	@docker compose -f docker-compose.yaml -f docker-compose.test.yaml up -d --wait --build gv-api > /dev/null
 	@printf "$(GREEN)>>> API ready$(NC)\n"
 
 # All tests: silent, only prints pass/fail

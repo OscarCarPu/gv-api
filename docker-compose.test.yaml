@@ -1,0 +1,4 @@
+services:
+  gv-api:
+    environment:
+      - DATABASE_URL=postgresql://user:password@db:5432/gv-db-tests?sslmode=disable
