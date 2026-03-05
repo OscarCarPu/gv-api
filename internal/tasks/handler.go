@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"strconv"
 
@@ -32,6 +33,15 @@ type Handler struct {
 
 func NewHandler(s ServiceInterface) *Handler {
 	return &Handler{service: s}
+}
+
+func parseIDParam(r *http.Request, entity string) (int32, error) {
+	idStr := chi.URLParam(r, "id")
+	id, err := strconv.Atoi(idStr)
+	if err != nil {
+		return 0, fmt.Errorf("invalid %s id", entity)
+	}
+	return int32(id), nil
 }
 
 func (h *Handler) CreateProject(w http.ResponseWriter, r *http.Request) {
@@ -129,16 +139,15 @@ func (h *Handler) CreateTimeEntry(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) FinishTimeEntry(w http.ResponseWriter, r *http.Request) {
-	idStr := chi.URLParam(r, "id")
-	id, err := strconv.Atoi(idStr)
+	id, err := parseIDParam(r, "time entry")
 	if err != nil {
-		response.Error(w, http.StatusBadRequest, "invalid time entry id")
+		response.Error(w, http.StatusBadRequest, err.Error())
 		return
 	}
 
 	var req FinishTimeEntryRequest
 	_ = json.NewDecoder(r.Body).Decode(&req)
-	req.ID = int32(id)
+	req.ID = id
 
 	entry, err := h.service.FinishTimeEntry(r.Context(), req)
 	if err != nil {
@@ -154,16 +163,15 @@ func (h *Handler) FinishTimeEntry(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) FinishTask(w http.ResponseWriter, r *http.Request) {
-	idStr := chi.URLParam(r, "id")
-	id, err := strconv.Atoi(idStr)
+	id, err := parseIDParam(r, "task")
 	if err != nil {
-		response.Error(w, http.StatusBadRequest, "invalid task id")
+		response.Error(w, http.StatusBadRequest, err.Error())
 		return
 	}
 
 	var req FinishTaskRequest
 	_ = json.NewDecoder(r.Body).Decode(&req)
-	req.ID = int32(id)
+	req.ID = id
 
 	task, err := h.service.FinishTask(r.Context(), req)
 	if err != nil {
@@ -179,16 +187,15 @@ func (h *Handler) FinishTask(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) FinishProject(w http.ResponseWriter, r *http.Request) {
-	idStr := chi.URLParam(r, "id")
-	id, err := strconv.Atoi(idStr)
+	id, err := parseIDParam(r, "project")
 	if err != nil {
-		response.Error(w, http.StatusBadRequest, "invalid project id")
+		response.Error(w, http.StatusBadRequest, err.Error())
 		return
 	}
 
 	var req FinishProjectRequest
 	_ = json.NewDecoder(r.Body).Decode(&req)
-	req.ID = int32(id)
+	req.ID = id
 
 	project, err := h.service.FinishProject(r.Context(), req)
 	if err != nil {
@@ -214,14 +221,13 @@ func (h *Handler) GetActiveTree(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) GetProjectChildren(w http.ResponseWriter, r *http.Request) {
-	idStr := chi.URLParam(r, "id")
-	id, err := strconv.Atoi(idStr)
+	id, err := parseIDParam(r, "project")
 	if err != nil {
-		response.Error(w, http.StatusBadRequest, "invalid project id")
+		response.Error(w, http.StatusBadRequest, err.Error())
 		return
 	}
 
-	result, err := h.service.GetProjectChildren(r.Context(), int32(id))
+	result, err := h.service.GetProjectChildren(r.Context(), id)
 	if err != nil {
 		if errors.Is(err, ErrNotFound) {
 			response.Error(w, http.StatusNotFound, "project not found")
@@ -235,14 +241,13 @@ func (h *Handler) GetProjectChildren(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) GetTaskTimeEntries(w http.ResponseWriter, r *http.Request) {
-	idStr := chi.URLParam(r, "id")
-	id, err := strconv.Atoi(idStr)
+	id, err := parseIDParam(r, "task")
 	if err != nil {
-		response.Error(w, http.StatusBadRequest, "invalid task id")
+		response.Error(w, http.StatusBadRequest, err.Error())
 		return
 	}
 
-	result, err := h.service.GetTaskTimeEntries(r.Context(), int32(id))
+	result, err := h.service.GetTaskTimeEntries(r.Context(), id)
 	if err != nil {
 		if errors.Is(err, ErrNotFound) {
 			response.Error(w, http.StatusNotFound, "task not found")

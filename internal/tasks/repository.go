@@ -37,6 +37,22 @@ func NewRepository(q tasksdb.Querier) *PostgresRepository {
 	return &PostgresRepository{q: q}
 }
 
+func pgTimestampToPtr(ts pgtype.Timestamp) *time.Time {
+	if ts.Valid {
+		t := ts.Time
+		return &t
+	}
+	return nil
+}
+
+func pgDateToPtr(d pgtype.Date) *time.Time {
+	if d.Valid {
+		t := d.Time
+		return &t
+	}
+	return nil
+}
+
 func (r *PostgresRepository) CreateProject(ctx context.Context, name string, description *string, dueAt *time.Time, parentID *int32) (ProjectResponse, error) {
 	var pgDueAt pgtype.Date
 	if dueAt != nil {
@@ -53,17 +69,11 @@ func (r *PostgresRepository) CreateProject(ctx context.Context, name string, des
 		return ProjectResponse{}, err
 	}
 
-	var respDueAt *time.Time
-	if row.DueAt.Valid {
-		t := row.DueAt.Time
-		respDueAt = &t
-	}
-
 	return ProjectResponse{
 		ID:          row.ID,
 		Name:        row.Name,
 		Description: row.Description,
-		DueAt:       respDueAt,
+		DueAt:       pgDateToPtr(row.DueAt),
 		ParentID:    row.ParentID,
 	}, nil
 }
@@ -84,18 +94,12 @@ func (r *PostgresRepository) CreateTask(ctx context.Context, projectID *int32, n
 		return TaskResponse{}, err
 	}
 
-	var respDueAt *time.Time
-	if row.DueAt.Valid {
-		t := row.DueAt.Time
-		respDueAt = &t
-	}
-
 	return TaskResponse{
 		ID:          row.ID,
 		ProjectID:   row.ProjectID,
 		Name:        row.Name,
 		Description: row.Description,
-		DueAt:       respDueAt,
+		DueAt:       pgDateToPtr(row.DueAt),
 	}, nil
 }
 
@@ -133,17 +137,11 @@ func (r *PostgresRepository) CreateTimeEntry(ctx context.Context, taskID int32, 
 		return TimeEntryResponse{}, err
 	}
 
-	var respFinishedAt *time.Time
-	if row.FinishedAt.Valid {
-		t := row.FinishedAt.Time
-		respFinishedAt = &t
-	}
-
 	return TimeEntryResponse{
 		ID:         row.ID,
 		TaskID:     row.TaskID,
 		StartedAt:  row.StartedAt.Time,
-		FinishedAt: respFinishedAt,
+		FinishedAt: pgTimestampToPtr(row.FinishedAt),
 		Comment:    row.Comment,
 	}, nil
 }
@@ -162,17 +160,11 @@ func (r *PostgresRepository) FinishTimeEntry(ctx context.Context, id int32, fini
 		return TimeEntryResponse{}, err
 	}
 
-	var respFinishedAt *time.Time
-	if row.FinishedAt.Valid {
-		t := row.FinishedAt.Time
-		respFinishedAt = &t
-	}
-
 	return TimeEntryResponse{
 		ID:         row.ID,
 		TaskID:     row.TaskID,
 		StartedAt:  row.StartedAt.Time,
-		FinishedAt: respFinishedAt,
+		FinishedAt: pgTimestampToPtr(row.FinishedAt),
 		Comment:    row.Comment,
 	}, nil
 }
@@ -191,32 +183,14 @@ func (r *PostgresRepository) FinishTask(ctx context.Context, id int32, finishedA
 		return TaskResponse{}, err
 	}
 
-	var respDueAt *time.Time
-	if row.DueAt.Valid {
-		t := row.DueAt.Time
-		respDueAt = &t
-	}
-
-	var respStartedAt *time.Time
-	if row.StartedAt.Valid {
-		t := row.StartedAt.Time
-		respStartedAt = &t
-	}
-
-	var respFinishedAt *time.Time
-	if row.FinishedAt.Valid {
-		t := row.FinishedAt.Time
-		respFinishedAt = &t
-	}
-
 	return TaskResponse{
 		ID:          row.ID,
 		ProjectID:   row.ProjectID,
 		Name:        row.Name,
 		Description: row.Description,
-		DueAt:       respDueAt,
-		StartedAt:   respStartedAt,
-		FinishedAt:  respFinishedAt,
+		DueAt:       pgDateToPtr(row.DueAt),
+		StartedAt:   pgTimestampToPtr(row.StartedAt),
+		FinishedAt:  pgTimestampToPtr(row.FinishedAt),
 	}, nil
 }
 
@@ -234,32 +208,14 @@ func (r *PostgresRepository) FinishProject(ctx context.Context, id int32, finish
 		return ProjectResponse{}, err
 	}
 
-	var respDueAt *time.Time
-	if row.DueAt.Valid {
-		t := row.DueAt.Time
-		respDueAt = &t
-	}
-
-	var respStartedAt *time.Time
-	if row.StartedAt.Valid {
-		t := row.StartedAt.Time
-		respStartedAt = &t
-	}
-
-	var respFinishedAt *time.Time
-	if row.FinishedAt.Valid {
-		t := row.FinishedAt.Time
-		respFinishedAt = &t
-	}
-
 	return ProjectResponse{
 		ID:          row.ID,
 		Name:        row.Name,
 		Description: row.Description,
-		DueAt:       respDueAt,
+		DueAt:       pgDateToPtr(row.DueAt),
 		ParentID:    row.ParentID,
-		StartedAt:   respStartedAt,
-		FinishedAt:  respFinishedAt,
+		StartedAt:   pgTimestampToPtr(row.StartedAt),
+		FinishedAt:  pgTimestampToPtr(row.FinishedAt),
 	}, nil
 }
 
@@ -405,30 +361,14 @@ func (r *PostgresRepository) GetProjectChildren(ctx context.Context, projectID i
 			projectTaskTime[*tw.row.ProjectID] += tw.row.TimeSpent
 		}
 
-		var dueAt *time.Time
-		if tw.row.DueAt.Valid {
-			t := tw.row.DueAt.Time
-			dueAt = &t
-		}
-		var startedAt *time.Time
-		if tw.row.StartedAt.Valid {
-			t := tw.row.StartedAt.Time
-			startedAt = &t
-		}
-		var finishedAt *time.Time
-		if tw.row.FinishedAt.Valid {
-			t := tw.row.FinishedAt.Time
-			finishedAt = &t
-		}
-
 		node := ProjectChildNode{
 			ID:          tw.row.ID,
 			Type:        "task",
 			Name:        tw.row.Name,
 			Description: tw.row.Description,
-			DueAt:       dueAt,
-			StartedAt:   startedAt,
-			FinishedAt:  finishedAt,
+			DueAt:       pgDateToPtr(tw.row.DueAt),
+			StartedAt:   pgTimestampToPtr(tw.row.StartedAt),
+			FinishedAt:  pgTimestampToPtr(tw.row.FinishedAt),
 			TimeSpent:   tw.row.TimeSpent,
 			ProjectID:   tw.row.ProjectID,
 			Todos:       tw.todos,
@@ -467,22 +407,6 @@ func (r *PostgresRepository) GetProjectChildren(ctx context.Context, projectID i
 		}
 	}
 
-	// Helper to convert project row to time pointers
-	pgToTime := func(ts pgtype.Timestamp) *time.Time {
-		if ts.Valid {
-			t := ts.Time
-			return &t
-		}
-		return nil
-	}
-	pgDateToTime := func(d pgtype.Date) *time.Time {
-		if d.Valid {
-			t := d.Time
-			return &t
-		}
-		return nil
-	}
-
 	// Build root project response
 	root := descendants[0]
 	project := ProjectDetailResponse{
@@ -490,9 +414,9 @@ func (r *PostgresRepository) GetProjectChildren(ctx context.Context, projectID i
 		ParentID:    root.ParentID,
 		Name:        root.Name,
 		Description: root.Description,
-		DueAt:       pgDateToTime(root.DueAt),
-		StartedAt:   pgToTime(root.StartedAt),
-		FinishedAt:  pgToTime(root.FinishedAt),
+		DueAt:       pgDateToPtr(root.DueAt),
+		StartedAt:   pgTimestampToPtr(root.StartedAt),
+		FinishedAt:  pgTimestampToPtr(root.FinishedAt),
 		TimeSpent:   projectTimeSpent[root.ID],
 	}
 
@@ -505,9 +429,9 @@ func (r *PostgresRepository) GetProjectChildren(ctx context.Context, projectID i
 				Type:        "project",
 				Name:        d.Name,
 				Description: d.Description,
-				DueAt:       pgDateToTime(d.DueAt),
-				StartedAt:   pgToTime(d.StartedAt),
-				FinishedAt:  pgToTime(d.FinishedAt),
+				DueAt:       pgDateToPtr(d.DueAt),
+				StartedAt:   pgTimestampToPtr(d.StartedAt),
+				FinishedAt:  pgTimestampToPtr(d.FinishedAt),
 				TimeSpent:   projectTimeSpent[d.ID],
 				ParentID:    d.ParentID,
 			})
@@ -536,21 +460,6 @@ func (r *PostgresRepository) GetTaskTimeEntries(ctx context.Context, taskID int3
 	}
 
 	first := rows[0]
-	var dueAt *time.Time
-	if first.DueAt.Valid {
-		t := first.DueAt.Time
-		dueAt = &t
-	}
-	var taskStartedAt *time.Time
-	if first.TaskStartedAt.Valid {
-		t := first.TaskStartedAt.Time
-		taskStartedAt = &t
-	}
-	var taskFinishedAt *time.Time
-	if first.TaskFinishedAt.Valid {
-		t := first.TaskFinishedAt.Time
-		taskFinishedAt = &t
-	}
 
 	var entries []TimeEntryResponse
 	var timeSpent int64
@@ -583,9 +492,9 @@ func (r *PostgresRepository) GetTaskTimeEntries(ctx context.Context, taskID int3
 			ProjectID:   first.ProjectID,
 			Name:        first.Name,
 			Description: first.Description,
-			DueAt:       dueAt,
-			StartedAt:   taskStartedAt,
-			FinishedAt:  taskFinishedAt,
+			DueAt:       pgDateToPtr(first.DueAt),
+			StartedAt:   pgTimestampToPtr(first.TaskStartedAt),
+			FinishedAt:  pgTimestampToPtr(first.TaskFinishedAt),
 			TimeSpent:   timeSpent,
 		},
 		TimeEntries: entries,
@@ -600,17 +509,11 @@ func (r *PostgresRepository) GetRootProjects(ctx context.Context) ([]ProjectResp
 
 	projects := make([]ProjectResponse, len(rows))
 	for i, row := range rows {
-		var respDueAt *time.Time
-		if row.DueAt.Valid {
-			t := row.DueAt.Time
-			respDueAt = &t
-		}
-
 		projects[i] = ProjectResponse{
 			ID:          row.ID,
 			Name:        row.Name,
 			Description: row.Description,
-			DueAt:       respDueAt,
+			DueAt:       pgDateToPtr(row.DueAt),
 			ParentID:    row.ParentID,
 		}
 	}

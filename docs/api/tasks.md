@@ -393,4 +393,4 @@
   - **Code:** `404 Not Found`
     - **Content:** `Task not found`
   - **Code:** `500 Internal Server Error`
-    - **Content:** `Failed to get time entries`
+    - **Content:** `Failed to get task time entries`
