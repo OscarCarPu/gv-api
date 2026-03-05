@@ -15,6 +15,8 @@ type Querier interface {
 	CreateTask(ctx context.Context, arg CreateTaskParams) (CreateTaskRow, error)
 	CreateTimeEntry(ctx context.Context, arg CreateTimeEntryParams) (TimeEntry, error)
 	CreateTodo(ctx context.Context, arg CreateTodoParams) (CreateTodoRow, error)
+	FinishProject(ctx context.Context, arg FinishProjectParams) (Project, error)
+	FinishTask(ctx context.Context, arg FinishTaskParams) (Task, error)
 	FinishTimeEntry(ctx context.Context, arg FinishTimeEntryParams) (TimeEntry, error)
 	GetHabitsWithLogs(ctx context.Context, logDate time.Time) ([]GetHabitsWithLogsRow, error)
 	GetRootProjects(ctx context.Context) ([]GetRootProjectsRow, error)

@@ -59,6 +59,14 @@ func (m *mockQuerier) FinishTimeEntry(ctx context.Context, arg sqlc.FinishTimeEn
 	return sqlc.TimeEntry{}, nil
 }
 
+func (m *mockQuerier) FinishTask(ctx context.Context, arg sqlc.FinishTaskParams) (sqlc.Task, error) {
+	return sqlc.Task{}, nil
+}
+
+func (m *mockQuerier) FinishProject(ctx context.Context, arg sqlc.FinishProjectParams) (sqlc.Project, error) {
+	return sqlc.Project{}, nil
+}
+
 func (m *mockQuerier) GetRootProjects(ctx context.Context) ([]sqlc.GetRootProjectsRow, error) {
 	return nil, nil
 }

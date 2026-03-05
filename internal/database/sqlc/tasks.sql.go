@@ -144,6 +144,58 @@ func (q *Queries) CreateTodo(ctx context.Context, arg CreateTodoParams) (CreateT
 	return i, err
 }
 
+const finishProject = `-- name: FinishProject :one
+UPDATE projects SET finished_at = $2
+WHERE id = $1
+RETURNING id, parent_id, name, description, due_at, started_at, finished_at
+`
+
+type FinishProjectParams struct {
+	ID         int32            `db:"id" json:"id"`
+	FinishedAt pgtype.Timestamp `db:"finished_at" json:"finished_at"`
+}
+
+func (q *Queries) FinishProject(ctx context.Context, arg FinishProjectParams) (Project, error) {
+	row := q.db.QueryRow(ctx, finishProject, arg.ID, arg.FinishedAt)
+	var i Project
+	err := row.Scan(
+		&i.ID,
+		&i.ParentID,
+		&i.Name,
+		&i.Description,
+		&i.DueAt,
+		&i.StartedAt,
+		&i.FinishedAt,
+	)
+	return i, err
+}
+
+const finishTask = `-- name: FinishTask :one
+UPDATE tasks SET finished_at = $2
+WHERE id = $1
+RETURNING id, project_id, name, description, due_at, started_at, finished_at
+`
+
+type FinishTaskParams struct {
+	ID         int32            `db:"id" json:"id"`
+	FinishedAt pgtype.Timestamp `db:"finished_at" json:"finished_at"`
+}
+
+func (q *Queries) FinishTask(ctx context.Context, arg FinishTaskParams) (Task, error) {
+	row := q.db.QueryRow(ctx, finishTask, arg.ID, arg.FinishedAt)
+	var i Task
+	err := row.Scan(
+		&i.ID,
+		&i.ProjectID,
+		&i.Name,
+		&i.Description,
+		&i.DueAt,
+		&i.StartedAt,
+		&i.FinishedAt,
+	)
+	return i, err
+}
+
 const finishTimeEntry = `-- name: FinishTimeEntry :one
 UPDATE time_entries SET finished_at = $2
 WHERE id = $1

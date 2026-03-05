@@ -15,6 +15,8 @@ type ProjectResponse struct {
 	Description *string    `json:"description"`
 	DueAt       *time.Time `json:"due_at"`
 	ParentID    *int32     `json:"parent_id"`
+	StartedAt   *time.Time `json:"started_at"`
+	FinishedAt  *time.Time `json:"finished_at"`
 }
 
 type CreateTaskRequest struct {
@@ -30,6 +32,8 @@ type TaskResponse struct {
 	Name        string     `json:"name"`
 	Description *string    `json:"description"`
 	DueAt       *time.Time `json:"due_at"`
+	StartedAt   *time.Time `json:"started_at"`
+	FinishedAt  *time.Time `json:"finished_at"`
 }
 
 type CreateTodoRequest struct {
@@ -59,6 +63,16 @@ type TimeEntryResponse struct {
 }
 
 type FinishTimeEntryRequest struct {
+	ID         int32      `json:"-"`
+	FinishedAt *time.Time `json:"finished_at"`
+}
+
+type FinishTaskRequest struct {
+	ID         int32      `json:"-"`
+	FinishedAt *time.Time `json:"finished_at"`
+}
+
+type FinishProjectRequest struct {
 	ID         int32      `json:"-"`
 	FinishedAt *time.Time `json:"finished_at"`
 }

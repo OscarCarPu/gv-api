@@ -19,6 +19,8 @@ type Repository interface {
 	CreateTodo(ctx context.Context, taskID int32, name string) (TodoResponse, error)
 	CreateTimeEntry(ctx context.Context, taskID int32, startedAt time.Time, finishedAt *time.Time, comment *string) (TimeEntryResponse, error)
 	FinishTimeEntry(ctx context.Context, id int32, finishedAt time.Time) (TimeEntryResponse, error)
+	FinishTask(ctx context.Context, id int32, finishedAt time.Time) (TaskResponse, error)
+	FinishProject(ctx context.Context, id int32, finishedAt time.Time) (ProjectResponse, error)
 	GetRootProjects(ctx context.Context) ([]ProjectResponse, error)
 }
 
@@ -167,6 +169,92 @@ func (r *PostgresRepository) FinishTimeEntry(ctx context.Context, id int32, fini
 		StartedAt:  row.StartedAt.Time,
 		FinishedAt: respFinishedAt,
 		Comment:    row.Comment,
+	}, nil
+}
+
+func (r *PostgresRepository) FinishTask(ctx context.Context, id int32, finishedAt time.Time) (TaskResponse, error) {
+	pgFinishedAt := pgtype.Timestamp{Time: finishedAt, Valid: true}
+
+	row, err := r.q.FinishTask(ctx, sqlc.FinishTaskParams{
+		ID:         id,
+		FinishedAt: pgFinishedAt,
+	})
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return TaskResponse{}, ErrNotFound
+		}
+		return TaskResponse{}, err
+	}
+
+	var respDueAt *time.Time
+	if row.DueAt.Valid {
+		t := row.DueAt.Time
+		respDueAt = &t
+	}
+
+	var respStartedAt *time.Time
+	if row.StartedAt.Valid {
+		t := row.StartedAt.Time
+		respStartedAt = &t
+	}
+
+	var respFinishedAt *time.Time
+	if row.FinishedAt.Valid {
+		t := row.FinishedAt.Time
+		respFinishedAt = &t
+	}
+
+	return TaskResponse{
+		ID:          row.ID,
+		ProjectID:   row.ProjectID,
+		Name:        row.Name,
+		Description: row.Description,
+		DueAt:       respDueAt,
+		StartedAt:   respStartedAt,
+		FinishedAt:  respFinishedAt,
+	}, nil
+}
+
+func (r *PostgresRepository) FinishProject(ctx context.Context, id int32, finishedAt time.Time) (ProjectResponse, error) {
+	pgFinishedAt := pgtype.Timestamp{Time: finishedAt, Valid: true}
+
+	row, err := r.q.FinishProject(ctx, sqlc.FinishProjectParams{
+		ID:         id,
+		FinishedAt: pgFinishedAt,
+	})
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return ProjectResponse{}, ErrNotFound
+		}
+		return ProjectResponse{}, err
+	}
+
+	var respDueAt *time.Time
+	if row.DueAt.Valid {
+		t := row.DueAt.Time
+		respDueAt = &t
+	}
+
+	var respStartedAt *time.Time
+	if row.StartedAt.Valid {
+		t := row.StartedAt.Time
+		respStartedAt = &t
+	}
+
+	var respFinishedAt *time.Time
+	if row.FinishedAt.Valid {
+		t := row.FinishedAt.Time
+		respFinishedAt = &t
+	}
+
+	return ProjectResponse{
+		ID:          row.ID,
+		Name:        row.Name,
+		Description: row.Description,
+		DueAt:       respDueAt,
+		ParentID:    row.ParentID,
+		StartedAt:   respStartedAt,
+		FinishedAt:  respFinishedAt,
 	}, nil
 }
 

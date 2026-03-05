@@ -23,6 +23,16 @@ UPDATE time_entries SET finished_at = $2
 WHERE id = $1
 RETURNING id, task_id, started_at, finished_at, comment;
 
+-- name: FinishTask :one
+UPDATE tasks SET finished_at = $2
+WHERE id = $1
+RETURNING id, project_id, name, description, due_at, started_at, finished_at;
+
+-- name: FinishProject :one
+UPDATE projects SET finished_at = $2
+WHERE id = $1
+RETURNING id, parent_id, name, description, due_at, started_at, finished_at;
+
 -- name: GetRootProjects :many
 SELECT id, name, description, due_at, parent_id, started_at
 FROM projects

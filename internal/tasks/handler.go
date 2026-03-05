@@ -18,6 +18,8 @@ type ServiceInterface interface {
 	CreateTodo(ctx context.Context, req CreateTodoRequest) (TodoResponse, error)
 	CreateTimeEntry(ctx context.Context, req CreateTimeEntryRequest) (TimeEntryResponse, error)
 	FinishTimeEntry(ctx context.Context, req FinishTimeEntryRequest) (TimeEntryResponse, error)
+	FinishTask(ctx context.Context, req FinishTaskRequest) (TaskResponse, error)
+	FinishProject(ctx context.Context, req FinishProjectRequest) (ProjectResponse, error)
 	GetRootProjects(ctx context.Context) ([]ProjectResponse, error)
 }
 
@@ -146,6 +148,56 @@ func (h *Handler) FinishTimeEntry(w http.ResponseWriter, r *http.Request) {
 	}
 
 	response.JSON(w, http.StatusOK, entry)
+}
+
+func (h *Handler) FinishTask(w http.ResponseWriter, r *http.Request) {
+	idStr := chi.URLParam(r, "id")
+	id, err := strconv.Atoi(idStr)
+	if err != nil {
+		response.Error(w, http.StatusBadRequest, "invalid task id")
+		return
+	}
+
+	var req FinishTaskRequest
+	_ = json.NewDecoder(r.Body).Decode(&req)
+	req.ID = int32(id)
+
+	task, err := h.service.FinishTask(r.Context(), req)
+	if err != nil {
+		if errors.Is(err, ErrNotFound) {
+			response.Error(w, http.StatusNotFound, "task not found")
+			return
+		}
+		response.Error(w, http.StatusInternalServerError, "Failed to finish task")
+		return
+	}
+
+	response.JSON(w, http.StatusOK, task)
+}
+
+func (h *Handler) FinishProject(w http.ResponseWriter, r *http.Request) {
+	idStr := chi.URLParam(r, "id")
+	id, err := strconv.Atoi(idStr)
+	if err != nil {
+		response.Error(w, http.StatusBadRequest, "invalid project id")
+		return
+	}
+
+	var req FinishProjectRequest
+	_ = json.NewDecoder(r.Body).Decode(&req)
+	req.ID = int32(id)
+
+	project, err := h.service.FinishProject(r.Context(), req)
+	if err != nil {
+		if errors.Is(err, ErrNotFound) {
+			response.Error(w, http.StatusNotFound, "project not found")
+			return
+		}
+		response.Error(w, http.StatusInternalServerError, "Failed to finish project")
+		return
+	}
+
+	response.JSON(w, http.StatusOK, project)
 }
 
 func (h *Handler) GetRootProjects(w http.ResponseWriter, r *http.Request) {

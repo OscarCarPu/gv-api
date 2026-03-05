@@ -16,6 +16,8 @@ type mockRepo struct {
 	createTodoFn      func(ctx context.Context, taskID int32, name string) (TodoResponse, error)
 	createTimeEntryFn func(ctx context.Context, taskID int32, startedAt time.Time, finishedAt *time.Time, comment *string) (TimeEntryResponse, error)
 	finishTimeEntryFn func(ctx context.Context, id int32, finishedAt time.Time) (TimeEntryResponse, error)
+	finishTaskFn      func(ctx context.Context, id int32, finishedAt time.Time) (TaskResponse, error)
+	finishProjectFn   func(ctx context.Context, id int32, finishedAt time.Time) (ProjectResponse, error)
 	getRootProjectsFn func(ctx context.Context) ([]ProjectResponse, error)
 }
 
@@ -52,6 +54,20 @@ func (m *mockRepo) FinishTimeEntry(ctx context.Context, id int32, finishedAt tim
 		return m.finishTimeEntryFn(ctx, id, finishedAt)
 	}
 	return TimeEntryResponse{}, nil
+}
+
+func (m *mockRepo) FinishTask(ctx context.Context, id int32, finishedAt time.Time) (TaskResponse, error) {
+	if m.finishTaskFn != nil {
+		return m.finishTaskFn(ctx, id, finishedAt)
+	}
+	return TaskResponse{}, nil
+}
+
+func (m *mockRepo) FinishProject(ctx context.Context, id int32, finishedAt time.Time) (ProjectResponse, error) {
+	if m.finishProjectFn != nil {
+		return m.finishProjectFn(ctx, id, finishedAt)
+	}
+	return ProjectResponse{}, nil
 }
 
 func (m *mockRepo) GetRootProjects(ctx context.Context) ([]ProjectResponse, error) {
@@ -332,6 +348,112 @@ func TestService_GetRootProjects(t *testing.T) {
 			assert.Len(t, got, tt.wantLen)
 		})
 	}
+}
+
+func TestService_FinishTask(t *testing.T) {
+	now := time.Date(2026, 3, 4, 12, 0, 0, 0, time.UTC)
+
+	t.Run("with explicit finished_at", func(t *testing.T) {
+		mock := &mockRepo{
+			finishTaskFn: func(ctx context.Context, id int32, finishedAt time.Time) (TaskResponse, error) {
+				assert.Equal(t, int32(1), id)
+				assert.Equal(t, now, finishedAt)
+				return TaskResponse{ID: 1, Name: "task", FinishedAt: &now}, nil
+			},
+		}
+
+		svc := NewService(mock, nil)
+		got, err := svc.FinishTask(context.Background(), FinishTaskRequest{ID: 1, FinishedAt: &now})
+
+		require.NoError(t, err)
+		assert.Equal(t, int32(1), got.ID)
+		assert.Equal(t, &now, got.FinishedAt)
+	})
+
+	t.Run("without finished_at defaults to now", func(t *testing.T) {
+		var capturedFinishedAt time.Time
+		mock := &mockRepo{
+			finishTaskFn: func(ctx context.Context, id int32, finishedAt time.Time) (TaskResponse, error) {
+				capturedFinishedAt = finishedAt
+				return TaskResponse{ID: 1, Name: "task", FinishedAt: &finishedAt}, nil
+			},
+		}
+
+		svc := NewService(mock, time.UTC)
+		before := time.Now().In(time.UTC)
+		_, err := svc.FinishTask(context.Background(), FinishTaskRequest{ID: 1})
+		after := time.Now().In(time.UTC)
+
+		require.NoError(t, err)
+		assert.False(t, capturedFinishedAt.Before(before))
+		assert.False(t, capturedFinishedAt.After(after))
+	})
+
+	t.Run("repository error", func(t *testing.T) {
+		mock := &mockRepo{
+			finishTaskFn: func(ctx context.Context, id int32, finishedAt time.Time) (TaskResponse, error) {
+				return TaskResponse{}, errors.New("db error")
+			},
+		}
+
+		svc := NewService(mock, nil)
+		_, err := svc.FinishTask(context.Background(), FinishTaskRequest{ID: 1})
+
+		require.Error(t, err)
+	})
+}
+
+func TestService_FinishProject(t *testing.T) {
+	now := time.Date(2026, 3, 4, 12, 0, 0, 0, time.UTC)
+
+	t.Run("with explicit finished_at", func(t *testing.T) {
+		mock := &mockRepo{
+			finishProjectFn: func(ctx context.Context, id int32, finishedAt time.Time) (ProjectResponse, error) {
+				assert.Equal(t, int32(1), id)
+				assert.Equal(t, now, finishedAt)
+				return ProjectResponse{ID: 1, Name: "project", FinishedAt: &now}, nil
+			},
+		}
+
+		svc := NewService(mock, nil)
+		got, err := svc.FinishProject(context.Background(), FinishProjectRequest{ID: 1, FinishedAt: &now})
+
+		require.NoError(t, err)
+		assert.Equal(t, int32(1), got.ID)
+		assert.Equal(t, &now, got.FinishedAt)
+	})
+
+	t.Run("without finished_at defaults to now", func(t *testing.T) {
+		var capturedFinishedAt time.Time
+		mock := &mockRepo{
+			finishProjectFn: func(ctx context.Context, id int32, finishedAt time.Time) (ProjectResponse, error) {
+				capturedFinishedAt = finishedAt
+				return ProjectResponse{ID: 1, Name: "project", FinishedAt: &finishedAt}, nil
+			},
+		}
+
+		svc := NewService(mock, time.UTC)
+		before := time.Now().In(time.UTC)
+		_, err := svc.FinishProject(context.Background(), FinishProjectRequest{ID: 1})
+		after := time.Now().In(time.UTC)
+
+		require.NoError(t, err)
+		assert.False(t, capturedFinishedAt.Before(before))
+		assert.False(t, capturedFinishedAt.After(after))
+	})
+
+	t.Run("repository error", func(t *testing.T) {
+		mock := &mockRepo{
+			finishProjectFn: func(ctx context.Context, id int32, finishedAt time.Time) (ProjectResponse, error) {
+				return ProjectResponse{}, errors.New("db error")
+			},
+		}
+
+		svc := NewService(mock, nil)
+		_, err := svc.FinishProject(context.Background(), FinishProjectRequest{ID: 1})
+
+		require.Error(t, err)
+	})
 }
 
 func TestService_FinishTimeEntry(t *testing.T) {

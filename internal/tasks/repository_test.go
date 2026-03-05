@@ -20,6 +20,8 @@ type mockQuerier struct {
 	createTodoFn      func(ctx context.Context, arg sqlc.CreateTodoParams) (sqlc.CreateTodoRow, error)
 	createTimeEntryFn func(ctx context.Context, arg sqlc.CreateTimeEntryParams) (sqlc.TimeEntry, error)
 	finishTimeEntryFn func(ctx context.Context, arg sqlc.FinishTimeEntryParams) (sqlc.TimeEntry, error)
+	finishTaskFn      func(ctx context.Context, arg sqlc.FinishTaskParams) (sqlc.Task, error)
+	finishProjectFn   func(ctx context.Context, arg sqlc.FinishProjectParams) (sqlc.Project, error)
 	getRootProjectsFn func(ctx context.Context) ([]sqlc.GetRootProjectsRow, error)
 }
 
@@ -56,6 +58,20 @@ func (m *mockQuerier) FinishTimeEntry(ctx context.Context, arg sqlc.FinishTimeEn
 		return m.finishTimeEntryFn(ctx, arg)
 	}
 	return sqlc.TimeEntry{}, nil
+}
+
+func (m *mockQuerier) FinishTask(ctx context.Context, arg sqlc.FinishTaskParams) (sqlc.Task, error) {
+	if m.finishTaskFn != nil {
+		return m.finishTaskFn(ctx, arg)
+	}
+	return sqlc.Task{}, nil
+}
+
+func (m *mockQuerier) FinishProject(ctx context.Context, arg sqlc.FinishProjectParams) (sqlc.Project, error) {
+	if m.finishProjectFn != nil {
+		return m.finishProjectFn(ctx, arg)
+	}
+	return sqlc.Project{}, nil
 }
 
 func (m *mockQuerier) GetRootProjects(ctx context.Context) ([]sqlc.GetRootProjectsRow, error) {
@@ -341,6 +357,130 @@ func TestRepository_GetRootProjects(t *testing.T) {
 
 		_, err := repo.GetRootProjects(context.Background())
 		assert.Error(t, err)
+	})
+}
+
+func TestRepository_FinishTask(t *testing.T) {
+	t.Run("maps response correctly", func(t *testing.T) {
+		desc := "task desc"
+		projectID := int32(5)
+		startedAt := time.Date(2026, 3, 1, 9, 0, 0, 0, time.UTC)
+		finishedAt := time.Date(2026, 3, 1, 17, 0, 0, 0, time.UTC)
+		dueDate := pgtype.Date{Time: time.Date(2026, 7, 1, 0, 0, 0, 0, time.UTC), Valid: true}
+
+		mock := &mockQuerier{
+			finishTaskFn: func(ctx context.Context, arg sqlc.FinishTaskParams) (sqlc.Task, error) {
+				return sqlc.Task{
+					ID:          1,
+					ProjectID:   &projectID,
+					Name:        "test task",
+					Description: &desc,
+					DueAt:       dueDate,
+					StartedAt:   pgtype.Timestamp{Time: startedAt, Valid: true},
+					FinishedAt:  pgtype.Timestamp{Time: finishedAt, Valid: true},
+				}, nil
+			},
+		}
+		repo := NewRepository(mock)
+
+		got, err := repo.FinishTask(context.Background(), 1, finishedAt)
+		require.NoError(t, err)
+
+		assert.Equal(t, int32(1), got.ID)
+		assert.Equal(t, &projectID, got.ProjectID)
+		assert.Equal(t, "test task", got.Name)
+		assert.Equal(t, &desc, got.Description)
+		dueAt := time.Date(2026, 7, 1, 0, 0, 0, 0, time.UTC)
+		assert.Equal(t, &dueAt, got.DueAt)
+		assert.Equal(t, &startedAt, got.StartedAt)
+		assert.Equal(t, &finishedAt, got.FinishedAt)
+	})
+
+	t.Run("returns ErrNotFound on pgx.ErrNoRows", func(t *testing.T) {
+		mock := &mockQuerier{
+			finishTaskFn: func(ctx context.Context, arg sqlc.FinishTaskParams) (sqlc.Task, error) {
+				return sqlc.Task{}, pgx.ErrNoRows
+			},
+		}
+		repo := NewRepository(mock)
+
+		_, err := repo.FinishTask(context.Background(), 999, time.Now())
+		assert.ErrorIs(t, err, ErrNotFound)
+	})
+
+	t.Run("returns error from querier", func(t *testing.T) {
+		mock := &mockQuerier{
+			finishTaskFn: func(ctx context.Context, arg sqlc.FinishTaskParams) (sqlc.Task, error) {
+				return sqlc.Task{}, errors.New("db error")
+			},
+		}
+		repo := NewRepository(mock)
+
+		_, err := repo.FinishTask(context.Background(), 1, time.Now())
+		assert.Error(t, err)
+		assert.NotErrorIs(t, err, ErrNotFound)
+	})
+}
+
+func TestRepository_FinishProject(t *testing.T) {
+	t.Run("maps response correctly", func(t *testing.T) {
+		desc := "project desc"
+		parentID := int32(2)
+		startedAt := time.Date(2026, 3, 1, 9, 0, 0, 0, time.UTC)
+		finishedAt := time.Date(2026, 3, 1, 17, 0, 0, 0, time.UTC)
+		dueDate := pgtype.Date{Time: time.Date(2026, 6, 15, 0, 0, 0, 0, time.UTC), Valid: true}
+
+		mock := &mockQuerier{
+			finishProjectFn: func(ctx context.Context, arg sqlc.FinishProjectParams) (sqlc.Project, error) {
+				return sqlc.Project{
+					ID:          1,
+					ParentID:    &parentID,
+					Name:        "test project",
+					Description: &desc,
+					DueAt:       dueDate,
+					StartedAt:   pgtype.Timestamp{Time: startedAt, Valid: true},
+					FinishedAt:  pgtype.Timestamp{Time: finishedAt, Valid: true},
+				}, nil
+			},
+		}
+		repo := NewRepository(mock)
+
+		got, err := repo.FinishProject(context.Background(), 1, finishedAt)
+		require.NoError(t, err)
+
+		assert.Equal(t, int32(1), got.ID)
+		assert.Equal(t, &parentID, got.ParentID)
+		assert.Equal(t, "test project", got.Name)
+		assert.Equal(t, &desc, got.Description)
+		dueAt := time.Date(2026, 6, 15, 0, 0, 0, 0, time.UTC)
+		assert.Equal(t, &dueAt, got.DueAt)
+		assert.Equal(t, &startedAt, got.StartedAt)
+		assert.Equal(t, &finishedAt, got.FinishedAt)
+	})
+
+	t.Run("returns ErrNotFound on pgx.ErrNoRows", func(t *testing.T) {
+		mock := &mockQuerier{
+			finishProjectFn: func(ctx context.Context, arg sqlc.FinishProjectParams) (sqlc.Project, error) {
+				return sqlc.Project{}, pgx.ErrNoRows
+			},
+		}
+		repo := NewRepository(mock)
+
+		_, err := repo.FinishProject(context.Background(), 999, time.Now())
+		assert.ErrorIs(t, err, ErrNotFound)
+	})
+
+	t.Run("returns error from querier", func(t *testing.T) {
+		mock := &mockQuerier{
+			finishProjectFn: func(ctx context.Context, arg sqlc.FinishProjectParams) (sqlc.Project, error) {
+				return sqlc.Project{}, errors.New("db error")
+			},
+		}
+		repo := NewRepository(mock)
+
+		_, err := repo.FinishProject(context.Background(), 1, time.Now())
+		assert.Error(t, err)
+		assert.NotErrorIs(t, err, ErrNotFound)
 	})
 }
 

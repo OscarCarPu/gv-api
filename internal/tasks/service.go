@@ -41,6 +41,22 @@ func (s *Service) FinishTimeEntry(ctx context.Context, req FinishTimeEntryReques
 	return s.repo.FinishTimeEntry(ctx, req.ID, finishedAt)
 }
 
+func (s *Service) FinishTask(ctx context.Context, req FinishTaskRequest) (TaskResponse, error) {
+	finishedAt := time.Now().In(s.location)
+	if req.FinishedAt != nil {
+		finishedAt = *req.FinishedAt
+	}
+	return s.repo.FinishTask(ctx, req.ID, finishedAt)
+}
+
+func (s *Service) FinishProject(ctx context.Context, req FinishProjectRequest) (ProjectResponse, error) {
+	finishedAt := time.Now().In(s.location)
+	if req.FinishedAt != nil {
+		finishedAt = *req.FinishedAt
+	}
+	return s.repo.FinishProject(ctx, req.ID, finishedAt)
+}
+
 func (s *Service) GetRootProjects(ctx context.Context) ([]ProjectResponse, error) {
 	return s.repo.GetRootProjects(ctx)
 }
