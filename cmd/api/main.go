@@ -73,6 +73,7 @@ func main() {
 		r.Post("/habits/log", habitHandler.UpsertLog)
 		r.Get("/tasks/tree", taskHandler.GetActiveTree)
 		r.Get("/tasks/projects", taskHandler.GetRootProjects)
+		r.Get("/tasks/projects/{id}/children", taskHandler.GetProjectChildren)
 		r.Post("/tasks/projects", taskHandler.CreateProject)
 		r.Post("/tasks/tasks", taskHandler.CreateTask)
 		r.Post("/tasks/todos", taskHandler.CreateTodo)

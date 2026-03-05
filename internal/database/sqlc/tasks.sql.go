@@ -253,6 +253,60 @@ func (q *Queries) GetActiveProjects(ctx context.Context) ([]GetActiveProjectsRow
 	return items, nil
 }
 
+const getProjectWithDescendants = `-- name: GetProjectWithDescendants :many
+WITH RECURSIVE project_tree AS (
+    SELECT p.id, p.parent_id, p.name, p.description, p.due_at, p.started_at, p.finished_at, 0 AS depth
+    FROM projects p WHERE p.id = $1
+    UNION ALL
+    SELECT c.id, c.parent_id, c.name, c.description, c.due_at, c.started_at, c.finished_at, pt.depth + 1
+    FROM projects c
+    JOIN project_tree pt ON c.parent_id = pt.id
+)
+SELECT id, parent_id, name, description, due_at, started_at, finished_at, depth
+FROM project_tree
+ORDER BY depth, name
+`
+
+type GetProjectWithDescendantsRow struct {
+	ID          int32            `db:"id" json:"id"`
+	ParentID    *int32           `db:"parent_id" json:"parent_id"`
+	Name        string           `db:"name" json:"name"`
+	Description *string          `db:"description" json:"description"`
+	DueAt       pgtype.Date      `db:"due_at" json:"due_at"`
+	StartedAt   pgtype.Timestamp `db:"started_at" json:"started_at"`
+	FinishedAt  pgtype.Timestamp `db:"finished_at" json:"finished_at"`
+	Depth       int32            `db:"depth" json:"depth"`
+}
+
+func (q *Queries) GetProjectWithDescendants(ctx context.Context, id int32) ([]GetProjectWithDescendantsRow, error) {
+	rows, err := q.db.Query(ctx, getProjectWithDescendants, id)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []GetProjectWithDescendantsRow{}
+	for rows.Next() {
+		var i GetProjectWithDescendantsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.ParentID,
+			&i.Name,
+			&i.Description,
+			&i.DueAt,
+			&i.StartedAt,
+			&i.FinishedAt,
+			&i.Depth,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getRootProjects = `-- name: GetRootProjects :many
 SELECT id, name, description, due_at, parent_id, started_at
 FROM projects
@@ -285,6 +339,69 @@ func (q *Queries) GetRootProjects(ctx context.Context) ([]GetRootProjectsRow, er
 			&i.DueAt,
 			&i.ParentID,
 			&i.StartedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const getTasksByProjectIDs = `-- name: GetTasksByProjectIDs :many
+WITH task_times AS (
+    SELECT
+        t.id, t.project_id, t.name, t.description, t.due_at, t.started_at, t.finished_at,
+        COALESCE(SUM(EXTRACT(EPOCH FROM (te.finished_at - te.started_at)))::bigint, 0)::bigint AS time_spent
+    FROM tasks t
+    LEFT JOIN time_entries te ON te.task_id = t.id AND te.finished_at IS NOT NULL
+    WHERE t.project_id = ANY($1::int[])
+    GROUP BY t.id
+)
+SELECT
+    tt.id, tt.project_id, tt.name, tt.description, tt.due_at, tt.started_at, tt.finished_at,
+    tt.time_spent,
+    td.id AS todo_id, td.name AS todo_name
+FROM task_times tt
+LEFT JOIN todos td ON td.task_id = tt.id
+ORDER BY tt.finished_at NULLS FIRST, tt.name, todo_id
+`
+
+type GetTasksByProjectIDsRow struct {
+	ID          int32            `db:"id" json:"id"`
+	ProjectID   *int32           `db:"project_id" json:"project_id"`
+	Name        string           `db:"name" json:"name"`
+	Description *string          `db:"description" json:"description"`
+	DueAt       pgtype.Date      `db:"due_at" json:"due_at"`
+	StartedAt   pgtype.Timestamp `db:"started_at" json:"started_at"`
+	FinishedAt  pgtype.Timestamp `db:"finished_at" json:"finished_at"`
+	TimeSpent   int64            `db:"time_spent" json:"time_spent"`
+	TodoID      *int32           `db:"todo_id" json:"todo_id"`
+	TodoName    *string          `db:"todo_name" json:"todo_name"`
+}
+
+func (q *Queries) GetTasksByProjectIDs(ctx context.Context, projectIds []int32) ([]GetTasksByProjectIDsRow, error) {
+	rows, err := q.db.Query(ctx, getTasksByProjectIDs, projectIds)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []GetTasksByProjectIDsRow{}
+	for rows.Next() {
+		var i GetTasksByProjectIDsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.ProjectID,
+			&i.Name,
+			&i.Description,
+			&i.DueAt,
+			&i.StartedAt,
+			&i.FinishedAt,
+			&i.TimeSpent,
+			&i.TodoID,
+			&i.TodoName,
 		); err != nil {
 			return nil, err
 		}

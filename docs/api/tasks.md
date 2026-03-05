@@ -308,38 +308,50 @@
   - **Code:** `200 OK`
   - **Content:**
     ```json
-    [
-      {
-        "id": 2,
-        "type": "project",
-        "parent_id": 1,
-        "name": "Sub-Project",
-        "description": "A sub-project.",
-        "due_at": "2025-06-01",
-        "started_at": "2025-01-15T08:00:00Z",
-        "finished_at": null,
-        "time_spent": 7200
-      },
-      {
-        "id": 1,
-        "type": "task",
-        "project_id": 1,
-        "name": "My Task",
-        "description": "Task description.",
-        "due_at": "2025-06-01",
-        "started_at": "2025-02-15T08:00:00Z",
-        "finished_at": null,
-        "time_spent": 5400,
-        "todos": [
-          {
-            "id": 1,
-            "task_id": 1,
-            "name": "My Todo"
-          }
-        ]
-      }
-    ]
-    ```
+ {
+  "project": {
+    "id": 1,
+    "parent_id": null,
+    "name": "My Project",
+    "description": "This is my project.",
+    "due_at": "2025-01-01",
+    "started_at": "2024-12-01T08:00:00Z",
+    "finished_at": null,
+    "time_spent": 7200
+  },
+  "children": [
+    {
+      "id": 2,
+      "type": "project",
+      "parent_id": 1,
+      "name": "Sub-Project",
+      "description": "A sub-project.",
+      "due_at": "2025-06-01",
+      "started_at": "2025-01-15T08:00:00Z",
+      "finished_at": null,
+      "time_spent": 7200
+    },
+    {
+      "id": 1,
+      "type": "task",
+      "project_id": 1,
+      "name": "My Task",
+      "description": "Task description.",
+      "due_at": "2025-06-01",
+      "started_at": "2025-02-15T08:00:00Z",
+      "finished_at": null,
+      "time_spent": 5400,
+      "todos": [
+        {
+          "id": 1,
+          "task_id": 1,
+          "name": "My Todo"
+        }
+      ]
+    }
+  ]
+} 
+```
 - **Error Responses:**
   - **Code:** `404 Not Found`
     - **Content:** `Project not found`

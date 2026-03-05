@@ -79,6 +79,14 @@ func (m *mockQuerier) GetUnfinishedTasks(ctx context.Context) ([]sqlc.GetUnfinis
 	return nil, nil
 }
 
+func (m *mockQuerier) GetProjectWithDescendants(ctx context.Context, id int32) ([]sqlc.GetProjectWithDescendantsRow, error) {
+	return nil, nil
+}
+
+func (m *mockQuerier) GetTasksByProjectIDs(ctx context.Context, projectIds []int32) ([]sqlc.GetTasksByProjectIDsRow, error) {
+	return nil, nil
+}
+
 func TestRepository_GetHabitsWithLogs(t *testing.T) {
 	t.Run("maps rows to domain types", func(t *testing.T) {
 		desc := "Daily workout"

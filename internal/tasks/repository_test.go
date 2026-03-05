@@ -15,16 +15,18 @@ import (
 )
 
 type mockQuerier struct {
-	createProjectFn   func(ctx context.Context, arg sqlc.CreateProjectParams) (sqlc.CreateProjectRow, error)
-	createTaskFn      func(ctx context.Context, arg sqlc.CreateTaskParams) (sqlc.CreateTaskRow, error)
-	createTodoFn      func(ctx context.Context, arg sqlc.CreateTodoParams) (sqlc.CreateTodoRow, error)
-	createTimeEntryFn func(ctx context.Context, arg sqlc.CreateTimeEntryParams) (sqlc.TimeEntry, error)
-	finishTimeEntryFn func(ctx context.Context, arg sqlc.FinishTimeEntryParams) (sqlc.TimeEntry, error)
-	finishTaskFn      func(ctx context.Context, arg sqlc.FinishTaskParams) (sqlc.Task, error)
-	finishProjectFn   func(ctx context.Context, arg sqlc.FinishProjectParams) (sqlc.Project, error)
-	getRootProjectsFn    func(ctx context.Context) ([]sqlc.GetRootProjectsRow, error)
-	getActiveProjectsFn  func(ctx context.Context) ([]sqlc.GetActiveProjectsRow, error)
-	getUnfinishedTasksFn func(ctx context.Context) ([]sqlc.GetUnfinishedTasksRow, error)
+	createProjectFn              func(ctx context.Context, arg sqlc.CreateProjectParams) (sqlc.CreateProjectRow, error)
+	createTaskFn                 func(ctx context.Context, arg sqlc.CreateTaskParams) (sqlc.CreateTaskRow, error)
+	createTodoFn                 func(ctx context.Context, arg sqlc.CreateTodoParams) (sqlc.CreateTodoRow, error)
+	createTimeEntryFn            func(ctx context.Context, arg sqlc.CreateTimeEntryParams) (sqlc.TimeEntry, error)
+	finishTimeEntryFn            func(ctx context.Context, arg sqlc.FinishTimeEntryParams) (sqlc.TimeEntry, error)
+	finishTaskFn                 func(ctx context.Context, arg sqlc.FinishTaskParams) (sqlc.Task, error)
+	finishProjectFn              func(ctx context.Context, arg sqlc.FinishProjectParams) (sqlc.Project, error)
+	getRootProjectsFn            func(ctx context.Context) ([]sqlc.GetRootProjectsRow, error)
+	getActiveProjectsFn          func(ctx context.Context) ([]sqlc.GetActiveProjectsRow, error)
+	getUnfinishedTasksFn         func(ctx context.Context) ([]sqlc.GetUnfinishedTasksRow, error)
+	getProjectWithDescendantsFn  func(ctx context.Context, id int32) ([]sqlc.GetProjectWithDescendantsRow, error)
+	getTasksByProjectIDsFn       func(ctx context.Context, projectIds []int32) ([]sqlc.GetTasksByProjectIDsRow, error)
 }
 
 func (m *mockQuerier) CreateProject(ctx context.Context, arg sqlc.CreateProjectParams) (sqlc.CreateProjectRow, error) {
@@ -93,6 +95,20 @@ func (m *mockQuerier) GetActiveProjects(ctx context.Context) ([]sqlc.GetActivePr
 func (m *mockQuerier) GetUnfinishedTasks(ctx context.Context) ([]sqlc.GetUnfinishedTasksRow, error) {
 	if m.getUnfinishedTasksFn != nil {
 		return m.getUnfinishedTasksFn(ctx)
+	}
+	return nil, nil
+}
+
+func (m *mockQuerier) GetProjectWithDescendants(ctx context.Context, id int32) ([]sqlc.GetProjectWithDescendantsRow, error) {
+	if m.getProjectWithDescendantsFn != nil {
+		return m.getProjectWithDescendantsFn(ctx, id)
+	}
+	return nil, nil
+}
+
+func (m *mockQuerier) GetTasksByProjectIDs(ctx context.Context, projectIds []int32) ([]sqlc.GetTasksByProjectIDsRow, error) {
+	if m.getTasksByProjectIDsFn != nil {
+		return m.getTasksByProjectIDsFn(ctx, projectIds)
 	}
 	return nil, nil
 }
@@ -693,5 +709,209 @@ func TestRepository_GetActiveTree(t *testing.T) {
 
 		_, err := repo.GetActiveTree(context.Background())
 		assert.Error(t, err)
+	})
+}
+
+func TestRepository_GetProjectChildren(t *testing.T) {
+	parentID := int32(1)
+	finishedAt := pgtype.Timestamp{Time: time.Date(2026, 3, 1, 17, 0, 0, 0, time.UTC), Valid: true}
+
+	t.Run("project with sub-projects and tasks", func(t *testing.T) {
+		mock := &mockQuerier{
+			getProjectWithDescendantsFn: func(ctx context.Context, id int32) ([]sqlc.GetProjectWithDescendantsRow, error) {
+				return []sqlc.GetProjectWithDescendantsRow{
+					{ID: 1, Name: "Root", Depth: 0},
+					{ID: 2, ParentID: &parentID, Name: "Sub-Project", Depth: 1},
+				}, nil
+			},
+			getTasksByProjectIDsFn: func(ctx context.Context, projectIds []int32) ([]sqlc.GetTasksByProjectIDsRow, error) {
+				pid1 := int32(1)
+				pid2 := int32(2)
+				todoID := int32(10)
+				todoName := "My Todo"
+				return []sqlc.GetTasksByProjectIDsRow{
+					{ID: 1, ProjectID: &pid1, Name: "Task A", TimeSpent: 3600, TodoID: &todoID, TodoName: &todoName},
+					{ID: 2, ProjectID: &pid2, Name: "Task B", TimeSpent: 1800},
+				}, nil
+			},
+		}
+		repo := NewRepository(mock)
+
+		got, err := repo.GetProjectChildren(context.Background(), 1)
+		require.NoError(t, err)
+
+		// Root project
+		assert.Equal(t, int32(1), got.Project.ID)
+		assert.Equal(t, "Root", got.Project.Name)
+		assert.Equal(t, int64(5400), got.Project.TimeSpent) // 3600 (own) + 1800 (sub-project)
+
+		// Children: sub-project first, then task
+		require.Len(t, got.Children, 2)
+		assert.Equal(t, "project", got.Children[0].Type)
+		assert.Equal(t, "Sub-Project", got.Children[0].Name)
+		assert.Equal(t, int64(1800), got.Children[0].TimeSpent)
+
+		assert.Equal(t, "task", got.Children[1].Type)
+		assert.Equal(t, "Task A", got.Children[1].Name)
+		assert.Equal(t, int64(3600), got.Children[1].TimeSpent)
+		require.Len(t, got.Children[1].Todos, 1)
+		assert.Equal(t, "My Todo", got.Children[1].Todos[0].Name)
+	})
+
+	t.Run("tasks with multiple todos", func(t *testing.T) {
+		mock := &mockQuerier{
+			getProjectWithDescendantsFn: func(ctx context.Context, id int32) ([]sqlc.GetProjectWithDescendantsRow, error) {
+				return []sqlc.GetProjectWithDescendantsRow{
+					{ID: 1, Name: "Root", Depth: 0},
+				}, nil
+			},
+			getTasksByProjectIDsFn: func(ctx context.Context, projectIds []int32) ([]sqlc.GetTasksByProjectIDsRow, error) {
+				pid := int32(1)
+				todoID1, todoID2 := int32(10), int32(11)
+				todoName1, todoName2 := "Todo 1", "Todo 2"
+				return []sqlc.GetTasksByProjectIDsRow{
+					{ID: 1, ProjectID: &pid, Name: "Task", TimeSpent: 100, TodoID: &todoID1, TodoName: &todoName1},
+					{ID: 1, ProjectID: &pid, Name: "Task", TimeSpent: 100, TodoID: &todoID2, TodoName: &todoName2},
+				}, nil
+			},
+		}
+		repo := NewRepository(mock)
+
+		got, err := repo.GetProjectChildren(context.Background(), 1)
+		require.NoError(t, err)
+
+		require.Len(t, got.Children, 1)
+		assert.Equal(t, "Task", got.Children[0].Name)
+		require.Len(t, got.Children[0].Todos, 2)
+		assert.Equal(t, "Todo 1", got.Children[0].Todos[0].Name)
+		assert.Equal(t, "Todo 2", got.Children[0].Todos[1].Name)
+	})
+
+	t.Run("project with no children", func(t *testing.T) {
+		mock := &mockQuerier{
+			getProjectWithDescendantsFn: func(ctx context.Context, id int32) ([]sqlc.GetProjectWithDescendantsRow, error) {
+				return []sqlc.GetProjectWithDescendantsRow{
+					{ID: 5, Name: "Empty", Depth: 0},
+				}, nil
+			},
+			getTasksByProjectIDsFn: func(ctx context.Context, projectIds []int32) ([]sqlc.GetTasksByProjectIDsRow, error) {
+				return []sqlc.GetTasksByProjectIDsRow{}, nil
+			},
+		}
+		repo := NewRepository(mock)
+
+		got, err := repo.GetProjectChildren(context.Background(), 5)
+		require.NoError(t, err)
+
+		assert.Equal(t, int32(5), got.Project.ID)
+		assert.Empty(t, got.Children)
+		assert.NotNil(t, got.Children)
+	})
+
+	t.Run("recursive time_spent accumulation", func(t *testing.T) {
+		pid1 := int32(1)
+		pid2 := int32(2)
+		mock := &mockQuerier{
+			getProjectWithDescendantsFn: func(ctx context.Context, id int32) ([]sqlc.GetProjectWithDescendantsRow, error) {
+				return []sqlc.GetProjectWithDescendantsRow{
+					{ID: 1, Name: "Root", Depth: 0},
+					{ID: 2, ParentID: &pid1, Name: "Child", Depth: 1},
+					{ID: 3, ParentID: &pid2, Name: "Grandchild", Depth: 2},
+				}, nil
+			},
+			getTasksByProjectIDsFn: func(ctx context.Context, projectIds []int32) ([]sqlc.GetTasksByProjectIDsRow, error) {
+				pid3 := int32(3)
+				return []sqlc.GetTasksByProjectIDsRow{
+					{ID: 1, ProjectID: &pid3, Name: "Deep Task", TimeSpent: 500},
+				}, nil
+			},
+		}
+		repo := NewRepository(mock)
+
+		got, err := repo.GetProjectChildren(context.Background(), 1)
+		require.NoError(t, err)
+
+		// Root should have 500 (from grandchild → child → root)
+		assert.Equal(t, int64(500), got.Project.TimeSpent)
+		// Direct child should have 500 (from grandchild)
+		require.Len(t, got.Children, 1)
+		assert.Equal(t, int64(500), got.Children[0].TimeSpent)
+	})
+
+	t.Run("ordering: sub-projects first, unfinished tasks, finished tasks", func(t *testing.T) {
+		mock := &mockQuerier{
+			getProjectWithDescendantsFn: func(ctx context.Context, id int32) ([]sqlc.GetProjectWithDescendantsRow, error) {
+				return []sqlc.GetProjectWithDescendantsRow{
+					{ID: 1, Name: "Root", Depth: 0},
+					{ID: 2, ParentID: &parentID, Name: "Sub", Depth: 1},
+				}, nil
+			},
+			getTasksByProjectIDsFn: func(ctx context.Context, projectIds []int32) ([]sqlc.GetTasksByProjectIDsRow, error) {
+				pid := int32(1)
+				return []sqlc.GetTasksByProjectIDsRow{
+					// Unfinished task first (NULLS FIRST ordering from SQL)
+					{ID: 1, ProjectID: &pid, Name: "Active Task", TimeSpent: 0},
+					// Finished task
+					{ID: 2, ProjectID: &pid, Name: "Done Task", TimeSpent: 100, FinishedAt: finishedAt},
+				}, nil
+			},
+		}
+		repo := NewRepository(mock)
+
+		got, err := repo.GetProjectChildren(context.Background(), 1)
+		require.NoError(t, err)
+
+		require.Len(t, got.Children, 3)
+		assert.Equal(t, "project", got.Children[0].Type)
+		assert.Equal(t, "Sub", got.Children[0].Name)
+		assert.Equal(t, "task", got.Children[1].Type)
+		assert.Equal(t, "Active Task", got.Children[1].Name)
+		assert.Nil(t, got.Children[1].FinishedAt)
+		assert.Equal(t, "task", got.Children[2].Type)
+		assert.Equal(t, "Done Task", got.Children[2].Name)
+		assert.NotNil(t, got.Children[2].FinishedAt)
+	})
+
+	t.Run("ErrNotFound when project doesn't exist", func(t *testing.T) {
+		mock := &mockQuerier{
+			getProjectWithDescendantsFn: func(ctx context.Context, id int32) ([]sqlc.GetProjectWithDescendantsRow, error) {
+				return []sqlc.GetProjectWithDescendantsRow{}, nil
+			},
+		}
+		repo := NewRepository(mock)
+
+		_, err := repo.GetProjectChildren(context.Background(), 999)
+		assert.ErrorIs(t, err, ErrNotFound)
+	})
+
+	t.Run("error from GetProjectWithDescendants propagates", func(t *testing.T) {
+		mock := &mockQuerier{
+			getProjectWithDescendantsFn: func(ctx context.Context, id int32) ([]sqlc.GetProjectWithDescendantsRow, error) {
+				return nil, errors.New("db error")
+			},
+		}
+		repo := NewRepository(mock)
+
+		_, err := repo.GetProjectChildren(context.Background(), 1)
+		assert.Error(t, err)
+		assert.NotErrorIs(t, err, ErrNotFound)
+	})
+
+	t.Run("error from GetTasksByProjectIDs propagates", func(t *testing.T) {
+		mock := &mockQuerier{
+			getProjectWithDescendantsFn: func(ctx context.Context, id int32) ([]sqlc.GetProjectWithDescendantsRow, error) {
+				return []sqlc.GetProjectWithDescendantsRow{
+					{ID: 1, Name: "Root", Depth: 0},
+				}, nil
+			},
+			getTasksByProjectIDsFn: func(ctx context.Context, projectIds []int32) ([]sqlc.GetTasksByProjectIDsRow, error) {
+				return nil, errors.New("db error")
+			},
+		}
+		repo := NewRepository(mock)
+
+		_, err := repo.GetProjectChildren(context.Background(), 1)
+		assert.Error(t, err)
+		assert.NotErrorIs(t, err, ErrNotFound)
 	})
 }

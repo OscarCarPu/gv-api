@@ -22,6 +22,7 @@ type ServiceInterface interface {
 	FinishProject(ctx context.Context, req FinishProjectRequest) (ProjectResponse, error)
 	GetRootProjects(ctx context.Context) ([]ProjectResponse, error)
 	GetActiveTree(ctx context.Context) ([]ActiveTreeNode, error)
+	GetProjectChildren(ctx context.Context, projectID int32) (ProjectChildrenResponse, error)
 }
 
 type Handler struct {
@@ -209,6 +210,27 @@ func (h *Handler) GetActiveTree(w http.ResponseWriter, r *http.Request) {
 	}
 
 	response.JSON(w, http.StatusOK, tree)
+}
+
+func (h *Handler) GetProjectChildren(w http.ResponseWriter, r *http.Request) {
+	idStr := chi.URLParam(r, "id")
+	id, err := strconv.Atoi(idStr)
+	if err != nil {
+		response.Error(w, http.StatusBadRequest, "invalid project id")
+		return
+	}
+
+	result, err := h.service.GetProjectChildren(r.Context(), int32(id))
+	if err != nil {
+		if errors.Is(err, ErrNotFound) {
+			response.Error(w, http.StatusNotFound, "project not found")
+			return
+		}
+		response.Error(w, http.StatusInternalServerError, "Failed to get project children")
+		return
+	}
+
+	response.JSON(w, http.StatusOK, result)
 }
 
 func (h *Handler) GetRootProjects(w http.ResponseWriter, r *http.Request) {

@@ -83,3 +83,37 @@ type ActiveTreeNode struct {
 	Name     string           `json:"name"`
 	Children []ActiveTreeNode `json:"children,omitempty"`
 }
+
+type ProjectChildrenResponse struct {
+	Project  ProjectDetailResponse `json:"project"`
+	Children []ProjectChildNode    `json:"children"`
+}
+
+type ProjectDetailResponse struct {
+	ID          int32      `json:"id"`
+	ParentID    *int32     `json:"parent_id"`
+	Name        string     `json:"name"`
+	Description *string    `json:"description"`
+	DueAt       *time.Time `json:"due_at"`
+	StartedAt   *time.Time `json:"started_at"`
+	FinishedAt  *time.Time `json:"finished_at"`
+	TimeSpent   int64      `json:"time_spent"`
+}
+
+type ProjectChildNode struct {
+	ID          int32      `json:"id"`
+	Type        string     `json:"type"`
+	Name        string     `json:"name"`
+	Description *string    `json:"description"`
+	DueAt       *time.Time `json:"due_at"`
+	StartedAt   *time.Time `json:"started_at"`
+	FinishedAt  *time.Time `json:"finished_at"`
+	TimeSpent   int64      `json:"time_spent"`
+
+	// Project-only
+	ParentID *int32 `json:"parent_id,omitempty"`
+
+	// Task-only
+	ProjectID *int32         `json:"project_id,omitempty"`
+	Todos     []TodoResponse `json:"todos,omitempty"`
+}

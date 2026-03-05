@@ -18,8 +18,9 @@ type mockRepo struct {
 	finishTimeEntryFn func(ctx context.Context, id int32, finishedAt time.Time) (TimeEntryResponse, error)
 	finishTaskFn      func(ctx context.Context, id int32, finishedAt time.Time) (TaskResponse, error)
 	finishProjectFn   func(ctx context.Context, id int32, finishedAt time.Time) (ProjectResponse, error)
-	getRootProjectsFn func(ctx context.Context) ([]ProjectResponse, error)
-	getActiveTreeFn   func(ctx context.Context) ([]ActiveTreeNode, error)
+	getRootProjectsFn    func(ctx context.Context) ([]ProjectResponse, error)
+	getActiveTreeFn      func(ctx context.Context) ([]ActiveTreeNode, error)
+	getProjectChildrenFn func(ctx context.Context, projectID int32) (ProjectChildrenResponse, error)
 }
 
 func (m *mockRepo) CreateProject(ctx context.Context, name string, description *string, dueAt *time.Time, parentID *int32) (ProjectResponse, error) {
@@ -83,6 +84,13 @@ func (m *mockRepo) GetActiveTree(ctx context.Context) ([]ActiveTreeNode, error) 
 		return m.getActiveTreeFn(ctx)
 	}
 	return nil, nil
+}
+
+func (m *mockRepo) GetProjectChildren(ctx context.Context, projectID int32) (ProjectChildrenResponse, error) {
+	if m.getProjectChildrenFn != nil {
+		return m.getProjectChildrenFn(ctx, projectID)
+	}
+	return ProjectChildrenResponse{}, nil
 }
 
 func TestService_CreateProject(t *testing.T) {
@@ -545,6 +553,40 @@ func TestService_GetActiveTree(t *testing.T) {
 
 		svc := NewService(mock, nil)
 		_, err := svc.GetActiveTree(context.Background())
+
+		require.Error(t, err)
+	})
+}
+
+func TestService_GetProjectChildren(t *testing.T) {
+	t.Run("delegates to repo and returns result", func(t *testing.T) {
+		expected := ProjectChildrenResponse{
+			Project:  ProjectDetailResponse{ID: 1, Name: "Root"},
+			Children: []ProjectChildNode{},
+		}
+		mock := &mockRepo{
+			getProjectChildrenFn: func(ctx context.Context, projectID int32) (ProjectChildrenResponse, error) {
+				assert.Equal(t, int32(5), projectID)
+				return expected, nil
+			},
+		}
+
+		svc := NewService(mock, nil)
+		got, err := svc.GetProjectChildren(context.Background(), 5)
+
+		require.NoError(t, err)
+		assert.Equal(t, expected, got)
+	})
+
+	t.Run("propagates error", func(t *testing.T) {
+		mock := &mockRepo{
+			getProjectChildrenFn: func(ctx context.Context, projectID int32) (ProjectChildrenResponse, error) {
+				return ProjectChildrenResponse{}, errors.New("db error")
+			},
+		}
+
+		svc := NewService(mock, nil)
+		_, err := svc.GetProjectChildren(context.Background(), 1)
 
 		require.Error(t, err)
 	})

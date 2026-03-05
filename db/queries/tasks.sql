@@ -50,3 +50,34 @@ SELECT id, project_id, name, started_at
 FROM tasks
 WHERE finished_at IS NULL
 ORDER BY name;
+
+-- name: GetProjectWithDescendants :many
+WITH RECURSIVE project_tree AS (
+    SELECT p.id, p.parent_id, p.name, p.description, p.due_at, p.started_at, p.finished_at, 0 AS depth
+    FROM projects p WHERE p.id = $1
+    UNION ALL
+    SELECT c.id, c.parent_id, c.name, c.description, c.due_at, c.started_at, c.finished_at, pt.depth + 1
+    FROM projects c
+    JOIN project_tree pt ON c.parent_id = pt.id
+)
+SELECT id, parent_id, name, description, due_at, started_at, finished_at, depth
+FROM project_tree
+ORDER BY depth, name;
+
+-- name: GetTasksByProjectIDs :many
+WITH task_times AS (
+    SELECT
+        t.id, t.project_id, t.name, t.description, t.due_at, t.started_at, t.finished_at,
+        COALESCE(SUM(EXTRACT(EPOCH FROM (te.finished_at - te.started_at)))::bigint, 0)::bigint AS time_spent
+    FROM tasks t
+    LEFT JOIN time_entries te ON te.task_id = t.id AND te.finished_at IS NOT NULL
+    WHERE t.project_id = ANY(@project_ids::int[])
+    GROUP BY t.id
+)
+SELECT
+    tt.id, tt.project_id, tt.name, tt.description, tt.due_at, tt.started_at, tt.finished_at,
+    tt.time_spent,
+    td.id AS todo_id, td.name AS todo_name
+FROM task_times tt
+LEFT JOIN todos td ON td.task_id = tt.id
+ORDER BY tt.finished_at NULLS FIRST, tt.name, todo_id;
