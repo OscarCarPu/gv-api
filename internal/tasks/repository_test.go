@@ -569,143 +569,108 @@ func TestRepository_FinishTimeEntry(t *testing.T) {
 	})
 }
 
-func TestRepository_GetActiveTree(t *testing.T) {
-	parentID1 := int32(1)
-	projectID1 := int32(1)
-	projectID2 := int32(2)
+func TestRepository_GetActiveProjects(t *testing.T) {
+	parentID := int32(1)
 
-	t.Run("projects with nested sub-projects and tasks", func(t *testing.T) {
+	t.Run("maps rows correctly", func(t *testing.T) {
 		mock := &mockQuerier{
 			getActiveProjectsFn: func(ctx context.Context) ([]tasksdb.GetActiveProjectsRow, error) {
 				return []tasksdb.GetActiveProjectsRow{
 					{ID: 1, Name: "Parent Project"},
-					{ID: 2, ParentID: &parentID1, Name: "Child Project"},
-				}, nil
-			},
-			getUnfinishedTasksFn: func(ctx context.Context) ([]tasksdb.GetUnfinishedTasksRow, error) {
-				return []tasksdb.GetUnfinishedTasksRow{
-					{ID: 1, ProjectID: &projectID1, Name: "Task A", StartedAt: pgtype.Timestamp{Time: time.Now(), Valid: true}},
-					{ID: 2, ProjectID: &projectID2, Name: "Task B"},
+					{ID: 2, ParentID: &parentID, Name: "Child Project"},
 				}, nil
 			},
 		}
 		repo := NewRepository(mock)
 
-		got, err := repo.GetActiveTree(context.Background())
-		require.NoError(t, err)
-
-		require.Len(t, got, 1)
-		assert.Equal(t, "Parent Project", got[0].Name)
-		assert.Equal(t, "project", got[0].Type)
-
-		// Children: sub-project first, then started task
-		require.Len(t, got[0].Children, 2)
-		assert.Equal(t, "Child Project", got[0].Children[0].Name)
-		assert.Equal(t, "project", got[0].Children[0].Type)
-		assert.Equal(t, "Task A", got[0].Children[1].Name)
-		assert.Equal(t, "task", got[0].Children[1].Type)
-
-		// Child project has its own task
-		require.Len(t, got[0].Children[0].Children, 1)
-		assert.Equal(t, "Task B", got[0].Children[0].Children[0].Name)
-	})
-
-	t.Run("orphan tasks at root level", func(t *testing.T) {
-		mock := &mockQuerier{
-			getActiveProjectsFn: func(ctx context.Context) ([]tasksdb.GetActiveProjectsRow, error) {
-				return []tasksdb.GetActiveProjectsRow{}, nil
-			},
-			getUnfinishedTasksFn: func(ctx context.Context) ([]tasksdb.GetUnfinishedTasksRow, error) {
-				return []tasksdb.GetUnfinishedTasksRow{
-					{ID: 1, Name: "Orphan Started", StartedAt: pgtype.Timestamp{Time: time.Now(), Valid: true}},
-					{ID: 2, Name: "Orphan Unstarted"},
-				}, nil
-			},
-		}
-		repo := NewRepository(mock)
-
-		got, err := repo.GetActiveTree(context.Background())
+		got, err := repo.GetActiveProjects(context.Background())
 		require.NoError(t, err)
 
 		require.Len(t, got, 2)
-		assert.Equal(t, "Orphan Started", got[0].Name)
-		assert.Equal(t, "Orphan Unstarted", got[1].Name)
+		assert.Equal(t, int32(1), got[0].ID)
+		assert.Equal(t, "Parent Project", got[0].Name)
+		assert.Nil(t, got[0].ParentID)
+		assert.Equal(t, int32(2), got[1].ID)
+		assert.Equal(t, "Child Project", got[1].Name)
+		assert.Equal(t, &parentID, got[1].ParentID)
 	})
 
-	t.Run("empty tree", func(t *testing.T) {
+	t.Run("returns empty list", func(t *testing.T) {
 		mock := &mockQuerier{
 			getActiveProjectsFn: func(ctx context.Context) ([]tasksdb.GetActiveProjectsRow, error) {
 				return []tasksdb.GetActiveProjectsRow{}, nil
 			},
+		}
+		repo := NewRepository(mock)
+
+		got, err := repo.GetActiveProjects(context.Background())
+		require.NoError(t, err)
+		assert.Empty(t, got)
+	})
+
+	t.Run("returns error from querier", func(t *testing.T) {
+		mock := &mockQuerier{
+			getActiveProjectsFn: func(ctx context.Context) ([]tasksdb.GetActiveProjectsRow, error) {
+				return nil, errors.New("db error")
+			},
+		}
+		repo := NewRepository(mock)
+
+		_, err := repo.GetActiveProjects(context.Background())
+		assert.Error(t, err)
+	})
+}
+
+func TestRepository_GetUnfinishedTasks(t *testing.T) {
+	projectID := int32(5)
+
+	t.Run("maps rows correctly", func(t *testing.T) {
+		mock := &mockQuerier{
+			getUnfinishedTasksFn: func(ctx context.Context) ([]tasksdb.GetUnfinishedTasksRow, error) {
+				return []tasksdb.GetUnfinishedTasksRow{
+					{ID: 1, ProjectID: &projectID, Name: "Task A", StartedAt: pgtype.Timestamp{Time: time.Now(), Valid: true}},
+					{ID: 2, Name: "Task B"},
+				}, nil
+			},
+		}
+		repo := NewRepository(mock)
+
+		got, err := repo.GetUnfinishedTasks(context.Background())
+		require.NoError(t, err)
+
+		require.Len(t, got, 2)
+		assert.Equal(t, int32(1), got[0].ID)
+		assert.Equal(t, &projectID, got[0].ProjectID)
+		assert.Equal(t, "Task A", got[0].Name)
+		assert.True(t, got[0].Started)
+		assert.Equal(t, int32(2), got[1].ID)
+		assert.Nil(t, got[1].ProjectID)
+		assert.Equal(t, "Task B", got[1].Name)
+		assert.False(t, got[1].Started)
+	})
+
+	t.Run("returns empty list", func(t *testing.T) {
+		mock := &mockQuerier{
 			getUnfinishedTasksFn: func(ctx context.Context) ([]tasksdb.GetUnfinishedTasksRow, error) {
 				return []tasksdb.GetUnfinishedTasksRow{}, nil
 			},
 		}
 		repo := NewRepository(mock)
 
-		got, err := repo.GetActiveTree(context.Background())
+		got, err := repo.GetUnfinishedTasks(context.Background())
 		require.NoError(t, err)
 		assert.Empty(t, got)
-		assert.NotNil(t, got)
 	})
 
-	t.Run("ordering: projects before started tasks before unstarted tasks", func(t *testing.T) {
+	t.Run("returns error from querier", func(t *testing.T) {
 		mock := &mockQuerier{
-			getActiveProjectsFn: func(ctx context.Context) ([]tasksdb.GetActiveProjectsRow, error) {
-				return []tasksdb.GetActiveProjectsRow{
-					{ID: 1, Name: "Project"},
-				}, nil
-			},
-			getUnfinishedTasksFn: func(ctx context.Context) ([]tasksdb.GetUnfinishedTasksRow, error) {
-				return []tasksdb.GetUnfinishedTasksRow{
-					{ID: 1, Name: "Unstarted Orphan"},
-					{ID: 2, Name: "Started Orphan", StartedAt: pgtype.Timestamp{Time: time.Now(), Valid: true}},
-					{ID: 3, ProjectID: &projectID1, Name: "Unstarted Child"},
-					{ID: 4, ProjectID: &projectID1, Name: "Started Child", StartedAt: pgtype.Timestamp{Time: time.Now(), Valid: true}},
-				}, nil
-			},
-		}
-		repo := NewRepository(mock)
-
-		got, err := repo.GetActiveTree(context.Background())
-		require.NoError(t, err)
-
-		// Root: project first, then started orphan, then unstarted orphan
-		require.Len(t, got, 3)
-		assert.Equal(t, "project", got[0].Type)
-		assert.Equal(t, "Started Orphan", got[1].Name)
-		assert.Equal(t, "Unstarted Orphan", got[2].Name)
-
-		// Project children: started task first, then unstarted
-		require.Len(t, got[0].Children, 2)
-		assert.Equal(t, "Started Child", got[0].Children[0].Name)
-		assert.Equal(t, "Unstarted Child", got[0].Children[1].Name)
-	})
-
-	t.Run("error from GetActiveProjects propagates", func(t *testing.T) {
-		mock := &mockQuerier{
-			getActiveProjectsFn: func(ctx context.Context) ([]tasksdb.GetActiveProjectsRow, error) {
-				return nil, errors.New("db error")
-			},
-		}
-		repo := NewRepository(mock)
-
-		_, err := repo.GetActiveTree(context.Background())
-		assert.Error(t, err)
-	})
-
-	t.Run("error from GetUnfinishedTasks propagates", func(t *testing.T) {
-		mock := &mockQuerier{
-			getActiveProjectsFn: func(ctx context.Context) ([]tasksdb.GetActiveProjectsRow, error) {
-				return []tasksdb.GetActiveProjectsRow{}, nil
-			},
 			getUnfinishedTasksFn: func(ctx context.Context) ([]tasksdb.GetUnfinishedTasksRow, error) {
 				return nil, errors.New("db error")
 			},
 		}
 		repo := NewRepository(mock)
 
-		_, err := repo.GetActiveTree(context.Background())
+		_, err := repo.GetUnfinishedTasks(context.Background())
 		assert.Error(t, err)
 	})
 }
@@ -909,6 +874,108 @@ func TestRepository_GetProjectChildren(t *testing.T) {
 		repo := NewRepository(mock)
 
 		_, err := repo.GetProjectChildren(context.Background(), 1)
+		assert.Error(t, err)
+		assert.NotErrorIs(t, err, ErrNotFound)
+	})
+}
+
+func TestRepository_GetTaskTimeEntries(t *testing.T) {
+	projectID := int32(3)
+	desc := "task desc"
+	comment1 := "first"
+	comment2 := "second"
+	startedAt := pgtype.Timestamp{Time: time.Date(2026, 3, 1, 9, 0, 0, 0, time.UTC), Valid: true}
+	finishedAt := pgtype.Timestamp{Time: time.Date(2026, 3, 1, 17, 0, 0, 0, time.UTC), Valid: true}
+	dueDate := pgtype.Date{Time: time.Date(2026, 6, 15, 0, 0, 0, 0, time.UTC), Valid: true}
+
+	t.Run("maps task and time entries correctly", func(t *testing.T) {
+		entryID1, entryID2 := int32(10), int32(11)
+		entryStart1 := pgtype.Timestamp{Time: time.Date(2026, 3, 1, 9, 0, 0, 0, time.UTC), Valid: true}
+		entryEnd1 := pgtype.Timestamp{Time: time.Date(2026, 3, 1, 10, 0, 0, 0, time.UTC), Valid: true}
+		entryStart2 := pgtype.Timestamp{Time: time.Date(2026, 3, 1, 11, 0, 0, 0, time.UTC), Valid: true}
+
+		mock := &mockQuerier{
+			getTimeEntriesByTaskIDFn: func(ctx context.Context, id int32) ([]tasksdb.GetTimeEntriesByTaskIDRow, error) {
+				return []tasksdb.GetTimeEntriesByTaskIDRow{
+					{
+						TaskID: 1, ProjectID: &projectID, Name: "My Task", Description: &desc,
+						DueAt: dueDate, TaskStartedAt: startedAt, TaskFinishedAt: finishedAt,
+						TimeSpent:   3600,
+						TimeEntryID: &entryID1, EntryStartedAt: entryStart1, EntryFinishedAt: entryEnd1, Comment: &comment1,
+					},
+					{
+						TaskID: 1, ProjectID: &projectID, Name: "My Task", Description: &desc,
+						DueAt: dueDate, TaskStartedAt: startedAt, TaskFinishedAt: finishedAt,
+						TimeSpent:   3600,
+						TimeEntryID: &entryID2, EntryStartedAt: entryStart2, Comment: &comment2,
+					},
+				}, nil
+			},
+		}
+		repo := NewRepository(mock)
+
+		got, err := repo.GetTaskTimeEntries(context.Background(), 1)
+		require.NoError(t, err)
+
+		assert.Equal(t, int32(1), got.Task.ID)
+		assert.Equal(t, &projectID, got.Task.ProjectID)
+		assert.Equal(t, "My Task", got.Task.Name)
+		assert.Equal(t, &desc, got.Task.Description)
+		assert.NotNil(t, got.Task.DueAt)
+		assert.NotNil(t, got.Task.StartedAt)
+		assert.NotNil(t, got.Task.FinishedAt)
+		assert.Equal(t, int64(3600), got.Task.TimeSpent)
+
+		require.Len(t, got.TimeEntries, 2)
+		assert.Equal(t, int32(10), got.TimeEntries[0].ID)
+		assert.NotNil(t, got.TimeEntries[0].FinishedAt)
+		assert.Equal(t, &comment1, got.TimeEntries[0].Comment)
+		assert.Equal(t, int32(11), got.TimeEntries[1].ID)
+		assert.Nil(t, got.TimeEntries[1].FinishedAt)
+	})
+
+	t.Run("task with no time entries", func(t *testing.T) {
+		mock := &mockQuerier{
+			getTimeEntriesByTaskIDFn: func(ctx context.Context, id int32) ([]tasksdb.GetTimeEntriesByTaskIDRow, error) {
+				return []tasksdb.GetTimeEntriesByTaskIDRow{
+					{
+						TaskID: 1, Name: "Solo Task", TimeSpent: 0,
+					},
+				}, nil
+			},
+		}
+		repo := NewRepository(mock)
+
+		got, err := repo.GetTaskTimeEntries(context.Background(), 1)
+		require.NoError(t, err)
+
+		assert.Equal(t, "Solo Task", got.Task.Name)
+		assert.Equal(t, int64(0), got.Task.TimeSpent)
+		assert.Empty(t, got.TimeEntries)
+		assert.NotNil(t, got.TimeEntries)
+	})
+
+	t.Run("ErrNotFound when task doesn't exist", func(t *testing.T) {
+		mock := &mockQuerier{
+			getTimeEntriesByTaskIDFn: func(ctx context.Context, id int32) ([]tasksdb.GetTimeEntriesByTaskIDRow, error) {
+				return []tasksdb.GetTimeEntriesByTaskIDRow{}, nil
+			},
+		}
+		repo := NewRepository(mock)
+
+		_, err := repo.GetTaskTimeEntries(context.Background(), 999)
+		assert.ErrorIs(t, err, ErrNotFound)
+	})
+
+	t.Run("returns error from querier", func(t *testing.T) {
+		mock := &mockQuerier{
+			getTimeEntriesByTaskIDFn: func(ctx context.Context, id int32) ([]tasksdb.GetTimeEntriesByTaskIDRow, error) {
+				return nil, errors.New("db error")
+			},
+		}
+		repo := NewRepository(mock)
+
+		_, err := repo.GetTaskTimeEntries(context.Background(), 1)
 		assert.Error(t, err)
 		assert.NotErrorIs(t, err, ErrNotFound)
 	})

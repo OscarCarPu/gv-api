@@ -58,7 +58,89 @@ func (s *Service) FinishProject(ctx context.Context, req FinishProjectRequest) (
 }
 
 func (s *Service) GetActiveTree(ctx context.Context) ([]ActiveTreeNode, error) {
-	return s.repo.GetActiveTree(ctx)
+	projects, err := s.repo.GetActiveProjects(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	tasks, err := s.repo.GetUnfinishedTasks(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	// Build project nodes indexed by ID
+	projectNodes := make(map[int32]*ActiveTreeNode, len(projects))
+	for _, p := range projects {
+		projectNodes[p.ID] = &ActiveTreeNode{
+			ID:       p.ID,
+			Type:     "project",
+			Name:     p.Name,
+			Children: []ActiveTreeNode{},
+		}
+	}
+
+	// Group tasks by project ID, separating started vs unstarted
+	startedTasks := make(map[int32][]ActiveTreeNode)
+	unstartedTasks := make(map[int32][]ActiveTreeNode)
+	var orphanStarted []ActiveTreeNode
+	var orphanUnstarted []ActiveTreeNode
+
+	for _, t := range tasks {
+		node := ActiveTreeNode{
+			ID:   t.ID,
+			Type: "task",
+			Name: t.Name,
+		}
+
+		if t.ProjectID != nil {
+			if _, ok := projectNodes[*t.ProjectID]; ok {
+				if t.Started {
+					startedTasks[*t.ProjectID] = append(startedTasks[*t.ProjectID], node)
+				} else {
+					unstartedTasks[*t.ProjectID] = append(unstartedTasks[*t.ProjectID], node)
+				}
+				continue
+			}
+		}
+		if t.Started {
+			orphanStarted = append(orphanStarted, node)
+		} else {
+			orphanUnstarted = append(orphanUnstarted, node)
+		}
+	}
+
+	// Attach tasks to each project node
+	for id, node := range projectNodes {
+		node.Children = append(node.Children, startedTasks[id]...)
+		node.Children = append(node.Children, unstartedTasks[id]...)
+	}
+
+	// Attach child projects to parent projects (sub-projects first, before tasks)
+	childProjectIDs := make(map[int32]bool)
+	for _, p := range projects {
+		if p.ParentID != nil {
+			if parent, ok := projectNodes[*p.ParentID]; ok {
+				childProjectIDs[p.ID] = true
+				parent.Children = append([]ActiveTreeNode{*projectNodes[p.ID]}, parent.Children...)
+			}
+		}
+	}
+
+	// Build root: projects that aren't children, then orphan tasks
+	var root []ActiveTreeNode
+	for _, p := range projects {
+		if !childProjectIDs[p.ID] {
+			root = append(root, *projectNodes[p.ID])
+		}
+	}
+	root = append(root, orphanStarted...)
+	root = append(root, orphanUnstarted...)
+
+	if root == nil {
+		root = []ActiveTreeNode{}
+	}
+
+	return root, nil
 }
 
 func (s *Service) GetProjectChildren(ctx context.Context, projectID int32) (ProjectChildrenResponse, error) {

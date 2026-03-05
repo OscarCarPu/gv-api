@@ -24,7 +24,8 @@ type Repository interface {
 	FinishTask(ctx context.Context, id int32, finishedAt time.Time) (TaskResponse, error)
 	FinishProject(ctx context.Context, id int32, finishedAt time.Time) (ProjectResponse, error)
 	GetRootProjects(ctx context.Context) ([]ProjectResponse, error)
-	GetActiveTree(ctx context.Context) ([]ActiveTreeNode, error)
+	GetActiveProjects(ctx context.Context) ([]ActiveProject, error)
+	GetUnfinishedTasks(ctx context.Context) ([]UnfinishedTask, error)
 	GetProjectChildren(ctx context.Context, projectID int32) (ProjectChildrenResponse, error)
 	GetTaskTimeEntries(ctx context.Context, taskID int32) (TaskTimeEntriesResponse, error)
 }
@@ -219,93 +220,39 @@ func (r *PostgresRepository) FinishProject(ctx context.Context, id int32, finish
 	}, nil
 }
 
-func (r *PostgresRepository) GetActiveTree(ctx context.Context) ([]ActiveTreeNode, error) {
-	projects, err := r.q.GetActiveProjects(ctx)
+func (r *PostgresRepository) GetActiveProjects(ctx context.Context) ([]ActiveProject, error) {
+	rows, err := r.q.GetActiveProjects(ctx)
 	if err != nil {
 		return nil, err
 	}
 
-	tasks, err := r.q.GetUnfinishedTasks(ctx)
+	projects := make([]ActiveProject, len(rows))
+	for i, row := range rows {
+		projects[i] = ActiveProject{
+			ID:       row.ID,
+			ParentID: row.ParentID,
+			Name:     row.Name,
+		}
+	}
+	return projects, nil
+}
+
+func (r *PostgresRepository) GetUnfinishedTasks(ctx context.Context) ([]UnfinishedTask, error) {
+	rows, err := r.q.GetUnfinishedTasks(ctx)
 	if err != nil {
 		return nil, err
 	}
 
-	// Build project nodes indexed by ID
-	projectNodes := make(map[int32]*ActiveTreeNode, len(projects))
-	for _, p := range projects {
-		projectNodes[p.ID] = &ActiveTreeNode{
-			ID:       p.ID,
-			Type:     "project",
-			Name:     p.Name,
-			Children: []ActiveTreeNode{},
+	tasks := make([]UnfinishedTask, len(rows))
+	for i, row := range rows {
+		tasks[i] = UnfinishedTask{
+			ID:        row.ID,
+			ProjectID: row.ProjectID,
+			Name:      row.Name,
+			Started:   row.StartedAt.Valid,
 		}
 	}
-
-	// Group tasks by project ID, separating started vs unstarted
-	startedTasks := make(map[int32][]ActiveTreeNode)
-	unstartedTasks := make(map[int32][]ActiveTreeNode)
-	var orphanStarted []ActiveTreeNode
-	var orphanUnstarted []ActiveTreeNode
-
-	for _, t := range tasks {
-		node := ActiveTreeNode{
-			ID:   t.ID,
-			Type: "task",
-			Name: t.Name,
-		}
-		started := t.StartedAt.Valid
-
-		if t.ProjectID != nil {
-			if _, ok := projectNodes[*t.ProjectID]; ok {
-				if started {
-					startedTasks[*t.ProjectID] = append(startedTasks[*t.ProjectID], node)
-				} else {
-					unstartedTasks[*t.ProjectID] = append(unstartedTasks[*t.ProjectID], node)
-				}
-				continue
-			}
-		}
-		if started {
-			orphanStarted = append(orphanStarted, node)
-		} else {
-			orphanUnstarted = append(orphanUnstarted, node)
-		}
-	}
-
-	// Attach tasks to each project node
-	for id, node := range projectNodes {
-		node.Children = append(node.Children, startedTasks[id]...)
-		node.Children = append(node.Children, unstartedTasks[id]...)
-	}
-
-	// Attach child projects to parent projects (sub-projects first, before tasks)
-	// We need to track which projects are children so we know root projects
-	childProjectIDs := make(map[int32]bool)
-	for _, p := range projects {
-		if p.ParentID != nil {
-			if parent, ok := projectNodes[*p.ParentID]; ok {
-				childProjectIDs[p.ID] = true
-				// Prepend sub-project before tasks
-				parent.Children = append([]ActiveTreeNode{*projectNodes[p.ID]}, parent.Children...)
-			}
-		}
-	}
-
-	// Build root: projects that aren't children, then orphan tasks
-	var root []ActiveTreeNode
-	for _, p := range projects {
-		if !childProjectIDs[p.ID] {
-			root = append(root, *projectNodes[p.ID])
-		}
-	}
-	root = append(root, orphanStarted...)
-	root = append(root, orphanUnstarted...)
-
-	if root == nil {
-		root = []ActiveTreeNode{}
-	}
-
-	return root, nil
+	return tasks, nil
 }
 
 func (r *PostgresRepository) GetProjectChildren(ctx context.Context, projectID int32) (ProjectChildrenResponse, error) {
@@ -462,22 +409,15 @@ func (r *PostgresRepository) GetTaskTimeEntries(ctx context.Context, taskID int3
 	first := rows[0]
 
 	var entries []TimeEntryResponse
-	var timeSpent int64
 	for _, row := range rows {
 		if row.TimeEntryID == nil {
 			continue
-		}
-		var finishedAt *time.Time
-		if row.EntryFinishedAt.Valid {
-			t := row.EntryFinishedAt.Time
-			finishedAt = &t
-			timeSpent += int64(row.EntryFinishedAt.Time.Sub(row.EntryStartedAt.Time).Seconds())
 		}
 		entries = append(entries, TimeEntryResponse{
 			ID:         *row.TimeEntryID,
 			TaskID:     row.TaskID,
 			StartedAt:  row.EntryStartedAt.Time,
-			FinishedAt: finishedAt,
+			FinishedAt: pgTimestampToPtr(row.EntryFinishedAt),
 			Comment:    row.Comment,
 		})
 	}
@@ -495,7 +435,7 @@ func (r *PostgresRepository) GetTaskTimeEntries(ctx context.Context, taskID int3
 			DueAt:       pgDateToPtr(first.DueAt),
 			StartedAt:   pgTimestampToPtr(first.TaskStartedAt),
 			FinishedAt:  pgTimestampToPtr(first.TaskFinishedAt),
-			TimeSpent:   timeSpent,
+			TimeSpent:   first.TimeSpent,
 		},
 		TimeEntries: entries,
 	}, nil

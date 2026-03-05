@@ -1,7 +1,7 @@
 services:
   db:
     image: postgres:15-alpine
-    container_name: habits_db
+    container_name: gv_db
     env_file:
       - .env
     ports:
@@ -21,7 +21,7 @@ services:
 
   gv-api:
     build: .
-    container_name: habits_api
+    container_name: gv_api
     depends_on:
       db:
         condition: service_healthy

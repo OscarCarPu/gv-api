@@ -1,6 +1,7 @@
 package auth
 
 import (
+	"encoding/json"
 	"errors"
 	"net/http"
 	"net/http/httptest"
@@ -55,6 +56,21 @@ func TestAuthMiddleware(t *testing.T) {
 
 			if status := rr.Code; status != test.expectedStatus {
 				t.Errorf("handler returned wrong status code: got %v want %v", status, test.expectedStatus)
+			}
+
+			if test.expectedStatus == http.StatusUnauthorized {
+				contentType := rr.Header().Get("Content-Type")
+				if contentType != "application/json" {
+					t.Errorf("expected Content-Type application/json, got %v", contentType)
+				}
+
+				var body map[string]string
+				if err := json.NewDecoder(rr.Body).Decode(&body); err != nil {
+					t.Fatalf("failed to decode JSON response: %v", err)
+				}
+				if body["error"] != "Unauthorized" {
+					t.Errorf("expected error message 'Unauthorized', got %v", body["error"])
+				}
 			}
 		})
 	}

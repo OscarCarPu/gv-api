@@ -83,10 +83,18 @@ LEFT JOIN todos td ON td.task_id = tt.id
 ORDER BY tt.finished_at NULLS FIRST, tt.name, todo_id;
 
 -- name: GetTimeEntriesByTaskID :many
+WITH task_info AS (
+    SELECT t.id, t.project_id, t.name, t.description, t.due_at, t.started_at, t.finished_at,
+        COALESCE(SUM(EXTRACT(EPOCH FROM (te.finished_at - te.started_at)))::bigint, 0)::bigint AS time_spent
+    FROM tasks t
+    LEFT JOIN time_entries te ON te.task_id = t.id AND te.finished_at IS NOT NULL
+    WHERE t.id = $1
+    GROUP BY t.id
+)
 SELECT
-    t.id AS task_id, t.project_id, t.name, t.description, t.due_at, t.started_at AS task_started_at, t.finished_at AS task_finished_at,
+    ti.id AS task_id, ti.project_id, ti.name, ti.description, ti.due_at,
+    ti.started_at AS task_started_at, ti.finished_at AS task_finished_at, ti.time_spent,
     te.id AS time_entry_id, te.started_at AS entry_started_at, te.finished_at AS entry_finished_at, te.comment
-FROM tasks t
-LEFT JOIN time_entries te ON te.task_id = t.id
-WHERE t.id = $1
+FROM task_info ti
+LEFT JOIN time_entries te ON te.task_id = ti.id
 ORDER BY te.started_at;

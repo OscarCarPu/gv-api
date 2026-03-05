@@ -93,6 +93,19 @@ type TaskDetailResponse struct {
 	TimeSpent   int64      `json:"time_spent"`
 }
 
+type ActiveProject struct {
+	ID       int32
+	ParentID *int32
+	Name     string
+}
+
+type UnfinishedTask struct {
+	ID        int32
+	ProjectID *int32
+	Name      string
+	Started   bool
+}
+
 type ActiveTreeNode struct {
 	ID       int32            `json:"id"`
 	Type     string           `json:"type"`

@@ -414,12 +414,20 @@ func (q *Queries) GetTasksByProjectIDs(ctx context.Context, projectIds []int32) 
 }
 
 const getTimeEntriesByTaskID = `-- name: GetTimeEntriesByTaskID :many
+WITH task_info AS (
+    SELECT t.id, t.project_id, t.name, t.description, t.due_at, t.started_at, t.finished_at,
+        COALESCE(SUM(EXTRACT(EPOCH FROM (te.finished_at - te.started_at)))::bigint, 0)::bigint AS time_spent
+    FROM tasks t
+    LEFT JOIN time_entries te ON te.task_id = t.id AND te.finished_at IS NOT NULL
+    WHERE t.id = $1
+    GROUP BY t.id
+)
 SELECT
-    t.id AS task_id, t.project_id, t.name, t.description, t.due_at, t.started_at AS task_started_at, t.finished_at AS task_finished_at,
+    ti.id AS task_id, ti.project_id, ti.name, ti.description, ti.due_at,
+    ti.started_at AS task_started_at, ti.finished_at AS task_finished_at, ti.time_spent,
     te.id AS time_entry_id, te.started_at AS entry_started_at, te.finished_at AS entry_finished_at, te.comment
-FROM tasks t
-LEFT JOIN time_entries te ON te.task_id = t.id
-WHERE t.id = $1
+FROM task_info ti
+LEFT JOIN time_entries te ON te.task_id = ti.id
 ORDER BY te.started_at
 `
 
@@ -431,6 +439,7 @@ type GetTimeEntriesByTaskIDRow struct {
 	DueAt           pgtype.Date      `db:"due_at" json:"due_at"`
 	TaskStartedAt   pgtype.Timestamp `db:"task_started_at" json:"task_started_at"`
 	TaskFinishedAt  pgtype.Timestamp `db:"task_finished_at" json:"task_finished_at"`
+	TimeSpent       int64            `db:"time_spent" json:"time_spent"`
 	TimeEntryID     *int32           `db:"time_entry_id" json:"time_entry_id"`
 	EntryStartedAt  pgtype.Timestamp `db:"entry_started_at" json:"entry_started_at"`
 	EntryFinishedAt pgtype.Timestamp `db:"entry_finished_at" json:"entry_finished_at"`
@@ -454,6 +463,7 @@ func (q *Queries) GetTimeEntriesByTaskID(ctx context.Context, id int32) ([]GetTi
 			&i.DueAt,
 			&i.TaskStartedAt,
 			&i.TaskFinishedAt,
+			&i.TimeSpent,
 			&i.TimeEntryID,
 			&i.EntryStartedAt,
 			&i.EntryFinishedAt,

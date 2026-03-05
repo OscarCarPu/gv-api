@@ -18,8 +18,9 @@ type mockRepo struct {
 	finishTimeEntryFn func(ctx context.Context, id int32, finishedAt time.Time) (TimeEntryResponse, error)
 	finishTaskFn      func(ctx context.Context, id int32, finishedAt time.Time) (TaskResponse, error)
 	finishProjectFn   func(ctx context.Context, id int32, finishedAt time.Time) (ProjectResponse, error)
-	getRootProjectsFn    func(ctx context.Context) ([]ProjectResponse, error)
-	getActiveTreeFn      func(ctx context.Context) ([]ActiveTreeNode, error)
+	getRootProjectsFn      func(ctx context.Context) ([]ProjectResponse, error)
+	getActiveProjectsFn    func(ctx context.Context) ([]ActiveProject, error)
+	getUnfinishedTasksFn   func(ctx context.Context) ([]UnfinishedTask, error)
 	getProjectChildrenFn   func(ctx context.Context, projectID int32) (ProjectChildrenResponse, error)
 	getTaskTimeEntriesFn   func(ctx context.Context, taskID int32) (TaskTimeEntriesResponse, error)
 }
@@ -80,9 +81,16 @@ func (m *mockRepo) GetRootProjects(ctx context.Context) ([]ProjectResponse, erro
 	return nil, nil
 }
 
-func (m *mockRepo) GetActiveTree(ctx context.Context) ([]ActiveTreeNode, error) {
-	if m.getActiveTreeFn != nil {
-		return m.getActiveTreeFn(ctx)
+func (m *mockRepo) GetActiveProjects(ctx context.Context) ([]ActiveProject, error) {
+	if m.getActiveProjectsFn != nil {
+		return m.getActiveProjectsFn(ctx)
+	}
+	return nil, nil
+}
+
+func (m *mockRepo) GetUnfinishedTasks(ctx context.Context) ([]UnfinishedTask, error) {
+	if m.getUnfinishedTasksFn != nil {
+		return m.getUnfinishedTasksFn(ctx)
 	}
 	return nil, nil
 }
@@ -535,34 +543,139 @@ func TestService_FinishTimeEntry(t *testing.T) {
 }
 
 func TestService_GetActiveTree(t *testing.T) {
-	t.Run("delegates to repo and returns result", func(t *testing.T) {
-		expected := []ActiveTreeNode{
-			{ID: 1, Type: "project", Name: "P1", Children: []ActiveTreeNode{}},
-		}
+	parentID1 := int32(1)
+	projectID1 := int32(1)
+	projectID2 := int32(2)
+
+	t.Run("projects with nested sub-projects and tasks", func(t *testing.T) {
 		mock := &mockRepo{
-			getActiveTreeFn: func(ctx context.Context) ([]ActiveTreeNode, error) {
-				return expected, nil
+			getActiveProjectsFn: func(ctx context.Context) ([]ActiveProject, error) {
+				return []ActiveProject{
+					{ID: 1, Name: "Parent Project"},
+					{ID: 2, ParentID: &parentID1, Name: "Child Project"},
+				}, nil
+			},
+			getUnfinishedTasksFn: func(ctx context.Context) ([]UnfinishedTask, error) {
+				return []UnfinishedTask{
+					{ID: 1, ProjectID: &projectID1, Name: "Task A", Started: true},
+					{ID: 2, ProjectID: &projectID2, Name: "Task B"},
+				}, nil
 			},
 		}
-
 		svc := NewService(mock, nil)
-		got, err := svc.GetActiveTree(context.Background())
 
+		got, err := svc.GetActiveTree(context.Background())
 		require.NoError(t, err)
-		assert.Equal(t, expected, got)
+
+		require.Len(t, got, 1)
+		assert.Equal(t, "Parent Project", got[0].Name)
+		assert.Equal(t, "project", got[0].Type)
+
+		require.Len(t, got[0].Children, 2)
+		assert.Equal(t, "Child Project", got[0].Children[0].Name)
+		assert.Equal(t, "project", got[0].Children[0].Type)
+		assert.Equal(t, "Task A", got[0].Children[1].Name)
+		assert.Equal(t, "task", got[0].Children[1].Type)
+
+		require.Len(t, got[0].Children[0].Children, 1)
+		assert.Equal(t, "Task B", got[0].Children[0].Children[0].Name)
 	})
 
-	t.Run("propagates error", func(t *testing.T) {
+	t.Run("orphan tasks at root level", func(t *testing.T) {
 		mock := &mockRepo{
-			getActiveTreeFn: func(ctx context.Context) ([]ActiveTreeNode, error) {
+			getActiveProjectsFn: func(ctx context.Context) ([]ActiveProject, error) {
+				return []ActiveProject{}, nil
+			},
+			getUnfinishedTasksFn: func(ctx context.Context) ([]UnfinishedTask, error) {
+				return []UnfinishedTask{
+					{ID: 1, Name: "Orphan Started", Started: true},
+					{ID: 2, Name: "Orphan Unstarted"},
+				}, nil
+			},
+		}
+		svc := NewService(mock, nil)
+
+		got, err := svc.GetActiveTree(context.Background())
+		require.NoError(t, err)
+
+		require.Len(t, got, 2)
+		assert.Equal(t, "Orphan Started", got[0].Name)
+		assert.Equal(t, "Orphan Unstarted", got[1].Name)
+	})
+
+	t.Run("empty tree", func(t *testing.T) {
+		mock := &mockRepo{
+			getActiveProjectsFn: func(ctx context.Context) ([]ActiveProject, error) {
+				return []ActiveProject{}, nil
+			},
+			getUnfinishedTasksFn: func(ctx context.Context) ([]UnfinishedTask, error) {
+				return []UnfinishedTask{}, nil
+			},
+		}
+		svc := NewService(mock, nil)
+
+		got, err := svc.GetActiveTree(context.Background())
+		require.NoError(t, err)
+		assert.Empty(t, got)
+		assert.NotNil(t, got)
+	})
+
+	t.Run("ordering: projects before started tasks before unstarted tasks", func(t *testing.T) {
+		mock := &mockRepo{
+			getActiveProjectsFn: func(ctx context.Context) ([]ActiveProject, error) {
+				return []ActiveProject{
+					{ID: 1, Name: "Project"},
+				}, nil
+			},
+			getUnfinishedTasksFn: func(ctx context.Context) ([]UnfinishedTask, error) {
+				return []UnfinishedTask{
+					{ID: 1, Name: "Unstarted Orphan"},
+					{ID: 2, Name: "Started Orphan", Started: true},
+					{ID: 3, ProjectID: &projectID1, Name: "Unstarted Child"},
+					{ID: 4, ProjectID: &projectID1, Name: "Started Child", Started: true},
+				}, nil
+			},
+		}
+		svc := NewService(mock, nil)
+
+		got, err := svc.GetActiveTree(context.Background())
+		require.NoError(t, err)
+
+		require.Len(t, got, 3)
+		assert.Equal(t, "project", got[0].Type)
+		assert.Equal(t, "Started Orphan", got[1].Name)
+		assert.Equal(t, "Unstarted Orphan", got[2].Name)
+
+		require.Len(t, got[0].Children, 2)
+		assert.Equal(t, "Started Child", got[0].Children[0].Name)
+		assert.Equal(t, "Unstarted Child", got[0].Children[1].Name)
+	})
+
+	t.Run("error from GetActiveProjects propagates", func(t *testing.T) {
+		mock := &mockRepo{
+			getActiveProjectsFn: func(ctx context.Context) ([]ActiveProject, error) {
 				return nil, errors.New("db error")
 			},
 		}
-
 		svc := NewService(mock, nil)
-		_, err := svc.GetActiveTree(context.Background())
 
-		require.Error(t, err)
+		_, err := svc.GetActiveTree(context.Background())
+		assert.Error(t, err)
+	})
+
+	t.Run("error from GetUnfinishedTasks propagates", func(t *testing.T) {
+		mock := &mockRepo{
+			getActiveProjectsFn: func(ctx context.Context) ([]ActiveProject, error) {
+				return []ActiveProject{}, nil
+			},
+			getUnfinishedTasksFn: func(ctx context.Context) ([]UnfinishedTask, error) {
+				return nil, errors.New("db error")
+			},
+		}
+		svc := NewService(mock, nil)
+
+		_, err := svc.GetActiveTree(context.Background())
+		assert.Error(t, err)
 	})
 }
 
@@ -595,6 +708,40 @@ func TestService_GetProjectChildren(t *testing.T) {
 
 		svc := NewService(mock, nil)
 		_, err := svc.GetProjectChildren(context.Background(), 1)
+
+		require.Error(t, err)
+	})
+}
+
+func TestService_GetTaskTimeEntries(t *testing.T) {
+	t.Run("delegates to repo and returns result", func(t *testing.T) {
+		expected := TaskTimeEntriesResponse{
+			Task:        TaskDetailResponse{ID: 1, Name: "Task", TimeSpent: 3600},
+			TimeEntries: []TimeEntryResponse{},
+		}
+		mock := &mockRepo{
+			getTaskTimeEntriesFn: func(ctx context.Context, taskID int32) (TaskTimeEntriesResponse, error) {
+				assert.Equal(t, int32(7), taskID)
+				return expected, nil
+			},
+		}
+
+		svc := NewService(mock, nil)
+		got, err := svc.GetTaskTimeEntries(context.Background(), 7)
+
+		require.NoError(t, err)
+		assert.Equal(t, expected, got)
+	})
+
+	t.Run("propagates error", func(t *testing.T) {
+		mock := &mockRepo{
+			getTaskTimeEntriesFn: func(ctx context.Context, taskID int32) (TaskTimeEntriesResponse, error) {
+				return TaskTimeEntriesResponse{}, errors.New("db error")
+			},
+		}
+
+		svc := NewService(mock, nil)
+		_, err := svc.GetTaskTimeEntries(context.Background(), 1)
 
 		require.Error(t, err)
 	})

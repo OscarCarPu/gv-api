@@ -917,3 +917,91 @@ func TestHandler_GetProjectChildren(t *testing.T) {
 		assert.Contains(t, rec.Body.String(), "Failed to get project children")
 	})
 }
+
+func TestHandler_GetTaskTimeEntries(t *testing.T) {
+	t.Run("returns 200 with task time entries", func(t *testing.T) {
+		now := time.Now()
+		mock := &mockService{
+			getTaskTimeEntriesFn: func(ctx context.Context, taskID int32) (TaskTimeEntriesResponse, error) {
+				return TaskTimeEntriesResponse{
+					Task: TaskDetailResponse{ID: taskID, Name: "My Task", TimeSpent: 3600},
+					TimeEntries: []TimeEntryResponse{
+						{ID: 1, TaskID: taskID, StartedAt: now},
+					},
+				}, nil
+			},
+		}
+		handler := NewHandler(mock)
+
+		req := httptest.NewRequest(http.MethodGet, "/tasks/7/time-entries", nil)
+		rctx := chi.NewRouteContext()
+		rctx.URLParams.Add("id", "7")
+		req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
+
+		rec := httptest.NewRecorder()
+		handler.GetTaskTimeEntries(rec, req)
+
+		assert.Equal(t, http.StatusOK, rec.Code)
+
+		var got TaskTimeEntriesResponse
+		require.NoError(t, json.NewDecoder(rec.Body).Decode(&got))
+		assert.Equal(t, int32(7), got.Task.ID)
+		assert.Equal(t, int64(3600), got.Task.TimeSpent)
+		assert.Len(t, got.TimeEntries, 1)
+	})
+
+	t.Run("returns 400 for invalid id", func(t *testing.T) {
+		handler := NewHandler(&mockService{})
+
+		req := httptest.NewRequest(http.MethodGet, "/tasks/abc/time-entries", nil)
+		rctx := chi.NewRouteContext()
+		rctx.URLParams.Add("id", "abc")
+		req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
+
+		rec := httptest.NewRecorder()
+		handler.GetTaskTimeEntries(rec, req)
+
+		assert.Equal(t, http.StatusBadRequest, rec.Code)
+		assert.Contains(t, rec.Body.String(), "invalid task id")
+	})
+
+	t.Run("returns 404 when not found", func(t *testing.T) {
+		mock := &mockService{
+			getTaskTimeEntriesFn: func(ctx context.Context, taskID int32) (TaskTimeEntriesResponse, error) {
+				return TaskTimeEntriesResponse{}, ErrNotFound
+			},
+		}
+		handler := NewHandler(mock)
+
+		req := httptest.NewRequest(http.MethodGet, "/tasks/999/time-entries", nil)
+		rctx := chi.NewRouteContext()
+		rctx.URLParams.Add("id", "999")
+		req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
+
+		rec := httptest.NewRecorder()
+		handler.GetTaskTimeEntries(rec, req)
+
+		assert.Equal(t, http.StatusNotFound, rec.Code)
+		assert.Contains(t, rec.Body.String(), "task not found")
+	})
+
+	t.Run("returns 500 when service fails", func(t *testing.T) {
+		mock := &mockService{
+			getTaskTimeEntriesFn: func(ctx context.Context, taskID int32) (TaskTimeEntriesResponse, error) {
+				return TaskTimeEntriesResponse{}, errors.New("db error")
+			},
+		}
+		handler := NewHandler(mock)
+
+		req := httptest.NewRequest(http.MethodGet, "/tasks/1/time-entries", nil)
+		rctx := chi.NewRouteContext()
+		rctx.URLParams.Add("id", "1")
+		req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
+
+		rec := httptest.NewRecorder()
+		handler.GetTaskTimeEntries(rec, req)
+
+		assert.Equal(t, http.StatusInternalServerError, rec.Code)
+		assert.Contains(t, rec.Body.String(), "Failed to get task time entries")
+	})
+}

@@ -40,6 +40,6 @@ CREATE INDEX idx_todos_task_id ON todos(task_id);
 CREATE INDEX idx_time_entries_task_id ON time_entries(task_id);
 
 -- Useful query indexes
-CREATE INDEX idx_tasks_is_done ON tasks(is_done) WHERE is_done = FALSE;
+CREATE INDEX idx_tasks_unfinished ON tasks(finished_at) WHERE finished_at IS NULL;
 CREATE INDEX idx_tasks_due_at ON tasks(due_at) WHERE due_at IS NOT NULL;
 CREATE INDEX idx_time_entries_started_at ON time_entries(started_at);
