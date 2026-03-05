@@ -1,13 +1,13 @@
 version: "2"
 sql:
   - schema: "db/migrations"
-    queries: "db/queries"
+    queries: "db/queries/habits.sql"
     engine: "postgresql"
     gen:
       go:
-        package: "sqlc"
+        package: "habitsdb"
         sql_package: "pgx/v5"
-        out: "internal/database/sqlc"
+        out: "internal/database/habitsdb"
         emit_json_tags: true
         emit_db_tags: true
         emit_empty_slices: true
@@ -18,3 +18,20 @@ sql:
           - db_type: "date"
             go_type: "time.Time"
 
+  - schema: "db/migrations"
+    queries: "db/queries/tasks.sql"
+    engine: "postgresql"
+    gen:
+      go:
+        package: "tasksdb"
+        sql_package: "pgx/v5"
+        out: "internal/database/tasksdb"
+        emit_json_tags: true
+        emit_db_tags: true
+        emit_empty_slices: true
+        emit_pointers_for_null_types: true
+        emit_interface: true
+
+        overrides:
+          - db_type: "date"
+            go_type: "time.Time"

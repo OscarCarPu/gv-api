@@ -65,6 +65,10 @@ func (s *Service) GetProjectChildren(ctx context.Context, projectID int32) (Proj
 	return s.repo.GetProjectChildren(ctx, projectID)
 }
 
+func (s *Service) GetTaskTimeEntries(ctx context.Context, taskID int32) (TaskTimeEntriesResponse, error) {
+	return s.repo.GetTaskTimeEntries(ctx, taskID)
+}
+
 func (s *Service) GetRootProjects(ctx context.Context) ([]ProjectResponse, error) {
 	return s.repo.GetRootProjects(ctx)
 }

@@ -10,7 +10,8 @@ import (
 	"gv-api/internal/auth"
 	"gv-api/internal/config"
 	"gv-api/internal/database"
-	"gv-api/internal/database/sqlc"
+	"gv-api/internal/database/habitsdb"
+	"gv-api/internal/database/tasksdb"
 	"gv-api/internal/habits"
 	"gv-api/internal/tasks"
 
@@ -32,20 +33,20 @@ func main() {
 	//nolint:errcheck // if the db is closed, the program has already exited
 	defer db.Close()
 
-	queries := sqlc.New(db)
-
-	// Habit Setup
 	loc, err := time.LoadLocation(cfg.Timezone)
 	if err != nil {
 		log.Fatalf("Failed to load timezone %q: %v", cfg.Timezone, err)
 	}
 
-	habitRepo := habits.NewRepository(queries)
+	// Habit Setup
+	habitQueries := habitsdb.New(db)
+	habitRepo := habits.NewRepository(habitQueries)
 	habitService := habits.NewService(habitRepo, loc)
 	habitHandler := habits.NewHandler(habitService)
 
 	// Tasks Setup
-	taskRepo := tasks.NewRepository(queries)
+	taskQueries := tasksdb.New(db)
+	taskRepo := tasks.NewRepository(taskQueries)
 	taskService := tasks.NewService(taskRepo, loc)
 	taskHandler := tasks.NewHandler(taskService)
 
@@ -79,6 +80,7 @@ func main() {
 		r.Post("/tasks/todos", taskHandler.CreateTodo)
 		r.Post("/tasks/time-entries", taskHandler.CreateTimeEntry)
 		r.Patch("/tasks/time-entries/{id}/finish", taskHandler.FinishTimeEntry)
+		r.Get("/tasks/tasks/{id}/time-entries", taskHandler.GetTaskTimeEntries)
 		r.Patch("/tasks/tasks/{id}/finish", taskHandler.FinishTask)
 		r.Patch("/tasks/projects/{id}/finish", taskHandler.FinishProject)
 	})

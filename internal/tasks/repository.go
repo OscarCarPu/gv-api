@@ -7,7 +7,7 @@ import (
 	"slices"
 	"time"
 
-	"gv-api/internal/database/sqlc"
+	"gv-api/internal/database/tasksdb"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -26,13 +26,14 @@ type Repository interface {
 	GetRootProjects(ctx context.Context) ([]ProjectResponse, error)
 	GetActiveTree(ctx context.Context) ([]ActiveTreeNode, error)
 	GetProjectChildren(ctx context.Context, projectID int32) (ProjectChildrenResponse, error)
+	GetTaskTimeEntries(ctx context.Context, taskID int32) (TaskTimeEntriesResponse, error)
 }
 
 type PostgresRepository struct {
-	q sqlc.Querier
+	q tasksdb.Querier
 }
 
-func NewRepository(q sqlc.Querier) *PostgresRepository {
+func NewRepository(q tasksdb.Querier) *PostgresRepository {
 	return &PostgresRepository{q: q}
 }
 
@@ -42,7 +43,7 @@ func (r *PostgresRepository) CreateProject(ctx context.Context, name string, des
 		pgDueAt = pgtype.Date{Time: *dueAt, Valid: true}
 	}
 
-	row, err := r.q.CreateProject(ctx, sqlc.CreateProjectParams{
+	row, err := r.q.CreateProject(ctx, tasksdb.CreateProjectParams{
 		Name:        name,
 		Description: description,
 		DueAt:       pgDueAt,
@@ -73,7 +74,7 @@ func (r *PostgresRepository) CreateTask(ctx context.Context, projectID *int32, n
 		pgDueAt = pgtype.Date{Time: *dueAt, Valid: true}
 	}
 
-	row, err := r.q.CreateTask(ctx, sqlc.CreateTaskParams{
+	row, err := r.q.CreateTask(ctx, tasksdb.CreateTaskParams{
 		ProjectID:   projectID,
 		Name:        name,
 		Description: description,
@@ -99,7 +100,7 @@ func (r *PostgresRepository) CreateTask(ctx context.Context, projectID *int32, n
 }
 
 func (r *PostgresRepository) CreateTodo(ctx context.Context, taskID int32, name string) (TodoResponse, error) {
-	row, err := r.q.CreateTodo(ctx, sqlc.CreateTodoParams{
+	row, err := r.q.CreateTodo(ctx, tasksdb.CreateTodoParams{
 		TaskID: taskID,
 		Name:   name,
 	})
@@ -122,7 +123,7 @@ func (r *PostgresRepository) CreateTimeEntry(ctx context.Context, taskID int32, 
 		pgFinishedAt = pgtype.Timestamp{Time: *finishedAt, Valid: true}
 	}
 
-	row, err := r.q.CreateTimeEntry(ctx, sqlc.CreateTimeEntryParams{
+	row, err := r.q.CreateTimeEntry(ctx, tasksdb.CreateTimeEntryParams{
 		TaskID:     taskID,
 		StartedAt:  pgStartedAt,
 		FinishedAt: pgFinishedAt,
@@ -150,7 +151,7 @@ func (r *PostgresRepository) CreateTimeEntry(ctx context.Context, taskID int32, 
 func (r *PostgresRepository) FinishTimeEntry(ctx context.Context, id int32, finishedAt time.Time) (TimeEntryResponse, error) {
 	pgFinishedAt := pgtype.Timestamp{Time: finishedAt, Valid: true}
 
-	row, err := r.q.FinishTimeEntry(ctx, sqlc.FinishTimeEntryParams{
+	row, err := r.q.FinishTimeEntry(ctx, tasksdb.FinishTimeEntryParams{
 		ID:         id,
 		FinishedAt: pgFinishedAt,
 	})
@@ -179,7 +180,7 @@ func (r *PostgresRepository) FinishTimeEntry(ctx context.Context, id int32, fini
 func (r *PostgresRepository) FinishTask(ctx context.Context, id int32, finishedAt time.Time) (TaskResponse, error) {
 	pgFinishedAt := pgtype.Timestamp{Time: finishedAt, Valid: true}
 
-	row, err := r.q.FinishTask(ctx, sqlc.FinishTaskParams{
+	row, err := r.q.FinishTask(ctx, tasksdb.FinishTaskParams{
 		ID:         id,
 		FinishedAt: pgFinishedAt,
 	})
@@ -222,7 +223,7 @@ func (r *PostgresRepository) FinishTask(ctx context.Context, id int32, finishedA
 func (r *PostgresRepository) FinishProject(ctx context.Context, id int32, finishedAt time.Time) (ProjectResponse, error) {
 	pgFinishedAt := pgtype.Timestamp{Time: finishedAt, Valid: true}
 
-	row, err := r.q.FinishProject(ctx, sqlc.FinishProjectParams{
+	row, err := r.q.FinishProject(ctx, tasksdb.FinishProjectParams{
 		ID:         id,
 		FinishedAt: pgFinishedAt,
 	})
@@ -373,7 +374,7 @@ func (r *PostgresRepository) GetProjectChildren(ctx context.Context, projectID i
 
 	// Group task rows by task ID (multiple rows per task due to LEFT JOIN todos)
 	type taskWithTodos struct {
-		row   sqlc.GetTasksByProjectIDsRow
+		row   tasksdb.GetTasksByProjectIDsRow
 		todos []TodoResponse
 	}
 	taskMap := make(map[int32]*taskWithTodos)
@@ -439,7 +440,7 @@ func (r *PostgresRepository) GetProjectChildren(ctx context.Context, projectID i
 
 	// Build descendant map indexed by ID, with depth for bottom-up accumulation
 	type projectInfo struct {
-		row      sqlc.GetProjectWithDescendantsRow
+		row      tasksdb.GetProjectWithDescendantsRow
 		parentID *int32
 		depth    int32
 	}
@@ -449,9 +450,9 @@ func (r *PostgresRepository) GetProjectChildren(ctx context.Context, projectID i
 	}
 
 	// Sort descendants by depth descending for bottom-up time accumulation
-	sorted := make([]sqlc.GetProjectWithDescendantsRow, len(descendants))
+	sorted := make([]tasksdb.GetProjectWithDescendantsRow, len(descendants))
 	copy(sorted, descendants)
-	slices.SortFunc(sorted, func(a, b sqlc.GetProjectWithDescendantsRow) int {
+	slices.SortFunc(sorted, func(a, b tasksdb.GetProjectWithDescendantsRow) int {
 		return cmp.Compare(b.Depth, a.Depth)
 	})
 
@@ -521,6 +522,47 @@ func (r *PostgresRepository) GetProjectChildren(ctx context.Context, projectID i
 	return ProjectChildrenResponse{
 		Project:  project,
 		Children: children,
+	}, nil
+}
+
+func (r *PostgresRepository) GetTaskTimeEntries(ctx context.Context, taskID int32) (TaskTimeEntriesResponse, error) {
+	rows, err := r.q.GetTimeEntriesByTaskID(ctx, taskID)
+	if err != nil {
+		return TaskTimeEntriesResponse{}, err
+	}
+
+	if len(rows) == 0 {
+		exists, err := r.q.TaskExists(ctx, taskID)
+		if err != nil {
+			return TaskTimeEntriesResponse{}, err
+		}
+		if !exists {
+			return TaskTimeEntriesResponse{}, ErrNotFound
+		}
+		return TaskTimeEntriesResponse{Entries: []TimeEntryResponse{}}, nil
+	}
+
+	entries := make([]TimeEntryResponse, len(rows))
+	var totalTimeSpent int64
+	for i, row := range rows {
+		var finishedAt *time.Time
+		if row.FinishedAt.Valid {
+			t := row.FinishedAt.Time
+			finishedAt = &t
+			totalTimeSpent += int64(row.FinishedAt.Time.Sub(row.StartedAt.Time).Seconds())
+		}
+		entries[i] = TimeEntryResponse{
+			ID:         row.ID,
+			TaskID:     row.TaskID,
+			StartedAt:  row.StartedAt.Time,
+			FinishedAt: finishedAt,
+			Comment:    row.Comment,
+		}
+	}
+
+	return TaskTimeEntriesResponse{
+		TotalTimeSpent: totalTimeSpent,
+		Entries:        entries,
 	}, nil
 }
 

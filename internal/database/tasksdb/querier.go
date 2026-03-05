@@ -2,15 +2,13 @@
 // versions:
 //   sqlc v1.30.0
 
-package sqlc
+package tasksdb
 
 import (
 	"context"
-	"time"
 )
 
 type Querier interface {
-	CreateHabit(ctx context.Context, arg CreateHabitParams) (Habit, error)
 	CreateProject(ctx context.Context, arg CreateProjectParams) (CreateProjectRow, error)
 	CreateTask(ctx context.Context, arg CreateTaskParams) (CreateTaskRow, error)
 	CreateTimeEntry(ctx context.Context, arg CreateTimeEntryParams) (TimeEntry, error)
@@ -19,12 +17,12 @@ type Querier interface {
 	FinishTask(ctx context.Context, arg FinishTaskParams) (Task, error)
 	FinishTimeEntry(ctx context.Context, arg FinishTimeEntryParams) (TimeEntry, error)
 	GetActiveProjects(ctx context.Context) ([]GetActiveProjectsRow, error)
-	GetHabitsWithLogs(ctx context.Context, logDate time.Time) ([]GetHabitsWithLogsRow, error)
 	GetProjectWithDescendants(ctx context.Context, id int32) ([]GetProjectWithDescendantsRow, error)
 	GetRootProjects(ctx context.Context) ([]GetRootProjectsRow, error)
 	GetTasksByProjectIDs(ctx context.Context, projectIds []int32) ([]GetTasksByProjectIDsRow, error)
+	GetTimeEntriesByTaskID(ctx context.Context, taskID int32) ([]TimeEntry, error)
 	GetUnfinishedTasks(ctx context.Context) ([]GetUnfinishedTasksRow, error)
-	UpsertLog(ctx context.Context, arg UpsertLogParams) error
+	TaskExists(ctx context.Context, id int32) (bool, error)
 }
 
 var _ Querier = (*Queries)(nil)

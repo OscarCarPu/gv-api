@@ -23,6 +23,7 @@ type ServiceInterface interface {
 	GetRootProjects(ctx context.Context) ([]ProjectResponse, error)
 	GetActiveTree(ctx context.Context) ([]ActiveTreeNode, error)
 	GetProjectChildren(ctx context.Context, projectID int32) (ProjectChildrenResponse, error)
+	GetTaskTimeEntries(ctx context.Context, taskID int32) (TaskTimeEntriesResponse, error)
 }
 
 type Handler struct {
@@ -227,6 +228,27 @@ func (h *Handler) GetProjectChildren(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		response.Error(w, http.StatusInternalServerError, "Failed to get project children")
+		return
+	}
+
+	response.JSON(w, http.StatusOK, result)
+}
+
+func (h *Handler) GetTaskTimeEntries(w http.ResponseWriter, r *http.Request) {
+	idStr := chi.URLParam(r, "id")
+	id, err := strconv.Atoi(idStr)
+	if err != nil {
+		response.Error(w, http.StatusBadRequest, "invalid task id")
+		return
+	}
+
+	result, err := h.service.GetTaskTimeEntries(r.Context(), int32(id))
+	if err != nil {
+		if errors.Is(err, ErrNotFound) {
+			response.Error(w, http.StatusNotFound, "task not found")
+			return
+		}
+		response.Error(w, http.StatusInternalServerError, "Failed to get task time entries")
 		return
 	}
 

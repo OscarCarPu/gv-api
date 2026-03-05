@@ -6,85 +6,37 @@ import (
 	"testing"
 	"time"
 
-	"gv-api/internal/database/sqlc"
+	"gv-api/internal/database/habitsdb"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
 type mockQuerier struct {
-	getHabitsWithLogsFn func(ctx context.Context, logDate time.Time) ([]sqlc.GetHabitsWithLogsRow, error)
-	upsertLogFn         func(ctx context.Context, arg sqlc.UpsertLogParams) error
-	createHabitFn       func(ctx context.Context, arg sqlc.CreateHabitParams) (sqlc.Habit, error)
+	getHabitsWithLogsFn func(ctx context.Context, logDate time.Time) ([]habitsdb.GetHabitsWithLogsRow, error)
+	upsertLogFn         func(ctx context.Context, arg habitsdb.UpsertLogParams) error
+	createHabitFn       func(ctx context.Context, arg habitsdb.CreateHabitParams) (habitsdb.Habit, error)
 }
 
-func (m *mockQuerier) GetHabitsWithLogs(ctx context.Context, logDate time.Time) ([]sqlc.GetHabitsWithLogsRow, error) {
+func (m *mockQuerier) GetHabitsWithLogs(ctx context.Context, logDate time.Time) ([]habitsdb.GetHabitsWithLogsRow, error) {
 	if m.getHabitsWithLogsFn != nil {
 		return m.getHabitsWithLogsFn(ctx, logDate)
 	}
 	return nil, nil
 }
 
-func (m *mockQuerier) UpsertLog(ctx context.Context, arg sqlc.UpsertLogParams) error {
+func (m *mockQuerier) UpsertLog(ctx context.Context, arg habitsdb.UpsertLogParams) error {
 	if m.upsertLogFn != nil {
 		return m.upsertLogFn(ctx, arg)
 	}
 	return nil
 }
 
-func (m *mockQuerier) CreateHabit(ctx context.Context, arg sqlc.CreateHabitParams) (sqlc.Habit, error) {
+func (m *mockQuerier) CreateHabit(ctx context.Context, arg habitsdb.CreateHabitParams) (habitsdb.Habit, error) {
 	if m.createHabitFn != nil {
 		return m.createHabitFn(ctx, arg)
 	}
-	return sqlc.Habit{}, nil
-}
-
-func (m *mockQuerier) CreateProject(ctx context.Context, arg sqlc.CreateProjectParams) (sqlc.CreateProjectRow, error) {
-	return sqlc.CreateProjectRow{}, nil
-}
-
-func (m *mockQuerier) CreateTask(ctx context.Context, arg sqlc.CreateTaskParams) (sqlc.CreateTaskRow, error) {
-	return sqlc.CreateTaskRow{}, nil
-}
-
-func (m *mockQuerier) CreateTodo(ctx context.Context, arg sqlc.CreateTodoParams) (sqlc.CreateTodoRow, error) {
-	return sqlc.CreateTodoRow{}, nil
-}
-
-func (m *mockQuerier) CreateTimeEntry(ctx context.Context, arg sqlc.CreateTimeEntryParams) (sqlc.TimeEntry, error) {
-	return sqlc.TimeEntry{}, nil
-}
-
-func (m *mockQuerier) FinishTimeEntry(ctx context.Context, arg sqlc.FinishTimeEntryParams) (sqlc.TimeEntry, error) {
-	return sqlc.TimeEntry{}, nil
-}
-
-func (m *mockQuerier) FinishTask(ctx context.Context, arg sqlc.FinishTaskParams) (sqlc.Task, error) {
-	return sqlc.Task{}, nil
-}
-
-func (m *mockQuerier) FinishProject(ctx context.Context, arg sqlc.FinishProjectParams) (sqlc.Project, error) {
-	return sqlc.Project{}, nil
-}
-
-func (m *mockQuerier) GetRootProjects(ctx context.Context) ([]sqlc.GetRootProjectsRow, error) {
-	return nil, nil
-}
-
-func (m *mockQuerier) GetActiveProjects(ctx context.Context) ([]sqlc.GetActiveProjectsRow, error) {
-	return nil, nil
-}
-
-func (m *mockQuerier) GetUnfinishedTasks(ctx context.Context) ([]sqlc.GetUnfinishedTasksRow, error) {
-	return nil, nil
-}
-
-func (m *mockQuerier) GetProjectWithDescendants(ctx context.Context, id int32) ([]sqlc.GetProjectWithDescendantsRow, error) {
-	return nil, nil
-}
-
-func (m *mockQuerier) GetTasksByProjectIDs(ctx context.Context, projectIds []int32) ([]sqlc.GetTasksByProjectIDsRow, error) {
-	return nil, nil
+	return habitsdb.Habit{}, nil
 }
 
 func TestRepository_GetHabitsWithLogs(t *testing.T) {
@@ -93,8 +45,8 @@ func TestRepository_GetHabitsWithLogs(t *testing.T) {
 		val := float32(42.5)
 
 		mock := &mockQuerier{
-			getHabitsWithLogsFn: func(ctx context.Context, logDate time.Time) ([]sqlc.GetHabitsWithLogsRow, error) {
-				return []sqlc.GetHabitsWithLogsRow{
+			getHabitsWithLogsFn: func(ctx context.Context, logDate time.Time) ([]habitsdb.GetHabitsWithLogsRow, error) {
+				return []habitsdb.GetHabitsWithLogsRow{
 					{ID: 1, Name: "Exercise", Description: &desc, Value: &val},
 					{ID: 2, Name: "Reading", Description: nil, Value: nil},
 				}, nil
@@ -116,7 +68,7 @@ func TestRepository_GetHabitsWithLogs(t *testing.T) {
 
 	t.Run("returns error from querier", func(t *testing.T) {
 		mock := &mockQuerier{
-			getHabitsWithLogsFn: func(ctx context.Context, logDate time.Time) ([]sqlc.GetHabitsWithLogsRow, error) {
+			getHabitsWithLogsFn: func(ctx context.Context, logDate time.Time) ([]habitsdb.GetHabitsWithLogsRow, error) {
 				return nil, errors.New("db error")
 			},
 		}
@@ -129,10 +81,10 @@ func TestRepository_GetHabitsWithLogs(t *testing.T) {
 
 func TestRepository_UpsertLog(t *testing.T) {
 	t.Run("passes correct params", func(t *testing.T) {
-		var got sqlc.UpsertLogParams
+		var got habitsdb.UpsertLogParams
 
 		mock := &mockQuerier{
-			upsertLogFn: func(ctx context.Context, arg sqlc.UpsertLogParams) error {
+			upsertLogFn: func(ctx context.Context, arg habitsdb.UpsertLogParams) error {
 				got = arg
 				return nil
 			},
@@ -150,7 +102,7 @@ func TestRepository_UpsertLog(t *testing.T) {
 
 	t.Run("returns error from querier", func(t *testing.T) {
 		mock := &mockQuerier{
-			upsertLogFn: func(ctx context.Context, arg sqlc.UpsertLogParams) error {
+			upsertLogFn: func(ctx context.Context, arg habitsdb.UpsertLogParams) error {
 				return errors.New("db error")
 			},
 		}
@@ -166,8 +118,8 @@ func TestRepository_CreateHabit(t *testing.T) {
 		desc := "test desc"
 
 		mock := &mockQuerier{
-			createHabitFn: func(ctx context.Context, arg sqlc.CreateHabitParams) (sqlc.Habit, error) {
-				return sqlc.Habit{ID: 7, Name: arg.Name, Description: arg.Description}, nil
+			createHabitFn: func(ctx context.Context, arg habitsdb.CreateHabitParams) (habitsdb.Habit, error) {
+				return habitsdb.Habit{ID: 7, Name: arg.Name, Description: arg.Description}, nil
 			},
 		}
 		repo := NewRepository(mock)
@@ -182,8 +134,8 @@ func TestRepository_CreateHabit(t *testing.T) {
 
 	t.Run("returns error from querier", func(t *testing.T) {
 		mock := &mockQuerier{
-			createHabitFn: func(ctx context.Context, arg sqlc.CreateHabitParams) (sqlc.Habit, error) {
-				return sqlc.Habit{}, errors.New("unique violation")
+			createHabitFn: func(ctx context.Context, arg habitsdb.CreateHabitParams) (habitsdb.Habit, error) {
+				return habitsdb.Habit{}, errors.New("unique violation")
 			},
 		}
 		repo := NewRepository(mock)

@@ -77,6 +77,11 @@ type FinishProjectRequest struct {
 	FinishedAt *time.Time `json:"finished_at"`
 }
 
+type TaskTimeEntriesResponse struct {
+	TotalTimeSpent int64               `json:"total_time_spent"`
+	Entries        []TimeEntryResponse `json:"entries"`
+}
+
 type ActiveTreeNode struct {
 	ID       int32            `json:"id"`
 	Type     string           `json:"type"`

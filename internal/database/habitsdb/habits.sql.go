@@ -3,7 +3,7 @@
 //   sqlc v1.30.0
 // source: habits.sql
 
-package sqlc
+package habitsdb
 
 import (
 	"context"

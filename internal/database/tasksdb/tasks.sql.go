@@ -3,7 +3,7 @@
 //   sqlc v1.30.0
 // source: tasks.sql
 
-package sqlc
+package tasksdb
 
 import (
 	"context"
@@ -413,6 +413,39 @@ func (q *Queries) GetTasksByProjectIDs(ctx context.Context, projectIds []int32) 
 	return items, nil
 }
 
+const getTimeEntriesByTaskID = `-- name: GetTimeEntriesByTaskID :many
+SELECT id, task_id, started_at, finished_at, comment
+FROM time_entries
+WHERE task_id = $1
+ORDER BY started_at
+`
+
+func (q *Queries) GetTimeEntriesByTaskID(ctx context.Context, taskID int32) ([]TimeEntry, error) {
+	rows, err := q.db.Query(ctx, getTimeEntriesByTaskID, taskID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []TimeEntry{}
+	for rows.Next() {
+		var i TimeEntry
+		if err := rows.Scan(
+			&i.ID,
+			&i.TaskID,
+			&i.StartedAt,
+			&i.FinishedAt,
+			&i.Comment,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getUnfinishedTasks = `-- name: GetUnfinishedTasks :many
 SELECT id, project_id, name, started_at
 FROM tasks
@@ -450,4 +483,15 @@ func (q *Queries) GetUnfinishedTasks(ctx context.Context) ([]GetUnfinishedTasksR
 		return nil, err
 	}
 	return items, nil
+}
+
+const taskExists = `-- name: TaskExists :one
+SELECT EXISTS(SELECT 1 FROM tasks WHERE id = $1)
+`
+
+func (q *Queries) TaskExists(ctx context.Context, id int32) (bool, error) {
+	row := q.db.QueryRow(ctx, taskExists, id)
+	var exists bool
+	err := row.Scan(&exists)
+	return exists, err
 }

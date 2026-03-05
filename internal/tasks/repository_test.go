@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"gv-api/internal/database/sqlc"
+	"gv-api/internal/database/tasksdb"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -15,115 +15,121 @@ import (
 )
 
 type mockQuerier struct {
-	createProjectFn              func(ctx context.Context, arg sqlc.CreateProjectParams) (sqlc.CreateProjectRow, error)
-	createTaskFn                 func(ctx context.Context, arg sqlc.CreateTaskParams) (sqlc.CreateTaskRow, error)
-	createTodoFn                 func(ctx context.Context, arg sqlc.CreateTodoParams) (sqlc.CreateTodoRow, error)
-	createTimeEntryFn            func(ctx context.Context, arg sqlc.CreateTimeEntryParams) (sqlc.TimeEntry, error)
-	finishTimeEntryFn            func(ctx context.Context, arg sqlc.FinishTimeEntryParams) (sqlc.TimeEntry, error)
-	finishTaskFn                 func(ctx context.Context, arg sqlc.FinishTaskParams) (sqlc.Task, error)
-	finishProjectFn              func(ctx context.Context, arg sqlc.FinishProjectParams) (sqlc.Project, error)
-	getRootProjectsFn            func(ctx context.Context) ([]sqlc.GetRootProjectsRow, error)
-	getActiveProjectsFn          func(ctx context.Context) ([]sqlc.GetActiveProjectsRow, error)
-	getUnfinishedTasksFn         func(ctx context.Context) ([]sqlc.GetUnfinishedTasksRow, error)
-	getProjectWithDescendantsFn  func(ctx context.Context, id int32) ([]sqlc.GetProjectWithDescendantsRow, error)
-	getTasksByProjectIDsFn       func(ctx context.Context, projectIds []int32) ([]sqlc.GetTasksByProjectIDsRow, error)
+	createProjectFn              func(ctx context.Context, arg tasksdb.CreateProjectParams) (tasksdb.CreateProjectRow, error)
+	createTaskFn                 func(ctx context.Context, arg tasksdb.CreateTaskParams) (tasksdb.CreateTaskRow, error)
+	createTodoFn                 func(ctx context.Context, arg tasksdb.CreateTodoParams) (tasksdb.CreateTodoRow, error)
+	createTimeEntryFn            func(ctx context.Context, arg tasksdb.CreateTimeEntryParams) (tasksdb.TimeEntry, error)
+	finishTimeEntryFn            func(ctx context.Context, arg tasksdb.FinishTimeEntryParams) (tasksdb.TimeEntry, error)
+	finishTaskFn                 func(ctx context.Context, arg tasksdb.FinishTaskParams) (tasksdb.Task, error)
+	finishProjectFn              func(ctx context.Context, arg tasksdb.FinishProjectParams) (tasksdb.Project, error)
+	getRootProjectsFn            func(ctx context.Context) ([]tasksdb.GetRootProjectsRow, error)
+	getActiveProjectsFn          func(ctx context.Context) ([]tasksdb.GetActiveProjectsRow, error)
+	getUnfinishedTasksFn         func(ctx context.Context) ([]tasksdb.GetUnfinishedTasksRow, error)
+	getProjectWithDescendantsFn  func(ctx context.Context, id int32) ([]tasksdb.GetProjectWithDescendantsRow, error)
+	getTasksByProjectIDsFn       func(ctx context.Context, projectIds []int32) ([]tasksdb.GetTasksByProjectIDsRow, error)
+	getTimeEntriesByTaskIDFn     func(ctx context.Context, taskID int32) ([]tasksdb.TimeEntry, error)
+	taskExistsFn                 func(ctx context.Context, id int32) (bool, error)
 }
 
-func (m *mockQuerier) CreateProject(ctx context.Context, arg sqlc.CreateProjectParams) (sqlc.CreateProjectRow, error) {
+func (m *mockQuerier) CreateProject(ctx context.Context, arg tasksdb.CreateProjectParams) (tasksdb.CreateProjectRow, error) {
 	if m.createProjectFn != nil {
 		return m.createProjectFn(ctx, arg)
 	}
-	return sqlc.CreateProjectRow{}, nil
+	return tasksdb.CreateProjectRow{}, nil
 }
 
-func (m *mockQuerier) CreateTask(ctx context.Context, arg sqlc.CreateTaskParams) (sqlc.CreateTaskRow, error) {
+func (m *mockQuerier) CreateTask(ctx context.Context, arg tasksdb.CreateTaskParams) (tasksdb.CreateTaskRow, error) {
 	if m.createTaskFn != nil {
 		return m.createTaskFn(ctx, arg)
 	}
-	return sqlc.CreateTaskRow{}, nil
+	return tasksdb.CreateTaskRow{}, nil
 }
 
-func (m *mockQuerier) CreateTodo(ctx context.Context, arg sqlc.CreateTodoParams) (sqlc.CreateTodoRow, error) {
+func (m *mockQuerier) CreateTodo(ctx context.Context, arg tasksdb.CreateTodoParams) (tasksdb.CreateTodoRow, error) {
 	if m.createTodoFn != nil {
 		return m.createTodoFn(ctx, arg)
 	}
-	return sqlc.CreateTodoRow{}, nil
+	return tasksdb.CreateTodoRow{}, nil
 }
 
-func (m *mockQuerier) CreateTimeEntry(ctx context.Context, arg sqlc.CreateTimeEntryParams) (sqlc.TimeEntry, error) {
+func (m *mockQuerier) CreateTimeEntry(ctx context.Context, arg tasksdb.CreateTimeEntryParams) (tasksdb.TimeEntry, error) {
 	if m.createTimeEntryFn != nil {
 		return m.createTimeEntryFn(ctx, arg)
 	}
-	return sqlc.TimeEntry{}, nil
+	return tasksdb.TimeEntry{}, nil
 }
 
-func (m *mockQuerier) FinishTimeEntry(ctx context.Context, arg sqlc.FinishTimeEntryParams) (sqlc.TimeEntry, error) {
+func (m *mockQuerier) FinishTimeEntry(ctx context.Context, arg tasksdb.FinishTimeEntryParams) (tasksdb.TimeEntry, error) {
 	if m.finishTimeEntryFn != nil {
 		return m.finishTimeEntryFn(ctx, arg)
 	}
-	return sqlc.TimeEntry{}, nil
+	return tasksdb.TimeEntry{}, nil
 }
 
-func (m *mockQuerier) FinishTask(ctx context.Context, arg sqlc.FinishTaskParams) (sqlc.Task, error) {
+func (m *mockQuerier) FinishTask(ctx context.Context, arg tasksdb.FinishTaskParams) (tasksdb.Task, error) {
 	if m.finishTaskFn != nil {
 		return m.finishTaskFn(ctx, arg)
 	}
-	return sqlc.Task{}, nil
+	return tasksdb.Task{}, nil
 }
 
-func (m *mockQuerier) FinishProject(ctx context.Context, arg sqlc.FinishProjectParams) (sqlc.Project, error) {
+func (m *mockQuerier) FinishProject(ctx context.Context, arg tasksdb.FinishProjectParams) (tasksdb.Project, error) {
 	if m.finishProjectFn != nil {
 		return m.finishProjectFn(ctx, arg)
 	}
-	return sqlc.Project{}, nil
+	return tasksdb.Project{}, nil
 }
 
-func (m *mockQuerier) GetRootProjects(ctx context.Context) ([]sqlc.GetRootProjectsRow, error) {
+func (m *mockQuerier) GetRootProjects(ctx context.Context) ([]tasksdb.GetRootProjectsRow, error) {
 	if m.getRootProjectsFn != nil {
 		return m.getRootProjectsFn(ctx)
 	}
 	return nil, nil
 }
 
-func (m *mockQuerier) GetActiveProjects(ctx context.Context) ([]sqlc.GetActiveProjectsRow, error) {
+func (m *mockQuerier) GetActiveProjects(ctx context.Context) ([]tasksdb.GetActiveProjectsRow, error) {
 	if m.getActiveProjectsFn != nil {
 		return m.getActiveProjectsFn(ctx)
 	}
 	return nil, nil
 }
 
-func (m *mockQuerier) GetUnfinishedTasks(ctx context.Context) ([]sqlc.GetUnfinishedTasksRow, error) {
+func (m *mockQuerier) GetUnfinishedTasks(ctx context.Context) ([]tasksdb.GetUnfinishedTasksRow, error) {
 	if m.getUnfinishedTasksFn != nil {
 		return m.getUnfinishedTasksFn(ctx)
 	}
 	return nil, nil
 }
 
-func (m *mockQuerier) GetProjectWithDescendants(ctx context.Context, id int32) ([]sqlc.GetProjectWithDescendantsRow, error) {
+func (m *mockQuerier) GetProjectWithDescendants(ctx context.Context, id int32) ([]tasksdb.GetProjectWithDescendantsRow, error) {
 	if m.getProjectWithDescendantsFn != nil {
 		return m.getProjectWithDescendantsFn(ctx, id)
 	}
 	return nil, nil
 }
 
-func (m *mockQuerier) GetTasksByProjectIDs(ctx context.Context, projectIds []int32) ([]sqlc.GetTasksByProjectIDsRow, error) {
+func (m *mockQuerier) GetTasksByProjectIDs(ctx context.Context, projectIds []int32) ([]tasksdb.GetTasksByProjectIDsRow, error) {
 	if m.getTasksByProjectIDsFn != nil {
 		return m.getTasksByProjectIDsFn(ctx, projectIds)
 	}
 	return nil, nil
 }
 
-func (m *mockQuerier) CreateHabit(ctx context.Context, arg sqlc.CreateHabitParams) (sqlc.Habit, error) {
-	return sqlc.Habit{}, nil
-}
-
-func (m *mockQuerier) GetHabitsWithLogs(ctx context.Context, logDate time.Time) ([]sqlc.GetHabitsWithLogsRow, error) {
+func (m *mockQuerier) GetTimeEntriesByTaskID(ctx context.Context, taskID int32) ([]tasksdb.TimeEntry, error) {
+	if m.getTimeEntriesByTaskIDFn != nil {
+		return m.getTimeEntriesByTaskIDFn(ctx, taskID)
+	}
 	return nil, nil
 }
 
-func (m *mockQuerier) UpsertLog(ctx context.Context, arg sqlc.UpsertLogParams) error {
-	return nil
+func (m *mockQuerier) TaskExists(ctx context.Context, id int32) (bool, error) {
+	if m.taskExistsFn != nil {
+		return m.taskExistsFn(ctx, id)
+	}
+	return false, nil
 }
+
+
 
 func TestRepository_CreateProject(t *testing.T) {
 	t.Run("maps response correctly", func(t *testing.T) {
@@ -132,8 +138,8 @@ func TestRepository_CreateProject(t *testing.T) {
 		dueDate := pgtype.Date{Time: time.Date(2026, 6, 15, 0, 0, 0, 0, time.UTC), Valid: true}
 
 		mock := &mockQuerier{
-			createProjectFn: func(ctx context.Context, arg sqlc.CreateProjectParams) (sqlc.CreateProjectRow, error) {
-				return sqlc.CreateProjectRow{
+			createProjectFn: func(ctx context.Context, arg tasksdb.CreateProjectParams) (tasksdb.CreateProjectRow, error) {
+				return tasksdb.CreateProjectRow{
 					ID:          1,
 					Name:        arg.Name,
 					Description: arg.Description,
@@ -157,8 +163,8 @@ func TestRepository_CreateProject(t *testing.T) {
 
 	t.Run("returns nil DueAt when date is invalid", func(t *testing.T) {
 		mock := &mockQuerier{
-			createProjectFn: func(ctx context.Context, arg sqlc.CreateProjectParams) (sqlc.CreateProjectRow, error) {
-				return sqlc.CreateProjectRow{
+			createProjectFn: func(ctx context.Context, arg tasksdb.CreateProjectParams) (tasksdb.CreateProjectRow, error) {
+				return tasksdb.CreateProjectRow{
 					ID:   2,
 					Name: arg.Name,
 				}, nil
@@ -173,8 +179,8 @@ func TestRepository_CreateProject(t *testing.T) {
 
 	t.Run("returns error from querier", func(t *testing.T) {
 		mock := &mockQuerier{
-			createProjectFn: func(ctx context.Context, arg sqlc.CreateProjectParams) (sqlc.CreateProjectRow, error) {
-				return sqlc.CreateProjectRow{}, errors.New("db error")
+			createProjectFn: func(ctx context.Context, arg tasksdb.CreateProjectParams) (tasksdb.CreateProjectRow, error) {
+				return tasksdb.CreateProjectRow{}, errors.New("db error")
 			},
 		}
 		repo := NewRepository(mock)
@@ -191,8 +197,8 @@ func TestRepository_CreateTask(t *testing.T) {
 		dueDate := pgtype.Date{Time: time.Date(2026, 7, 1, 0, 0, 0, 0, time.UTC), Valid: true}
 
 		mock := &mockQuerier{
-			createTaskFn: func(ctx context.Context, arg sqlc.CreateTaskParams) (sqlc.CreateTaskRow, error) {
-				return sqlc.CreateTaskRow{
+			createTaskFn: func(ctx context.Context, arg tasksdb.CreateTaskParams) (tasksdb.CreateTaskRow, error) {
+				return tasksdb.CreateTaskRow{
 					ID:          1,
 					ProjectID:   arg.ProjectID,
 					Name:        arg.Name,
@@ -216,8 +222,8 @@ func TestRepository_CreateTask(t *testing.T) {
 
 	t.Run("returns nil DueAt when date is invalid", func(t *testing.T) {
 		mock := &mockQuerier{
-			createTaskFn: func(ctx context.Context, arg sqlc.CreateTaskParams) (sqlc.CreateTaskRow, error) {
-				return sqlc.CreateTaskRow{
+			createTaskFn: func(ctx context.Context, arg tasksdb.CreateTaskParams) (tasksdb.CreateTaskRow, error) {
+				return tasksdb.CreateTaskRow{
 					ID:   2,
 					Name: arg.Name,
 				}, nil
@@ -232,8 +238,8 @@ func TestRepository_CreateTask(t *testing.T) {
 
 	t.Run("returns error from querier", func(t *testing.T) {
 		mock := &mockQuerier{
-			createTaskFn: func(ctx context.Context, arg sqlc.CreateTaskParams) (sqlc.CreateTaskRow, error) {
-				return sqlc.CreateTaskRow{}, errors.New("db error")
+			createTaskFn: func(ctx context.Context, arg tasksdb.CreateTaskParams) (tasksdb.CreateTaskRow, error) {
+				return tasksdb.CreateTaskRow{}, errors.New("db error")
 			},
 		}
 		repo := NewRepository(mock)
@@ -246,8 +252,8 @@ func TestRepository_CreateTask(t *testing.T) {
 func TestRepository_CreateTodo(t *testing.T) {
 	t.Run("maps response correctly", func(t *testing.T) {
 		mock := &mockQuerier{
-			createTodoFn: func(ctx context.Context, arg sqlc.CreateTodoParams) (sqlc.CreateTodoRow, error) {
-				return sqlc.CreateTodoRow{
+			createTodoFn: func(ctx context.Context, arg tasksdb.CreateTodoParams) (tasksdb.CreateTodoRow, error) {
+				return tasksdb.CreateTodoRow{
 					ID:     1,
 					TaskID: arg.TaskID,
 					Name:   arg.Name,
@@ -266,8 +272,8 @@ func TestRepository_CreateTodo(t *testing.T) {
 
 	t.Run("returns error from querier", func(t *testing.T) {
 		mock := &mockQuerier{
-			createTodoFn: func(ctx context.Context, arg sqlc.CreateTodoParams) (sqlc.CreateTodoRow, error) {
-				return sqlc.CreateTodoRow{}, errors.New("db error")
+			createTodoFn: func(ctx context.Context, arg tasksdb.CreateTodoParams) (tasksdb.CreateTodoRow, error) {
+				return tasksdb.CreateTodoRow{}, errors.New("db error")
 			},
 		}
 		repo := NewRepository(mock)
@@ -284,8 +290,8 @@ func TestRepository_CreateTimeEntry(t *testing.T) {
 		comment := "worked on feature"
 
 		mock := &mockQuerier{
-			createTimeEntryFn: func(ctx context.Context, arg sqlc.CreateTimeEntryParams) (sqlc.TimeEntry, error) {
-				return sqlc.TimeEntry{
+			createTimeEntryFn: func(ctx context.Context, arg tasksdb.CreateTimeEntryParams) (tasksdb.TimeEntry, error) {
+				return tasksdb.TimeEntry{
 					ID:         1,
 					TaskID:     arg.TaskID,
 					StartedAt:  arg.StartedAt,
@@ -310,8 +316,8 @@ func TestRepository_CreateTimeEntry(t *testing.T) {
 		now := time.Date(2026, 3, 1, 9, 0, 0, 0, time.UTC)
 
 		mock := &mockQuerier{
-			createTimeEntryFn: func(ctx context.Context, arg sqlc.CreateTimeEntryParams) (sqlc.TimeEntry, error) {
-				return sqlc.TimeEntry{
+			createTimeEntryFn: func(ctx context.Context, arg tasksdb.CreateTimeEntryParams) (tasksdb.TimeEntry, error) {
+				return tasksdb.TimeEntry{
 					ID:        2,
 					TaskID:    arg.TaskID,
 					StartedAt: arg.StartedAt,
@@ -329,8 +335,8 @@ func TestRepository_CreateTimeEntry(t *testing.T) {
 		now := time.Date(2026, 3, 1, 9, 0, 0, 0, time.UTC)
 
 		mock := &mockQuerier{
-			createTimeEntryFn: func(ctx context.Context, arg sqlc.CreateTimeEntryParams) (sqlc.TimeEntry, error) {
-				return sqlc.TimeEntry{}, errors.New("db error")
+			createTimeEntryFn: func(ctx context.Context, arg tasksdb.CreateTimeEntryParams) (tasksdb.TimeEntry, error) {
+				return tasksdb.TimeEntry{}, errors.New("db error")
 			},
 		}
 		repo := NewRepository(mock)
@@ -346,8 +352,8 @@ func TestRepository_GetRootProjects(t *testing.T) {
 		dueDate := pgtype.Date{Time: time.Date(2026, 12, 31, 0, 0, 0, 0, time.UTC), Valid: true}
 
 		mock := &mockQuerier{
-			getRootProjectsFn: func(ctx context.Context) ([]sqlc.GetRootProjectsRow, error) {
-				return []sqlc.GetRootProjectsRow{
+			getRootProjectsFn: func(ctx context.Context) ([]tasksdb.GetRootProjectsRow, error) {
+				return []tasksdb.GetRootProjectsRow{
 					{ID: 1, Name: "Alpha", Description: &desc, DueAt: dueDate},
 					{ID: 2, Name: "Beta"},
 				}, nil
@@ -368,8 +374,8 @@ func TestRepository_GetRootProjects(t *testing.T) {
 
 	t.Run("returns empty list", func(t *testing.T) {
 		mock := &mockQuerier{
-			getRootProjectsFn: func(ctx context.Context) ([]sqlc.GetRootProjectsRow, error) {
-				return []sqlc.GetRootProjectsRow{}, nil
+			getRootProjectsFn: func(ctx context.Context) ([]tasksdb.GetRootProjectsRow, error) {
+				return []tasksdb.GetRootProjectsRow{}, nil
 			},
 		}
 		repo := NewRepository(mock)
@@ -381,7 +387,7 @@ func TestRepository_GetRootProjects(t *testing.T) {
 
 	t.Run("returns error from querier", func(t *testing.T) {
 		mock := &mockQuerier{
-			getRootProjectsFn: func(ctx context.Context) ([]sqlc.GetRootProjectsRow, error) {
+			getRootProjectsFn: func(ctx context.Context) ([]tasksdb.GetRootProjectsRow, error) {
 				return nil, errors.New("db error")
 			},
 		}
@@ -401,8 +407,8 @@ func TestRepository_FinishTask(t *testing.T) {
 		dueDate := pgtype.Date{Time: time.Date(2026, 7, 1, 0, 0, 0, 0, time.UTC), Valid: true}
 
 		mock := &mockQuerier{
-			finishTaskFn: func(ctx context.Context, arg sqlc.FinishTaskParams) (sqlc.Task, error) {
-				return sqlc.Task{
+			finishTaskFn: func(ctx context.Context, arg tasksdb.FinishTaskParams) (tasksdb.Task, error) {
+				return tasksdb.Task{
 					ID:          1,
 					ProjectID:   &projectID,
 					Name:        "test task",
@@ -430,8 +436,8 @@ func TestRepository_FinishTask(t *testing.T) {
 
 	t.Run("returns ErrNotFound on pgx.ErrNoRows", func(t *testing.T) {
 		mock := &mockQuerier{
-			finishTaskFn: func(ctx context.Context, arg sqlc.FinishTaskParams) (sqlc.Task, error) {
-				return sqlc.Task{}, pgx.ErrNoRows
+			finishTaskFn: func(ctx context.Context, arg tasksdb.FinishTaskParams) (tasksdb.Task, error) {
+				return tasksdb.Task{}, pgx.ErrNoRows
 			},
 		}
 		repo := NewRepository(mock)
@@ -442,8 +448,8 @@ func TestRepository_FinishTask(t *testing.T) {
 
 	t.Run("returns error from querier", func(t *testing.T) {
 		mock := &mockQuerier{
-			finishTaskFn: func(ctx context.Context, arg sqlc.FinishTaskParams) (sqlc.Task, error) {
-				return sqlc.Task{}, errors.New("db error")
+			finishTaskFn: func(ctx context.Context, arg tasksdb.FinishTaskParams) (tasksdb.Task, error) {
+				return tasksdb.Task{}, errors.New("db error")
 			},
 		}
 		repo := NewRepository(mock)
@@ -463,8 +469,8 @@ func TestRepository_FinishProject(t *testing.T) {
 		dueDate := pgtype.Date{Time: time.Date(2026, 6, 15, 0, 0, 0, 0, time.UTC), Valid: true}
 
 		mock := &mockQuerier{
-			finishProjectFn: func(ctx context.Context, arg sqlc.FinishProjectParams) (sqlc.Project, error) {
-				return sqlc.Project{
+			finishProjectFn: func(ctx context.Context, arg tasksdb.FinishProjectParams) (tasksdb.Project, error) {
+				return tasksdb.Project{
 					ID:          1,
 					ParentID:    &parentID,
 					Name:        "test project",
@@ -492,8 +498,8 @@ func TestRepository_FinishProject(t *testing.T) {
 
 	t.Run("returns ErrNotFound on pgx.ErrNoRows", func(t *testing.T) {
 		mock := &mockQuerier{
-			finishProjectFn: func(ctx context.Context, arg sqlc.FinishProjectParams) (sqlc.Project, error) {
-				return sqlc.Project{}, pgx.ErrNoRows
+			finishProjectFn: func(ctx context.Context, arg tasksdb.FinishProjectParams) (tasksdb.Project, error) {
+				return tasksdb.Project{}, pgx.ErrNoRows
 			},
 		}
 		repo := NewRepository(mock)
@@ -504,8 +510,8 @@ func TestRepository_FinishProject(t *testing.T) {
 
 	t.Run("returns error from querier", func(t *testing.T) {
 		mock := &mockQuerier{
-			finishProjectFn: func(ctx context.Context, arg sqlc.FinishProjectParams) (sqlc.Project, error) {
-				return sqlc.Project{}, errors.New("db error")
+			finishProjectFn: func(ctx context.Context, arg tasksdb.FinishProjectParams) (tasksdb.Project, error) {
+				return tasksdb.Project{}, errors.New("db error")
 			},
 		}
 		repo := NewRepository(mock)
@@ -523,8 +529,8 @@ func TestRepository_FinishTimeEntry(t *testing.T) {
 		comment := "done"
 
 		mock := &mockQuerier{
-			finishTimeEntryFn: func(ctx context.Context, arg sqlc.FinishTimeEntryParams) (sqlc.TimeEntry, error) {
-				return sqlc.TimeEntry{
+			finishTimeEntryFn: func(ctx context.Context, arg tasksdb.FinishTimeEntryParams) (tasksdb.TimeEntry, error) {
+				return tasksdb.TimeEntry{
 					ID:         1,
 					TaskID:     3,
 					StartedAt:  pgtype.Timestamp{Time: startedAt, Valid: true},
@@ -547,8 +553,8 @@ func TestRepository_FinishTimeEntry(t *testing.T) {
 
 	t.Run("returns ErrNotFound on pgx.ErrNoRows", func(t *testing.T) {
 		mock := &mockQuerier{
-			finishTimeEntryFn: func(ctx context.Context, arg sqlc.FinishTimeEntryParams) (sqlc.TimeEntry, error) {
-				return sqlc.TimeEntry{}, pgx.ErrNoRows
+			finishTimeEntryFn: func(ctx context.Context, arg tasksdb.FinishTimeEntryParams) (tasksdb.TimeEntry, error) {
+				return tasksdb.TimeEntry{}, pgx.ErrNoRows
 			},
 		}
 		repo := NewRepository(mock)
@@ -559,8 +565,8 @@ func TestRepository_FinishTimeEntry(t *testing.T) {
 
 	t.Run("returns error from querier", func(t *testing.T) {
 		mock := &mockQuerier{
-			finishTimeEntryFn: func(ctx context.Context, arg sqlc.FinishTimeEntryParams) (sqlc.TimeEntry, error) {
-				return sqlc.TimeEntry{}, errors.New("db error")
+			finishTimeEntryFn: func(ctx context.Context, arg tasksdb.FinishTimeEntryParams) (tasksdb.TimeEntry, error) {
+				return tasksdb.TimeEntry{}, errors.New("db error")
 			},
 		}
 		repo := NewRepository(mock)
@@ -578,14 +584,14 @@ func TestRepository_GetActiveTree(t *testing.T) {
 
 	t.Run("projects with nested sub-projects and tasks", func(t *testing.T) {
 		mock := &mockQuerier{
-			getActiveProjectsFn: func(ctx context.Context) ([]sqlc.GetActiveProjectsRow, error) {
-				return []sqlc.GetActiveProjectsRow{
+			getActiveProjectsFn: func(ctx context.Context) ([]tasksdb.GetActiveProjectsRow, error) {
+				return []tasksdb.GetActiveProjectsRow{
 					{ID: 1, Name: "Parent Project"},
 					{ID: 2, ParentID: &parentID1, Name: "Child Project"},
 				}, nil
 			},
-			getUnfinishedTasksFn: func(ctx context.Context) ([]sqlc.GetUnfinishedTasksRow, error) {
-				return []sqlc.GetUnfinishedTasksRow{
+			getUnfinishedTasksFn: func(ctx context.Context) ([]tasksdb.GetUnfinishedTasksRow, error) {
+				return []tasksdb.GetUnfinishedTasksRow{
 					{ID: 1, ProjectID: &projectID1, Name: "Task A", StartedAt: pgtype.Timestamp{Time: time.Now(), Valid: true}},
 					{ID: 2, ProjectID: &projectID2, Name: "Task B"},
 				}, nil
@@ -614,11 +620,11 @@ func TestRepository_GetActiveTree(t *testing.T) {
 
 	t.Run("orphan tasks at root level", func(t *testing.T) {
 		mock := &mockQuerier{
-			getActiveProjectsFn: func(ctx context.Context) ([]sqlc.GetActiveProjectsRow, error) {
-				return []sqlc.GetActiveProjectsRow{}, nil
+			getActiveProjectsFn: func(ctx context.Context) ([]tasksdb.GetActiveProjectsRow, error) {
+				return []tasksdb.GetActiveProjectsRow{}, nil
 			},
-			getUnfinishedTasksFn: func(ctx context.Context) ([]sqlc.GetUnfinishedTasksRow, error) {
-				return []sqlc.GetUnfinishedTasksRow{
+			getUnfinishedTasksFn: func(ctx context.Context) ([]tasksdb.GetUnfinishedTasksRow, error) {
+				return []tasksdb.GetUnfinishedTasksRow{
 					{ID: 1, Name: "Orphan Started", StartedAt: pgtype.Timestamp{Time: time.Now(), Valid: true}},
 					{ID: 2, Name: "Orphan Unstarted"},
 				}, nil
@@ -636,11 +642,11 @@ func TestRepository_GetActiveTree(t *testing.T) {
 
 	t.Run("empty tree", func(t *testing.T) {
 		mock := &mockQuerier{
-			getActiveProjectsFn: func(ctx context.Context) ([]sqlc.GetActiveProjectsRow, error) {
-				return []sqlc.GetActiveProjectsRow{}, nil
+			getActiveProjectsFn: func(ctx context.Context) ([]tasksdb.GetActiveProjectsRow, error) {
+				return []tasksdb.GetActiveProjectsRow{}, nil
 			},
-			getUnfinishedTasksFn: func(ctx context.Context) ([]sqlc.GetUnfinishedTasksRow, error) {
-				return []sqlc.GetUnfinishedTasksRow{}, nil
+			getUnfinishedTasksFn: func(ctx context.Context) ([]tasksdb.GetUnfinishedTasksRow, error) {
+				return []tasksdb.GetUnfinishedTasksRow{}, nil
 			},
 		}
 		repo := NewRepository(mock)
@@ -653,13 +659,13 @@ func TestRepository_GetActiveTree(t *testing.T) {
 
 	t.Run("ordering: projects before started tasks before unstarted tasks", func(t *testing.T) {
 		mock := &mockQuerier{
-			getActiveProjectsFn: func(ctx context.Context) ([]sqlc.GetActiveProjectsRow, error) {
-				return []sqlc.GetActiveProjectsRow{
+			getActiveProjectsFn: func(ctx context.Context) ([]tasksdb.GetActiveProjectsRow, error) {
+				return []tasksdb.GetActiveProjectsRow{
 					{ID: 1, Name: "Project"},
 				}, nil
 			},
-			getUnfinishedTasksFn: func(ctx context.Context) ([]sqlc.GetUnfinishedTasksRow, error) {
-				return []sqlc.GetUnfinishedTasksRow{
+			getUnfinishedTasksFn: func(ctx context.Context) ([]tasksdb.GetUnfinishedTasksRow, error) {
+				return []tasksdb.GetUnfinishedTasksRow{
 					{ID: 1, Name: "Unstarted Orphan"},
 					{ID: 2, Name: "Started Orphan", StartedAt: pgtype.Timestamp{Time: time.Now(), Valid: true}},
 					{ID: 3, ProjectID: &projectID1, Name: "Unstarted Child"},
@@ -686,7 +692,7 @@ func TestRepository_GetActiveTree(t *testing.T) {
 
 	t.Run("error from GetActiveProjects propagates", func(t *testing.T) {
 		mock := &mockQuerier{
-			getActiveProjectsFn: func(ctx context.Context) ([]sqlc.GetActiveProjectsRow, error) {
+			getActiveProjectsFn: func(ctx context.Context) ([]tasksdb.GetActiveProjectsRow, error) {
 				return nil, errors.New("db error")
 			},
 		}
@@ -698,10 +704,10 @@ func TestRepository_GetActiveTree(t *testing.T) {
 
 	t.Run("error from GetUnfinishedTasks propagates", func(t *testing.T) {
 		mock := &mockQuerier{
-			getActiveProjectsFn: func(ctx context.Context) ([]sqlc.GetActiveProjectsRow, error) {
-				return []sqlc.GetActiveProjectsRow{}, nil
+			getActiveProjectsFn: func(ctx context.Context) ([]tasksdb.GetActiveProjectsRow, error) {
+				return []tasksdb.GetActiveProjectsRow{}, nil
 			},
-			getUnfinishedTasksFn: func(ctx context.Context) ([]sqlc.GetUnfinishedTasksRow, error) {
+			getUnfinishedTasksFn: func(ctx context.Context) ([]tasksdb.GetUnfinishedTasksRow, error) {
 				return nil, errors.New("db error")
 			},
 		}
@@ -718,18 +724,18 @@ func TestRepository_GetProjectChildren(t *testing.T) {
 
 	t.Run("project with sub-projects and tasks", func(t *testing.T) {
 		mock := &mockQuerier{
-			getProjectWithDescendantsFn: func(ctx context.Context, id int32) ([]sqlc.GetProjectWithDescendantsRow, error) {
-				return []sqlc.GetProjectWithDescendantsRow{
+			getProjectWithDescendantsFn: func(ctx context.Context, id int32) ([]tasksdb.GetProjectWithDescendantsRow, error) {
+				return []tasksdb.GetProjectWithDescendantsRow{
 					{ID: 1, Name: "Root", Depth: 0},
 					{ID: 2, ParentID: &parentID, Name: "Sub-Project", Depth: 1},
 				}, nil
 			},
-			getTasksByProjectIDsFn: func(ctx context.Context, projectIds []int32) ([]sqlc.GetTasksByProjectIDsRow, error) {
+			getTasksByProjectIDsFn: func(ctx context.Context, projectIds []int32) ([]tasksdb.GetTasksByProjectIDsRow, error) {
 				pid1 := int32(1)
 				pid2 := int32(2)
 				todoID := int32(10)
 				todoName := "My Todo"
-				return []sqlc.GetTasksByProjectIDsRow{
+				return []tasksdb.GetTasksByProjectIDsRow{
 					{ID: 1, ProjectID: &pid1, Name: "Task A", TimeSpent: 3600, TodoID: &todoID, TodoName: &todoName},
 					{ID: 2, ProjectID: &pid2, Name: "Task B", TimeSpent: 1800},
 				}, nil
@@ -760,16 +766,16 @@ func TestRepository_GetProjectChildren(t *testing.T) {
 
 	t.Run("tasks with multiple todos", func(t *testing.T) {
 		mock := &mockQuerier{
-			getProjectWithDescendantsFn: func(ctx context.Context, id int32) ([]sqlc.GetProjectWithDescendantsRow, error) {
-				return []sqlc.GetProjectWithDescendantsRow{
+			getProjectWithDescendantsFn: func(ctx context.Context, id int32) ([]tasksdb.GetProjectWithDescendantsRow, error) {
+				return []tasksdb.GetProjectWithDescendantsRow{
 					{ID: 1, Name: "Root", Depth: 0},
 				}, nil
 			},
-			getTasksByProjectIDsFn: func(ctx context.Context, projectIds []int32) ([]sqlc.GetTasksByProjectIDsRow, error) {
+			getTasksByProjectIDsFn: func(ctx context.Context, projectIds []int32) ([]tasksdb.GetTasksByProjectIDsRow, error) {
 				pid := int32(1)
 				todoID1, todoID2 := int32(10), int32(11)
 				todoName1, todoName2 := "Todo 1", "Todo 2"
-				return []sqlc.GetTasksByProjectIDsRow{
+				return []tasksdb.GetTasksByProjectIDsRow{
 					{ID: 1, ProjectID: &pid, Name: "Task", TimeSpent: 100, TodoID: &todoID1, TodoName: &todoName1},
 					{ID: 1, ProjectID: &pid, Name: "Task", TimeSpent: 100, TodoID: &todoID2, TodoName: &todoName2},
 				}, nil
@@ -789,13 +795,13 @@ func TestRepository_GetProjectChildren(t *testing.T) {
 
 	t.Run("project with no children", func(t *testing.T) {
 		mock := &mockQuerier{
-			getProjectWithDescendantsFn: func(ctx context.Context, id int32) ([]sqlc.GetProjectWithDescendantsRow, error) {
-				return []sqlc.GetProjectWithDescendantsRow{
+			getProjectWithDescendantsFn: func(ctx context.Context, id int32) ([]tasksdb.GetProjectWithDescendantsRow, error) {
+				return []tasksdb.GetProjectWithDescendantsRow{
 					{ID: 5, Name: "Empty", Depth: 0},
 				}, nil
 			},
-			getTasksByProjectIDsFn: func(ctx context.Context, projectIds []int32) ([]sqlc.GetTasksByProjectIDsRow, error) {
-				return []sqlc.GetTasksByProjectIDsRow{}, nil
+			getTasksByProjectIDsFn: func(ctx context.Context, projectIds []int32) ([]tasksdb.GetTasksByProjectIDsRow, error) {
+				return []tasksdb.GetTasksByProjectIDsRow{}, nil
 			},
 		}
 		repo := NewRepository(mock)
@@ -812,16 +818,16 @@ func TestRepository_GetProjectChildren(t *testing.T) {
 		pid1 := int32(1)
 		pid2 := int32(2)
 		mock := &mockQuerier{
-			getProjectWithDescendantsFn: func(ctx context.Context, id int32) ([]sqlc.GetProjectWithDescendantsRow, error) {
-				return []sqlc.GetProjectWithDescendantsRow{
+			getProjectWithDescendantsFn: func(ctx context.Context, id int32) ([]tasksdb.GetProjectWithDescendantsRow, error) {
+				return []tasksdb.GetProjectWithDescendantsRow{
 					{ID: 1, Name: "Root", Depth: 0},
 					{ID: 2, ParentID: &pid1, Name: "Child", Depth: 1},
 					{ID: 3, ParentID: &pid2, Name: "Grandchild", Depth: 2},
 				}, nil
 			},
-			getTasksByProjectIDsFn: func(ctx context.Context, projectIds []int32) ([]sqlc.GetTasksByProjectIDsRow, error) {
+			getTasksByProjectIDsFn: func(ctx context.Context, projectIds []int32) ([]tasksdb.GetTasksByProjectIDsRow, error) {
 				pid3 := int32(3)
-				return []sqlc.GetTasksByProjectIDsRow{
+				return []tasksdb.GetTasksByProjectIDsRow{
 					{ID: 1, ProjectID: &pid3, Name: "Deep Task", TimeSpent: 500},
 				}, nil
 			},
@@ -840,15 +846,15 @@ func TestRepository_GetProjectChildren(t *testing.T) {
 
 	t.Run("ordering: sub-projects first, unfinished tasks, finished tasks", func(t *testing.T) {
 		mock := &mockQuerier{
-			getProjectWithDescendantsFn: func(ctx context.Context, id int32) ([]sqlc.GetProjectWithDescendantsRow, error) {
-				return []sqlc.GetProjectWithDescendantsRow{
+			getProjectWithDescendantsFn: func(ctx context.Context, id int32) ([]tasksdb.GetProjectWithDescendantsRow, error) {
+				return []tasksdb.GetProjectWithDescendantsRow{
 					{ID: 1, Name: "Root", Depth: 0},
 					{ID: 2, ParentID: &parentID, Name: "Sub", Depth: 1},
 				}, nil
 			},
-			getTasksByProjectIDsFn: func(ctx context.Context, projectIds []int32) ([]sqlc.GetTasksByProjectIDsRow, error) {
+			getTasksByProjectIDsFn: func(ctx context.Context, projectIds []int32) ([]tasksdb.GetTasksByProjectIDsRow, error) {
 				pid := int32(1)
-				return []sqlc.GetTasksByProjectIDsRow{
+				return []tasksdb.GetTasksByProjectIDsRow{
 					// Unfinished task first (NULLS FIRST ordering from SQL)
 					{ID: 1, ProjectID: &pid, Name: "Active Task", TimeSpent: 0},
 					// Finished task
@@ -874,8 +880,8 @@ func TestRepository_GetProjectChildren(t *testing.T) {
 
 	t.Run("ErrNotFound when project doesn't exist", func(t *testing.T) {
 		mock := &mockQuerier{
-			getProjectWithDescendantsFn: func(ctx context.Context, id int32) ([]sqlc.GetProjectWithDescendantsRow, error) {
-				return []sqlc.GetProjectWithDescendantsRow{}, nil
+			getProjectWithDescendantsFn: func(ctx context.Context, id int32) ([]tasksdb.GetProjectWithDescendantsRow, error) {
+				return []tasksdb.GetProjectWithDescendantsRow{}, nil
 			},
 		}
 		repo := NewRepository(mock)
@@ -886,7 +892,7 @@ func TestRepository_GetProjectChildren(t *testing.T) {
 
 	t.Run("error from GetProjectWithDescendants propagates", func(t *testing.T) {
 		mock := &mockQuerier{
-			getProjectWithDescendantsFn: func(ctx context.Context, id int32) ([]sqlc.GetProjectWithDescendantsRow, error) {
+			getProjectWithDescendantsFn: func(ctx context.Context, id int32) ([]tasksdb.GetProjectWithDescendantsRow, error) {
 				return nil, errors.New("db error")
 			},
 		}
@@ -899,12 +905,12 @@ func TestRepository_GetProjectChildren(t *testing.T) {
 
 	t.Run("error from GetTasksByProjectIDs propagates", func(t *testing.T) {
 		mock := &mockQuerier{
-			getProjectWithDescendantsFn: func(ctx context.Context, id int32) ([]sqlc.GetProjectWithDescendantsRow, error) {
-				return []sqlc.GetProjectWithDescendantsRow{
+			getProjectWithDescendantsFn: func(ctx context.Context, id int32) ([]tasksdb.GetProjectWithDescendantsRow, error) {
+				return []tasksdb.GetProjectWithDescendantsRow{
 					{ID: 1, Name: "Root", Depth: 0},
 				}, nil
 			},
-			getTasksByProjectIDsFn: func(ctx context.Context, projectIds []int32) ([]sqlc.GetTasksByProjectIDsRow, error) {
+			getTasksByProjectIDsFn: func(ctx context.Context, projectIds []int32) ([]tasksdb.GetTasksByProjectIDsRow, error) {
 				return nil, errors.New("db error")
 			},
 		}

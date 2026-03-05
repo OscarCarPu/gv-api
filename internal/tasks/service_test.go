@@ -20,7 +20,8 @@ type mockRepo struct {
 	finishProjectFn   func(ctx context.Context, id int32, finishedAt time.Time) (ProjectResponse, error)
 	getRootProjectsFn    func(ctx context.Context) ([]ProjectResponse, error)
 	getActiveTreeFn      func(ctx context.Context) ([]ActiveTreeNode, error)
-	getProjectChildrenFn func(ctx context.Context, projectID int32) (ProjectChildrenResponse, error)
+	getProjectChildrenFn   func(ctx context.Context, projectID int32) (ProjectChildrenResponse, error)
+	getTaskTimeEntriesFn   func(ctx context.Context, taskID int32) (TaskTimeEntriesResponse, error)
 }
 
 func (m *mockRepo) CreateProject(ctx context.Context, name string, description *string, dueAt *time.Time, parentID *int32) (ProjectResponse, error) {
@@ -91,6 +92,13 @@ func (m *mockRepo) GetProjectChildren(ctx context.Context, projectID int32) (Pro
 		return m.getProjectChildrenFn(ctx, projectID)
 	}
 	return ProjectChildrenResponse{}, nil
+}
+
+func (m *mockRepo) GetTaskTimeEntries(ctx context.Context, taskID int32) (TaskTimeEntriesResponse, error) {
+	if m.getTaskTimeEntriesFn != nil {
+		return m.getTaskTimeEntriesFn(ctx, taskID)
+	}
+	return TaskTimeEntriesResponse{}, nil
 }
 
 func TestService_CreateProject(t *testing.T) {

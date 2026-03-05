@@ -81,3 +81,12 @@ SELECT
 FROM task_times tt
 LEFT JOIN todos td ON td.task_id = tt.id
 ORDER BY tt.finished_at NULLS FIRST, tt.name, todo_id;
+
+-- name: GetTimeEntriesByTaskID :many
+SELECT id, task_id, started_at, finished_at, comment
+FROM time_entries
+WHERE task_id = $1
+ORDER BY started_at;
+
+-- name: TaskExists :one
+SELECT EXISTS(SELECT 1 FROM tasks WHERE id = $1);

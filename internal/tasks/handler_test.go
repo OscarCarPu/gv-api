@@ -27,7 +27,8 @@ type mockService struct {
 	finishProjectFn   func(ctx context.Context, req FinishProjectRequest) (ProjectResponse, error)
 	getRootProjectsFn    func(ctx context.Context) ([]ProjectResponse, error)
 	getActiveTreeFn      func(ctx context.Context) ([]ActiveTreeNode, error)
-	getProjectChildrenFn func(ctx context.Context, projectID int32) (ProjectChildrenResponse, error)
+	getProjectChildrenFn   func(ctx context.Context, projectID int32) (ProjectChildrenResponse, error)
+	getTaskTimeEntriesFn   func(ctx context.Context, taskID int32) (TaskTimeEntriesResponse, error)
 }
 
 func (m *mockService) CreateProject(ctx context.Context, req CreateProjectRequest) (ProjectResponse, error) {
@@ -98,6 +99,13 @@ func (m *mockService) GetProjectChildren(ctx context.Context, projectID int32) (
 		return m.getProjectChildrenFn(ctx, projectID)
 	}
 	return ProjectChildrenResponse{}, nil
+}
+
+func (m *mockService) GetTaskTimeEntries(ctx context.Context, taskID int32) (TaskTimeEntriesResponse, error) {
+	if m.getTaskTimeEntriesFn != nil {
+		return m.getTaskTimeEntriesFn(ctx, taskID)
+	}
+	return TaskTimeEntriesResponse{}, nil
 }
 
 // --- Handler Tests ---

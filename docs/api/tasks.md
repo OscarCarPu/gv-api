@@ -351,7 +351,7 @@
     }
   ]
 } 
-```
+    ```
 - **Error Responses:**
   - **Code:** `404 Not Found`
     - **Content:** `Project not found`

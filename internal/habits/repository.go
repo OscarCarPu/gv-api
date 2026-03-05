@@ -4,7 +4,7 @@ import (
 	"context"
 	"time"
 
-	"gv-api/internal/database/sqlc"
+	"gv-api/internal/database/habitsdb"
 )
 
 type Repository interface {
@@ -14,10 +14,10 @@ type Repository interface {
 }
 
 type PostgresRepository struct {
-	q sqlc.Querier
+	q habitsdb.Querier
 }
 
-func NewRepository(q sqlc.Querier) *PostgresRepository {
+func NewRepository(q habitsdb.Querier) *PostgresRepository {
 	return &PostgresRepository{q: q}
 }
 
@@ -42,7 +42,7 @@ func (r *PostgresRepository) GetHabitsWithLogs(ctx context.Context, date time.Ti
 }
 
 func (r *PostgresRepository) UpsertLog(ctx context.Context, habitID int32, date time.Time, value float32) error {
-	params := sqlc.UpsertLogParams{
+	params := habitsdb.UpsertLogParams{
 		HabitID: habitID,
 		LogDate: date,
 		Value:   value,
@@ -51,7 +51,7 @@ func (r *PostgresRepository) UpsertLog(ctx context.Context, habitID int32, date 
 }
 
 func (r *PostgresRepository) CreateHabit(ctx context.Context, name string, description *string) (CreateHabitResponse, error) {
-	habit, err := r.q.CreateHabit(ctx, sqlc.CreateHabitParams{
+	habit, err := r.q.CreateHabit(ctx, habitsdb.CreateHabitParams{
 		Name:        name,
 		Description: description,
 	})
