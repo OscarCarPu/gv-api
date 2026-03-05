@@ -28,6 +28,7 @@ type mockQuerier struct {
 	getProjectWithDescendantsFn  func(ctx context.Context, id int32) ([]tasksdb.GetProjectWithDescendantsRow, error)
 	getTasksByProjectIDsFn       func(ctx context.Context, projectIds []int32) ([]tasksdb.GetTasksByProjectIDsRow, error)
 	getTimeEntriesByTaskIDFn     func(ctx context.Context, id int32) ([]tasksdb.GetTimeEntriesByTaskIDRow, error)
+	toggleTodoFn                 func(ctx context.Context, id int32) (tasksdb.Todo, error)
 }
 
 func (m *mockQuerier) CreateProject(ctx context.Context, arg tasksdb.CreateProjectParams) (tasksdb.CreateProjectRow, error) {
@@ -121,7 +122,12 @@ func (m *mockQuerier) GetTimeEntriesByTaskID(ctx context.Context, id int32) ([]t
 	return nil, nil
 }
 
-
+func (m *mockQuerier) ToggleTodo(ctx context.Context, id int32) (tasksdb.Todo, error) {
+	if m.toggleTodoFn != nil {
+		return m.toggleTodoFn(ctx, id)
+	}
+	return tasksdb.Todo{}, nil
+}
 
 func TestRepository_CreateProject(t *testing.T) {
 	t.Run("maps response correctly", func(t *testing.T) {
@@ -976,6 +982,55 @@ func TestRepository_GetTaskTimeEntries(t *testing.T) {
 		repo := NewRepository(mock)
 
 		_, err := repo.GetTaskTimeEntries(context.Background(), 1)
+		assert.Error(t, err)
+		assert.NotErrorIs(t, err, ErrNotFound)
+	})
+}
+
+func TestRepository_ToggleTodo(t *testing.T) {
+	t.Run("maps response correctly", func(t *testing.T) {
+		mock := &mockQuerier{
+			toggleTodoFn: func(ctx context.Context, id int32) (tasksdb.Todo, error) {
+				return tasksdb.Todo{
+					ID:     id,
+					TaskID: 5,
+					Name:   "My Todo",
+					IsDone: true,
+				}, nil
+			},
+		}
+		repo := NewRepository(mock)
+
+		got, err := repo.ToggleTodo(context.Background(), 3)
+		require.NoError(t, err)
+
+		assert.Equal(t, int32(3), got.ID)
+		assert.Equal(t, int32(5), got.TaskID)
+		assert.Equal(t, "My Todo", got.Name)
+		assert.True(t, got.IsDone)
+	})
+
+	t.Run("returns ErrNotFound on pgx.ErrNoRows", func(t *testing.T) {
+		mock := &mockQuerier{
+			toggleTodoFn: func(ctx context.Context, id int32) (tasksdb.Todo, error) {
+				return tasksdb.Todo{}, pgx.ErrNoRows
+			},
+		}
+		repo := NewRepository(mock)
+
+		_, err := repo.ToggleTodo(context.Background(), 999)
+		assert.ErrorIs(t, err, ErrNotFound)
+	})
+
+	t.Run("returns error from querier", func(t *testing.T) {
+		mock := &mockQuerier{
+			toggleTodoFn: func(ctx context.Context, id int32) (tasksdb.Todo, error) {
+				return tasksdb.Todo{}, errors.New("db error")
+			},
+		}
+		repo := NewRepository(mock)
+
+		_, err := repo.ToggleTodo(context.Background(), 1)
 		assert.Error(t, err)
 		assert.NotErrorIs(t, err, ErrNotFound)
 	})

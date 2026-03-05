@@ -22,6 +22,7 @@ type Querier interface {
 	GetTasksByProjectIDs(ctx context.Context, projectIds []int32) ([]GetTasksByProjectIDsRow, error)
 	GetTimeEntriesByTaskID(ctx context.Context, id int32) ([]GetTimeEntriesByTaskIDRow, error)
 	GetUnfinishedTasks(ctx context.Context) ([]GetUnfinishedTasksRow, error)
+	ToggleTodo(ctx context.Context, id int32) (Todo, error)
 }
 
 var _ Querier = (*Queries)(nil)

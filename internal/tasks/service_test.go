@@ -23,6 +23,7 @@ type mockRepo struct {
 	getUnfinishedTasksFn   func(ctx context.Context) ([]UnfinishedTask, error)
 	getProjectChildrenFn   func(ctx context.Context, projectID int32) (ProjectChildrenResponse, error)
 	getTaskTimeEntriesFn   func(ctx context.Context, taskID int32) (TaskTimeEntriesResponse, error)
+	toggleTodoFn           func(ctx context.Context, id int32) (TodoResponse, error)
 }
 
 func (m *mockRepo) CreateProject(ctx context.Context, name string, description *string, dueAt *time.Time, parentID *int32) (ProjectResponse, error) {
@@ -107,6 +108,13 @@ func (m *mockRepo) GetTaskTimeEntries(ctx context.Context, taskID int32) (TaskTi
 		return m.getTaskTimeEntriesFn(ctx, taskID)
 	}
 	return TaskTimeEntriesResponse{}, nil
+}
+
+func (m *mockRepo) ToggleTodo(ctx context.Context, id int32) (TodoResponse, error) {
+	if m.toggleTodoFn != nil {
+		return m.toggleTodoFn(ctx, id)
+	}
+	return TodoResponse{}, nil
 }
 
 func TestService_CreateProject(t *testing.T) {
@@ -742,6 +750,37 @@ func TestService_GetTaskTimeEntries(t *testing.T) {
 
 		svc := NewService(mock, nil)
 		_, err := svc.GetTaskTimeEntries(context.Background(), 1)
+
+		require.Error(t, err)
+	})
+}
+
+func TestService_ToggleTodo(t *testing.T) {
+	t.Run("delegates to repo and returns result", func(t *testing.T) {
+		expected := TodoResponse{ID: 1, TaskID: 5, Name: "My Todo", IsDone: true}
+		mock := &mockRepo{
+			toggleTodoFn: func(ctx context.Context, id int32) (TodoResponse, error) {
+				assert.Equal(t, int32(3), id)
+				return expected, nil
+			},
+		}
+
+		svc := NewService(mock, nil)
+		got, err := svc.ToggleTodo(context.Background(), 3)
+
+		require.NoError(t, err)
+		assert.Equal(t, expected, got)
+	})
+
+	t.Run("propagates error", func(t *testing.T) {
+		mock := &mockRepo{
+			toggleTodoFn: func(ctx context.Context, id int32) (TodoResponse, error) {
+				return TodoResponse{}, errors.New("db error")
+			},
+		}
+
+		svc := NewService(mock, nil)
+		_, err := svc.ToggleTodo(context.Background(), 1)
 
 		require.Error(t, err)
 	})

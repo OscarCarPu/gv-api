@@ -45,6 +45,7 @@ type TodoResponse struct {
 	ID     int32  `json:"id"`
 	TaskID int32  `json:"task_id"`
 	Name   string `json:"name"`
+	IsDone bool   `json:"is_done"`
 }
 
 type CreateTimeEntryRequest struct {

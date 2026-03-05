@@ -78,6 +78,7 @@ func main() {
 		r.Post("/tasks/projects", taskHandler.CreateProject)
 		r.Post("/tasks/tasks", taskHandler.CreateTask)
 		r.Post("/tasks/todos", taskHandler.CreateTodo)
+		r.Patch("/tasks/todos/{id}/toggle", taskHandler.ToggleTodo)
 		r.Post("/tasks/time-entries", taskHandler.CreateTimeEntry)
 		r.Patch("/tasks/time-entries/{id}/finish", taskHandler.FinishTimeEntry)
 		r.Get("/tasks/tasks/{id}/time-entries", taskHandler.GetTaskTimeEntries)

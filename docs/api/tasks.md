@@ -124,6 +124,31 @@
   - **Code:** `500 Internal Server Error`
     - **Content:** `Failed to create todo`
 
+## Toggle Todo
+
+- **Method:** `PATCH`
+- **Endpoint:** `/tasks/todos/:id/toggle`
+- **Description:** Toggles the `is_done` status of a todo item.
+- **Request Body:** None
+- **Success Response:**
+  - **Code:** `200 OK`
+  - **Content:**
+    ```json
+    {
+      "id": 1,
+      "task_id": 1,
+      "name": "My Todo",
+      "is_done": true
+    }
+    ```
+- **Error Responses:**
+  - **Code:** `400 Bad Request`
+    - **Content:** `invalid todo id`
+  - **Code:** `404 Not Found`
+    - **Content:** `todo not found`
+  - **Code:** `500 Internal Server Error`
+    - **Content:** `Failed to toggle todo`
+
 ## Create Time Entry
 
 - **Method:** `POST`

@@ -517,3 +517,21 @@ func (q *Queries) GetUnfinishedTasks(ctx context.Context) ([]GetUnfinishedTasksR
 	}
 	return items, nil
 }
+
+const toggleTodo = `-- name: ToggleTodo :one
+UPDATE todos SET is_done = NOT is_done
+WHERE id = $1
+RETURNING id, task_id, name, is_done
+`
+
+func (q *Queries) ToggleTodo(ctx context.Context, id int32) (Todo, error) {
+	row := q.db.QueryRow(ctx, toggleTodo, id)
+	var i Todo
+	err := row.Scan(
+		&i.ID,
+		&i.TaskID,
+		&i.Name,
+		&i.IsDone,
+	)
+	return i, err
+}

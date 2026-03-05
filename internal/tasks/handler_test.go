@@ -29,6 +29,7 @@ type mockService struct {
 	getActiveTreeFn      func(ctx context.Context) ([]ActiveTreeNode, error)
 	getProjectChildrenFn   func(ctx context.Context, projectID int32) (ProjectChildrenResponse, error)
 	getTaskTimeEntriesFn   func(ctx context.Context, taskID int32) (TaskTimeEntriesResponse, error)
+	toggleTodoFn           func(ctx context.Context, id int32) (TodoResponse, error)
 }
 
 func (m *mockService) CreateProject(ctx context.Context, req CreateProjectRequest) (ProjectResponse, error) {
@@ -106,6 +107,13 @@ func (m *mockService) GetTaskTimeEntries(ctx context.Context, taskID int32) (Tas
 		return m.getTaskTimeEntriesFn(ctx, taskID)
 	}
 	return TaskTimeEntriesResponse{}, nil
+}
+
+func (m *mockService) ToggleTodo(ctx context.Context, id int32) (TodoResponse, error) {
+	if m.toggleTodoFn != nil {
+		return m.toggleTodoFn(ctx, id)
+	}
+	return TodoResponse{}, nil
 }
 
 // --- Handler Tests ---
@@ -1003,5 +1011,88 @@ func TestHandler_GetTaskTimeEntries(t *testing.T) {
 
 		assert.Equal(t, http.StatusInternalServerError, rec.Code)
 		assert.Contains(t, rec.Body.String(), "Failed to get task time entries")
+	})
+}
+
+func TestHandler_ToggleTodo(t *testing.T) {
+	t.Run("returns 200 with toggled todo", func(t *testing.T) {
+		mock := &mockService{
+			toggleTodoFn: func(ctx context.Context, id int32) (TodoResponse, error) {
+				return TodoResponse{ID: id, TaskID: 5, Name: "My Todo", IsDone: true}, nil
+			},
+		}
+		handler := NewHandler(mock)
+
+		req := httptest.NewRequest(http.MethodPatch, "/tasks/todos/3/toggle", nil)
+		rctx := chi.NewRouteContext()
+		rctx.URLParams.Add("id", "3")
+		req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
+
+		rec := httptest.NewRecorder()
+		handler.ToggleTodo(rec, req)
+
+		assert.Equal(t, http.StatusOK, rec.Code)
+
+		var got TodoResponse
+		require.NoError(t, json.NewDecoder(rec.Body).Decode(&got))
+		assert.Equal(t, int32(3), got.ID)
+		assert.Equal(t, int32(5), got.TaskID)
+		assert.Equal(t, "My Todo", got.Name)
+		assert.True(t, got.IsDone)
+	})
+
+	t.Run("returns 400 for invalid id", func(t *testing.T) {
+		handler := NewHandler(&mockService{})
+
+		req := httptest.NewRequest(http.MethodPatch, "/tasks/todos/abc/toggle", nil)
+		rctx := chi.NewRouteContext()
+		rctx.URLParams.Add("id", "abc")
+		req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
+
+		rec := httptest.NewRecorder()
+		handler.ToggleTodo(rec, req)
+
+		assert.Equal(t, http.StatusBadRequest, rec.Code)
+		assert.Contains(t, rec.Body.String(), "invalid todo id")
+	})
+
+	t.Run("returns 404 when not found", func(t *testing.T) {
+		mock := &mockService{
+			toggleTodoFn: func(ctx context.Context, id int32) (TodoResponse, error) {
+				return TodoResponse{}, ErrNotFound
+			},
+		}
+		handler := NewHandler(mock)
+
+		req := httptest.NewRequest(http.MethodPatch, "/tasks/todos/999/toggle", nil)
+		rctx := chi.NewRouteContext()
+		rctx.URLParams.Add("id", "999")
+		req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
+
+		rec := httptest.NewRecorder()
+		handler.ToggleTodo(rec, req)
+
+		assert.Equal(t, http.StatusNotFound, rec.Code)
+		assert.Contains(t, rec.Body.String(), "todo not found")
+	})
+
+	t.Run("returns 500 when service fails", func(t *testing.T) {
+		mock := &mockService{
+			toggleTodoFn: func(ctx context.Context, id int32) (TodoResponse, error) {
+				return TodoResponse{}, errors.New("db error")
+			},
+		}
+		handler := NewHandler(mock)
+
+		req := httptest.NewRequest(http.MethodPatch, "/tasks/todos/1/toggle", nil)
+		rctx := chi.NewRouteContext()
+		rctx.URLParams.Add("id", "1")
+		req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
+
+		rec := httptest.NewRecorder()
+		handler.ToggleTodo(rec, req)
+
+		assert.Equal(t, http.StatusInternalServerError, rec.Code)
+		assert.Contains(t, rec.Body.String(), "Failed to toggle todo")
 	})
 }

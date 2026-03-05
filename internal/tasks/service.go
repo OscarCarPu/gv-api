@@ -57,6 +57,10 @@ func (s *Service) FinishProject(ctx context.Context, req FinishProjectRequest) (
 	return s.repo.FinishProject(ctx, req.ID, finishedAt)
 }
 
+func (s *Service) ToggleTodo(ctx context.Context, id int32) (TodoResponse, error) {
+	return s.repo.ToggleTodo(ctx, id)
+}
+
 func (s *Service) GetActiveTree(ctx context.Context) ([]ActiveTreeNode, error) {
 	projects, err := s.repo.GetActiveProjects(ctx)
 	if err != nil {

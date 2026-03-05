@@ -82,6 +82,11 @@ FROM task_times tt
 LEFT JOIN todos td ON td.task_id = tt.id
 ORDER BY tt.finished_at NULLS FIRST, tt.name, todo_id;
 
+-- name: ToggleTodo :one
+UPDATE todos SET is_done = NOT is_done
+WHERE id = $1
+RETURNING id, task_id, name, is_done;
+
 -- name: GetTimeEntriesByTaskID :many
 WITH task_info AS (
     SELECT t.id, t.project_id, t.name, t.description, t.due_at, t.started_at, t.finished_at,

@@ -25,6 +25,7 @@ type ServiceInterface interface {
 	GetActiveTree(ctx context.Context) ([]ActiveTreeNode, error)
 	GetProjectChildren(ctx context.Context, projectID int32) (ProjectChildrenResponse, error)
 	GetTaskTimeEntries(ctx context.Context, taskID int32) (TaskTimeEntriesResponse, error)
+	ToggleTodo(ctx context.Context, id int32) (TodoResponse, error)
 }
 
 type Handler struct {
@@ -268,4 +269,24 @@ func (h *Handler) GetRootProjects(w http.ResponseWriter, r *http.Request) {
 	}
 
 	response.JSON(w, http.StatusOK, projects)
+}
+
+func (h *Handler) ToggleTodo(w http.ResponseWriter, r *http.Request) {
+	id, err := parseIDParam(r, "todo")
+	if err != nil {
+		response.Error(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	todo, err := h.service.ToggleTodo(r.Context(), id)
+	if err != nil {
+		if errors.Is(err, ErrNotFound) {
+			response.Error(w, http.StatusNotFound, "todo not found")
+			return
+		}
+		response.Error(w, http.StatusInternalServerError, "Failed to toggle todo")
+		return
+	}
+
+	response.JSON(w, http.StatusOK, todo)
 }

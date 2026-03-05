@@ -28,6 +28,7 @@ type Repository interface {
 	GetUnfinishedTasks(ctx context.Context) ([]UnfinishedTask, error)
 	GetProjectChildren(ctx context.Context, projectID int32) (ProjectChildrenResponse, error)
 	GetTaskTimeEntries(ctx context.Context, taskID int32) (TaskTimeEntriesResponse, error)
+	ToggleTodo(ctx context.Context, id int32) (TodoResponse, error)
 }
 
 type PostgresRepository struct {
@@ -117,6 +118,23 @@ func (r *PostgresRepository) CreateTodo(ctx context.Context, taskID int32, name 
 		ID:     row.ID,
 		TaskID: row.TaskID,
 		Name:   row.Name,
+	}, nil
+}
+
+func (r *PostgresRepository) ToggleTodo(ctx context.Context, id int32) (TodoResponse, error) {
+	row, err := r.q.ToggleTodo(ctx, id)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return TodoResponse{}, ErrNotFound
+		}
+		return TodoResponse{}, err
+	}
+
+	return TodoResponse{
+		ID:     row.ID,
+		TaskID: row.TaskID,
+		Name:   row.Name,
+		IsDone: row.IsDone,
 	}, nil
 }
 
