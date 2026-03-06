@@ -99,13 +99,14 @@ Environment variables loaded via `os.Getenv` with sensible defaults. No `.env` f
 | GET | `/tasks/projects` | Root (unfinished, parentless) projects |
 | GET | `/tasks/projects/{id}/children` | Project with descendants, tasks, todos, time stats |
 | POST | `/tasks/projects` | Create project |
+| PATCH | `/tasks/projects/{id}` | Update a project |
 | POST | `/tasks/tasks` | Create task |
-| POST | `/tasks/todos` | Create todo |
-| POST | `/tasks/time-entries` | Create time entry |
-| PATCH | `/tasks/time-entries/{id}/finish` | Finish a time entry |
-| PATCH | `/tasks/tasks/{id}/finish` | Finish a task |
-| PATCH | `/tasks/projects/{id}/finish` | Finish a project |
+| PATCH | `/tasks/tasks/{id}` | Update a task |
 | GET | `/tasks/tasks/{id}/time-entries` | Task detail with time entries |
+| POST | `/tasks/todos` | Create todo |
+| PATCH | `/tasks/todos/{id}` | Update a todo |
+| POST | `/tasks/time-entries` | Create time entry |
+| PATCH | `/tasks/time-entries/{id}` | Update a time entry |
 
 ## Database Schema
 
@@ -139,55 +140,3 @@ Test DB is created/destroyed per run. E2E tests use a custom `APIClient` helper.
 - Non-root user in container
 - Docker Compose with `db` (postgres:15-alpine) + `gv-api` on external `gv` network
 - Migrations applied via Docker entrypoint (volume mount to `/docker-entrypoint-initdb.d`)
-
----
-
-## Improvement Opportunities
-
-### Code Quality
-
-1. **`GetActiveTree` is in the repository layer but contains significant business logic** (tree building, sorting started vs unstarted tasks). This should live in the service layer, with the repository only returning flat data.
-
-2. **`GetProjectChildren` same issue** - complex tree assembly, time accumulation, and sorting logic in the repository. Move to service.
-
-3. **`GetTaskTimeEntries` computes `timeSpent` in Go** instead of in SQL. The `GetTasksByProjectIDs` query already does this in SQL - be consistent. Either compute in SQL for both or in Go for both.
-
-4. **Inconsistent ID generation**: `habits` uses `GENERATED ALWAYS AS IDENTITY`, `tasks` schema uses `SERIAL`. Pick one convention (prefer `GENERATED ALWAYS AS IDENTITY` - it's the modern approach).
-
-5. **Migration file naming**: `001_habits.sql`, `002_tasks.sql` use sequential numbering but the Makefile's `migration` target generates timestamp-based names. These conventions conflict.
-
-6. **Missing `is_done` column usage in tasks**: The schema has `idx_tasks_is_done` index on `tasks(is_done)` but there's no `is_done` column in the tasks table - this migration would fail. The index references a non-existent column.
-
-7. **`GetRootProjects` query selects `started_at`** but the handler maps to `ProjectResponse` which has `StartedAt` and `FinishedAt` fields - the query doesn't return `finished_at` since it filters `WHERE finished_at IS NULL`, but also doesn't include `finished_at` in the SELECT, causing potential sqlc type mismatches.
-
-### Security
-
-8. **CORS allows all origins** (`AllowedOrigins: []string{"*"}`). For a personal API this may be intentional, but worth restricting to known frontends.
-
-9. **Default secrets in config** (`Password: "Abc123.."`, `JwtSecret: "secret"`, `TotpSecret: "secret"`). These defaults are dangerous if the env vars aren't set in production.
-
-### Architecture
-
-10. **No graceful shutdown**: `http.ListenAndServe` blocks without signal handling. The server won't drain connections on SIGTERM.
-
-11. **No structured logging**: Uses `log.Printf` throughout. Consider `slog` (stdlib since Go 1.21) for structured, leveled logging.
-
-12. **No request logging middleware**: No visibility into incoming requests, response times, or status codes.
-
-13. **Error messages leak to client**: `auth/handler.go` returns `err.Error()` directly in some cases, which could expose internal details.
-
-14. **No input validation library**: Validation is manual and inconsistent - some handlers check required fields, others don't. The habits `GetDaily` handler doesn't validate date format before passing to service.
-
-### Testing
-
-15. **E2E `truncateTables` only truncates habits tables**, not tasks tables. Task E2E tests may have stale data issues.
-
-16. **No linter config visible** (`.golangci.yml` or similar), though the `//nolint` comment in main.go suggests one is used.
-
-### Minor
-
-17. **`docker-compose.yaml` container names** still reference "habits" (`habits_db`, `habits_api`) even though the project now includes tasks.
-
-18. **Dockerfile copies migrations** to runtime image but they're only needed at DB init time (handled by docker-compose volume mount). The COPY is redundant.
-
-19. **`response.Error` uses `map[string]string`** for error responses while handlers sometimes use `http.Error` directly (in middleware). Inconsistent error response format.

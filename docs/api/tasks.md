@@ -13,7 +13,9 @@
         "name": "My Project",
         "description": "This is my project.",
         "due_at": "2025-01-01",
-        "parent_id": null
+        "parent_id": null,
+        "started_at": null,
+        "finished_at": null
       }
     ]
     ```
@@ -48,7 +50,9 @@
       "name": "My Project",
       "description": "This is my project.",
       "due_at": "2025-01-01",
-      "parent_id": 1
+      "parent_id": 1,
+      "started_at": null,
+      "finished_at": null
     }
     ```
 
@@ -57,6 +61,50 @@
     - **Content:** `Invalid Body` or `name is required`
   - **Code:** `500 Internal Server Error`
     - **Content:** `Failed to create project`
+
+## Update Project
+
+- **Method:** `PATCH`
+- **Endpoint:** `/tasks/projects/{id}`
+- **Description:** Partially updates a project. Only provided fields are modified.
+- **Request Body:**
+  ```json
+  {
+    "name": "Renamed Project",
+    "description": "Updated description.",
+    "due_at": "2025-06-01",
+    "parent_id": 2,
+    "started_at": "2025-01-01T08:00:00Z",
+    "finished_at": "2025-03-01T17:00:00Z"
+  }
+  ```
+  - `name` (optional): New name.
+  - `description` (optional): New description.
+  - `due_at` (optional): New due date.
+  - `parent_id` (optional): New parent project ID.
+  - `started_at` (optional): Start timestamp.
+  - `finished_at` (optional): Finish timestamp.
+- **Success Response:**
+  - **Code:** `200 OK`
+  - **Content:**
+    ```json
+    {
+      "id": 1,
+      "name": "Renamed Project",
+      "description": "Updated description.",
+      "due_at": "2025-06-01",
+      "parent_id": 2,
+      "started_at": "2025-01-01T08:00:00Z",
+      "finished_at": "2025-03-01T17:00:00Z"
+    }
+    ```
+- **Error Responses:**
+  - **Code:** `400 Bad Request`
+    - **Content:** `invalid project id` or `Invalid Body`
+  - **Code:** `404 Not Found`
+    - **Content:** `project not found`
+  - **Code:** `500 Internal Server Error`
+    - **Content:** `Failed to update project`
 
 ## Create Task
 
@@ -85,7 +133,9 @@
       "project_id": 1,
       "name": "My Task",
       "description": "Task description.",
-      "due_at": "2025-06-01"
+      "due_at": "2025-06-01",
+      "started_at": null,
+      "finished_at": null
     }
     ```
 - **Error Responses:**
@@ -93,6 +143,50 @@
     - **Content:** `Invalid Body` or `name is required`
   - **Code:** `500 Internal Server Error`
     - **Content:** `Failed to create task`
+
+## Update Task
+
+- **Method:** `PATCH`
+- **Endpoint:** `/tasks/tasks/{id}`
+- **Description:** Partially updates a task. Only provided fields are modified.
+- **Request Body:**
+  ```json
+  {
+    "name": "Renamed Task",
+    "description": "Updated description.",
+    "due_at": "2025-06-01",
+    "project_id": 2,
+    "started_at": "2025-02-15T08:00:00Z",
+    "finished_at": "2025-03-01T17:00:00Z"
+  }
+  ```
+  - `name` (optional): New name.
+  - `description` (optional): New description.
+  - `due_at` (optional): New due date.
+  - `project_id` (optional): New parent project ID.
+  - `started_at` (optional): Start timestamp.
+  - `finished_at` (optional): Finish timestamp.
+- **Success Response:**
+  - **Code:** `200 OK`
+  - **Content:**
+    ```json
+    {
+      "id": 1,
+      "project_id": 2,
+      "name": "Renamed Task",
+      "description": "Updated description.",
+      "due_at": "2025-06-01",
+      "started_at": "2025-02-15T08:00:00Z",
+      "finished_at": "2025-03-01T17:00:00Z"
+    }
+    ```
+- **Error Responses:**
+  - **Code:** `400 Bad Request`
+    - **Content:** `invalid task id` or `Invalid Body`
+  - **Code:** `404 Not Found`
+    - **Content:** `task not found`
+  - **Code:** `500 Internal Server Error`
+    - **Content:** `Failed to update task`
 
 ## Create Todo
 
@@ -115,7 +209,8 @@
     {
       "id": 1,
       "task_id": 1,
-      "name": "My Todo"
+      "name": "My Todo",
+      "is_done": false
     }
     ```
 - **Error Responses:**
@@ -124,12 +219,20 @@
   - **Code:** `500 Internal Server Error`
     - **Content:** `Failed to create todo`
 
-## Toggle Todo
+## Update Todo
 
 - **Method:** `PATCH`
-- **Endpoint:** `/tasks/todos/:id/toggle`
-- **Description:** Toggles the `is_done` status of a todo item.
-- **Request Body:** None
+- **Endpoint:** `/tasks/todos/{id}`
+- **Description:** Partially updates a todo. Can change name and/or toggle done status.
+- **Request Body:**
+  ```json
+  {
+    "name": "Renamed Todo",
+    "is_done": true
+  }
+  ```
+  - `name` (optional): New name.
+  - `is_done` (optional): New done status.
 - **Success Response:**
   - **Code:** `200 OK`
   - **Content:**
@@ -137,17 +240,17 @@
     {
       "id": 1,
       "task_id": 1,
-      "name": "My Todo",
+      "name": "Renamed Todo",
       "is_done": true
     }
     ```
 - **Error Responses:**
   - **Code:** `400 Bad Request`
-    - **Content:** `invalid todo id`
+    - **Content:** `invalid todo id` or `Invalid Body`
   - **Code:** `404 Not Found`
     - **Content:** `todo not found`
   - **Code:** `500 Internal Server Error`
-    - **Content:** `Failed to toggle todo`
+    - **Content:** `Failed to update todo`
 
 ## Create Time Entry
 
@@ -185,18 +288,22 @@
   - **Code:** `500 Internal Server Error`
     - **Content:** `Failed to create time entry`
 
-## Finish Time Entry
+## Update Time Entry
 
 - **Method:** `PATCH`
-- **Endpoint:** `/tasks/time-entries/:id/finish`
-- **Description:** Marks a time entry as finished. If `finished_at` is omitted, the server uses the current time.
-- **Request Body (optional):**
+- **Endpoint:** `/tasks/time-entries/{id}`
+- **Description:** Partially updates a time entry. Only provided fields are modified.
+- **Request Body:**
   ```json
   {
-    "finished_at": "2025-03-01T10:30:00Z"
+    "started_at": "2025-03-01T09:00:00Z",
+    "finished_at": "2025-03-01T10:30:00Z",
+    "comment": "Updated comment"
   }
   ```
-  - `finished_at` (optional): The end time in RFC 3339 format. Defaults to NOW().
+  - `started_at` (optional): New start time.
+  - `finished_at` (optional): New end time.
+  - `comment` (optional): New comment.
 - **Success Response:**
   - **Code:** `200 OK`
   - **Content:**
@@ -206,84 +313,16 @@
       "task_id": 1,
       "started_at": "2025-03-01T09:00:00Z",
       "finished_at": "2025-03-01T10:30:00Z",
-      "comment": "Worked on feature X"
+      "comment": "Updated comment"
     }
     ```
 - **Error Responses:**
   - **Code:** `400 Bad Request`
-    - **Content:** `Invalid Body`
+    - **Content:** `invalid time entry id` or `Invalid Body`
   - **Code:** `404 Not Found`
-    - **Content:** `Time entry not found`
+    - **Content:** `time entry not found`
   - **Code:** `500 Internal Server Error`
-    - **Content:** `Failed to finish time entry`
-
-## Finish Task
-
-- **Method:** `PATCH`
-- **Endpoint:** `/tasks/tasks/:id/finish`
-- **Description:** Marks a task as finished by setting its `finished_at` timestamp. If `finished_at` is omitted, the server uses the current time.
-- **Request Body (optional):**
-  ```json
-  {
-    "finished_at": "2025-03-01T17:00:00Z"
-  }
-  ```
-  - `finished_at` (optional): The finish time in RFC 3339 format. Defaults to NOW().
-- **Success Response:**
-  - **Code:** `200 OK`
-  - **Content:**
-    ```json
-    {
-      "id": 1,
-      "project_id": 1,
-      "name": "My Task",
-      "description": "Task description.",
-      "due_at": "2025-06-01",
-      "started_at": "2025-02-15T08:00:00Z",
-      "finished_at": "2025-03-01T17:00:00Z"
-    }
-    ```
-- **Error Responses:**
-  - **Code:** `400 Bad Request`
-    - **Content:** `Invalid Body`
-  - **Code:** `404 Not Found`
-    - **Content:** `Task not found`
-  - **Code:** `500 Internal Server Error`
-    - **Content:** `Failed to finish task`
-
-## Finish Project
-
-- **Method:** `PATCH`
-- **Endpoint:** `/tasks/projects/:id/finish`
-- **Description:** Marks a project as finished by setting its `finished_at` timestamp. If `finished_at` is omitted, the server uses the current time.
-- **Request Body (optional):**
-  ```json
-  {
-    "finished_at": "2025-03-01T17:00:00Z"
-  }
-  ```
-  - `finished_at` (optional): The finish time in RFC 3339 format. Defaults to NOW().
-- **Success Response:**
-  - **Code:** `200 OK`
-  - **Content:**
-    ```json
-    {
-      "id": 1,
-      "parent_id": null,
-      "name": "My Project",
-      "description": "This is my project.",
-      "due_at": "2025-01-01",
-      "started_at": "2024-12-01T08:00:00Z",
-      "finished_at": "2025-03-01T17:00:00Z"
-    }
-    ```
-- **Error Responses:**
-  - **Code:** `400 Bad Request`
-    - **Content:** `Invalid Body`
-  - **Code:** `404 Not Found`
-    - **Content:** `Project not found`
-  - **Code:** `500 Internal Server Error`
-    - **Content:** `Failed to finish project`
+    - **Content:** `Failed to update time entry`
 
 ## Get Active Tree
 
@@ -308,15 +347,15 @@
           },
           {
             "id": 1,
-            "type": "task"
-            "name": "task_1",
+            "type": "task",
+            "name": "task_1"
           }
         ]
       },
       {
         "id": 5,
-        "type": "task"
-        "name": "orphan_task",
+        "type": "task",
+        "name": "orphan_task"
       }
     ]
     ```
@@ -327,7 +366,7 @@
 ## Get Project Children
 
 - **Method:** `GET`
-- **Endpoint:** `/tasks/projects/:id/children`
+- **Endpoint:** `/tasks/projects/{id}/children`
 - **Description:** Returns sub-projects and tasks belonging to the given project. Results are ordered: sub-projects first, then unfinished tasks, then finished tasks. Tasks include their `todos` array and `time_spent` (total seconds from time entries). Sub-projects include `time_spent` (recursive sum across all nested tasks).
 - **Success Response:**
   - **Code:** `200 OK`
@@ -370,7 +409,8 @@
             {
               "id": 1,
               "task_id": 1,
-              "name": "My Todo"
+              "name": "My Todo",
+              "is_done": false
             }
           ]
         }
@@ -379,14 +419,14 @@
     ```
 - **Error Responses:**
   - **Code:** `404 Not Found`
-    - **Content:** `Project not found`
+    - **Content:** `project not found`
   - **Code:** `500 Internal Server Error`
     - **Content:** `Failed to get project children`
 
 ## Get Task Time Entries
 
 - **Method:** `GET`
-- **Endpoint:** `/tasks/tasks/:id/time-entries`
+- **Endpoint:** `/tasks/tasks/{id}/time-entries`
 - **Description:** Returns the task details and all its time entries, along with the total time spent in seconds.
 - **Success Response:**
   - **Code:** `200 OK`
@@ -416,6 +456,6 @@
     ```
 - **Error Responses:**
   - **Code:** `404 Not Found`
-    - **Content:** `Task not found`
+    - **Content:** `task not found`
   - **Code:** `500 Internal Server Error`
     - **Content:** `Failed to get task time entries`
