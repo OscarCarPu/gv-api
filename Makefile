@@ -117,7 +117,7 @@ test-e2e: test-api-setup
 # Coverage: run all tests and generate coverage report
 test-coverage: test-api-setup
 	@printf "$(CYAN)>>> Running all tests with coverage...$(NC)\n"
-	@TEST_DB_URL=$(OUTSIDE_TEST_DB_URL) PORT=$(PORT) PASSWORD=$(PASSWORD) TOTP_SECRET=$(TOTP_SECRET) go test -v $$(go list ./... | grep -v /internal/database/sqlc) -coverprofile=coverage.out
+	@TEST_DB_URL=$(OUTSIDE_TEST_DB_URL) PORT=$(PORT) PASSWORD=$(PASSWORD) TOTP_SECRET=$(TOTP_SECRET) go test -v $$(go list ./... | grep -v -E '/internal/database/(sqlc|habitsdb|tasksdb)') -coverprofile=coverage.out
 	@$(MAKE) test-db-cleanup --no-print-directory
 	@printf "$(YELLOW)>>> Updating README with coverage table...$(NC)\n"
 	@uv run scripts/coverage.py

@@ -2,27 +2,24 @@ import os
 import re
 import subprocess
 
-# Map your specific files/folders to custom comments
-COMMENTS = {
-    "gv-api/cmd/api/main.go": "Entry point, no business logic",
-    "gv-api/internal/config/config.go": "Configuration boilerplate",
-    "gv-api/internal/database/db.go": "Database boilerplate",
-    "gv-api/test/e2e/client.go": "E2E test infrastructure",
-    "gv-api/test/e2e/setup.go": "E2E test infrastructure",
-}
-
-# Paths to exclude from the total coverage calculation
-EXCLUDED_FROM_TOTAL = {
-    *COMMENTS.keys(),
-    "gv-api/test/e2e/client.go",
-    "gv-api/test/e2e/setup.go",
+# Paths to hide entirely from the coverage table
+HIDDEN_PATHS = {
+    "/internal/database/habitsdb/",
+    "/internal/database/tasksdb/",
+    "/internal/database/sqlc/",
+    "/cmd/api/main.go",
+    "/internal/config/config.go",
+    "/internal/database/db.go",
+    "/test/e2e/client.go",
+    "/test/e2e/setup.go",
 }
 
 
-def get_badge(percentage_str, is_exception):
-    if is_exception:
-        return "![skipped](https://img.shields.io/badge/SKIPPED-grey)"
+def is_hidden(path):
+    return any(h in path for h in HIDDEN_PATHS)
 
+
+def get_badge(percentage_str):
     try:
         p = float(percentage_str.strip("%"))
         if p >= 80:
@@ -75,27 +72,22 @@ def main():
 
     table = [
         "## Coverage\n",
-        "| File | Coverage | Comments |",
-        "| :--- | :---: | :--- |",
+        "| File | Coverage |",
+        "| :--- | :---: |",
     ]
 
     for path in sorted(file_data.keys()):
+        if is_hidden(path):
+            continue
+
         avg_pct = sum(file_data[path]) / len(file_data[path])
         avg_str = f"{avg_pct:.1f}%"
+        badge = get_badge(avg_str)
+        table.append(f"| `{path}` | {badge} |")
 
-        # Logic: If it's an exception, use grey badge and skip coverage color logic
-        comment = COMMENTS.get(path)
-        is_exception = comment is not None
-
-        badge = get_badge(avg_str, is_exception)
-        comment_text = comment if comment else ""
-
-        table.append(f"| `{path}` | {badge} | {comment_text} |")
-
-    # Calculate total from non-excluded files only
     included_pcts = []
     for path, pcts in file_data.items():
-        if path not in EXCLUDED_FROM_TOTAL:
+        if not is_hidden(path):
             included_pcts.extend(pcts)
 
     if included_pcts:
@@ -103,8 +95,10 @@ def main():
     else:
         real_total = total_coverage
 
-    total_badge = get_badge(real_total, False)
-    table.append(f"| **Total** | {total_badge} | Excludes boilerplate and test infra |")
+    total_badge = get_badge(real_total)
+    table.append(f"| **Total** | {total_badge} |")
+    table.append("")
+    table.append("> Untested code not shown above is either auto-generated (sqlc) or boilerplate that doesn't warrant testing.")
 
     table_content = "\n".join(table) + "\n"
 
