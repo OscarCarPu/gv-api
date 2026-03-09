@@ -19,12 +19,6 @@ setup-project:
 sqlc:
 	sqlc generate
 
-# Create a new migration file
-# Usage: make migration name=add_users
-migration:
-	@read -p "Enter migration name: " name; \
-	touch db/migrations/$(shell date +%Y%m%d%H%M%S)_$$name.sql
-
 # --- DATABASE ---
 
 # Connect to the database with pgcli
@@ -72,7 +66,7 @@ test-db-setup:
 	@printf "$(YELLOW)>>> Creating test database...$(NC)\n"
 	@docker compose exec -T db psql -U $(POSTGRES_USER) -d postgres -c "CREATE DATABASE \"$(TEST_DB)\";" > /dev/null
 	@printf "$(YELLOW)>>> Running migrations...$(NC)\n"
-	@docker compose exec -T db bash -c 'for f in $$(ls /docker-entrypoint-initdb.d/*.sql | sort); do psql -U $(POSTGRES_USER) -d $(TEST_DB) -f "$$f"; done' > /dev/null
+	@docker compose exec -T db bash -c 'for f in $$(ls /docker-entrypoint-initdb.d/*.up.sql | sort); do psql -U $(POSTGRES_USER) -d $(TEST_DB) -f "$$f"; done' > /dev/null
 	@printf "$(GREEN)>>> Test database ready$(NC)\n"
 
 test-db-cleanup:

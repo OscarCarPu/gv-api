@@ -25,6 +25,10 @@ func main() {
 		log.Fatal("Failed to load config", err)
 	}
 
+	if err := database.Migrate(cfg.DBUrl, "db/migrations"); err != nil {
+		log.Fatal("Failed to run migrations: ", err)
+	}
+
 	db, err := database.New(context.Background(), cfg.DBUrl)
 	if err != nil {
 		log.Fatal(err)
