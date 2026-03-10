@@ -48,8 +48,8 @@ INSERT INTO projects (name, description, due_at, started_at) VALUES
     ('Website Redesign', 'Redesign the company website with new branding', CURRENT_DATE + INTERVAL '30 days', NOW() - INTERVAL '10 days');
 
 -- id=2: child of Website Redesign (1)
-INSERT INTO projects (parent_id, name, description, started_at) VALUES
-    (1, 'Homepage Revamp', 'Redesign the homepage layout and content', NOW() - INTERVAL '8 days');
+INSERT INTO projects (parent_id, name, description, due_at, started_at) VALUES
+    (1, 'Homepage Revamp', 'Redesign the homepage layout and content', CURRENT_DATE + INTERVAL '20 days', NOW() - INTERVAL '8 days');
 
 -- id=3: child of Homepage Revamp (2) — grandchild of 1
 INSERT INTO projects (parent_id, name, description, started_at) VALUES
@@ -64,8 +64,8 @@ INSERT INTO projects (name, description, due_at) VALUES
     ('Mobile App', 'Cross-platform mobile application', CURRENT_DATE + INTERVAL '90 days');
 
 -- id=6: child of Mobile App (5)
-INSERT INTO projects (parent_id, name, description) VALUES
-    (5, 'Onboarding Flow', 'Design and build the onboarding screens');
+INSERT INTO projects (parent_id, name, description, due_at) VALUES
+    (5, 'Onboarding Flow', 'Design and build the onboarding screens', CURRENT_DATE + INTERVAL '45 days');
 
 -- Tasks on projects
 INSERT INTO tasks (project_id, name, description, due_at, started_at) VALUES
@@ -78,6 +78,12 @@ INSERT INTO tasks (project_id, name, description, due_at, started_at) VALUES
     (5, 'Research frameworks', 'Evaluate React Native vs Flutter', CURRENT_DATE + INTERVAL '7 days', NULL),
     (6, 'Design onboarding screens', 'Mockups for the 5-step onboarding', CURRENT_DATE + INTERVAL '20 days', NULL);
 
+-- Tasks on projects without due date
+INSERT INTO tasks (project_id, name, description, started_at) VALUES
+    (1, 'Content migration', 'Migrate existing content to new layout', NOW() - INTERVAL '2 days'),
+    (4, 'Rate limiting', 'Implement rate limiting middleware', NULL),
+    (5, 'Push notifications', 'Set up push notification service', NULL);
+
 -- A finished task on a project
 INSERT INTO tasks (project_id, name, description, started_at, finished_at) VALUES
     (1, 'Choose color palette', 'Select brand colors', NOW() - INTERVAL '9 days', NOW() - INTERVAL '7 days');
@@ -87,6 +93,11 @@ INSERT INTO tasks (name, description, due_at, started_at) VALUES
     ('Fix server logs', 'Investigate and fix log rotation issue', CURRENT_DATE + INTERVAL '2 days', NOW() - INTERVAL '1 day'),
     ('Update dependencies', 'Bump Go modules to latest versions', CURRENT_DATE + INTERVAL '3 days', NULL),
     ('Write blog post', 'Draft a blog post about the new API', CURRENT_DATE + INTERVAL '14 days', NULL);
+
+-- Root tasks without due date
+INSERT INTO tasks (name, description, started_at) VALUES
+    ('Clean up Docker images', 'Remove unused Docker images from registry', NOW() - INTERVAL '1 day'),
+    ('Review PR backlog', 'Go through open pull requests and review', NULL);
 
 -- A finished root task
 INSERT INTO tasks (name, description, started_at, finished_at) VALUES
