@@ -640,6 +640,28 @@ func TestService_GetActiveTree(t *testing.T) {
 		assert.Equal(t, "Orphan Unstarted", got[1].Name)
 	})
 
+	t.Run("tasks with inactive project are excluded from root", func(t *testing.T) {
+		inactiveProjectID := int32(99)
+		mock := &mockRepo{
+			getActiveProjectsFn: func(ctx context.Context) ([]ActiveProject, error) {
+				return []ActiveProject{}, nil
+			},
+			getUnfinishedTasksFn: func(ctx context.Context) ([]UnfinishedTask, error) {
+				return []UnfinishedTask{
+					{ID: 1, ProjectID: &inactiveProjectID, Name: "Task with inactive project", Started: true},
+					{ID: 2, Name: "Root task"},
+				}, nil
+			},
+		}
+		svc := NewService(mock, nil)
+
+		got, err := svc.GetActiveTree(context.Background())
+		require.NoError(t, err)
+
+		require.Len(t, got, 1)
+		assert.Equal(t, "Root task", got[0].Name)
+	})
+
 	t.Run("empty tree", func(t *testing.T) {
 		mock := &mockRepo{
 			getActiveProjectsFn: func(ctx context.Context) ([]ActiveProject, error) {

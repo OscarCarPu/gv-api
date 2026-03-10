@@ -95,8 +95,8 @@ func (s *Service) GetActiveTree(ctx context.Context) ([]ActiveTreeNode, error) {
 				} else {
 					unstartedTasks[*t.ProjectID] = append(unstartedTasks[*t.ProjectID], node)
 				}
-				continue
 			}
+			continue
 		}
 		if t.Started {
 			orphanStarted = append(orphanStarted, node)
