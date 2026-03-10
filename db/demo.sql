@@ -135,6 +135,6 @@ INSERT INTO time_entries (task_id, started_at, finished_at, comment) VALUES
     (9, NOW() - INTERVAL '9 days', NOW() - INTERVAL '9 days' + INTERVAL '30 minutes', 'Color palette research'),
     (10, NOW() - INTERVAL '1 day', NOW() - INTERVAL '1 day' + INTERVAL '45 minutes', 'Investigating log rotation');
 
--- An active time entry (no finished_at)
-INSERT INTO time_entries (task_id, started_at, comment) VALUES
-    (10, NOW() - INTERVAL '20 minutes', 'Fixing log config');
+-- Previously active time entry, now finished
+INSERT INTO time_entries (task_id, started_at, finished_at, comment) VALUES
+    (10, NOW() - INTERVAL '20 minutes', NOW(), 'Fixing log config');
