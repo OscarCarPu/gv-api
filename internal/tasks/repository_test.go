@@ -31,6 +31,8 @@ type mockQuerier struct {
 	getTaskByIDFn                func(ctx context.Context, id int32) ([]tasksdb.GetTaskByIDRow, error)
 	getTimeEntriesByTaskIDFn     func(ctx context.Context, id int32) ([]tasksdb.GetTimeEntriesByTaskIDRow, error)
 	getTasksByDueDateFn          func(ctx context.Context) ([]tasksdb.GetTasksByDueDateRow, error)
+	finishDescendantProjectsFn   func(ctx context.Context, id int32) error
+	finishTasksByProjectTreeFn   func(ctx context.Context, id int32) error
 	deleteProjectFn              func(ctx context.Context, id int32) error
 	deleteTaskFn                 func(ctx context.Context, id int32) error
 	deleteTodoFn                 func(ctx context.Context, id int32) error
@@ -147,6 +149,20 @@ func (m *mockQuerier) GetTasksByDueDate(ctx context.Context) ([]tasksdb.GetTasks
 		return m.getTasksByDueDateFn(ctx)
 	}
 	return nil, nil
+}
+
+func (m *mockQuerier) FinishDescendantProjects(ctx context.Context, id int32) error {
+	if m.finishDescendantProjectsFn != nil {
+		return m.finishDescendantProjectsFn(ctx, id)
+	}
+	return nil
+}
+
+func (m *mockQuerier) FinishTasksByProjectTree(ctx context.Context, id int32) error {
+	if m.finishTasksByProjectTreeFn != nil {
+		return m.finishTasksByProjectTreeFn(ctx, id)
+	}
+	return nil
 }
 
 func (m *mockQuerier) DeleteProject(ctx context.Context, id int32) error {

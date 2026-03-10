@@ -32,6 +32,8 @@ type Repository interface {
 	GetProjectChildren(ctx context.Context, projectID int32) (ProjectChildrenResponse, error)
 	GetTaskTimeEntries(ctx context.Context, taskID int32) (TaskTimeEntriesResponse, error)
 	GetTasksByDueDate(ctx context.Context) ([]TaskByDueDateResponse, error)
+	FinishDescendantProjects(ctx context.Context, projectID int32) error
+	FinishTasksByProjectTree(ctx context.Context, projectID int32) error
 	DeleteProject(ctx context.Context, id int32) error
 	DeleteTask(ctx context.Context, id int32) error
 	DeleteTodo(ctx context.Context, id int32) error
@@ -608,6 +610,14 @@ func (r *PostgresRepository) GetTasksByDueDate(ctx context.Context) ([]TaskByDue
 		}
 	}
 	return tasks, nil
+}
+
+func (r *PostgresRepository) FinishDescendantProjects(ctx context.Context, projectID int32) error {
+	return r.q.FinishDescendantProjects(ctx, projectID)
+}
+
+func (r *PostgresRepository) FinishTasksByProjectTree(ctx context.Context, projectID int32) error {
+	return r.q.FinishTasksByProjectTree(ctx, projectID)
 }
 
 func (r *PostgresRepository) DeleteProject(ctx context.Context, id int32) error {

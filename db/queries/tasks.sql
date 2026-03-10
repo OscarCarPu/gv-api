@@ -135,6 +135,26 @@ FROM task_info ti
 LEFT JOIN todos td ON td.task_id = ti.id
 ORDER BY td.id;
 
+-- name: FinishDescendantProjects :exec
+WITH RECURSIVE project_tree AS (
+    SELECT p.id FROM projects p WHERE p.id = $1
+    UNION ALL
+    SELECT c.id FROM projects c JOIN project_tree pt ON c.parent_id = pt.id
+)
+UPDATE projects p2 SET finished_at = NOW()
+FROM project_tree pt
+WHERE p2.id = pt.id AND p2.id != $1 AND p2.finished_at IS NULL;
+
+-- name: FinishTasksByProjectTree :exec
+WITH RECURSIVE project_tree AS (
+    SELECT p.id FROM projects p WHERE p.id = $1
+    UNION ALL
+    SELECT c.id FROM projects c JOIN project_tree pt ON c.parent_id = pt.id
+)
+UPDATE tasks t SET finished_at = NOW()
+FROM project_tree pt
+WHERE t.project_id = pt.id AND t.finished_at IS NULL;
+
 -- name: DeleteProject :exec
 DELETE FROM projects WHERE id = $1;
 

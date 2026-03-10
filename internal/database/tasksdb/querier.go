@@ -17,6 +17,8 @@ type Querier interface {
 	DeleteTask(ctx context.Context, id int32) error
 	DeleteTimeEntry(ctx context.Context, id int32) error
 	DeleteTodo(ctx context.Context, id int32) error
+	FinishDescendantProjects(ctx context.Context, id int32) error
+	FinishTasksByProjectTree(ctx context.Context, id int32) error
 	GetActiveProjects(ctx context.Context) ([]GetActiveProjectsRow, error)
 	GetProjectWithDescendants(ctx context.Context, id int32) ([]GetProjectWithDescendantsRow, error)
 	GetRootProjects(ctx context.Context) ([]GetRootProjectsRow, error)

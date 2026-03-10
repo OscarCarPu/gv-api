@@ -181,6 +181,38 @@ func (q *Queries) DeleteTodo(ctx context.Context, id int32) error {
 	return err
 }
 
+const finishDescendantProjects = `-- name: FinishDescendantProjects :exec
+WITH RECURSIVE project_tree AS (
+    SELECT p.id FROM projects p WHERE p.id = $1
+    UNION ALL
+    SELECT c.id FROM projects c JOIN project_tree pt ON c.parent_id = pt.id
+)
+UPDATE projects p2 SET finished_at = NOW()
+FROM project_tree pt
+WHERE p2.id = pt.id AND p2.id != $1 AND p2.finished_at IS NULL
+`
+
+func (q *Queries) FinishDescendantProjects(ctx context.Context, id int32) error {
+	_, err := q.db.Exec(ctx, finishDescendantProjects, id)
+	return err
+}
+
+const finishTasksByProjectTree = `-- name: FinishTasksByProjectTree :exec
+WITH RECURSIVE project_tree AS (
+    SELECT p.id FROM projects p WHERE p.id = $1
+    UNION ALL
+    SELECT c.id FROM projects c JOIN project_tree pt ON c.parent_id = pt.id
+)
+UPDATE tasks t SET finished_at = NOW()
+FROM project_tree pt
+WHERE t.project_id = pt.id AND t.finished_at IS NULL
+`
+
+func (q *Queries) FinishTasksByProjectTree(ctx context.Context, id int32) error {
+	_, err := q.db.Exec(ctx, finishTasksByProjectTree, id)
+	return err
+}
+
 const getActiveProjects = `-- name: GetActiveProjects :many
 SELECT id, parent_id, name, due_at
 FROM projects

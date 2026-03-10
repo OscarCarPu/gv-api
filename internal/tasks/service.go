@@ -34,7 +34,21 @@ func (s *Service) CreateTimeEntry(ctx context.Context, req CreateTimeEntryReques
 }
 
 func (s *Service) UpdateProject(ctx context.Context, req UpdateProjectRequest) (ProjectResponse, error) {
-	return s.repo.UpdateProject(ctx, req)
+	resp, err := s.repo.UpdateProject(ctx, req)
+	if err != nil {
+		return resp, err
+	}
+
+	if req.FinishedAt != nil {
+		if err := s.repo.FinishDescendantProjects(ctx, req.ID); err != nil {
+			return resp, err
+		}
+		if err := s.repo.FinishTasksByProjectTree(ctx, req.ID); err != nil {
+			return resp, err
+		}
+	}
+
+	return resp, nil
 }
 
 func (s *Service) UpdateTask(ctx context.Context, req UpdateTaskRequest) (TaskResponse, error) {

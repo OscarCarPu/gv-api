@@ -27,10 +27,12 @@ type mockRepo struct {
 	getProjectChildrenFn   func(ctx context.Context, projectID int32) (ProjectChildrenResponse, error)
 	getTaskTimeEntriesFn   func(ctx context.Context, taskID int32) (TaskTimeEntriesResponse, error)
 	getTasksByDueDateFn    func(ctx context.Context) ([]TaskByDueDateResponse, error)
-	deleteProjectFn        func(ctx context.Context, id int32) error
-	deleteTaskFn           func(ctx context.Context, id int32) error
-	deleteTodoFn           func(ctx context.Context, id int32) error
-	deleteTimeEntryFn      func(ctx context.Context, id int32) error
+	finishDescendantProjectsFn func(ctx context.Context, projectID int32) error
+	finishTasksByProjectTreeFn func(ctx context.Context, projectID int32) error
+	deleteProjectFn            func(ctx context.Context, id int32) error
+	deleteTaskFn               func(ctx context.Context, id int32) error
+	deleteTodoFn               func(ctx context.Context, id int32) error
+	deleteTimeEntryFn          func(ctx context.Context, id int32) error
 }
 
 func (m *mockRepo) CreateProject(ctx context.Context, name string, description *string, dueAt *time.Time, parentID *int32) (ProjectResponse, error) {
@@ -143,6 +145,20 @@ func (m *mockRepo) GetTasksByDueDate(ctx context.Context) ([]TaskByDueDateRespon
 		return m.getTasksByDueDateFn(ctx)
 	}
 	return nil, nil
+}
+
+func (m *mockRepo) FinishDescendantProjects(ctx context.Context, projectID int32) error {
+	if m.finishDescendantProjectsFn != nil {
+		return m.finishDescendantProjectsFn(ctx, projectID)
+	}
+	return nil
+}
+
+func (m *mockRepo) FinishTasksByProjectTree(ctx context.Context, projectID int32) error {
+	if m.finishTasksByProjectTreeFn != nil {
+		return m.finishTasksByProjectTreeFn(ctx, projectID)
+	}
+	return nil
 }
 
 func (m *mockRepo) DeleteProject(ctx context.Context, id int32) error {
@@ -465,6 +481,47 @@ func TestService_UpdateProject(t *testing.T) {
 		assert.Equal(t, name, got.Name)
 	})
 
+	t.Run("cascades finish to descendants when finished_at is set", func(t *testing.T) {
+		var finishProjectsCalled, finishTasksCalled bool
+		mock := &mockRepo{
+			updateProjectFn: func(ctx context.Context, req UpdateProjectRequest) (ProjectResponse, error) {
+				return ProjectResponse{ID: 1, Name: name, FinishedAt: req.FinishedAt}, nil
+			},
+			finishDescendantProjectsFn: func(ctx context.Context, projectID int32) error {
+				assert.Equal(t, int32(1), projectID)
+				finishProjectsCalled = true
+				return nil
+			},
+			finishTasksByProjectTreeFn: func(ctx context.Context, projectID int32) error {
+				assert.Equal(t, int32(1), projectID)
+				finishTasksCalled = true
+				return nil
+			},
+		}
+		svc := NewService(mock, nil)
+		_, err := svc.UpdateProject(context.Background(), UpdateProjectRequest{ID: 1, FinishedAt: &now})
+		require.NoError(t, err)
+		assert.True(t, finishProjectsCalled)
+		assert.True(t, finishTasksCalled)
+	})
+
+	t.Run("does not cascade when finished_at is not set", func(t *testing.T) {
+		var finishProjectsCalled bool
+		mock := &mockRepo{
+			updateProjectFn: func(ctx context.Context, req UpdateProjectRequest) (ProjectResponse, error) {
+				return ProjectResponse{ID: 1, Name: name}, nil
+			},
+			finishDescendantProjectsFn: func(ctx context.Context, projectID int32) error {
+				finishProjectsCalled = true
+				return nil
+			},
+		}
+		svc := NewService(mock, nil)
+		_, err := svc.UpdateProject(context.Background(), UpdateProjectRequest{ID: 1, Name: &name})
+		require.NoError(t, err)
+		assert.False(t, finishProjectsCalled)
+	})
+
 	t.Run("propagates error", func(t *testing.T) {
 		mock := &mockRepo{
 			updateProjectFn: func(ctx context.Context, req UpdateProjectRequest) (ProjectResponse, error) {
@@ -473,6 +530,20 @@ func TestService_UpdateProject(t *testing.T) {
 		}
 		svc := NewService(mock, nil)
 		_, err := svc.UpdateProject(context.Background(), UpdateProjectRequest{ID: 1})
+		require.Error(t, err)
+	})
+
+	t.Run("propagates error from finish descendants", func(t *testing.T) {
+		mock := &mockRepo{
+			updateProjectFn: func(ctx context.Context, req UpdateProjectRequest) (ProjectResponse, error) {
+				return ProjectResponse{ID: 1, Name: "p"}, nil
+			},
+			finishDescendantProjectsFn: func(ctx context.Context, projectID int32) error {
+				return errors.New("cascade error")
+			},
+		}
+		svc := NewService(mock, nil)
+		_, err := svc.UpdateProject(context.Background(), UpdateProjectRequest{ID: 1, FinishedAt: &now})
 		require.Error(t, err)
 	})
 }
