@@ -155,6 +155,11 @@ UPDATE tasks t SET finished_at = NOW()
 FROM project_tree pt
 WHERE t.project_id = pt.id AND t.finished_at IS NULL;
 
+-- name: GetActiveTimeEntry :one
+SELECT id, task_id, started_at, finished_at, comment
+FROM time_entries
+WHERE finished_at IS NULL;
+
 -- name: DeleteProject :exec
 DELETE FROM projects WHERE id = $1;
 

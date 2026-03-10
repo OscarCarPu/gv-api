@@ -33,6 +33,7 @@ type ServiceInterface interface {
 	DeleteTask(ctx context.Context, id int32) error
 	DeleteTodo(ctx context.Context, id int32) error
 	DeleteTimeEntry(ctx context.Context, id int32) error
+	GetActiveTimeEntry(ctx context.Context) (TimeEntryResponse, error)
 }
 
 type Handler struct {
@@ -411,6 +412,20 @@ func (h *Handler) DeleteTimeEntry(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.WriteHeader(http.StatusNoContent)
+}
+
+func (h *Handler) GetActiveTimeEntry(w http.ResponseWriter, r *http.Request) {
+	entry, err := h.service.GetActiveTimeEntry(r.Context())
+	if err != nil {
+		if errors.Is(err, ErrNotFound) {
+			response.Error(w, http.StatusNotFound, "no active time entry")
+			return
+		}
+		response.Error(w, http.StatusInternalServerError, "Failed to get active time entry")
+		return
+	}
+
+	response.JSON(w, http.StatusOK, entry)
 }
 
 func (h *Handler) GetRootProjects(w http.ResponseWriter, r *http.Request) {

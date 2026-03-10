@@ -37,6 +37,7 @@ type mockService struct {
 	deleteTaskFn           func(ctx context.Context, id int32) error
 	deleteTodoFn           func(ctx context.Context, id int32) error
 	deleteTimeEntryFn      func(ctx context.Context, id int32) error
+	getActiveTimeEntryFn   func(ctx context.Context) (TimeEntryResponse, error)
 }
 
 func (m *mockService) CreateProject(ctx context.Context, req CreateProjectRequest) (ProjectResponse, error) {
@@ -170,6 +171,13 @@ func (m *mockService) DeleteTimeEntry(ctx context.Context, id int32) error {
 		return m.deleteTimeEntryFn(ctx, id)
 	}
 	return nil
+}
+
+func (m *mockService) GetActiveTimeEntry(ctx context.Context) (TimeEntryResponse, error) {
+	if m.getActiveTimeEntryFn != nil {
+		return m.getActiveTimeEntryFn(ctx)
+	}
+	return TimeEntryResponse{}, nil
 }
 
 // --- Handler Tests ---
@@ -1577,5 +1585,66 @@ func TestHandler_DeleteTimeEntry(t *testing.T) {
 		handler.DeleteTimeEntry(rec, req)
 		assert.Equal(t, http.StatusInternalServerError, rec.Code)
 		assert.Contains(t, rec.Body.String(), "Failed to delete time entry")
+	})
+}
+
+func TestHandler_GetActiveTimeEntry(t *testing.T) {
+	now := time.Now()
+	comment := "working on feature"
+
+	t.Run("returns 200 with active time entry", func(t *testing.T) {
+		mock := &mockService{
+			getActiveTimeEntryFn: func(ctx context.Context) (TimeEntryResponse, error) {
+				return TimeEntryResponse{ID: 1, TaskID: 5, StartedAt: now, Comment: &comment}, nil
+			},
+		}
+		handler := NewHandler(mock)
+
+		req := httptest.NewRequest(http.MethodGet, "/tasks/time-entries/active", nil)
+		rec := httptest.NewRecorder()
+
+		handler.GetActiveTimeEntry(rec, req)
+
+		assert.Equal(t, http.StatusOK, rec.Code)
+
+		var got TimeEntryResponse
+		require.NoError(t, json.NewDecoder(rec.Body).Decode(&got))
+		assert.Equal(t, int32(1), got.ID)
+		assert.Equal(t, int32(5), got.TaskID)
+		assert.Equal(t, &comment, got.Comment)
+	})
+
+	t.Run("returns 404 when no active time entry", func(t *testing.T) {
+		mock := &mockService{
+			getActiveTimeEntryFn: func(ctx context.Context) (TimeEntryResponse, error) {
+				return TimeEntryResponse{}, ErrNotFound
+			},
+		}
+		handler := NewHandler(mock)
+
+		req := httptest.NewRequest(http.MethodGet, "/tasks/time-entries/active", nil)
+		rec := httptest.NewRecorder()
+
+		handler.GetActiveTimeEntry(rec, req)
+
+		assert.Equal(t, http.StatusNotFound, rec.Code)
+		assert.Contains(t, rec.Body.String(), "no active time entry")
+	})
+
+	t.Run("returns 500 on service error", func(t *testing.T) {
+		mock := &mockService{
+			getActiveTimeEntryFn: func(ctx context.Context) (TimeEntryResponse, error) {
+				return TimeEntryResponse{}, errors.New("db error")
+			},
+		}
+		handler := NewHandler(mock)
+
+		req := httptest.NewRequest(http.MethodGet, "/tasks/time-entries/active", nil)
+		rec := httptest.NewRecorder()
+
+		handler.GetActiveTimeEntry(rec, req)
+
+		assert.Equal(t, http.StatusInternalServerError, rec.Code)
+		assert.Contains(t, rec.Body.String(), "Failed to get active time entry")
 	})
 }

@@ -38,6 +38,7 @@ type Repository interface {
 	DeleteTask(ctx context.Context, id int32) error
 	DeleteTodo(ctx context.Context, id int32) error
 	DeleteTimeEntry(ctx context.Context, id int32) error
+	GetActiveTimeEntry(ctx context.Context) (TimeEntryResponse, error)
 }
 
 type PostgresRepository struct {
@@ -634,6 +635,24 @@ func (r *PostgresRepository) DeleteTodo(ctx context.Context, id int32) error {
 
 func (r *PostgresRepository) DeleteTimeEntry(ctx context.Context, id int32) error {
 	return r.q.DeleteTimeEntry(ctx, id)
+}
+
+func (r *PostgresRepository) GetActiveTimeEntry(ctx context.Context) (TimeEntryResponse, error) {
+	row, err := r.q.GetActiveTimeEntry(ctx)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return TimeEntryResponse{}, ErrNotFound
+		}
+		return TimeEntryResponse{}, err
+	}
+
+	return TimeEntryResponse{
+		ID:         row.ID,
+		TaskID:     row.TaskID,
+		StartedAt:  row.StartedAt.Time,
+		FinishedAt: pgTimestampToPtr(row.FinishedAt),
+		Comment:    row.Comment,
+	}, nil
 }
 
 func (r *PostgresRepository) GetRootProjects(ctx context.Context) ([]ProjectResponse, error) {

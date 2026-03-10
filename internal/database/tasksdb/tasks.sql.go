@@ -252,6 +252,25 @@ func (q *Queries) GetActiveProjects(ctx context.Context) ([]GetActiveProjectsRow
 	return items, nil
 }
 
+const getActiveTimeEntry = `-- name: GetActiveTimeEntry :one
+SELECT id, task_id, started_at, finished_at, comment
+FROM time_entries
+WHERE finished_at IS NULL
+`
+
+func (q *Queries) GetActiveTimeEntry(ctx context.Context) (TimeEntry, error) {
+	row := q.db.QueryRow(ctx, getActiveTimeEntry)
+	var i TimeEntry
+	err := row.Scan(
+		&i.ID,
+		&i.TaskID,
+		&i.StartedAt,
+		&i.FinishedAt,
+		&i.Comment,
+	)
+	return i, err
+}
+
 const getProjectWithDescendants = `-- name: GetProjectWithDescendants :many
 WITH RECURSIVE project_tree AS (
     SELECT p.id, p.parent_id, p.name, p.description, p.due_at, p.started_at, p.finished_at, 0 AS depth

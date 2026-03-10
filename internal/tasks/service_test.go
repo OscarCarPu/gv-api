@@ -33,6 +33,7 @@ type mockRepo struct {
 	deleteTaskFn               func(ctx context.Context, id int32) error
 	deleteTodoFn               func(ctx context.Context, id int32) error
 	deleteTimeEntryFn          func(ctx context.Context, id int32) error
+	getActiveTimeEntryFn       func(ctx context.Context) (TimeEntryResponse, error)
 }
 
 func (m *mockRepo) CreateProject(ctx context.Context, name string, description *string, dueAt *time.Time, parentID *int32) (ProjectResponse, error) {
@@ -187,6 +188,13 @@ func (m *mockRepo) DeleteTimeEntry(ctx context.Context, id int32) error {
 		return m.deleteTimeEntryFn(ctx, id)
 	}
 	return nil
+}
+
+func (m *mockRepo) GetActiveTimeEntry(ctx context.Context) (TimeEntryResponse, error) {
+	if m.getActiveTimeEntryFn != nil {
+		return m.getActiveTimeEntryFn(ctx)
+	}
+	return TimeEntryResponse{}, nil
 }
 
 func TestService_CreateProject(t *testing.T) {
@@ -1021,6 +1029,35 @@ func TestService_DeleteTimeEntry(t *testing.T) {
 		}
 		svc := NewService(mock, nil)
 		err := svc.DeleteTimeEntry(context.Background(), 1)
+		require.Error(t, err)
+	})
+}
+
+func TestService_GetActiveTimeEntry(t *testing.T) {
+	now := time.Now()
+	comment := "working"
+
+	t.Run("delegates to repo and returns result", func(t *testing.T) {
+		expected := TimeEntryResponse{ID: 1, TaskID: 5, StartedAt: now, Comment: &comment}
+		mock := &mockRepo{
+			getActiveTimeEntryFn: func(ctx context.Context) (TimeEntryResponse, error) {
+				return expected, nil
+			},
+		}
+		svc := NewService(mock, nil)
+		got, err := svc.GetActiveTimeEntry(context.Background())
+		require.NoError(t, err)
+		assert.Equal(t, expected, got)
+	})
+
+	t.Run("propagates error", func(t *testing.T) {
+		mock := &mockRepo{
+			getActiveTimeEntryFn: func(ctx context.Context) (TimeEntryResponse, error) {
+				return TimeEntryResponse{}, errors.New("db error")
+			},
+		}
+		svc := NewService(mock, nil)
+		_, err := svc.GetActiveTimeEntry(context.Background())
 		require.Error(t, err)
 	})
 }

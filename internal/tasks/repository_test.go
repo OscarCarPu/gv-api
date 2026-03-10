@@ -37,6 +37,7 @@ type mockQuerier struct {
 	deleteTaskFn                 func(ctx context.Context, id int32) error
 	deleteTodoFn                 func(ctx context.Context, id int32) error
 	deleteTimeEntryFn            func(ctx context.Context, id int32) error
+	getActiveTimeEntryFn         func(ctx context.Context) (tasksdb.TimeEntry, error)
 }
 
 func (m *mockQuerier) CreateProject(ctx context.Context, arg tasksdb.CreateProjectParams) (tasksdb.CreateProjectRow, error) {
@@ -191,6 +192,13 @@ func (m *mockQuerier) DeleteTimeEntry(ctx context.Context, id int32) error {
 		return m.deleteTimeEntryFn(ctx, id)
 	}
 	return nil
+}
+
+func (m *mockQuerier) GetActiveTimeEntry(ctx context.Context) (tasksdb.TimeEntry, error) {
+	if m.getActiveTimeEntryFn != nil {
+		return m.getActiveTimeEntryFn(ctx)
+	}
+	return tasksdb.TimeEntry{}, nil
 }
 
 func TestRepository_CreateProject(t *testing.T) {
