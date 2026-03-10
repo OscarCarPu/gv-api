@@ -20,6 +20,7 @@ RETURNING id, task_id, started_at, finished_at, comment;
 
 -- name: UpdateTimeEntry :one
 UPDATE time_entries SET
+    task_id     = CASE WHEN @set_task_id::bool     THEN @task_id::int           ELSE task_id END,
     started_at  = CASE WHEN @set_started_at::bool  THEN @started_at::timestamp  ELSE started_at END,
     finished_at = CASE WHEN @set_finished_at::bool  THEN @finished_at::timestamp ELSE finished_at END,
     comment     = CASE WHEN @set_comment::bool      THEN @comment::text          ELSE comment END
@@ -99,7 +100,8 @@ ORDER BY tt.finished_at NULLS FIRST, tt.name, todo_id;
 
 -- name: UpdateTodo :one
 UPDATE todos SET
-    name    = CASE WHEN @set_name::bool    THEN @name::text ELSE name END,
+    task_id = CASE WHEN @set_task_id::bool THEN @task_id::int ELSE task_id END,
+    name    = CASE WHEN @set_name::bool    THEN @name::text   ELSE name END,
     is_done = CASE WHEN @set_is_done::bool THEN @is_done::bool ELSE is_done END
 WHERE id = @id
 RETURNING id, task_id, name, is_done;

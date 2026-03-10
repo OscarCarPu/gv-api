@@ -222,6 +222,10 @@ func (r *PostgresRepository) UpdateTask(ctx context.Context, req UpdateTaskReque
 
 func (r *PostgresRepository) UpdateTodo(ctx context.Context, req UpdateTodoRequest) (TodoResponse, error) {
 	params := tasksdb.UpdateTodoParams{ID: req.ID}
+	if req.TaskID != nil {
+		params.SetTaskID = true
+		params.TaskID = *req.TaskID
+	}
 	if req.Name != nil {
 		params.SetName = true
 		params.Name = *req.Name
@@ -249,6 +253,10 @@ func (r *PostgresRepository) UpdateTodo(ctx context.Context, req UpdateTodoReque
 
 func (r *PostgresRepository) UpdateTimeEntry(ctx context.Context, req UpdateTimeEntryRequest) (TimeEntryResponse, error) {
 	params := tasksdb.UpdateTimeEntryParams{ID: req.ID}
+	if req.TaskID != nil {
+		params.SetTaskID = true
+		params.TaskID = *req.TaskID
+	}
 	if req.StartedAt != nil {
 		params.SetStartedAt = true
 		params.StartedAt = pgtype.Timestamp{Time: *req.StartedAt, Valid: true}

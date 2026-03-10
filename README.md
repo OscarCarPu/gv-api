@@ -15,9 +15,9 @@ Un orquestador de vida integral desarrollado en Go, diseñado para centralizar d
 | `gv-api/internal/habits/service.go` | ![100.0%](https://img.shields.io/badge/100.0%25-brightgreen) |
 | `gv-api/internal/response/response.go` | ![87.5%](https://img.shields.io/badge/87.5%25-brightgreen) |
 | `gv-api/internal/tasks/handler.go` | ![98.3%](https://img.shields.io/badge/98.3%25-brightgreen) |
-| `gv-api/internal/tasks/repository.go` | ![86.4%](https://img.shields.io/badge/86.4%25-brightgreen) |
+| `gv-api/internal/tasks/repository.go` | ![85.7%](https://img.shields.io/badge/85.7%25-brightgreen) |
 | `gv-api/internal/tasks/service.go` | ![90.0%](https://img.shields.io/badge/90.0%25-brightgreen) |
-| **Total** | ![92.3%](https://img.shields.io/badge/92.3%25-brightgreen) |
+| **Total** | ![92.1%](https://img.shields.io/badge/92.1%25-brightgreen) |
 
 > Untested code not shown above is either auto-generated (sqlc) or boilerplate that doesn't warrant testing.
 

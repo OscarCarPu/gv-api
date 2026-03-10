@@ -84,13 +84,15 @@ type UpdateTaskRequest struct {
 }
 
 type UpdateTodoRequest struct {
-	ID     int32  `json:"-"`
+	ID     int32   `json:"-"`
+	TaskID *int32  `json:"task_id"`
 	Name   *string `json:"name"`
 	IsDone *bool   `json:"is_done"`
 }
 
 type UpdateTimeEntryRequest struct {
 	ID         int32      `json:"-"`
+	TaskID     *int32     `json:"task_id"`
 	StartedAt  *time.Time `json:"started_at"`
 	FinishedAt *time.Time `json:"finished_at"`
 	Comment    *string    `json:"comment"`

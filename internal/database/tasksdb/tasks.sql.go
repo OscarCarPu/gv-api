@@ -726,14 +726,17 @@ func (q *Queries) UpdateTask(ctx context.Context, arg UpdateTaskParams) (Task, e
 
 const updateTimeEntry = `-- name: UpdateTimeEntry :one
 UPDATE time_entries SET
-    started_at  = CASE WHEN $1::bool  THEN $2::timestamp  ELSE started_at END,
-    finished_at = CASE WHEN $3::bool  THEN $4::timestamp ELSE finished_at END,
-    comment     = CASE WHEN $5::bool      THEN $6::text          ELSE comment END
-WHERE id = $7
+    task_id     = CASE WHEN $1::bool     THEN $2::int           ELSE task_id END,
+    started_at  = CASE WHEN $3::bool  THEN $4::timestamp  ELSE started_at END,
+    finished_at = CASE WHEN $5::bool  THEN $6::timestamp ELSE finished_at END,
+    comment     = CASE WHEN $7::bool      THEN $8::text          ELSE comment END
+WHERE id = $9
 RETURNING id, task_id, started_at, finished_at, comment
 `
 
 type UpdateTimeEntryParams struct {
+	SetTaskID     bool             `db:"set_task_id" json:"set_task_id"`
+	TaskID        int32            `db:"task_id" json:"task_id"`
 	SetStartedAt  bool             `db:"set_started_at" json:"set_started_at"`
 	StartedAt     pgtype.Timestamp `db:"started_at" json:"started_at"`
 	SetFinishedAt bool             `db:"set_finished_at" json:"set_finished_at"`
@@ -745,6 +748,8 @@ type UpdateTimeEntryParams struct {
 
 func (q *Queries) UpdateTimeEntry(ctx context.Context, arg UpdateTimeEntryParams) (TimeEntry, error) {
 	row := q.db.QueryRow(ctx, updateTimeEntry,
+		arg.SetTaskID,
+		arg.TaskID,
 		arg.SetStartedAt,
 		arg.StartedAt,
 		arg.SetFinishedAt,
@@ -766,13 +771,16 @@ func (q *Queries) UpdateTimeEntry(ctx context.Context, arg UpdateTimeEntryParams
 
 const updateTodo = `-- name: UpdateTodo :one
 UPDATE todos SET
-    name    = CASE WHEN $1::bool    THEN $2::text ELSE name END,
-    is_done = CASE WHEN $3::bool THEN $4::bool ELSE is_done END
-WHERE id = $5
+    task_id = CASE WHEN $1::bool THEN $2::int ELSE task_id END,
+    name    = CASE WHEN $3::bool    THEN $4::text   ELSE name END,
+    is_done = CASE WHEN $5::bool THEN $6::bool ELSE is_done END
+WHERE id = $7
 RETURNING id, task_id, name, is_done
 `
 
 type UpdateTodoParams struct {
+	SetTaskID bool   `db:"set_task_id" json:"set_task_id"`
+	TaskID    int32  `db:"task_id" json:"task_id"`
 	SetName   bool   `db:"set_name" json:"set_name"`
 	Name      string `db:"name" json:"name"`
 	SetIsDone bool   `db:"set_is_done" json:"set_is_done"`
@@ -782,6 +790,8 @@ type UpdateTodoParams struct {
 
 func (q *Queries) UpdateTodo(ctx context.Context, arg UpdateTodoParams) (Todo, error) {
 	row := q.db.QueryRow(ctx, updateTodo,
+		arg.SetTaskID,
+		arg.TaskID,
 		arg.SetName,
 		arg.Name,
 		arg.SetIsDone,
