@@ -24,6 +24,8 @@ type ServiceInterface interface {
 	UpdateTimeEntry(ctx context.Context, req UpdateTimeEntryRequest) (TimeEntryResponse, error)
 	GetRootProjects(ctx context.Context) ([]ProjectResponse, error)
 	GetActiveTree(ctx context.Context) ([]ActiveTreeNode, error)
+	GetProject(ctx context.Context, id int32) (ProjectDetailResponse, error)
+	GetTask(ctx context.Context, id int32) (TaskFullResponse, error)
 	GetProjectChildren(ctx context.Context, projectID int32) (ProjectChildrenResponse, error)
 	GetTaskTimeEntries(ctx context.Context, taskID int32) (TaskTimeEntriesResponse, error)
 	GetTasksByDueDate(ctx context.Context) ([]TaskByDueDateResponse, error)
@@ -272,6 +274,46 @@ func (h *Handler) GetProjectChildren(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		response.Error(w, http.StatusInternalServerError, "Failed to get project children")
+		return
+	}
+
+	response.JSON(w, http.StatusOK, result)
+}
+
+func (h *Handler) GetProject(w http.ResponseWriter, r *http.Request) {
+	id, err := parseIDParam(r, "project")
+	if err != nil {
+		response.Error(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	result, err := h.service.GetProject(r.Context(), id)
+	if err != nil {
+		if errors.Is(err, ErrNotFound) {
+			response.Error(w, http.StatusNotFound, "project not found")
+			return
+		}
+		response.Error(w, http.StatusInternalServerError, "Failed to get project")
+		return
+	}
+
+	response.JSON(w, http.StatusOK, result)
+}
+
+func (h *Handler) GetTask(w http.ResponseWriter, r *http.Request) {
+	id, err := parseIDParam(r, "task")
+	if err != nil {
+		response.Error(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	result, err := h.service.GetTask(r.Context(), id)
+	if err != nil {
+		if errors.Is(err, ErrNotFound) {
+			response.Error(w, http.StatusNotFound, "task not found")
+			return
+		}
+		response.Error(w, http.StatusInternalServerError, "Failed to get task")
 		return
 	}
 

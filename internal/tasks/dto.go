@@ -112,6 +112,18 @@ type TaskDetailResponse struct {
 	TimeSpent   int64      `json:"time_spent"`
 }
 
+type TaskFullResponse struct {
+	ID          int32          `json:"id"`
+	ProjectID   *int32         `json:"project_id"`
+	Name        string         `json:"name"`
+	Description *string        `json:"description"`
+	DueAt       *time.Time     `json:"due_at"`
+	StartedAt   *time.Time     `json:"started_at"`
+	FinishedAt  *time.Time     `json:"finished_at"`
+	TimeSpent   int64          `json:"time_spent"`
+	Todos       []TodoResponse `json:"todos"`
+}
+
 type TaskByDueDateResponse struct {
 	ID           int32      `json:"id"`
 	Name         string     `json:"name"`
@@ -128,20 +140,27 @@ type ActiveProject struct {
 	ID       int32
 	ParentID *int32
 	Name     string
+	DueAt    *time.Time
 }
 
 type UnfinishedTask struct {
-	ID        int32
-	ProjectID *int32
-	Name      string
-	Started   bool
+	ID          int32
+	ProjectID   *int32
+	Name        string
+	Description *string
+	DueAt       *time.Time
+	Started     bool
+	StartedAt   *time.Time
 }
 
 type ActiveTreeNode struct {
-	ID       int32            `json:"id"`
-	Type     string           `json:"type"`
-	Name     string           `json:"name"`
-	Children []ActiveTreeNode `json:"children,omitempty"`
+	ID          int32            `json:"id"`
+	Type        string           `json:"type"`
+	Name        string           `json:"name"`
+	Description *string          `json:"description,omitempty"`
+	DueAt       *time.Time       `json:"due_at,omitempty"`
+	StartedAt   *time.Time       `json:"started_at,omitempty"`
+	Children    []ActiveTreeNode `json:"children,omitempty"`
 }
 
 type ProjectChildrenResponse struct {

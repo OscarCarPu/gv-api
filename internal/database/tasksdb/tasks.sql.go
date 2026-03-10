@@ -146,16 +146,17 @@ func (q *Queries) CreateTodo(ctx context.Context, arg CreateTodoParams) (CreateT
 }
 
 const getActiveProjects = `-- name: GetActiveProjects :many
-SELECT id, parent_id, name
+SELECT id, parent_id, name, due_at
 FROM projects
 WHERE started_at IS NOT NULL AND finished_at IS NULL
 ORDER BY name
 `
 
 type GetActiveProjectsRow struct {
-	ID       int32  `db:"id" json:"id"`
-	ParentID *int32 `db:"parent_id" json:"parent_id"`
-	Name     string `db:"name" json:"name"`
+	ID       int32       `db:"id" json:"id"`
+	ParentID *int32      `db:"parent_id" json:"parent_id"`
+	Name     string      `db:"name" json:"name"`
+	DueAt    pgtype.Date `db:"due_at" json:"due_at"`
 }
 
 func (q *Queries) GetActiveProjects(ctx context.Context) ([]GetActiveProjectsRow, error) {
@@ -167,7 +168,12 @@ func (q *Queries) GetActiveProjects(ctx context.Context) ([]GetActiveProjectsRow
 	items := []GetActiveProjectsRow{}
 	for rows.Next() {
 		var i GetActiveProjectsRow
-		if err := rows.Scan(&i.ID, &i.ParentID, &i.Name); err != nil {
+		if err := rows.Scan(
+			&i.ID,
+			&i.ParentID,
+			&i.Name,
+			&i.DueAt,
+		); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
@@ -264,6 +270,69 @@ func (q *Queries) GetRootProjects(ctx context.Context) ([]GetRootProjectsRow, er
 			&i.DueAt,
 			&i.ParentID,
 			&i.StartedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const getTaskByID = `-- name: GetTaskByID :many
+WITH task_info AS (
+    SELECT t.id, t.project_id, t.name, t.description, t.due_at, t.started_at, t.finished_at,
+        COALESCE(SUM(EXTRACT(EPOCH FROM (te.finished_at - te.started_at)))::bigint, 0)::bigint AS time_spent
+    FROM tasks t
+    LEFT JOIN time_entries te ON te.task_id = t.id AND te.finished_at IS NOT NULL
+    WHERE t.id = $1
+    GROUP BY t.id
+)
+SELECT
+    ti.id, ti.project_id, ti.name, ti.description, ti.due_at, ti.started_at, ti.finished_at, ti.time_spent,
+    td.id AS todo_id, td.name AS todo_name, td.is_done AS todo_is_done
+FROM task_info ti
+LEFT JOIN todos td ON td.task_id = ti.id
+ORDER BY td.id
+`
+
+type GetTaskByIDRow struct {
+	ID          int32            `db:"id" json:"id"`
+	ProjectID   *int32           `db:"project_id" json:"project_id"`
+	Name        string           `db:"name" json:"name"`
+	Description *string          `db:"description" json:"description"`
+	DueAt       pgtype.Date      `db:"due_at" json:"due_at"`
+	StartedAt   pgtype.Timestamp `db:"started_at" json:"started_at"`
+	FinishedAt  pgtype.Timestamp `db:"finished_at" json:"finished_at"`
+	TimeSpent   int64            `db:"time_spent" json:"time_spent"`
+	TodoID      *int32           `db:"todo_id" json:"todo_id"`
+	TodoName    *string          `db:"todo_name" json:"todo_name"`
+	TodoIsDone  *bool            `db:"todo_is_done" json:"todo_is_done"`
+}
+
+func (q *Queries) GetTaskByID(ctx context.Context, id int32) ([]GetTaskByIDRow, error) {
+	rows, err := q.db.Query(ctx, getTaskByID, id)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []GetTaskByIDRow{}
+	for rows.Next() {
+		var i GetTaskByIDRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.ProjectID,
+			&i.Name,
+			&i.Description,
+			&i.DueAt,
+			&i.StartedAt,
+			&i.FinishedAt,
+			&i.TimeSpent,
+			&i.TodoID,
+			&i.TodoName,
+			&i.TodoIsDone,
 		); err != nil {
 			return nil, err
 		}
@@ -463,17 +532,19 @@ func (q *Queries) GetTimeEntriesByTaskID(ctx context.Context, id int32) ([]GetTi
 }
 
 const getUnfinishedTasks = `-- name: GetUnfinishedTasks :many
-SELECT id, project_id, name, started_at
+SELECT id, project_id, name, description, due_at, started_at
 FROM tasks
 WHERE finished_at IS NULL
 ORDER BY name
 `
 
 type GetUnfinishedTasksRow struct {
-	ID        int32            `db:"id" json:"id"`
-	ProjectID *int32           `db:"project_id" json:"project_id"`
-	Name      string           `db:"name" json:"name"`
-	StartedAt pgtype.Timestamp `db:"started_at" json:"started_at"`
+	ID          int32            `db:"id" json:"id"`
+	ProjectID   *int32           `db:"project_id" json:"project_id"`
+	Name        string           `db:"name" json:"name"`
+	Description *string          `db:"description" json:"description"`
+	DueAt       pgtype.Date      `db:"due_at" json:"due_at"`
+	StartedAt   pgtype.Timestamp `db:"started_at" json:"started_at"`
 }
 
 func (q *Queries) GetUnfinishedTasks(ctx context.Context) ([]GetUnfinishedTasksRow, error) {
@@ -489,6 +560,8 @@ func (q *Queries) GetUnfinishedTasks(ctx context.Context) ([]GetUnfinishedTasksR
 			&i.ID,
 			&i.ProjectID,
 			&i.Name,
+			&i.Description,
+			&i.DueAt,
 			&i.StartedAt,
 		); err != nil {
 			return nil, err

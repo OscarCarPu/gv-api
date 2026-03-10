@@ -67,6 +67,7 @@ func (s *Service) GetActiveTree(ctx context.Context) ([]ActiveTreeNode, error) {
 			ID:       p.ID,
 			Type:     "project",
 			Name:     p.Name,
+			DueAt:    p.DueAt,
 			Children: []ActiveTreeNode{},
 		}
 	}
@@ -79,9 +80,12 @@ func (s *Service) GetActiveTree(ctx context.Context) ([]ActiveTreeNode, error) {
 
 	for _, t := range tasks {
 		node := ActiveTreeNode{
-			ID:   t.ID,
-			Type: "task",
-			Name: t.Name,
+			ID:          t.ID,
+			Type:        "task",
+			Name:        t.Name,
+			Description: t.Description,
+			DueAt:       t.DueAt,
+			StartedAt:   t.StartedAt,
 		}
 
 		if t.ProjectID != nil {
@@ -133,6 +137,14 @@ func (s *Service) GetActiveTree(ctx context.Context) ([]ActiveTreeNode, error) {
 	}
 
 	return root, nil
+}
+
+func (s *Service) GetProject(ctx context.Context, id int32) (ProjectDetailResponse, error) {
+	return s.repo.GetProject(ctx, id)
+}
+
+func (s *Service) GetTask(ctx context.Context, id int32) (TaskFullResponse, error) {
+	return s.repo.GetTask(ctx, id)
 }
 
 func (s *Service) GetProjectChildren(ctx context.Context, projectID int32) (ProjectChildrenResponse, error) {

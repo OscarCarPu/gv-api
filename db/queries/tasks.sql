@@ -55,13 +55,13 @@ WHERE parent_id IS NULL AND finished_at IS NULL
 ORDER BY name;
 
 -- name: GetActiveProjects :many
-SELECT id, parent_id, name
+SELECT id, parent_id, name, due_at
 FROM projects
 WHERE started_at IS NOT NULL AND finished_at IS NULL
 ORDER BY name;
 
 -- name: GetUnfinishedTasks :many
-SELECT id, project_id, name, started_at
+SELECT id, project_id, name, description, due_at, started_at
 FROM tasks
 WHERE finished_at IS NULL
 ORDER BY name;
@@ -116,6 +116,22 @@ WHERE t.finished_at IS NULL
   AND (t.due_at IS NOT NULL OR p.due_at IS NOT NULL)
 GROUP BY t.id, p.id
 ORDER BY t.due_at ASC NULLS LAST, p.due_at ASC NULLS LAST, t.name;
+
+-- name: GetTaskByID :many
+WITH task_info AS (
+    SELECT t.id, t.project_id, t.name, t.description, t.due_at, t.started_at, t.finished_at,
+        COALESCE(SUM(EXTRACT(EPOCH FROM (te.finished_at - te.started_at)))::bigint, 0)::bigint AS time_spent
+    FROM tasks t
+    LEFT JOIN time_entries te ON te.task_id = t.id AND te.finished_at IS NOT NULL
+    WHERE t.id = $1
+    GROUP BY t.id
+)
+SELECT
+    ti.id, ti.project_id, ti.name, ti.description, ti.due_at, ti.started_at, ti.finished_at, ti.time_spent,
+    td.id AS todo_id, td.name AS todo_name, td.is_done AS todo_is_done
+FROM task_info ti
+LEFT JOIN todos td ON td.task_id = ti.id
+ORDER BY td.id;
 
 -- name: GetTimeEntriesByTaskID :many
 WITH task_info AS (

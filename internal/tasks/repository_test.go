@@ -28,6 +28,7 @@ type mockQuerier struct {
 	getUnfinishedTasksFn         func(ctx context.Context) ([]tasksdb.GetUnfinishedTasksRow, error)
 	getProjectWithDescendantsFn  func(ctx context.Context, id int32) ([]tasksdb.GetProjectWithDescendantsRow, error)
 	getTasksByProjectIDsFn       func(ctx context.Context, projectIds []int32) ([]tasksdb.GetTasksByProjectIDsRow, error)
+	getTaskByIDFn                func(ctx context.Context, id int32) ([]tasksdb.GetTaskByIDRow, error)
 	getTimeEntriesByTaskIDFn     func(ctx context.Context, id int32) ([]tasksdb.GetTimeEntriesByTaskIDRow, error)
 	getTasksByDueDateFn          func(ctx context.Context) ([]tasksdb.GetTasksByDueDateRow, error)
 }
@@ -119,6 +120,13 @@ func (m *mockQuerier) GetProjectWithDescendants(ctx context.Context, id int32) (
 func (m *mockQuerier) GetTasksByProjectIDs(ctx context.Context, projectIds []int32) ([]tasksdb.GetTasksByProjectIDsRow, error) {
 	if m.getTasksByProjectIDsFn != nil {
 		return m.getTasksByProjectIDsFn(ctx, projectIds)
+	}
+	return nil, nil
+}
+
+func (m *mockQuerier) GetTaskByID(ctx context.Context, id int32) ([]tasksdb.GetTaskByIDRow, error) {
+	if m.getTaskByIDFn != nil {
+		return m.getTaskByIDFn(ctx, id)
 	}
 	return nil, nil
 }
@@ -645,12 +653,13 @@ func TestRepository_UpdateTimeEntry(t *testing.T) {
 
 func TestRepository_GetActiveProjects(t *testing.T) {
 	parentID := int32(1)
+	dueDate := pgtype.Date{Time: time.Date(2026, 6, 15, 0, 0, 0, 0, time.UTC), Valid: true}
 
 	t.Run("maps rows correctly", func(t *testing.T) {
 		mock := &mockQuerier{
 			getActiveProjectsFn: func(ctx context.Context) ([]tasksdb.GetActiveProjectsRow, error) {
 				return []tasksdb.GetActiveProjectsRow{
-					{ID: 1, Name: "Parent Project"},
+					{ID: 1, Name: "Parent Project", DueAt: dueDate},
 					{ID: 2, ParentID: &parentID, Name: "Child Project"},
 				}, nil
 			},
@@ -664,9 +673,11 @@ func TestRepository_GetActiveProjects(t *testing.T) {
 		assert.Equal(t, int32(1), got[0].ID)
 		assert.Equal(t, "Parent Project", got[0].Name)
 		assert.Nil(t, got[0].ParentID)
+		assert.Equal(t, &dueDate.Time, got[0].DueAt)
 		assert.Equal(t, int32(2), got[1].ID)
 		assert.Equal(t, "Child Project", got[1].Name)
 		assert.Equal(t, &parentID, got[1].ParentID)
+		assert.Nil(t, got[1].DueAt)
 	})
 
 	t.Run("returns empty list", func(t *testing.T) {
@@ -697,12 +708,15 @@ func TestRepository_GetActiveProjects(t *testing.T) {
 
 func TestRepository_GetUnfinishedTasks(t *testing.T) {
 	projectID := int32(5)
+	desc := "do something"
+	dueDate := pgtype.Date{Time: time.Date(2026, 7, 1, 0, 0, 0, 0, time.UTC), Valid: true}
+	startedAt := pgtype.Timestamp{Time: time.Date(2026, 3, 1, 9, 0, 0, 0, time.UTC), Valid: true}
 
 	t.Run("maps rows correctly", func(t *testing.T) {
 		mock := &mockQuerier{
 			getUnfinishedTasksFn: func(ctx context.Context) ([]tasksdb.GetUnfinishedTasksRow, error) {
 				return []tasksdb.GetUnfinishedTasksRow{
-					{ID: 1, ProjectID: &projectID, Name: "Task A", StartedAt: pgtype.Timestamp{Time: time.Now(), Valid: true}},
+					{ID: 1, ProjectID: &projectID, Name: "Task A", Description: &desc, DueAt: dueDate, StartedAt: startedAt},
 					{ID: 2, Name: "Task B"},
 				}, nil
 			},
@@ -716,11 +730,17 @@ func TestRepository_GetUnfinishedTasks(t *testing.T) {
 		assert.Equal(t, int32(1), got[0].ID)
 		assert.Equal(t, &projectID, got[0].ProjectID)
 		assert.Equal(t, "Task A", got[0].Name)
+		assert.Equal(t, &desc, got[0].Description)
+		assert.Equal(t, &dueDate.Time, got[0].DueAt)
 		assert.True(t, got[0].Started)
+		assert.Equal(t, &startedAt.Time, got[0].StartedAt)
 		assert.Equal(t, int32(2), got[1].ID)
 		assert.Nil(t, got[1].ProjectID)
 		assert.Equal(t, "Task B", got[1].Name)
+		assert.Nil(t, got[1].Description)
+		assert.Nil(t, got[1].DueAt)
 		assert.False(t, got[1].Started)
+		assert.Nil(t, got[1].StartedAt)
 	})
 
 	t.Run("returns empty list", func(t *testing.T) {

@@ -22,6 +22,8 @@ type mockRepo struct {
 	getRootProjectsFn      func(ctx context.Context) ([]ProjectResponse, error)
 	getActiveProjectsFn    func(ctx context.Context) ([]ActiveProject, error)
 	getUnfinishedTasksFn   func(ctx context.Context) ([]UnfinishedTask, error)
+	getProjectFn           func(ctx context.Context, id int32) (ProjectDetailResponse, error)
+	getTaskFn              func(ctx context.Context, id int32) (TaskFullResponse, error)
 	getProjectChildrenFn   func(ctx context.Context, projectID int32) (ProjectChildrenResponse, error)
 	getTaskTimeEntriesFn   func(ctx context.Context, taskID int32) (TaskTimeEntriesResponse, error)
 	getTasksByDueDateFn    func(ctx context.Context) ([]TaskByDueDateResponse, error)
@@ -102,6 +104,20 @@ func (m *mockRepo) GetUnfinishedTasks(ctx context.Context) ([]UnfinishedTask, er
 		return m.getUnfinishedTasksFn(ctx)
 	}
 	return nil, nil
+}
+
+func (m *mockRepo) GetProject(ctx context.Context, id int32) (ProjectDetailResponse, error) {
+	if m.getProjectFn != nil {
+		return m.getProjectFn(ctx, id)
+	}
+	return ProjectDetailResponse{}, nil
+}
+
+func (m *mockRepo) GetTask(ctx context.Context, id int32) (TaskFullResponse, error) {
+	if m.getTaskFn != nil {
+		return m.getTaskFn(ctx, id)
+	}
+	return TaskFullResponse{}, nil
 }
 
 func (m *mockRepo) GetProjectChildren(ctx context.Context, projectID int32) (ProjectChildrenResponse, error) {
@@ -519,18 +535,22 @@ func TestService_GetActiveTree(t *testing.T) {
 	parentID1 := int32(1)
 	projectID1 := int32(1)
 	projectID2 := int32(2)
+	projDue := time.Date(2026, 12, 31, 0, 0, 0, 0, time.UTC)
+	taskDesc := "important task"
+	taskDue := time.Date(2026, 6, 15, 0, 0, 0, 0, time.UTC)
+	taskStarted := time.Date(2026, 3, 1, 9, 0, 0, 0, time.UTC)
 
 	t.Run("projects with nested sub-projects and tasks", func(t *testing.T) {
 		mock := &mockRepo{
 			getActiveProjectsFn: func(ctx context.Context) ([]ActiveProject, error) {
 				return []ActiveProject{
-					{ID: 1, Name: "Parent Project"},
+					{ID: 1, Name: "Parent Project", DueAt: &projDue},
 					{ID: 2, ParentID: &parentID1, Name: "Child Project"},
 				}, nil
 			},
 			getUnfinishedTasksFn: func(ctx context.Context) ([]UnfinishedTask, error) {
 				return []UnfinishedTask{
-					{ID: 1, ProjectID: &projectID1, Name: "Task A", Started: true},
+					{ID: 1, ProjectID: &projectID1, Name: "Task A", Description: &taskDesc, DueAt: &taskDue, Started: true, StartedAt: &taskStarted},
 					{ID: 2, ProjectID: &projectID2, Name: "Task B"},
 				}, nil
 			},
@@ -543,15 +563,27 @@ func TestService_GetActiveTree(t *testing.T) {
 		require.Len(t, got, 1)
 		assert.Equal(t, "Parent Project", got[0].Name)
 		assert.Equal(t, "project", got[0].Type)
+		assert.Equal(t, &projDue, got[0].DueAt)
 
 		require.Len(t, got[0].Children, 2)
-		assert.Equal(t, "Child Project", got[0].Children[0].Name)
-		assert.Equal(t, "project", got[0].Children[0].Type)
-		assert.Equal(t, "Task A", got[0].Children[1].Name)
-		assert.Equal(t, "task", got[0].Children[1].Type)
+		child := got[0].Children[0]
+		assert.Equal(t, "Child Project", child.Name)
+		assert.Equal(t, "project", child.Type)
+		assert.Nil(t, child.DueAt)
+
+		taskA := got[0].Children[1]
+		assert.Equal(t, "Task A", taskA.Name)
+		assert.Equal(t, "task", taskA.Type)
+		assert.Equal(t, &taskDesc, taskA.Description)
+		assert.Equal(t, &taskDue, taskA.DueAt)
+		assert.Equal(t, &taskStarted, taskA.StartedAt)
 
 		require.Len(t, got[0].Children[0].Children, 1)
-		assert.Equal(t, "Task B", got[0].Children[0].Children[0].Name)
+		taskB := got[0].Children[0].Children[0]
+		assert.Equal(t, "Task B", taskB.Name)
+		assert.Nil(t, taskB.Description)
+		assert.Nil(t, taskB.DueAt)
+		assert.Nil(t, taskB.StartedAt)
 	})
 
 	t.Run("orphan tasks at root level", func(t *testing.T) {

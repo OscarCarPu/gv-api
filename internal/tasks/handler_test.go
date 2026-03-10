@@ -28,6 +28,8 @@ type mockService struct {
 	updateTimeEntryFn func(ctx context.Context, req UpdateTimeEntryRequest) (TimeEntryResponse, error)
 	getRootProjectsFn    func(ctx context.Context) ([]ProjectResponse, error)
 	getActiveTreeFn      func(ctx context.Context) ([]ActiveTreeNode, error)
+	getProjectFn           func(ctx context.Context, id int32) (ProjectDetailResponse, error)
+	getTaskFn              func(ctx context.Context, id int32) (TaskFullResponse, error)
 	getProjectChildrenFn   func(ctx context.Context, projectID int32) (ProjectChildrenResponse, error)
 	getTaskTimeEntriesFn   func(ctx context.Context, taskID int32) (TaskTimeEntriesResponse, error)
 	getTasksByDueDateFn    func(ctx context.Context) ([]TaskByDueDateResponse, error)
@@ -101,6 +103,20 @@ func (m *mockService) GetActiveTree(ctx context.Context) ([]ActiveTreeNode, erro
 		return m.getActiveTreeFn(ctx)
 	}
 	return nil, nil
+}
+
+func (m *mockService) GetProject(ctx context.Context, id int32) (ProjectDetailResponse, error) {
+	if m.getProjectFn != nil {
+		return m.getProjectFn(ctx, id)
+	}
+	return ProjectDetailResponse{}, nil
+}
+
+func (m *mockService) GetTask(ctx context.Context, id int32) (TaskFullResponse, error) {
+	if m.getTaskFn != nil {
+		return m.getTaskFn(ctx, id)
+	}
+	return TaskFullResponse{}, nil
 }
 
 func (m *mockService) GetProjectChildren(ctx context.Context, projectID int32) (ProjectChildrenResponse, error) {
@@ -818,12 +834,17 @@ func TestHandler_GetRootProjects(t *testing.T) {
 }
 
 func TestHandler_GetActiveTree(t *testing.T) {
+	projDue := time.Date(2026, 12, 31, 0, 0, 0, 0, time.UTC)
+	taskDesc := "do stuff"
+	taskDue := time.Date(2026, 6, 15, 0, 0, 0, 0, time.UTC)
+	taskStarted := time.Date(2026, 3, 1, 9, 0, 0, 0, time.UTC)
+
 	t.Run("returns 200 with tree nodes", func(t *testing.T) {
 		mock := &mockService{
 			getActiveTreeFn: func(ctx context.Context) ([]ActiveTreeNode, error) {
 				return []ActiveTreeNode{
-					{ID: 1, Type: "project", Name: "Project A", Children: []ActiveTreeNode{
-						{ID: 1, Type: "task", Name: "Task 1"},
+					{ID: 1, Type: "project", Name: "Project A", DueAt: &projDue, Children: []ActiveTreeNode{
+						{ID: 1, Type: "task", Name: "Task 1", Description: &taskDesc, DueAt: &taskDue, StartedAt: &taskStarted},
 					}},
 					{ID: 2, Type: "task", Name: "Orphan Task"},
 				}, nil
@@ -842,9 +863,15 @@ func TestHandler_GetActiveTree(t *testing.T) {
 		require.NoError(t, json.NewDecoder(rec.Body).Decode(&got))
 		assert.Len(t, got, 2)
 		assert.Equal(t, "project", got[0].Type)
-		assert.Len(t, got[0].Children, 1)
+		assert.Equal(t, &projDue, got[0].DueAt)
+		require.Len(t, got[0].Children, 1)
+		assert.Equal(t, &taskDesc, got[0].Children[0].Description)
+		assert.Equal(t, &taskDue, got[0].Children[0].DueAt)
+		assert.Equal(t, &taskStarted, got[0].Children[0].StartedAt)
 		assert.Equal(t, "task", got[1].Type)
 		assert.Nil(t, got[1].Children)
+		assert.Nil(t, got[1].DueAt)
+		assert.Nil(t, got[1].Description)
 	})
 
 	t.Run("returns 200 with empty array", func(t *testing.T) {
@@ -1149,5 +1176,161 @@ func TestHandler_GetTasksByDueDate(t *testing.T) {
 
 		assert.Equal(t, http.StatusInternalServerError, rec.Code)
 		assert.Contains(t, rec.Body.String(), "Failed to get tasks by due date")
+	})
+}
+
+func TestHandler_GetProject(t *testing.T) {
+	t.Run("returns 200 with project detail", func(t *testing.T) {
+		mock := &mockService{
+			getProjectFn: func(ctx context.Context, id int32) (ProjectDetailResponse, error) {
+				return ProjectDetailResponse{ID: id, Name: "My Project", TimeSpent: 7200}, nil
+			},
+		}
+		handler := NewHandler(mock)
+
+		req := httptest.NewRequest(http.MethodGet, "/tasks/projects/5", nil)
+		rctx := chi.NewRouteContext()
+		rctx.URLParams.Add("id", "5")
+		req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
+
+		rec := httptest.NewRecorder()
+		handler.GetProject(rec, req)
+
+		assert.Equal(t, http.StatusOK, rec.Code)
+
+		var got ProjectDetailResponse
+		require.NoError(t, json.NewDecoder(rec.Body).Decode(&got))
+		assert.Equal(t, int32(5), got.ID)
+		assert.Equal(t, "My Project", got.Name)
+		assert.Equal(t, int64(7200), got.TimeSpent)
+	})
+
+	t.Run("returns 400 for invalid id", func(t *testing.T) {
+		handler := NewHandler(&mockService{})
+		req := httptest.NewRequest(http.MethodGet, "/tasks/projects/abc", nil)
+		rctx := chi.NewRouteContext()
+		rctx.URLParams.Add("id", "abc")
+		req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
+
+		rec := httptest.NewRecorder()
+		handler.GetProject(rec, req)
+		assert.Equal(t, http.StatusBadRequest, rec.Code)
+		assert.Contains(t, rec.Body.String(), "invalid project id")
+	})
+
+	t.Run("returns 404 when not found", func(t *testing.T) {
+		mock := &mockService{
+			getProjectFn: func(ctx context.Context, id int32) (ProjectDetailResponse, error) {
+				return ProjectDetailResponse{}, ErrNotFound
+			},
+		}
+		handler := NewHandler(mock)
+		req := httptest.NewRequest(http.MethodGet, "/tasks/projects/999", nil)
+		rctx := chi.NewRouteContext()
+		rctx.URLParams.Add("id", "999")
+		req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
+
+		rec := httptest.NewRecorder()
+		handler.GetProject(rec, req)
+		assert.Equal(t, http.StatusNotFound, rec.Code)
+		assert.Contains(t, rec.Body.String(), "project not found")
+	})
+
+	t.Run("returns 500 when service fails", func(t *testing.T) {
+		mock := &mockService{
+			getProjectFn: func(ctx context.Context, id int32) (ProjectDetailResponse, error) {
+				return ProjectDetailResponse{}, errors.New("db error")
+			},
+		}
+		handler := NewHandler(mock)
+		req := httptest.NewRequest(http.MethodGet, "/tasks/projects/1", nil)
+		rctx := chi.NewRouteContext()
+		rctx.URLParams.Add("id", "1")
+		req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
+
+		rec := httptest.NewRecorder()
+		handler.GetProject(rec, req)
+		assert.Equal(t, http.StatusInternalServerError, rec.Code)
+		assert.Contains(t, rec.Body.String(), "Failed to get project")
+	})
+}
+
+func TestHandler_GetTask(t *testing.T) {
+	t.Run("returns 200 with task and todos", func(t *testing.T) {
+		mock := &mockService{
+			getTaskFn: func(ctx context.Context, id int32) (TaskFullResponse, error) {
+				return TaskFullResponse{
+					ID: id, Name: "My Task", TimeSpent: 3600,
+					Todos: []TodoResponse{{ID: 1, TaskID: id, Name: "Todo 1", IsDone: true}},
+				}, nil
+			},
+		}
+		handler := NewHandler(mock)
+
+		req := httptest.NewRequest(http.MethodGet, "/tasks/tasks/7", nil)
+		rctx := chi.NewRouteContext()
+		rctx.URLParams.Add("id", "7")
+		req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
+
+		rec := httptest.NewRecorder()
+		handler.GetTask(rec, req)
+
+		assert.Equal(t, http.StatusOK, rec.Code)
+
+		var got TaskFullResponse
+		require.NoError(t, json.NewDecoder(rec.Body).Decode(&got))
+		assert.Equal(t, int32(7), got.ID)
+		assert.Equal(t, int64(3600), got.TimeSpent)
+		assert.Len(t, got.Todos, 1)
+		assert.True(t, got.Todos[0].IsDone)
+	})
+
+	t.Run("returns 400 for invalid id", func(t *testing.T) {
+		handler := NewHandler(&mockService{})
+		req := httptest.NewRequest(http.MethodGet, "/tasks/tasks/abc", nil)
+		rctx := chi.NewRouteContext()
+		rctx.URLParams.Add("id", "abc")
+		req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
+
+		rec := httptest.NewRecorder()
+		handler.GetTask(rec, req)
+		assert.Equal(t, http.StatusBadRequest, rec.Code)
+		assert.Contains(t, rec.Body.String(), "invalid task id")
+	})
+
+	t.Run("returns 404 when not found", func(t *testing.T) {
+		mock := &mockService{
+			getTaskFn: func(ctx context.Context, id int32) (TaskFullResponse, error) {
+				return TaskFullResponse{}, ErrNotFound
+			},
+		}
+		handler := NewHandler(mock)
+		req := httptest.NewRequest(http.MethodGet, "/tasks/tasks/999", nil)
+		rctx := chi.NewRouteContext()
+		rctx.URLParams.Add("id", "999")
+		req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
+
+		rec := httptest.NewRecorder()
+		handler.GetTask(rec, req)
+		assert.Equal(t, http.StatusNotFound, rec.Code)
+		assert.Contains(t, rec.Body.String(), "task not found")
+	})
+
+	t.Run("returns 500 when service fails", func(t *testing.T) {
+		mock := &mockService{
+			getTaskFn: func(ctx context.Context, id int32) (TaskFullResponse, error) {
+				return TaskFullResponse{}, errors.New("db error")
+			},
+		}
+		handler := NewHandler(mock)
+		req := httptest.NewRequest(http.MethodGet, "/tasks/tasks/1", nil)
+		rctx := chi.NewRouteContext()
+		rctx.URLParams.Add("id", "1")
+		req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
+
+		rec := httptest.NewRecorder()
+		handler.GetTask(rec, req)
+		assert.Equal(t, http.StatusInternalServerError, rec.Code)
+		assert.Contains(t, rec.Body.String(), "Failed to get task")
 	})
 }

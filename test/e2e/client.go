@@ -165,6 +165,18 @@ type ProjectChildrenResponse struct {
 	Children []ProjectChildNode    `json:"children"`
 }
 
+type TaskFullResponse struct {
+	ID          int32          `json:"id"`
+	ProjectID   *int32         `json:"project_id"`
+	Name        string         `json:"name"`
+	Description *string        `json:"description"`
+	DueAt       *time.Time     `json:"due_at"`
+	StartedAt   *time.Time     `json:"started_at"`
+	FinishedAt  *time.Time     `json:"finished_at"`
+	TimeSpent   int64          `json:"time_spent"`
+	Todos       []TodoResponse `json:"todos"`
+}
+
 type TaskByDueDateResponse struct {
 	ID           int32      `json:"id"`
 	Name         string     `json:"name"`
@@ -178,10 +190,13 @@ type TaskByDueDateResponse struct {
 }
 
 type ActiveTreeNode struct {
-	ID       int32            `json:"id"`
-	Type     string           `json:"type"`
-	Name     string           `json:"name"`
-	Children []ActiveTreeNode `json:"children,omitempty"`
+	ID          int32            `json:"id"`
+	Type        string           `json:"type"`
+	Name        string           `json:"name"`
+	Description *string          `json:"description,omitempty"`
+	DueAt       *time.Time       `json:"due_at,omitempty"`
+	StartedAt   *time.Time       `json:"started_at,omitempty"`
+	Children    []ActiveTreeNode `json:"children,omitempty"`
 }
 
 // APIClient is a test driver that wraps HTTP calls to the API.
@@ -493,6 +508,34 @@ func (c *APIClient) GetTasksByDueDate(t *testing.T) []TaskByDueDateResponse {
 	var out []TaskByDueDateResponse
 	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
 		t.Fatalf("GetTasksByDueDate: decode: %v", err)
+	}
+	return out
+}
+
+func (c *APIClient) GetProject(t *testing.T, id int32) ProjectDetailResponse {
+	t.Helper()
+	resp := c.do(t, http.MethodGet, fmt.Sprintf("/tasks/projects/%d", id), nil)
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("GetProject: got status %d, want 200", resp.StatusCode)
+	}
+	var out ProjectDetailResponse
+	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+		t.Fatalf("GetProject: decode: %v", err)
+	}
+	return out
+}
+
+func (c *APIClient) GetTask(t *testing.T, id int32) TaskFullResponse {
+	t.Helper()
+	resp := c.do(t, http.MethodGet, fmt.Sprintf("/tasks/tasks/%d", id), nil)
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("GetTask: got status %d, want 200", resp.StatusCode)
+	}
+	var out TaskFullResponse
+	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+		t.Fatalf("GetTask: decode: %v", err)
 	}
 	return out
 }

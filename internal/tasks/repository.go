@@ -27,6 +27,8 @@ type Repository interface {
 	GetRootProjects(ctx context.Context) ([]ProjectResponse, error)
 	GetActiveProjects(ctx context.Context) ([]ActiveProject, error)
 	GetUnfinishedTasks(ctx context.Context) ([]UnfinishedTask, error)
+	GetProject(ctx context.Context, id int32) (ProjectDetailResponse, error)
+	GetTask(ctx context.Context, id int32) (TaskFullResponse, error)
 	GetProjectChildren(ctx context.Context, projectID int32) (ProjectChildrenResponse, error)
 	GetTaskTimeEntries(ctx context.Context, taskID int32) (TaskTimeEntriesResponse, error)
 	GetTasksByDueDate(ctx context.Context) ([]TaskByDueDateResponse, error)
@@ -313,6 +315,7 @@ func (r *PostgresRepository) GetActiveProjects(ctx context.Context) ([]ActivePro
 			ID:       row.ID,
 			ParentID: row.ParentID,
 			Name:     row.Name,
+			DueAt:    pgDateToPtr(row.DueAt),
 		}
 	}
 	return projects, nil
@@ -327,13 +330,62 @@ func (r *PostgresRepository) GetUnfinishedTasks(ctx context.Context) ([]Unfinish
 	tasks := make([]UnfinishedTask, len(rows))
 	for i, row := range rows {
 		tasks[i] = UnfinishedTask{
-			ID:        row.ID,
-			ProjectID: row.ProjectID,
-			Name:      row.Name,
-			Started:   row.StartedAt.Valid,
+			ID:          row.ID,
+			ProjectID:   row.ProjectID,
+			Name:        row.Name,
+			Description: row.Description,
+			DueAt:       pgDateToPtr(row.DueAt),
+			Started:     row.StartedAt.Valid,
+			StartedAt:   pgTimestampToPtr(row.StartedAt),
 		}
 	}
 	return tasks, nil
+}
+
+func (r *PostgresRepository) GetProject(ctx context.Context, id int32) (ProjectDetailResponse, error) {
+	resp, err := r.GetProjectChildren(ctx, id)
+	if err != nil {
+		return ProjectDetailResponse{}, err
+	}
+	return resp.Project, nil
+}
+
+func (r *PostgresRepository) GetTask(ctx context.Context, id int32) (TaskFullResponse, error) {
+	rows, err := r.q.GetTaskByID(ctx, id)
+	if err != nil {
+		return TaskFullResponse{}, err
+	}
+	if len(rows) == 0 {
+		return TaskFullResponse{}, ErrNotFound
+	}
+
+	first := rows[0]
+	var todos []TodoResponse
+	for _, row := range rows {
+		if row.TodoID != nil {
+			todos = append(todos, TodoResponse{
+				ID:     *row.TodoID,
+				TaskID: first.ID,
+				Name:   *row.TodoName,
+				IsDone: *row.TodoIsDone,
+			})
+		}
+	}
+	if todos == nil {
+		todos = []TodoResponse{}
+	}
+
+	return TaskFullResponse{
+		ID:          first.ID,
+		ProjectID:   first.ProjectID,
+		Name:        first.Name,
+		Description: first.Description,
+		DueAt:       pgDateToPtr(first.DueAt),
+		StartedAt:   pgTimestampToPtr(first.StartedAt),
+		FinishedAt:  pgTimestampToPtr(first.FinishedAt),
+		TimeSpent:   first.TimeSpent,
+		Todos:       todos,
+	}, nil
 }
 
 func (r *PostgresRepository) GetProjectChildren(ctx context.Context, projectID int32) (ProjectChildrenResponse, error) {
