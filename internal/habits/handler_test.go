@@ -10,6 +10,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/go-chi/chi/v5"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -20,6 +21,7 @@ type mockService struct {
 	logHabitFn     func(ctx context.Context, req LogUpsertRequest) error
 	getDailyViewFn func(ctx context.Context, dateStr string) ([]HabitWithLog, error)
 	createHabitFn  func(ctx context.Context, req CreateHabitRequest) (CreateHabitResponse, error)
+	deleteHabitFn  func(ctx context.Context, id int32) error
 }
 
 func (m *mockService) GetDailyView(ctx context.Context, dateStr string) ([]HabitWithLog, error) {
@@ -41,6 +43,13 @@ func (m *mockService) CreateHabit(ctx context.Context, req CreateHabitRequest) (
 		return m.createHabitFn(ctx, req)
 	}
 	return CreateHabitResponse{}, nil
+}
+
+func (m *mockService) DeleteHabit(ctx context.Context, id int32) error {
+	if m.deleteHabitFn != nil {
+		return m.deleteHabitFn(ctx, id)
+	}
+	return nil
 }
 
 func ptrFloat32(f float32) *float32 {
@@ -234,4 +243,58 @@ func TestHandler_CreateHabit(t *testing.T) {
 			assert.Contains(t, rec.Body.String(), tc.wantBody)
 		})
 	}
+}
+
+func TestHandler_DeleteHabit(t *testing.T) {
+	t.Run("returns 204 on success", func(t *testing.T) {
+		mock := &mockService{
+			deleteHabitFn: func(ctx context.Context, id int32) error {
+				assert.Equal(t, int32(5), id)
+				return nil
+			},
+		}
+		handler := NewHandler(mock)
+
+		req := httptest.NewRequest(http.MethodDelete, "/habits/5", nil)
+		rctx := chi.NewRouteContext()
+		rctx.URLParams.Add("id", "5")
+		req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
+
+		rec := httptest.NewRecorder()
+		handler.DeleteHabit(rec, req)
+		assert.Equal(t, http.StatusNoContent, rec.Code)
+		assert.Empty(t, rec.Body.String())
+	})
+
+	t.Run("returns 400 for invalid ID", func(t *testing.T) {
+		handler := NewHandler(&mockService{})
+
+		req := httptest.NewRequest(http.MethodDelete, "/habits/abc", nil)
+		rctx := chi.NewRouteContext()
+		rctx.URLParams.Add("id", "abc")
+		req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
+
+		rec := httptest.NewRecorder()
+		handler.DeleteHabit(rec, req)
+		assert.Equal(t, http.StatusBadRequest, rec.Code)
+	})
+
+	t.Run("returns 500 on service error", func(t *testing.T) {
+		mock := &mockService{
+			deleteHabitFn: func(ctx context.Context, id int32) error {
+				return errors.New("db error")
+			},
+		}
+		handler := NewHandler(mock)
+
+		req := httptest.NewRequest(http.MethodDelete, "/habits/1", nil)
+		rctx := chi.NewRouteContext()
+		rctx.URLParams.Add("id", "1")
+		req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
+
+		rec := httptest.NewRecorder()
+		handler.DeleteHabit(rec, req)
+		assert.Equal(t, http.StatusInternalServerError, rec.Code)
+		assert.Contains(t, rec.Body.String(), "Failed to delete habit")
+	})
 }

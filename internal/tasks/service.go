@@ -162,3 +162,19 @@ func (s *Service) GetTasksByDueDate(ctx context.Context) ([]TaskByDueDateRespons
 func (s *Service) GetRootProjects(ctx context.Context) ([]ProjectResponse, error) {
 	return s.repo.GetRootProjects(ctx)
 }
+
+func (s *Service) DeleteProject(ctx context.Context, id int32) error {
+	return s.repo.DeleteProject(ctx, id)
+}
+
+func (s *Service) DeleteTask(ctx context.Context, id int32) error {
+	return s.repo.DeleteTask(ctx, id)
+}
+
+func (s *Service) DeleteTodo(ctx context.Context, id int32) error {
+	return s.repo.DeleteTodo(ctx, id)
+}
+
+func (s *Service) DeleteTimeEntry(ctx context.Context, id int32) error {
+	return s.repo.DeleteTimeEntry(ctx, id)
+}

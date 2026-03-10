@@ -27,6 +27,10 @@ type mockRepo struct {
 	getProjectChildrenFn   func(ctx context.Context, projectID int32) (ProjectChildrenResponse, error)
 	getTaskTimeEntriesFn   func(ctx context.Context, taskID int32) (TaskTimeEntriesResponse, error)
 	getTasksByDueDateFn    func(ctx context.Context) ([]TaskByDueDateResponse, error)
+	deleteProjectFn        func(ctx context.Context, id int32) error
+	deleteTaskFn           func(ctx context.Context, id int32) error
+	deleteTodoFn           func(ctx context.Context, id int32) error
+	deleteTimeEntryFn      func(ctx context.Context, id int32) error
 }
 
 func (m *mockRepo) CreateProject(ctx context.Context, name string, description *string, dueAt *time.Time, parentID *int32) (ProjectResponse, error) {
@@ -139,6 +143,34 @@ func (m *mockRepo) GetTasksByDueDate(ctx context.Context) ([]TaskByDueDateRespon
 		return m.getTasksByDueDateFn(ctx)
 	}
 	return nil, nil
+}
+
+func (m *mockRepo) DeleteProject(ctx context.Context, id int32) error {
+	if m.deleteProjectFn != nil {
+		return m.deleteProjectFn(ctx, id)
+	}
+	return nil
+}
+
+func (m *mockRepo) DeleteTask(ctx context.Context, id int32) error {
+	if m.deleteTaskFn != nil {
+		return m.deleteTaskFn(ctx, id)
+	}
+	return nil
+}
+
+func (m *mockRepo) DeleteTodo(ctx context.Context, id int32) error {
+	if m.deleteTodoFn != nil {
+		return m.deleteTodoFn(ctx, id)
+	}
+	return nil
+}
+
+func (m *mockRepo) DeleteTimeEntry(ctx context.Context, id int32) error {
+	if m.deleteTimeEntryFn != nil {
+		return m.deleteTimeEntryFn(ctx, id)
+	}
+	return nil
 }
 
 func TestService_CreateProject(t *testing.T) {
@@ -796,6 +828,106 @@ func TestService_GetTasksByDueDate(t *testing.T) {
 		svc := NewService(mock, nil)
 		_, err := svc.GetTasksByDueDate(context.Background())
 
+		require.Error(t, err)
+	})
+}
+
+func TestService_DeleteProject(t *testing.T) {
+	t.Run("delegates to repo", func(t *testing.T) {
+		mock := &mockRepo{
+			deleteProjectFn: func(ctx context.Context, id int32) error {
+				assert.Equal(t, int32(5), id)
+				return nil
+			},
+		}
+		svc := NewService(mock, nil)
+		err := svc.DeleteProject(context.Background(), 5)
+		require.NoError(t, err)
+	})
+
+	t.Run("propagates error", func(t *testing.T) {
+		mock := &mockRepo{
+			deleteProjectFn: func(ctx context.Context, id int32) error {
+				return errors.New("db error")
+			},
+		}
+		svc := NewService(mock, nil)
+		err := svc.DeleteProject(context.Background(), 1)
+		require.Error(t, err)
+	})
+}
+
+func TestService_DeleteTask(t *testing.T) {
+	t.Run("delegates to repo", func(t *testing.T) {
+		mock := &mockRepo{
+			deleteTaskFn: func(ctx context.Context, id int32) error {
+				assert.Equal(t, int32(3), id)
+				return nil
+			},
+		}
+		svc := NewService(mock, nil)
+		err := svc.DeleteTask(context.Background(), 3)
+		require.NoError(t, err)
+	})
+
+	t.Run("propagates error", func(t *testing.T) {
+		mock := &mockRepo{
+			deleteTaskFn: func(ctx context.Context, id int32) error {
+				return errors.New("db error")
+			},
+		}
+		svc := NewService(mock, nil)
+		err := svc.DeleteTask(context.Background(), 1)
+		require.Error(t, err)
+	})
+}
+
+func TestService_DeleteTodo(t *testing.T) {
+	t.Run("delegates to repo", func(t *testing.T) {
+		mock := &mockRepo{
+			deleteTodoFn: func(ctx context.Context, id int32) error {
+				assert.Equal(t, int32(7), id)
+				return nil
+			},
+		}
+		svc := NewService(mock, nil)
+		err := svc.DeleteTodo(context.Background(), 7)
+		require.NoError(t, err)
+	})
+
+	t.Run("propagates error", func(t *testing.T) {
+		mock := &mockRepo{
+			deleteTodoFn: func(ctx context.Context, id int32) error {
+				return errors.New("db error")
+			},
+		}
+		svc := NewService(mock, nil)
+		err := svc.DeleteTodo(context.Background(), 1)
+		require.Error(t, err)
+	})
+}
+
+func TestService_DeleteTimeEntry(t *testing.T) {
+	t.Run("delegates to repo", func(t *testing.T) {
+		mock := &mockRepo{
+			deleteTimeEntryFn: func(ctx context.Context, id int32) error {
+				assert.Equal(t, int32(9), id)
+				return nil
+			},
+		}
+		svc := NewService(mock, nil)
+		err := svc.DeleteTimeEntry(context.Background(), 9)
+		require.NoError(t, err)
+	})
+
+	t.Run("propagates error", func(t *testing.T) {
+		mock := &mockRepo{
+			deleteTimeEntryFn: func(ctx context.Context, id int32) error {
+				return errors.New("db error")
+			},
+		}
+		svc := NewService(mock, nil)
+		err := svc.DeleteTimeEntry(context.Background(), 1)
 		require.Error(t, err)
 	})
 }

@@ -11,6 +11,7 @@ type Repository interface {
 	GetHabitsWithLogs(ctx context.Context, date time.Time) ([]HabitWithLog, error)
 	UpsertLog(ctx context.Context, habitID int32, date time.Time, value float32) error
 	CreateHabit(ctx context.Context, name string, description *string) (CreateHabitResponse, error)
+	DeleteHabit(ctx context.Context, id int32) error
 }
 
 type PostgresRepository struct {
@@ -48,6 +49,10 @@ func (r *PostgresRepository) UpsertLog(ctx context.Context, habitID int32, date 
 		Value:   value,
 	}
 	return r.q.UpsertLog(ctx, params)
+}
+
+func (r *PostgresRepository) DeleteHabit(ctx context.Context, id int32) error {
+	return r.q.DeleteHabit(ctx, id)
 }
 
 func (r *PostgresRepository) CreateHabit(ctx context.Context, name string, description *string) (CreateHabitResponse, error) {

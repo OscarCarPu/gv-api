@@ -133,6 +133,18 @@ FROM task_info ti
 LEFT JOIN todos td ON td.task_id = ti.id
 ORDER BY td.id;
 
+-- name: DeleteProject :exec
+DELETE FROM projects WHERE id = $1;
+
+-- name: DeleteTask :exec
+DELETE FROM tasks WHERE id = $1;
+
+-- name: DeleteTodo :exec
+DELETE FROM todos WHERE id = $1;
+
+-- name: DeleteTimeEntry :exec
+DELETE FROM time_entries WHERE id = $1;
+
 -- name: GetTimeEntriesByTaskID :many
 WITH task_info AS (
     SELECT t.id, t.project_id, t.name, t.description, t.due_at, t.started_at, t.finished_at,

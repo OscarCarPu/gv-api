@@ -44,3 +44,7 @@ func (s *Service) LogHabit(ctx context.Context, req LogUpsertRequest) error {
 func (s *Service) CreateHabit(ctx context.Context, req CreateHabitRequest) (CreateHabitResponse, error) {
 	return s.repo.CreateHabit(ctx, req.Name, req.Description)
 }
+
+func (s *Service) DeleteHabit(ctx context.Context, id int32) error {
+	return s.repo.DeleteHabit(ctx, id)
+}

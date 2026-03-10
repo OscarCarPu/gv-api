@@ -9,6 +9,9 @@ VALUES ($1, $2, $3)
 ON CONFLICT (habit_id, log_date)
 DO UPDATE SET value = excluded.value;
 
+-- name: DeleteHabit :exec
+DELETE FROM habits WHERE id = $1;
+
 -- name: CreateHabit :one
 INSERT INTO habits (name, description)
 VALUES ($1, $2)

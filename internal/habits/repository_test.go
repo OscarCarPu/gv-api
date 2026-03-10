@@ -16,6 +16,7 @@ type mockQuerier struct {
 	getHabitsWithLogsFn func(ctx context.Context, logDate time.Time) ([]habitsdb.GetHabitsWithLogsRow, error)
 	upsertLogFn         func(ctx context.Context, arg habitsdb.UpsertLogParams) error
 	createHabitFn       func(ctx context.Context, arg habitsdb.CreateHabitParams) (habitsdb.Habit, error)
+	deleteHabitFn       func(ctx context.Context, id int32) error
 }
 
 func (m *mockQuerier) GetHabitsWithLogs(ctx context.Context, logDate time.Time) ([]habitsdb.GetHabitsWithLogsRow, error) {
@@ -37,6 +38,13 @@ func (m *mockQuerier) CreateHabit(ctx context.Context, arg habitsdb.CreateHabitP
 		return m.createHabitFn(ctx, arg)
 	}
 	return habitsdb.Habit{}, nil
+}
+
+func (m *mockQuerier) DeleteHabit(ctx context.Context, id int32) error {
+	if m.deleteHabitFn != nil {
+		return m.deleteHabitFn(ctx, id)
+	}
+	return nil
 }
 
 func TestRepository_GetHabitsWithLogs(t *testing.T) {
@@ -141,6 +149,33 @@ func TestRepository_CreateHabit(t *testing.T) {
 		repo := NewRepository(mock)
 
 		_, err := repo.CreateHabit(context.Background(), "Exercise", nil)
+		assert.Error(t, err)
+	})
+}
+
+func TestRepository_DeleteHabit(t *testing.T) {
+	t.Run("calls querier with correct ID", func(t *testing.T) {
+		var gotID int32
+		mock := &mockQuerier{
+			deleteHabitFn: func(ctx context.Context, id int32) error {
+				gotID = id
+				return nil
+			},
+		}
+		repo := NewRepository(mock)
+		err := repo.DeleteHabit(context.Background(), 5)
+		require.NoError(t, err)
+		assert.Equal(t, int32(5), gotID)
+	})
+
+	t.Run("returns error from querier", func(t *testing.T) {
+		mock := &mockQuerier{
+			deleteHabitFn: func(ctx context.Context, id int32) error {
+				return errors.New("db error")
+			},
+		}
+		repo := NewRepository(mock)
+		err := repo.DeleteHabit(context.Background(), 1)
 		assert.Error(t, err)
 	})
 }

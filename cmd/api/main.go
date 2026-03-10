@@ -91,6 +91,11 @@ func main() {
 		r.Get("/tasks/tasks/{id}/time-entries", taskHandler.GetTaskTimeEntries)
 		r.Patch("/tasks/tasks/{id}", taskHandler.UpdateTask)
 		r.Patch("/tasks/projects/{id}", taskHandler.UpdateProject)
+		r.Delete("/tasks/projects/{id}", taskHandler.DeleteProject)
+		r.Delete("/tasks/tasks/{id}", taskHandler.DeleteTask)
+		r.Delete("/tasks/todos/{id}", taskHandler.DeleteTodo)
+		r.Delete("/tasks/time-entries/{id}", taskHandler.DeleteTimeEntry)
+		r.Delete("/habits/{id}", habitHandler.DeleteHabit)
 	})
 
 	log.Printf("Starting server on port %s", cfg.Port)

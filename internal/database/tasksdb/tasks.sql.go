@@ -145,6 +145,42 @@ func (q *Queries) CreateTodo(ctx context.Context, arg CreateTodoParams) (CreateT
 	return i, err
 }
 
+const deleteProject = `-- name: DeleteProject :exec
+DELETE FROM projects WHERE id = $1
+`
+
+func (q *Queries) DeleteProject(ctx context.Context, id int32) error {
+	_, err := q.db.Exec(ctx, deleteProject, id)
+	return err
+}
+
+const deleteTask = `-- name: DeleteTask :exec
+DELETE FROM tasks WHERE id = $1
+`
+
+func (q *Queries) DeleteTask(ctx context.Context, id int32) error {
+	_, err := q.db.Exec(ctx, deleteTask, id)
+	return err
+}
+
+const deleteTimeEntry = `-- name: DeleteTimeEntry :exec
+DELETE FROM time_entries WHERE id = $1
+`
+
+func (q *Queries) DeleteTimeEntry(ctx context.Context, id int32) error {
+	_, err := q.db.Exec(ctx, deleteTimeEntry, id)
+	return err
+}
+
+const deleteTodo = `-- name: DeleteTodo :exec
+DELETE FROM todos WHERE id = $1
+`
+
+func (q *Queries) DeleteTodo(ctx context.Context, id int32) error {
+	_, err := q.db.Exec(ctx, deleteTodo, id)
+	return err
+}
+
 const getActiveProjects = `-- name: GetActiveProjects :many
 SELECT id, parent_id, name, due_at
 FROM projects

@@ -28,6 +28,15 @@ func (q *Queries) CreateHabit(ctx context.Context, arg CreateHabitParams) (Habit
 	return i, err
 }
 
+const deleteHabit = `-- name: DeleteHabit :exec
+DELETE FROM habits WHERE id = $1
+`
+
+func (q *Queries) DeleteHabit(ctx context.Context, id int32) error {
+	_, err := q.db.Exec(ctx, deleteHabit, id)
+	return err
+}
+
 const getHabitsWithLogs = `-- name: GetHabitsWithLogs :many
 SELECT h.id, h.name, h.description, hl.value
 FROM habits h 

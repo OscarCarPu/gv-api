@@ -11,6 +11,7 @@ import (
 
 type Querier interface {
 	CreateHabit(ctx context.Context, arg CreateHabitParams) (Habit, error)
+	DeleteHabit(ctx context.Context, id int32) error
 	GetHabitsWithLogs(ctx context.Context, logDate time.Time) ([]GetHabitsWithLogsRow, error)
 	UpsertLog(ctx context.Context, arg UpsertLogParams) error
 }

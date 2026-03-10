@@ -33,6 +33,10 @@ type mockService struct {
 	getProjectChildrenFn   func(ctx context.Context, projectID int32) (ProjectChildrenResponse, error)
 	getTaskTimeEntriesFn   func(ctx context.Context, taskID int32) (TaskTimeEntriesResponse, error)
 	getTasksByDueDateFn    func(ctx context.Context) ([]TaskByDueDateResponse, error)
+	deleteProjectFn        func(ctx context.Context, id int32) error
+	deleteTaskFn           func(ctx context.Context, id int32) error
+	deleteTodoFn           func(ctx context.Context, id int32) error
+	deleteTimeEntryFn      func(ctx context.Context, id int32) error
 }
 
 func (m *mockService) CreateProject(ctx context.Context, req CreateProjectRequest) (ProjectResponse, error) {
@@ -138,6 +142,34 @@ func (m *mockService) GetTasksByDueDate(ctx context.Context) ([]TaskByDueDateRes
 		return m.getTasksByDueDateFn(ctx)
 	}
 	return nil, nil
+}
+
+func (m *mockService) DeleteProject(ctx context.Context, id int32) error {
+	if m.deleteProjectFn != nil {
+		return m.deleteProjectFn(ctx, id)
+	}
+	return nil
+}
+
+func (m *mockService) DeleteTask(ctx context.Context, id int32) error {
+	if m.deleteTaskFn != nil {
+		return m.deleteTaskFn(ctx, id)
+	}
+	return nil
+}
+
+func (m *mockService) DeleteTodo(ctx context.Context, id int32) error {
+	if m.deleteTodoFn != nil {
+		return m.deleteTodoFn(ctx, id)
+	}
+	return nil
+}
+
+func (m *mockService) DeleteTimeEntry(ctx context.Context, id int32) error {
+	if m.deleteTimeEntryFn != nil {
+		return m.deleteTimeEntryFn(ctx, id)
+	}
+	return nil
 }
 
 // --- Handler Tests ---
@@ -1332,5 +1364,218 @@ func TestHandler_GetTask(t *testing.T) {
 		handler.GetTask(rec, req)
 		assert.Equal(t, http.StatusInternalServerError, rec.Code)
 		assert.Contains(t, rec.Body.String(), "Failed to get task")
+	})
+}
+
+func TestHandler_DeleteProject(t *testing.T) {
+	t.Run("returns 204 on success", func(t *testing.T) {
+		mock := &mockService{
+			deleteProjectFn: func(ctx context.Context, id int32) error {
+				assert.Equal(t, int32(5), id)
+				return nil
+			},
+		}
+		handler := NewHandler(mock)
+
+		req := httptest.NewRequest(http.MethodDelete, "/tasks/projects/5", nil)
+		rctx := chi.NewRouteContext()
+		rctx.URLParams.Add("id", "5")
+		req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
+
+		rec := httptest.NewRecorder()
+		handler.DeleteProject(rec, req)
+		assert.Equal(t, http.StatusNoContent, rec.Code)
+		assert.Empty(t, rec.Body.String())
+	})
+
+	t.Run("returns 400 for invalid ID", func(t *testing.T) {
+		handler := NewHandler(&mockService{})
+
+		req := httptest.NewRequest(http.MethodDelete, "/tasks/projects/abc", nil)
+		rctx := chi.NewRouteContext()
+		rctx.URLParams.Add("id", "abc")
+		req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
+
+		rec := httptest.NewRecorder()
+		handler.DeleteProject(rec, req)
+		assert.Equal(t, http.StatusBadRequest, rec.Code)
+	})
+
+	t.Run("returns 500 on service error", func(t *testing.T) {
+		mock := &mockService{
+			deleteProjectFn: func(ctx context.Context, id int32) error {
+				return errors.New("db error")
+			},
+		}
+		handler := NewHandler(mock)
+
+		req := httptest.NewRequest(http.MethodDelete, "/tasks/projects/1", nil)
+		rctx := chi.NewRouteContext()
+		rctx.URLParams.Add("id", "1")
+		req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
+
+		rec := httptest.NewRecorder()
+		handler.DeleteProject(rec, req)
+		assert.Equal(t, http.StatusInternalServerError, rec.Code)
+		assert.Contains(t, rec.Body.String(), "Failed to delete project")
+	})
+}
+
+func TestHandler_DeleteTask(t *testing.T) {
+	t.Run("returns 204 on success", func(t *testing.T) {
+		mock := &mockService{
+			deleteTaskFn: func(ctx context.Context, id int32) error {
+				assert.Equal(t, int32(3), id)
+				return nil
+			},
+		}
+		handler := NewHandler(mock)
+
+		req := httptest.NewRequest(http.MethodDelete, "/tasks/tasks/3", nil)
+		rctx := chi.NewRouteContext()
+		rctx.URLParams.Add("id", "3")
+		req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
+
+		rec := httptest.NewRecorder()
+		handler.DeleteTask(rec, req)
+		assert.Equal(t, http.StatusNoContent, rec.Code)
+	})
+
+	t.Run("returns 400 for invalid ID", func(t *testing.T) {
+		handler := NewHandler(&mockService{})
+
+		req := httptest.NewRequest(http.MethodDelete, "/tasks/tasks/abc", nil)
+		rctx := chi.NewRouteContext()
+		rctx.URLParams.Add("id", "abc")
+		req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
+
+		rec := httptest.NewRecorder()
+		handler.DeleteTask(rec, req)
+		assert.Equal(t, http.StatusBadRequest, rec.Code)
+	})
+
+	t.Run("returns 500 on service error", func(t *testing.T) {
+		mock := &mockService{
+			deleteTaskFn: func(ctx context.Context, id int32) error {
+				return errors.New("db error")
+			},
+		}
+		handler := NewHandler(mock)
+
+		req := httptest.NewRequest(http.MethodDelete, "/tasks/tasks/1", nil)
+		rctx := chi.NewRouteContext()
+		rctx.URLParams.Add("id", "1")
+		req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
+
+		rec := httptest.NewRecorder()
+		handler.DeleteTask(rec, req)
+		assert.Equal(t, http.StatusInternalServerError, rec.Code)
+		assert.Contains(t, rec.Body.String(), "Failed to delete task")
+	})
+}
+
+func TestHandler_DeleteTodo(t *testing.T) {
+	t.Run("returns 204 on success", func(t *testing.T) {
+		mock := &mockService{
+			deleteTodoFn: func(ctx context.Context, id int32) error {
+				assert.Equal(t, int32(7), id)
+				return nil
+			},
+		}
+		handler := NewHandler(mock)
+
+		req := httptest.NewRequest(http.MethodDelete, "/tasks/todos/7", nil)
+		rctx := chi.NewRouteContext()
+		rctx.URLParams.Add("id", "7")
+		req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
+
+		rec := httptest.NewRecorder()
+		handler.DeleteTodo(rec, req)
+		assert.Equal(t, http.StatusNoContent, rec.Code)
+	})
+
+	t.Run("returns 400 for invalid ID", func(t *testing.T) {
+		handler := NewHandler(&mockService{})
+
+		req := httptest.NewRequest(http.MethodDelete, "/tasks/todos/abc", nil)
+		rctx := chi.NewRouteContext()
+		rctx.URLParams.Add("id", "abc")
+		req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
+
+		rec := httptest.NewRecorder()
+		handler.DeleteTodo(rec, req)
+		assert.Equal(t, http.StatusBadRequest, rec.Code)
+	})
+
+	t.Run("returns 500 on service error", func(t *testing.T) {
+		mock := &mockService{
+			deleteTodoFn: func(ctx context.Context, id int32) error {
+				return errors.New("db error")
+			},
+		}
+		handler := NewHandler(mock)
+
+		req := httptest.NewRequest(http.MethodDelete, "/tasks/todos/1", nil)
+		rctx := chi.NewRouteContext()
+		rctx.URLParams.Add("id", "1")
+		req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
+
+		rec := httptest.NewRecorder()
+		handler.DeleteTodo(rec, req)
+		assert.Equal(t, http.StatusInternalServerError, rec.Code)
+		assert.Contains(t, rec.Body.String(), "Failed to delete todo")
+	})
+}
+
+func TestHandler_DeleteTimeEntry(t *testing.T) {
+	t.Run("returns 204 on success", func(t *testing.T) {
+		mock := &mockService{
+			deleteTimeEntryFn: func(ctx context.Context, id int32) error {
+				assert.Equal(t, int32(9), id)
+				return nil
+			},
+		}
+		handler := NewHandler(mock)
+
+		req := httptest.NewRequest(http.MethodDelete, "/tasks/time-entries/9", nil)
+		rctx := chi.NewRouteContext()
+		rctx.URLParams.Add("id", "9")
+		req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
+
+		rec := httptest.NewRecorder()
+		handler.DeleteTimeEntry(rec, req)
+		assert.Equal(t, http.StatusNoContent, rec.Code)
+	})
+
+	t.Run("returns 400 for invalid ID", func(t *testing.T) {
+		handler := NewHandler(&mockService{})
+
+		req := httptest.NewRequest(http.MethodDelete, "/tasks/time-entries/abc", nil)
+		rctx := chi.NewRouteContext()
+		rctx.URLParams.Add("id", "abc")
+		req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
+
+		rec := httptest.NewRecorder()
+		handler.DeleteTimeEntry(rec, req)
+		assert.Equal(t, http.StatusBadRequest, rec.Code)
+	})
+
+	t.Run("returns 500 on service error", func(t *testing.T) {
+		mock := &mockService{
+			deleteTimeEntryFn: func(ctx context.Context, id int32) error {
+				return errors.New("db error")
+			},
+		}
+		handler := NewHandler(mock)
+
+		req := httptest.NewRequest(http.MethodDelete, "/tasks/time-entries/1", nil)
+		rctx := chi.NewRouteContext()
+		rctx.URLParams.Add("id", "1")
+		req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
+
+		rec := httptest.NewRecorder()
+		handler.DeleteTimeEntry(rec, req)
+		assert.Equal(t, http.StatusInternalServerError, rec.Code)
+		assert.Contains(t, rec.Body.String(), "Failed to delete time entry")
 	})
 }

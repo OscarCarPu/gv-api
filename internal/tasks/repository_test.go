@@ -31,6 +31,10 @@ type mockQuerier struct {
 	getTaskByIDFn                func(ctx context.Context, id int32) ([]tasksdb.GetTaskByIDRow, error)
 	getTimeEntriesByTaskIDFn     func(ctx context.Context, id int32) ([]tasksdb.GetTimeEntriesByTaskIDRow, error)
 	getTasksByDueDateFn          func(ctx context.Context) ([]tasksdb.GetTasksByDueDateRow, error)
+	deleteProjectFn              func(ctx context.Context, id int32) error
+	deleteTaskFn                 func(ctx context.Context, id int32) error
+	deleteTodoFn                 func(ctx context.Context, id int32) error
+	deleteTimeEntryFn            func(ctx context.Context, id int32) error
 }
 
 func (m *mockQuerier) CreateProject(ctx context.Context, arg tasksdb.CreateProjectParams) (tasksdb.CreateProjectRow, error) {
@@ -143,6 +147,34 @@ func (m *mockQuerier) GetTasksByDueDate(ctx context.Context) ([]tasksdb.GetTasks
 		return m.getTasksByDueDateFn(ctx)
 	}
 	return nil, nil
+}
+
+func (m *mockQuerier) DeleteProject(ctx context.Context, id int32) error {
+	if m.deleteProjectFn != nil {
+		return m.deleteProjectFn(ctx, id)
+	}
+	return nil
+}
+
+func (m *mockQuerier) DeleteTask(ctx context.Context, id int32) error {
+	if m.deleteTaskFn != nil {
+		return m.deleteTaskFn(ctx, id)
+	}
+	return nil
+}
+
+func (m *mockQuerier) DeleteTodo(ctx context.Context, id int32) error {
+	if m.deleteTodoFn != nil {
+		return m.deleteTodoFn(ctx, id)
+	}
+	return nil
+}
+
+func (m *mockQuerier) DeleteTimeEntry(ctx context.Context, id int32) error {
+	if m.deleteTimeEntryFn != nil {
+		return m.deleteTimeEntryFn(ctx, id)
+	}
+	return nil
 }
 
 func TestRepository_CreateProject(t *testing.T) {
@@ -1143,6 +1175,114 @@ func TestRepository_GetTasksByDueDate(t *testing.T) {
 		repo := NewRepository(mock)
 
 		_, err := repo.GetTasksByDueDate(context.Background())
+		assert.Error(t, err)
+	})
+}
+
+func TestRepository_DeleteProject(t *testing.T) {
+	t.Run("calls querier with correct ID", func(t *testing.T) {
+		var gotID int32
+		mock := &mockQuerier{
+			deleteProjectFn: func(ctx context.Context, id int32) error {
+				gotID = id
+				return nil
+			},
+		}
+		repo := NewRepository(mock)
+		err := repo.DeleteProject(context.Background(), 5)
+		require.NoError(t, err)
+		assert.Equal(t, int32(5), gotID)
+	})
+
+	t.Run("returns error from querier", func(t *testing.T) {
+		mock := &mockQuerier{
+			deleteProjectFn: func(ctx context.Context, id int32) error {
+				return errors.New("db error")
+			},
+		}
+		repo := NewRepository(mock)
+		err := repo.DeleteProject(context.Background(), 1)
+		assert.Error(t, err)
+	})
+}
+
+func TestRepository_DeleteTask(t *testing.T) {
+	t.Run("calls querier with correct ID", func(t *testing.T) {
+		var gotID int32
+		mock := &mockQuerier{
+			deleteTaskFn: func(ctx context.Context, id int32) error {
+				gotID = id
+				return nil
+			},
+		}
+		repo := NewRepository(mock)
+		err := repo.DeleteTask(context.Background(), 3)
+		require.NoError(t, err)
+		assert.Equal(t, int32(3), gotID)
+	})
+
+	t.Run("returns error from querier", func(t *testing.T) {
+		mock := &mockQuerier{
+			deleteTaskFn: func(ctx context.Context, id int32) error {
+				return errors.New("db error")
+			},
+		}
+		repo := NewRepository(mock)
+		err := repo.DeleteTask(context.Background(), 1)
+		assert.Error(t, err)
+	})
+}
+
+func TestRepository_DeleteTodo(t *testing.T) {
+	t.Run("calls querier with correct ID", func(t *testing.T) {
+		var gotID int32
+		mock := &mockQuerier{
+			deleteTodoFn: func(ctx context.Context, id int32) error {
+				gotID = id
+				return nil
+			},
+		}
+		repo := NewRepository(mock)
+		err := repo.DeleteTodo(context.Background(), 7)
+		require.NoError(t, err)
+		assert.Equal(t, int32(7), gotID)
+	})
+
+	t.Run("returns error from querier", func(t *testing.T) {
+		mock := &mockQuerier{
+			deleteTodoFn: func(ctx context.Context, id int32) error {
+				return errors.New("db error")
+			},
+		}
+		repo := NewRepository(mock)
+		err := repo.DeleteTodo(context.Background(), 1)
+		assert.Error(t, err)
+	})
+}
+
+func TestRepository_DeleteTimeEntry(t *testing.T) {
+	t.Run("calls querier with correct ID", func(t *testing.T) {
+		var gotID int32
+		mock := &mockQuerier{
+			deleteTimeEntryFn: func(ctx context.Context, id int32) error {
+				gotID = id
+				return nil
+			},
+		}
+		repo := NewRepository(mock)
+		err := repo.DeleteTimeEntry(context.Background(), 9)
+		require.NoError(t, err)
+		assert.Equal(t, int32(9), gotID)
+	})
+
+	t.Run("returns error from querier", func(t *testing.T) {
+		mock := &mockQuerier{
+			deleteTimeEntryFn: func(ctx context.Context, id int32) error {
+				return errors.New("db error")
+			},
+		}
+		repo := NewRepository(mock)
+		err := repo.DeleteTimeEntry(context.Background(), 1)
 		assert.Error(t, err)
 	})
 }

@@ -2,6 +2,7 @@ package habits
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
@@ -13,6 +14,7 @@ type mockRepo struct {
 	getHabitsFn   func(ctx context.Context, date time.Time) ([]HabitWithLog, error)
 	upsertLogFn   func(ctx context.Context, habitID int32, date time.Time, value float32) error
 	createHabitFn func(ctx context.Context, name string, description *string) (CreateHabitResponse, error)
+	deleteHabitFn func(ctx context.Context, id int32) error
 }
 
 func (m *mockRepo) GetHabitsWithLogs(ctx context.Context, date time.Time) ([]HabitWithLog, error) {
@@ -34,6 +36,13 @@ func (m *mockRepo) CreateHabit(ctx context.Context, name string, description *st
 		return m.createHabitFn(ctx, name, description)
 	}
 	return CreateHabitResponse{}, nil
+}
+
+func (m *mockRepo) DeleteHabit(ctx context.Context, id int32) error {
+	if m.deleteHabitFn != nil {
+		return m.deleteHabitFn(ctx, id)
+	}
+	return nil
 }
 
 func TestService_GetDailyView(t *testing.T) {
@@ -164,5 +173,30 @@ func TestService_CreateHabit(t *testing.T) {
 		_, err := svc.CreateHabit(context.Background(), req)
 		require.NoError(t, err)
 		assert.Nil(t, gotDesc)
+	})
+}
+
+func TestService_DeleteHabit(t *testing.T) {
+	t.Run("delegates to repo", func(t *testing.T) {
+		mock := &mockRepo{
+			deleteHabitFn: func(ctx context.Context, id int32) error {
+				assert.Equal(t, int32(5), id)
+				return nil
+			},
+		}
+		svc := NewService(mock, nil)
+		err := svc.DeleteHabit(context.Background(), 5)
+		require.NoError(t, err)
+	})
+
+	t.Run("propagates error", func(t *testing.T) {
+		mock := &mockRepo{
+			deleteHabitFn: func(ctx context.Context, id int32) error {
+				return errors.New("db error")
+			},
+		}
+		svc := NewService(mock, nil)
+		err := svc.DeleteHabit(context.Background(), 1)
+		require.Error(t, err)
 	})
 }

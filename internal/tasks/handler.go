@@ -29,6 +29,10 @@ type ServiceInterface interface {
 	GetProjectChildren(ctx context.Context, projectID int32) (ProjectChildrenResponse, error)
 	GetTaskTimeEntries(ctx context.Context, taskID int32) (TaskTimeEntriesResponse, error)
 	GetTasksByDueDate(ctx context.Context) ([]TaskByDueDateResponse, error)
+	DeleteProject(ctx context.Context, id int32) error
+	DeleteTask(ctx context.Context, id int32) error
+	DeleteTodo(ctx context.Context, id int32) error
+	DeleteTimeEntry(ctx context.Context, id int32) error
 }
 
 type Handler struct {
@@ -347,6 +351,66 @@ func (h *Handler) GetTasksByDueDate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	response.JSON(w, http.StatusOK, tasks)
+}
+
+func (h *Handler) DeleteProject(w http.ResponseWriter, r *http.Request) {
+	id, err := parseIDParam(r, "project")
+	if err != nil {
+		response.Error(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	if err := h.service.DeleteProject(r.Context(), id); err != nil {
+		response.Error(w, http.StatusInternalServerError, "Failed to delete project")
+		return
+	}
+
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (h *Handler) DeleteTask(w http.ResponseWriter, r *http.Request) {
+	id, err := parseIDParam(r, "task")
+	if err != nil {
+		response.Error(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	if err := h.service.DeleteTask(r.Context(), id); err != nil {
+		response.Error(w, http.StatusInternalServerError, "Failed to delete task")
+		return
+	}
+
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (h *Handler) DeleteTodo(w http.ResponseWriter, r *http.Request) {
+	id, err := parseIDParam(r, "todo")
+	if err != nil {
+		response.Error(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	if err := h.service.DeleteTodo(r.Context(), id); err != nil {
+		response.Error(w, http.StatusInternalServerError, "Failed to delete todo")
+		return
+	}
+
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (h *Handler) DeleteTimeEntry(w http.ResponseWriter, r *http.Request) {
+	id, err := parseIDParam(r, "time entry")
+	if err != nil {
+		response.Error(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	if err := h.service.DeleteTimeEntry(r.Context(), id); err != nil {
+		response.Error(w, http.StatusInternalServerError, "Failed to delete time entry")
+		return
+	}
+
+	w.WriteHeader(http.StatusNoContent)
 }
 
 func (h *Handler) GetRootProjects(w http.ResponseWriter, r *http.Request) {

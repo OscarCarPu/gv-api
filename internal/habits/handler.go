@@ -3,15 +3,20 @@ package habits
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
+	"strconv"
 
 	"gv-api/internal/response"
+
+	"github.com/go-chi/chi/v5"
 )
 
 type ServiceInterface interface {
 	GetDailyView(ctx context.Context, dateStr string) ([]HabitWithLog, error)
 	LogHabit(ctx context.Context, req LogUpsertRequest) error
 	CreateHabit(ctx context.Context, req CreateHabitRequest) (CreateHabitResponse, error)
+	DeleteHabit(ctx context.Context, id int32) error
 }
 
 type Handler struct {
@@ -49,6 +54,23 @@ func (h *Handler) UpsertLog(w http.ResponseWriter, r *http.Request) {
 	}
 
 	response.JSON(w, http.StatusOK, map[string]string{"status": "ok"})
+}
+
+// DeleteHabit -> DELETE /habits/{id}
+func (h *Handler) DeleteHabit(w http.ResponseWriter, r *http.Request) {
+	idStr := chi.URLParam(r, "id")
+	id, err := strconv.Atoi(idStr)
+	if err != nil {
+		response.Error(w, http.StatusBadRequest, fmt.Sprintf("invalid %s id", "habit"))
+		return
+	}
+
+	if err := h.service.DeleteHabit(r.Context(), int32(id)); err != nil {
+		response.Error(w, http.StatusInternalServerError, "Failed to delete habit")
+		return
+	}
+
+	w.WriteHeader(http.StatusNoContent)
 }
 
 // CreateHabit -> POST /habits

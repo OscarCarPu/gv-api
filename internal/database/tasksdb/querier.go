@@ -13,6 +13,10 @@ type Querier interface {
 	CreateTask(ctx context.Context, arg CreateTaskParams) (CreateTaskRow, error)
 	CreateTimeEntry(ctx context.Context, arg CreateTimeEntryParams) (TimeEntry, error)
 	CreateTodo(ctx context.Context, arg CreateTodoParams) (CreateTodoRow, error)
+	DeleteProject(ctx context.Context, id int32) error
+	DeleteTask(ctx context.Context, id int32) error
+	DeleteTimeEntry(ctx context.Context, id int32) error
+	DeleteTodo(ctx context.Context, id int32) error
 	GetActiveProjects(ctx context.Context) ([]GetActiveProjectsRow, error)
 	GetProjectWithDescendants(ctx context.Context, id int32) ([]GetProjectWithDescendantsRow, error)
 	GetRootProjects(ctx context.Context) ([]GetRootProjectsRow, error)
