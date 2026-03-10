@@ -16,6 +16,7 @@ type Querier interface {
 	GetActiveProjects(ctx context.Context) ([]GetActiveProjectsRow, error)
 	GetProjectWithDescendants(ctx context.Context, id int32) ([]GetProjectWithDescendantsRow, error)
 	GetRootProjects(ctx context.Context) ([]GetRootProjectsRow, error)
+	GetTasksByDueDate(ctx context.Context) ([]GetTasksByDueDateRow, error)
 	GetTasksByProjectIDs(ctx context.Context, projectIds []int32) ([]GetTasksByProjectIDsRow, error)
 	GetTimeEntriesByTaskID(ctx context.Context, id int32) ([]GetTimeEntriesByTaskIDRow, error)
 	GetUnfinishedTasks(ctx context.Context) ([]GetUnfinishedTasksRow, error)

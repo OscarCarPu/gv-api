@@ -80,6 +80,7 @@ func main() {
 		r.Get("/tasks/projects", taskHandler.GetRootProjects)
 		r.Get("/tasks/projects/{id}/children", taskHandler.GetProjectChildren)
 		r.Post("/tasks/projects", taskHandler.CreateProject)
+		r.Get("/tasks/tasks/by-due-date", taskHandler.GetTasksByDueDate)
 		r.Post("/tasks/tasks", taskHandler.CreateTask)
 		r.Post("/tasks/todos", taskHandler.CreateTodo)
 		r.Patch("/tasks/todos/{id}", taskHandler.UpdateTodo)

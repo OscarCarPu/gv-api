@@ -104,6 +104,19 @@ UPDATE todos SET
 WHERE id = @id
 RETURNING id, task_id, name, is_done;
 
+-- name: GetTasksByDueDate :many
+SELECT
+    t.id, t.name, t.description, t.due_at, t.started_at,
+    p.id AS project_id, p.name AS project_name, p.due_at AS project_due_at,
+    COALESCE(SUM(EXTRACT(EPOCH FROM (te.finished_at - te.started_at)))::bigint, 0)::bigint AS time_spent
+FROM tasks t
+LEFT JOIN projects p ON p.id = t.project_id
+LEFT JOIN time_entries te ON te.task_id = t.id AND te.finished_at IS NOT NULL
+WHERE t.finished_at IS NULL
+  AND (t.due_at IS NOT NULL OR p.due_at IS NOT NULL)
+GROUP BY t.id, p.id
+ORDER BY t.due_at ASC NULLS LAST, p.due_at ASC NULLS LAST, t.name;
+
 -- name: GetTimeEntriesByTaskID :many
 WITH task_info AS (
     SELECT t.id, t.project_id, t.name, t.description, t.due_at, t.started_at, t.finished_at,

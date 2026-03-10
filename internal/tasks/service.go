@@ -143,6 +143,10 @@ func (s *Service) GetTaskTimeEntries(ctx context.Context, taskID int32) (TaskTim
 	return s.repo.GetTaskTimeEntries(ctx, taskID)
 }
 
+func (s *Service) GetTasksByDueDate(ctx context.Context) ([]TaskByDueDateResponse, error) {
+	return s.repo.GetTasksByDueDate(ctx)
+}
+
 func (s *Service) GetRootProjects(ctx context.Context) ([]ProjectResponse, error) {
 	return s.repo.GetRootProjects(ctx)
 }

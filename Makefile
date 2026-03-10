@@ -1,4 +1,4 @@
-.PHONY: sqlc run build docker-build up setup-project pgcli-db test
+.PHONY: sqlc run build docker-build up setup-project pgcli-db test demo
 
 # Colors
 RED=\033[0;31m
@@ -24,6 +24,12 @@ sqlc:
 # Connect to the database with pgcli
 pgcli-db:
 	pgcli postgresql://$(POSTGRES_USER):$(POSTGRES_PASSWORD)@localhost:5432/$(POSTGRES_DB)
+
+# Load demo data into the database
+demo:
+	@printf "$(CYAN)>>> Loading demo data...$(NC)\n"
+	@docker compose exec -T db psql -U $(POSTGRES_USER) -d $(POSTGRES_DB) < db/demo.sql
+	@printf "$(GREEN)>>> Demo data loaded$(NC)\n"
 
 # --- DOCKER OPERATIONS ---
 

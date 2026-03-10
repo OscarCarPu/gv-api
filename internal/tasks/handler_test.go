@@ -30,6 +30,7 @@ type mockService struct {
 	getActiveTreeFn      func(ctx context.Context) ([]ActiveTreeNode, error)
 	getProjectChildrenFn   func(ctx context.Context, projectID int32) (ProjectChildrenResponse, error)
 	getTaskTimeEntriesFn   func(ctx context.Context, taskID int32) (TaskTimeEntriesResponse, error)
+	getTasksByDueDateFn    func(ctx context.Context) ([]TaskByDueDateResponse, error)
 }
 
 func (m *mockService) CreateProject(ctx context.Context, req CreateProjectRequest) (ProjectResponse, error) {
@@ -114,6 +115,13 @@ func (m *mockService) GetTaskTimeEntries(ctx context.Context, taskID int32) (Tas
 		return m.getTaskTimeEntriesFn(ctx, taskID)
 	}
 	return TaskTimeEntriesResponse{}, nil
+}
+
+func (m *mockService) GetTasksByDueDate(ctx context.Context) ([]TaskByDueDateResponse, error) {
+	if m.getTasksByDueDateFn != nil {
+		return m.getTasksByDueDateFn(ctx)
+	}
+	return nil, nil
 }
 
 // --- Handler Tests ---
@@ -1072,5 +1080,74 @@ func TestHandler_GetTaskTimeEntries(t *testing.T) {
 
 		assert.Equal(t, http.StatusInternalServerError, rec.Code)
 		assert.Contains(t, rec.Body.String(), "Failed to get task time entries")
+	})
+}
+
+func TestHandler_GetTasksByDueDate(t *testing.T) {
+	t.Run("returns 200 with tasks", func(t *testing.T) {
+		now := time.Now().Truncate(time.Second)
+		projectID := int32(5)
+		projectName := "My Project"
+		mock := &mockService{
+			getTasksByDueDateFn: func(ctx context.Context) ([]TaskByDueDateResponse, error) {
+				return []TaskByDueDateResponse{
+					{ID: 1, Name: "Task A", DueAt: &now, TimeSpent: 3600, ProjectID: &projectID, ProjectName: &projectName},
+					{ID: 2, Name: "Task B"},
+				}, nil
+			},
+		}
+		handler := NewHandler(mock)
+
+		req := httptest.NewRequest(http.MethodGet, "/tasks/tasks/by-due-date", nil)
+		rec := httptest.NewRecorder()
+
+		handler.GetTasksByDueDate(rec, req)
+
+		assert.Equal(t, http.StatusOK, rec.Code)
+
+		var got []TaskByDueDateResponse
+		require.NoError(t, json.NewDecoder(rec.Body).Decode(&got))
+		assert.Len(t, got, 2)
+		assert.Equal(t, "Task A", got[0].Name)
+		assert.Equal(t, int64(3600), got[0].TimeSpent)
+		assert.Equal(t, &projectID, got[0].ProjectID)
+		assert.Equal(t, "Task B", got[1].Name)
+	})
+
+	t.Run("returns 200 with empty list", func(t *testing.T) {
+		mock := &mockService{
+			getTasksByDueDateFn: func(ctx context.Context) ([]TaskByDueDateResponse, error) {
+				return []TaskByDueDateResponse{}, nil
+			},
+		}
+		handler := NewHandler(mock)
+
+		req := httptest.NewRequest(http.MethodGet, "/tasks/tasks/by-due-date", nil)
+		rec := httptest.NewRecorder()
+
+		handler.GetTasksByDueDate(rec, req)
+
+		assert.Equal(t, http.StatusOK, rec.Code)
+
+		var got []TaskByDueDateResponse
+		require.NoError(t, json.NewDecoder(rec.Body).Decode(&got))
+		assert.Empty(t, got)
+	})
+
+	t.Run("returns 500 when service fails", func(t *testing.T) {
+		mock := &mockService{
+			getTasksByDueDateFn: func(ctx context.Context) ([]TaskByDueDateResponse, error) {
+				return nil, errors.New("db error")
+			},
+		}
+		handler := NewHandler(mock)
+
+		req := httptest.NewRequest(http.MethodGet, "/tasks/tasks/by-due-date", nil)
+		rec := httptest.NewRecorder()
+
+		handler.GetTasksByDueDate(rec, req)
+
+		assert.Equal(t, http.StatusInternalServerError, rec.Code)
+		assert.Contains(t, rec.Body.String(), "Failed to get tasks by due date")
 	})
 }

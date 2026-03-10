@@ -37,9 +37,10 @@ type LogRequest struct {
 // Tasks DTOs
 
 type CreateProjectRequest struct {
-	Name        string  `json:"name"`
-	Description *string `json:"description"`
-	ParentID    *int32  `json:"parent_id,omitempty"`
+	Name        string     `json:"name"`
+	Description *string    `json:"description"`
+	DueAt       *time.Time `json:"due_at,omitempty"`
+	ParentID    *int32     `json:"parent_id,omitempty"`
 }
 
 type ProjectResponse struct {
@@ -52,9 +53,10 @@ type ProjectResponse struct {
 }
 
 type CreateTaskRequest struct {
-	ProjectID   *int32  `json:"project_id,omitempty"`
-	Name        string  `json:"name"`
-	Description *string `json:"description"`
+	ProjectID   *int32     `json:"project_id,omitempty"`
+	Name        string     `json:"name"`
+	Description *string    `json:"description"`
+	DueAt       *time.Time `json:"due_at,omitempty"`
 }
 
 type TaskResponse struct {
@@ -161,6 +163,18 @@ type ProjectChildNode struct {
 type ProjectChildrenResponse struct {
 	Project  ProjectDetailResponse `json:"project"`
 	Children []ProjectChildNode    `json:"children"`
+}
+
+type TaskByDueDateResponse struct {
+	ID           int32      `json:"id"`
+	Name         string     `json:"name"`
+	Description  *string    `json:"description"`
+	DueAt        *time.Time `json:"due_at"`
+	StartedAt    *time.Time `json:"started_at"`
+	TimeSpent    int64      `json:"time_spent"`
+	ProjectID    *int32     `json:"project_id"`
+	ProjectName  *string    `json:"project_name"`
+	ProjectDueAt *time.Time `json:"project_due_at"`
 }
 
 type ActiveTreeNode struct {
@@ -465,6 +479,20 @@ func (c *APIClient) GetActiveTree(t *testing.T) []ActiveTreeNode {
 	var out []ActiveTreeNode
 	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
 		t.Fatalf("GetActiveTree: decode: %v", err)
+	}
+	return out
+}
+
+func (c *APIClient) GetTasksByDueDate(t *testing.T) []TaskByDueDateResponse {
+	t.Helper()
+	resp := c.do(t, http.MethodGet, "/tasks/tasks/by-due-date", nil)
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("GetTasksByDueDate: got status %d, want 200", resp.StatusCode)
+	}
+	var out []TaskByDueDateResponse
+	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+		t.Fatalf("GetTasksByDueDate: decode: %v", err)
 	}
 	return out
 }

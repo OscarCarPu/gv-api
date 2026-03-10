@@ -26,6 +26,7 @@ type ServiceInterface interface {
 	GetActiveTree(ctx context.Context) ([]ActiveTreeNode, error)
 	GetProjectChildren(ctx context.Context, projectID int32) (ProjectChildrenResponse, error)
 	GetTaskTimeEntries(ctx context.Context, taskID int32) (TaskTimeEntriesResponse, error)
+	GetTasksByDueDate(ctx context.Context) ([]TaskByDueDateResponse, error)
 }
 
 type Handler struct {
@@ -295,6 +296,15 @@ func (h *Handler) GetTaskTimeEntries(w http.ResponseWriter, r *http.Request) {
 	}
 
 	response.JSON(w, http.StatusOK, result)
+}
+
+func (h *Handler) GetTasksByDueDate(w http.ResponseWriter, r *http.Request) {
+	tasks, err := h.service.GetTasksByDueDate(r.Context())
+	if err != nil {
+		response.Error(w, http.StatusInternalServerError, "Failed to get tasks by due date")
+		return
+	}
+	response.JSON(w, http.StatusOK, tasks)
 }
 
 func (h *Handler) GetRootProjects(w http.ResponseWriter, r *http.Request) {

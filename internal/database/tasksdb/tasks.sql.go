@@ -275,6 +275,62 @@ func (q *Queries) GetRootProjects(ctx context.Context) ([]GetRootProjectsRow, er
 	return items, nil
 }
 
+const getTasksByDueDate = `-- name: GetTasksByDueDate :many
+SELECT
+    t.id, t.name, t.description, t.due_at, t.started_at,
+    p.id AS project_id, p.name AS project_name, p.due_at AS project_due_at,
+    COALESCE(SUM(EXTRACT(EPOCH FROM (te.finished_at - te.started_at)))::bigint, 0)::bigint AS time_spent
+FROM tasks t
+LEFT JOIN projects p ON p.id = t.project_id
+LEFT JOIN time_entries te ON te.task_id = t.id AND te.finished_at IS NOT NULL
+WHERE t.finished_at IS NULL
+  AND (t.due_at IS NOT NULL OR p.due_at IS NOT NULL)
+GROUP BY t.id, p.id
+ORDER BY t.due_at ASC NULLS LAST, p.due_at ASC NULLS LAST, t.name
+`
+
+type GetTasksByDueDateRow struct {
+	ID           int32            `db:"id" json:"id"`
+	Name         string           `db:"name" json:"name"`
+	Description  *string          `db:"description" json:"description"`
+	DueAt        pgtype.Date      `db:"due_at" json:"due_at"`
+	StartedAt    pgtype.Timestamp `db:"started_at" json:"started_at"`
+	ProjectID    *int32           `db:"project_id" json:"project_id"`
+	ProjectName  *string          `db:"project_name" json:"project_name"`
+	ProjectDueAt pgtype.Date      `db:"project_due_at" json:"project_due_at"`
+	TimeSpent    int64            `db:"time_spent" json:"time_spent"`
+}
+
+func (q *Queries) GetTasksByDueDate(ctx context.Context) ([]GetTasksByDueDateRow, error) {
+	rows, err := q.db.Query(ctx, getTasksByDueDate)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []GetTasksByDueDateRow{}
+	for rows.Next() {
+		var i GetTasksByDueDateRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.Description,
+			&i.DueAt,
+			&i.StartedAt,
+			&i.ProjectID,
+			&i.ProjectName,
+			&i.ProjectDueAt,
+			&i.TimeSpent,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getTasksByProjectIDs = `-- name: GetTasksByProjectIDs :many
 WITH task_times AS (
     SELECT

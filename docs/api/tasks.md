@@ -324,6 +324,33 @@
   - **Code:** `500 Internal Server Error`
     - **Content:** `Failed to update time entry`
 
+## Get Tasks by Due Date
+
+- **Method:** `GET`
+- **Endpoint:** `/tasks/tasks/by-due-date`
+- **Description:** Returns unfinished tasks that have a due date set (either on the task itself or on its parent project), ordered by task `due_at` first, then by project `due_at`. Includes time spent from completed time entries.
+- **Success Response:**
+  - **Code:** `200 OK`
+  - **Content:**
+    ```json
+    [
+      {
+        "id": 1,
+        "name": "My Task",
+        "description": "Task description.",
+        "due_at": "2025-06-01",
+        "started_at": "2025-02-15T08:00:00Z",
+        "time_spent": 5400,
+        "project_id": 1,
+        "project_name": "My Project",
+        "project_due_at": "2025-12-31"
+      }
+    ]
+    ```
+- **Error Responses:**
+  - **Code:** `500 Internal Server Error`
+    - **Content:** `Failed to get tasks by due date`
+
 ## Get Active Tree
 
 - **Method:** `GET`

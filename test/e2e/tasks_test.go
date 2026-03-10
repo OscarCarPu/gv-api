@@ -453,3 +453,113 @@ func TestE2E_ReorganizeWork(t *testing.T) {
 		t.Errorf("description should be unchanged (Desc A), got %v", updated.Description)
 	}
 }
+
+func TestE2E_GetTasksByDueDate(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping e2e test in short mode")
+	}
+
+	truncateTables(t)
+	client := authenticate(t)
+
+	now := time.Now().UTC().Truncate(time.Second)
+	taskDue := time.Date(2026, 6, 15, 0, 0, 0, 0, time.UTC)
+	projectDue := time.Date(2026, 12, 31, 0, 0, 0, 0, time.UTC)
+	laterTaskDue := time.Date(2026, 9, 1, 0, 0, 0, 0, time.UTC)
+
+	// Create project with due date
+	proj := client.CreateProject(t, CreateProjectRequest{
+		Name:  "Due Date Project",
+		DueAt: &projectDue,
+	})
+	client.UpdateProject(t, proj.ID, UpdateProjectRequest{StartedAt: &now})
+
+	// Task 1: has own due_at (earliest) — should appear first
+	task1 := client.CreateTask(t, CreateTaskRequest{
+		Name:      "Task with early due",
+		ProjectID: &proj.ID,
+		DueAt:     &taskDue,
+	})
+
+	// Task 2: has later due_at — should appear second
+	task2 := client.CreateTask(t, CreateTaskRequest{
+		Name:      "Task with later due",
+		ProjectID: &proj.ID,
+		DueAt:     &laterTaskDue,
+	})
+
+	// Task 3: no own due_at, but project has due_at — should appear last (NULLS LAST)
+	task3 := client.CreateTask(t, CreateTaskRequest{
+		Name:      "Task inheriting project due",
+		ProjectID: &proj.ID,
+	})
+
+	// Task 4: finished task with due_at — should NOT appear
+	finishedTaskDue := time.Date(2026, 5, 1, 0, 0, 0, 0, time.UTC)
+	finishedTask := client.CreateTask(t, CreateTaskRequest{
+		Name:      "Finished task",
+		ProjectID: &proj.ID,
+		DueAt:     &finishedTaskDue,
+	})
+	client.UpdateTask(t, finishedTask.ID, UpdateTaskRequest{
+		StartedAt:  &now,
+		FinishedAt: &now,
+	})
+
+	// Task 5: no due_at and no project — should NOT appear
+	client.CreateTask(t, CreateTaskRequest{Name: "No due date anywhere"})
+
+	// Add a time entry to task1 (1h = 3600s)
+	client.CreateTimeEntry(t, CreateTimeEntryRequest{
+		TaskID:     task1.ID,
+		StartedAt:  time.Date(2026, 3, 1, 9, 0, 0, 0, time.UTC),
+		FinishedAt: timePtr(time.Date(2026, 3, 1, 10, 0, 0, 0, time.UTC)),
+	})
+
+	// Get tasks by due date
+	tasks := client.GetTasksByDueDate(t)
+
+	// Should contain exactly 3 tasks (task1, task2, task3)
+	if len(tasks) != 3 {
+		t.Fatalf("expected 3 tasks, got %d", len(tasks))
+	}
+
+	// Verify ordering: task1 (Jun 15) -> task2 (Sep 1) -> task3 (null task due, Dec 31 project due)
+	if tasks[0].ID != task1.ID {
+		t.Errorf("first task: want ID %d (earliest due), got ID %d", task1.ID, tasks[0].ID)
+	}
+	if tasks[1].ID != task2.ID {
+		t.Errorf("second task: want ID %d (later due), got ID %d", task2.ID, tasks[1].ID)
+	}
+	if tasks[2].ID != task3.ID {
+		t.Errorf("third task: want ID %d (null task due), got ID %d", task3.ID, tasks[2].ID)
+	}
+
+	// Verify task1 has time_spent
+	if tasks[0].TimeSpent != 3600 {
+		t.Errorf("task1 time_spent: want 3600, got %d", tasks[0].TimeSpent)
+	}
+
+	// Verify project info is populated
+	if tasks[0].ProjectID == nil || *tasks[0].ProjectID != proj.ID {
+		t.Errorf("task1 project_id: want %d, got %v", proj.ID, tasks[0].ProjectID)
+	}
+	if tasks[0].ProjectName == nil || *tasks[0].ProjectName != "Due Date Project" {
+		t.Errorf("task1 project_name: want %q, got %v", "Due Date Project", tasks[0].ProjectName)
+	}
+
+	// Verify task3 has no own due_at but has project_due_at
+	if tasks[2].DueAt != nil {
+		t.Errorf("task3 due_at should be nil, got %v", tasks[2].DueAt)
+	}
+	if tasks[2].ProjectDueAt == nil {
+		t.Error("task3 project_due_at should not be nil")
+	}
+
+	// Verify finished task is excluded
+	for _, task := range tasks {
+		if task.ID == finishedTask.ID {
+			t.Error("finished task should not appear in results")
+		}
+	}
+}

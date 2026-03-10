@@ -112,6 +112,18 @@ type TaskDetailResponse struct {
 	TimeSpent   int64      `json:"time_spent"`
 }
 
+type TaskByDueDateResponse struct {
+	ID           int32      `json:"id"`
+	Name         string     `json:"name"`
+	Description  *string    `json:"description"`
+	DueAt        *time.Time `json:"due_at"`
+	StartedAt    *time.Time `json:"started_at"`
+	TimeSpent    int64      `json:"time_spent"`
+	ProjectID    *int32     `json:"project_id"`
+	ProjectName  *string    `json:"project_name"`
+	ProjectDueAt *time.Time `json:"project_due_at"`
+}
+
 type ActiveProject struct {
 	ID       int32
 	ParentID *int32

@@ -29,6 +29,7 @@ type Repository interface {
 	GetUnfinishedTasks(ctx context.Context) ([]UnfinishedTask, error)
 	GetProjectChildren(ctx context.Context, projectID int32) (ProjectChildrenResponse, error)
 	GetTaskTimeEntries(ctx context.Context, taskID int32) (TaskTimeEntriesResponse, error)
+	GetTasksByDueDate(ctx context.Context) ([]TaskByDueDateResponse, error)
 }
 
 type PostgresRepository struct {
@@ -520,6 +521,29 @@ func (r *PostgresRepository) GetTaskTimeEntries(ctx context.Context, taskID int3
 		},
 		TimeEntries: entries,
 	}, nil
+}
+
+func (r *PostgresRepository) GetTasksByDueDate(ctx context.Context) ([]TaskByDueDateResponse, error) {
+	rows, err := r.q.GetTasksByDueDate(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	tasks := make([]TaskByDueDateResponse, len(rows))
+	for i, row := range rows {
+		tasks[i] = TaskByDueDateResponse{
+			ID:           row.ID,
+			Name:         row.Name,
+			Description:  row.Description,
+			DueAt:        pgDateToPtr(row.DueAt),
+			StartedAt:    pgTimestampToPtr(row.StartedAt),
+			TimeSpent:    row.TimeSpent,
+			ProjectID:    row.ProjectID,
+			ProjectName:  row.ProjectName,
+			ProjectDueAt: pgDateToPtr(row.ProjectDueAt),
+		}
+	}
+	return tasks, nil
 }
 
 func (r *PostgresRepository) GetRootProjects(ctx context.Context) ([]ProjectResponse, error) {

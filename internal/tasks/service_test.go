@@ -24,6 +24,7 @@ type mockRepo struct {
 	getUnfinishedTasksFn   func(ctx context.Context) ([]UnfinishedTask, error)
 	getProjectChildrenFn   func(ctx context.Context, projectID int32) (ProjectChildrenResponse, error)
 	getTaskTimeEntriesFn   func(ctx context.Context, taskID int32) (TaskTimeEntriesResponse, error)
+	getTasksByDueDateFn    func(ctx context.Context) ([]TaskByDueDateResponse, error)
 }
 
 func (m *mockRepo) CreateProject(ctx context.Context, name string, description *string, dueAt *time.Time, parentID *int32) (ProjectResponse, error) {
@@ -115,6 +116,13 @@ func (m *mockRepo) GetTaskTimeEntries(ctx context.Context, taskID int32) (TaskTi
 		return m.getTaskTimeEntriesFn(ctx, taskID)
 	}
 	return TaskTimeEntriesResponse{}, nil
+}
+
+func (m *mockRepo) GetTasksByDueDate(ctx context.Context) ([]TaskByDueDateResponse, error) {
+	if m.getTasksByDueDateFn != nil {
+		return m.getTasksByDueDateFn(ctx)
+	}
+	return nil, nil
 }
 
 func TestService_CreateProject(t *testing.T) {
@@ -707,6 +715,54 @@ func TestService_GetTaskTimeEntries(t *testing.T) {
 
 		svc := NewService(mock, nil)
 		_, err := svc.GetTaskTimeEntries(context.Background(), 1)
+
+		require.Error(t, err)
+	})
+}
+
+func TestService_GetTasksByDueDate(t *testing.T) {
+	t.Run("delegates to repo and returns result", func(t *testing.T) {
+		now := time.Now()
+		expected := []TaskByDueDateResponse{
+			{ID: 1, Name: "Task A", DueAt: &now, TimeSpent: 3600},
+			{ID: 2, Name: "Task B"},
+		}
+		mock := &mockRepo{
+			getTasksByDueDateFn: func(ctx context.Context) ([]TaskByDueDateResponse, error) {
+				return expected, nil
+			},
+		}
+
+		svc := NewService(mock, nil)
+		got, err := svc.GetTasksByDueDate(context.Background())
+
+		require.NoError(t, err)
+		assert.Equal(t, expected, got)
+	})
+
+	t.Run("returns empty list", func(t *testing.T) {
+		mock := &mockRepo{
+			getTasksByDueDateFn: func(ctx context.Context) ([]TaskByDueDateResponse, error) {
+				return []TaskByDueDateResponse{}, nil
+			},
+		}
+
+		svc := NewService(mock, nil)
+		got, err := svc.GetTasksByDueDate(context.Background())
+
+		require.NoError(t, err)
+		assert.Empty(t, got)
+	})
+
+	t.Run("propagates error", func(t *testing.T) {
+		mock := &mockRepo{
+			getTasksByDueDateFn: func(ctx context.Context) ([]TaskByDueDateResponse, error) {
+				return nil, errors.New("db error")
+			},
+		}
+
+		svc := NewService(mock, nil)
+		_, err := svc.GetTasksByDueDate(context.Background())
 
 		require.Error(t, err)
 	})

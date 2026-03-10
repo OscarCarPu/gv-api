@@ -29,6 +29,7 @@ type mockQuerier struct {
 	getProjectWithDescendantsFn  func(ctx context.Context, id int32) ([]tasksdb.GetProjectWithDescendantsRow, error)
 	getTasksByProjectIDsFn       func(ctx context.Context, projectIds []int32) ([]tasksdb.GetTasksByProjectIDsRow, error)
 	getTimeEntriesByTaskIDFn     func(ctx context.Context, id int32) ([]tasksdb.GetTimeEntriesByTaskIDRow, error)
+	getTasksByDueDateFn          func(ctx context.Context) ([]tasksdb.GetTasksByDueDateRow, error)
 }
 
 func (m *mockQuerier) CreateProject(ctx context.Context, arg tasksdb.CreateProjectParams) (tasksdb.CreateProjectRow, error) {
@@ -125,6 +126,13 @@ func (m *mockQuerier) GetTasksByProjectIDs(ctx context.Context, projectIds []int
 func (m *mockQuerier) GetTimeEntriesByTaskID(ctx context.Context, id int32) ([]tasksdb.GetTimeEntriesByTaskIDRow, error) {
 	if m.getTimeEntriesByTaskIDFn != nil {
 		return m.getTimeEntriesByTaskIDFn(ctx, id)
+	}
+	return nil, nil
+}
+
+func (m *mockQuerier) GetTasksByDueDate(ctx context.Context) ([]tasksdb.GetTasksByDueDateRow, error) {
+	if m.getTasksByDueDateFn != nil {
+		return m.getTasksByDueDateFn(ctx)
 	}
 	return nil, nil
 }
@@ -1040,5 +1048,81 @@ func TestRepository_GetTaskTimeEntries(t *testing.T) {
 		_, err := repo.GetTaskTimeEntries(context.Background(), 1)
 		assert.Error(t, err)
 		assert.NotErrorIs(t, err, ErrNotFound)
+	})
+}
+
+func TestRepository_GetTasksByDueDate(t *testing.T) {
+	desc := "task desc"
+	projectID := int32(5)
+	projectName := "My Project"
+	taskDueDate := pgtype.Date{Time: time.Date(2026, 6, 15, 0, 0, 0, 0, time.UTC), Valid: true}
+	projDueDate := pgtype.Date{Time: time.Date(2026, 12, 31, 0, 0, 0, 0, time.UTC), Valid: true}
+	startedAt := pgtype.Timestamp{Time: time.Date(2026, 3, 1, 9, 0, 0, 0, time.UTC), Valid: true}
+
+	t.Run("maps rows correctly", func(t *testing.T) {
+		mock := &mockQuerier{
+			getTasksByDueDateFn: func(ctx context.Context) ([]tasksdb.GetTasksByDueDateRow, error) {
+				return []tasksdb.GetTasksByDueDateRow{
+					{
+						ID: 1, Name: "Task A", Description: &desc,
+						DueAt: taskDueDate, StartedAt: startedAt,
+						ProjectID: &projectID, ProjectName: &projectName, ProjectDueAt: projDueDate,
+						TimeSpent: 3600,
+					},
+					{
+						ID: 2, Name: "Task B",
+						ProjectID: &projectID, ProjectName: &projectName, ProjectDueAt: projDueDate,
+						TimeSpent: 0,
+					},
+				}, nil
+			},
+		}
+		repo := NewRepository(mock)
+
+		got, err := repo.GetTasksByDueDate(context.Background())
+		require.NoError(t, err)
+
+		require.Len(t, got, 2)
+
+		assert.Equal(t, int32(1), got[0].ID)
+		assert.Equal(t, "Task A", got[0].Name)
+		assert.Equal(t, &desc, got[0].Description)
+		assert.NotNil(t, got[0].DueAt)
+		assert.NotNil(t, got[0].StartedAt)
+		assert.Equal(t, &projectID, got[0].ProjectID)
+		assert.Equal(t, &projectName, got[0].ProjectName)
+		assert.NotNil(t, got[0].ProjectDueAt)
+		assert.Equal(t, int64(3600), got[0].TimeSpent)
+
+		assert.Equal(t, int32(2), got[1].ID)
+		assert.Equal(t, "Task B", got[1].Name)
+		assert.Nil(t, got[1].DueAt)
+		assert.Nil(t, got[1].StartedAt)
+		assert.Equal(t, int64(0), got[1].TimeSpent)
+	})
+
+	t.Run("returns empty list", func(t *testing.T) {
+		mock := &mockQuerier{
+			getTasksByDueDateFn: func(ctx context.Context) ([]tasksdb.GetTasksByDueDateRow, error) {
+				return []tasksdb.GetTasksByDueDateRow{}, nil
+			},
+		}
+		repo := NewRepository(mock)
+
+		got, err := repo.GetTasksByDueDate(context.Background())
+		require.NoError(t, err)
+		assert.Empty(t, got)
+	})
+
+	t.Run("returns error from querier", func(t *testing.T) {
+		mock := &mockQuerier{
+			getTasksByDueDateFn: func(ctx context.Context) ([]tasksdb.GetTasksByDueDateRow, error) {
+				return nil, errors.New("db error")
+			},
+		}
+		repo := NewRepository(mock)
+
+		_, err := repo.GetTasksByDueDate(context.Background())
+		assert.Error(t, err)
 	})
 }
