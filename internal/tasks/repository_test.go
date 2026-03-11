@@ -981,7 +981,7 @@ func TestRepository_GetProjectChildren(t *testing.T) {
 		assert.NotNil(t, got.Children[2].FinishedAt)
 	})
 
-	t.Run("todos ordered done first then not done", func(t *testing.T) {
+	t.Run("todos ordered not done first then done", func(t *testing.T) {
 		mock := &mockQuerier{
 			getProjectWithDescendantsFn: func(ctx context.Context, id int32) ([]tasksdb.GetProjectWithDescendantsRow, error) {
 				return []tasksdb.GetProjectWithDescendantsRow{
@@ -991,13 +991,13 @@ func TestRepository_GetProjectChildren(t *testing.T) {
 			getTasksByProjectIDsFn: func(ctx context.Context, projectIds []int32) ([]tasksdb.GetTasksByProjectIDsRow, error) {
 				pid := int32(1)
 				todoID1, todoID2, todoID3 := int32(10), int32(11), int32(12)
-				todoName1, todoName2, todoName3 := "Done Todo", "Not Done Todo", "Also Done Todo"
+				todoName1, todoName2, todoName3 := "Not Done Todo", "Also Not Done Todo", "Done Todo"
 				done, notDone := true, false
-				// Rows come from DB already sorted: done first, then not done
+				// Rows come from DB already sorted: not done first, then done
 				return []tasksdb.GetTasksByProjectIDsRow{
-					{ID: 1, ProjectID: &pid, Name: "Task", TimeSpent: 0, TodoID: &todoID1, TodoName: &todoName1, TodoIsDone: &done},
-					{ID: 1, ProjectID: &pid, Name: "Task", TimeSpent: 0, TodoID: &todoID3, TodoName: &todoName3, TodoIsDone: &done},
+					{ID: 1, ProjectID: &pid, Name: "Task", TimeSpent: 0, TodoID: &todoID1, TodoName: &todoName1, TodoIsDone: &notDone},
 					{ID: 1, ProjectID: &pid, Name: "Task", TimeSpent: 0, TodoID: &todoID2, TodoName: &todoName2, TodoIsDone: &notDone},
+					{ID: 1, ProjectID: &pid, Name: "Task", TimeSpent: 0, TodoID: &todoID3, TodoName: &todoName3, TodoIsDone: &done},
 				}, nil
 			},
 		}
@@ -1008,12 +1008,12 @@ func TestRepository_GetProjectChildren(t *testing.T) {
 
 		require.Len(t, got.Children, 1)
 		require.Len(t, got.Children[0].Todos, 3)
-		assert.True(t, got.Children[0].Todos[0].IsDone)
-		assert.Equal(t, "Done Todo", got.Children[0].Todos[0].Name)
-		assert.True(t, got.Children[0].Todos[1].IsDone)
-		assert.Equal(t, "Also Done Todo", got.Children[0].Todos[1].Name)
-		assert.False(t, got.Children[0].Todos[2].IsDone)
-		assert.Equal(t, "Not Done Todo", got.Children[0].Todos[2].Name)
+		assert.False(t, got.Children[0].Todos[0].IsDone)
+		assert.Equal(t, "Not Done Todo", got.Children[0].Todos[0].Name)
+		assert.False(t, got.Children[0].Todos[1].IsDone)
+		assert.Equal(t, "Also Not Done Todo", got.Children[0].Todos[1].Name)
+		assert.True(t, got.Children[0].Todos[2].IsDone)
+		assert.Equal(t, "Done Todo", got.Children[0].Todos[2].Name)
 	})
 
 	t.Run("ErrNotFound when project doesn't exist", func(t *testing.T) {
@@ -1061,17 +1061,17 @@ func TestRepository_GetProjectChildren(t *testing.T) {
 }
 
 func TestRepository_GetTask(t *testing.T) {
-	t.Run("todos ordered done first then not done", func(t *testing.T) {
+	t.Run("todos ordered not done first then done", func(t *testing.T) {
 		todoID1, todoID2, todoID3 := int32(1), int32(2), int32(3)
-		todoName1, todoName2, todoName3 := "Done Todo", "Not Done Todo", "Also Done Todo"
+		todoName1, todoName2, todoName3 := "Not Done Todo", "Also Not Done Todo", "Done Todo"
 		done, notDone := true, false
 		mock := &mockQuerier{
 			getTaskByIDFn: func(ctx context.Context, id int32) ([]tasksdb.GetTaskByIDRow, error) {
-				// Rows come from DB already sorted: done first, then not done
+				// Rows come from DB already sorted: not done first, then done
 				return []tasksdb.GetTaskByIDRow{
-					{ID: 1, Name: "Task", TimeSpent: 0, TodoID: &todoID1, TodoName: &todoName1, TodoIsDone: &done},
-					{ID: 1, Name: "Task", TimeSpent: 0, TodoID: &todoID3, TodoName: &todoName3, TodoIsDone: &done},
+					{ID: 1, Name: "Task", TimeSpent: 0, TodoID: &todoID1, TodoName: &todoName1, TodoIsDone: &notDone},
 					{ID: 1, Name: "Task", TimeSpent: 0, TodoID: &todoID2, TodoName: &todoName2, TodoIsDone: &notDone},
+					{ID: 1, Name: "Task", TimeSpent: 0, TodoID: &todoID3, TodoName: &todoName3, TodoIsDone: &done},
 				}, nil
 			},
 		}
@@ -1081,12 +1081,12 @@ func TestRepository_GetTask(t *testing.T) {
 		require.NoError(t, err)
 
 		require.Len(t, got.Todos, 3)
-		assert.True(t, got.Todos[0].IsDone)
-		assert.Equal(t, "Done Todo", got.Todos[0].Name)
-		assert.True(t, got.Todos[1].IsDone)
-		assert.Equal(t, "Also Done Todo", got.Todos[1].Name)
-		assert.False(t, got.Todos[2].IsDone)
-		assert.Equal(t, "Not Done Todo", got.Todos[2].Name)
+		assert.False(t, got.Todos[0].IsDone)
+		assert.Equal(t, "Not Done Todo", got.Todos[0].Name)
+		assert.False(t, got.Todos[1].IsDone)
+		assert.Equal(t, "Also Not Done Todo", got.Todos[1].Name)
+		assert.True(t, got.Todos[2].IsDone)
+		assert.Equal(t, "Done Todo", got.Todos[2].Name)
 	})
 
 	t.Run("ErrNotFound when task doesn't exist", func(t *testing.T) {

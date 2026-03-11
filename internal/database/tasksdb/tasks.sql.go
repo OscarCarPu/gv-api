@@ -382,7 +382,7 @@ SELECT
     td.id AS todo_id, td.name AS todo_name, td.is_done AS todo_is_done
 FROM task_info ti
 LEFT JOIN todos td ON td.task_id = ti.id
-ORDER BY td.is_done DESC NULLS LAST, td.id
+ORDER BY td.is_done ASC NULLS LAST, td.id
 `
 
 type GetTaskByIDRow struct {
@@ -503,7 +503,7 @@ SELECT
     td.id AS todo_id, td.name AS todo_name, td.is_done AS todo_is_done
 FROM task_times tt
 LEFT JOIN todos td ON td.task_id = tt.id
-ORDER BY tt.finished_at NULLS FIRST, tt.name, td.is_done DESC NULLS LAST, todo_id
+ORDER BY tt.finished_at NULLS FIRST, tt.name, td.is_done ASC NULLS LAST, todo_id
 `
 
 type GetTasksByProjectIDsRow struct {
