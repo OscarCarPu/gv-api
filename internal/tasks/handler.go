@@ -34,6 +34,7 @@ type ServiceInterface interface {
 	DeleteTodo(ctx context.Context, id int32) error
 	DeleteTimeEntry(ctx context.Context, id int32) error
 	GetActiveTimeEntry(ctx context.Context) (TimeEntryResponse, error)
+	GetTimeEntrySummary(ctx context.Context) (TimeEntrySummaryResponse, error)
 }
 
 type Handler struct {
@@ -426,6 +427,16 @@ func (h *Handler) GetActiveTimeEntry(w http.ResponseWriter, r *http.Request) {
 	}
 
 	response.JSON(w, http.StatusOK, entry)
+}
+
+func (h *Handler) GetTimeEntrySummary(w http.ResponseWriter, r *http.Request) {
+	summary, err := h.service.GetTimeEntrySummary(r.Context())
+	if err != nil {
+		response.Error(w, http.StatusInternalServerError, "Failed to get time entry summary")
+		return
+	}
+
+	response.JSON(w, http.StatusOK, summary)
 }
 
 func (h *Handler) GetRootProjects(w http.ResponseWriter, r *http.Request) {

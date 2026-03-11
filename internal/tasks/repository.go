@@ -39,6 +39,7 @@ type Repository interface {
 	DeleteTodo(ctx context.Context, id int32) error
 	DeleteTimeEntry(ctx context.Context, id int32) error
 	GetActiveTimeEntry(ctx context.Context) (TimeEntryResponse, error)
+	GetTimeEntrySummary(ctx context.Context, todayStart, weekStart time.Time) (TimeEntrySummaryResponse, error)
 }
 
 type PostgresRepository struct {
@@ -652,6 +653,21 @@ func (r *PostgresRepository) GetActiveTimeEntry(ctx context.Context) (TimeEntryR
 		StartedAt:  row.StartedAt.Time,
 		FinishedAt: pgTimestampToPtr(row.FinishedAt),
 		Comment:    row.Comment,
+	}, nil
+}
+
+func (r *PostgresRepository) GetTimeEntrySummary(ctx context.Context, todayStart, weekStart time.Time) (TimeEntrySummaryResponse, error) {
+	row, err := r.q.GetTimeEntrySummary(ctx, tasksdb.GetTimeEntrySummaryParams{
+		TodayStart: pgtype.Timestamp{Time: todayStart, Valid: true},
+		WeekStart:  pgtype.Timestamp{Time: weekStart, Valid: true},
+	})
+	if err != nil {
+		return TimeEntrySummaryResponse{}, err
+	}
+
+	return TimeEntrySummaryResponse{
+		Today: row.Today,
+		Week:  row.Week,
 	}, nil
 }
 

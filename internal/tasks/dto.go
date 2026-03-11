@@ -138,6 +138,11 @@ type TaskByDueDateResponse struct {
 	ProjectDueAt *time.Time `json:"project_due_at"`
 }
 
+type TimeEntrySummaryResponse struct {
+	Today int64 `json:"today"`
+	Week  int64 `json:"week"`
+}
+
 type ActiveProject struct {
 	ID       int32
 	ParentID *int32

@@ -197,6 +197,10 @@ func (m *mockRepo) GetActiveTimeEntry(ctx context.Context) (TimeEntryResponse, e
 	return TimeEntryResponse{}, nil
 }
 
+func (m *mockRepo) GetTimeEntrySummary(ctx context.Context, todayStart, weekStart time.Time) (TimeEntrySummaryResponse, error) {
+	return TimeEntrySummaryResponse{}, nil
+}
+
 func TestService_CreateProject(t *testing.T) {
 	now := time.Now()
 	desc := "test description"

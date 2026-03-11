@@ -14,10 +14,10 @@ Un orquestador de vida integral desarrollado en Go, diseñado para centralizar d
 | `gv-api/internal/habits/repository.go` | ![100.0%](https://img.shields.io/badge/100.0%25-brightgreen) |
 | `gv-api/internal/habits/service.go` | ![100.0%](https://img.shields.io/badge/100.0%25-brightgreen) |
 | `gv-api/internal/response/response.go` | ![87.5%](https://img.shields.io/badge/87.5%25-brightgreen) |
-| `gv-api/internal/tasks/handler.go` | ![98.4%](https://img.shields.io/badge/98.4%25-brightgreen) |
-| `gv-api/internal/tasks/repository.go` | ![79.4%](https://img.shields.io/badge/79.4%25-yellow) |
-| `gv-api/internal/tasks/service.go` | ![89.9%](https://img.shields.io/badge/89.9%25-brightgreen) |
-| **Total** | ![90.3%](https://img.shields.io/badge/90.3%25-brightgreen) |
+| `gv-api/internal/tasks/handler.go` | ![94.1%](https://img.shields.io/badge/94.1%25-brightgreen) |
+| `gv-api/internal/tasks/repository.go` | ![76.4%](https://img.shields.io/badge/76.4%25-yellow) |
+| `gv-api/internal/tasks/service.go` | ![85.9%](https://img.shields.io/badge/85.9%25-brightgreen) |
+| **Total** | ![87.6%](https://img.shields.io/badge/87.6%25-brightgreen) |
 
 > Untested code not shown above is either auto-generated (sqlc) or boilerplate that doesn't warrant testing.
 

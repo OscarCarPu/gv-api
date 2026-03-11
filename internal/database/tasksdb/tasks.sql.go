@@ -618,6 +618,33 @@ func (q *Queries) GetTimeEntriesByTaskID(ctx context.Context, id int32) ([]GetTi
 	return items, nil
 }
 
+const getTimeEntrySummary = `-- name: GetTimeEntrySummary :one
+SELECT
+    COALESCE(SUM(CASE WHEN started_at >= $1::timestamp
+        THEN EXTRACT(EPOCH FROM (finished_at - started_at))::bigint ELSE 0 END), 0)::bigint AS today,
+    COALESCE(SUM(EXTRACT(EPOCH FROM (finished_at - started_at))::bigint), 0)::bigint AS week
+FROM time_entries
+WHERE finished_at IS NOT NULL
+  AND started_at >= $2::timestamp
+`
+
+type GetTimeEntrySummaryParams struct {
+	TodayStart pgtype.Timestamp `db:"today_start" json:"today_start"`
+	WeekStart  pgtype.Timestamp `db:"week_start" json:"week_start"`
+}
+
+type GetTimeEntrySummaryRow struct {
+	Today int64 `db:"today" json:"today"`
+	Week  int64 `db:"week" json:"week"`
+}
+
+func (q *Queries) GetTimeEntrySummary(ctx context.Context, arg GetTimeEntrySummaryParams) (GetTimeEntrySummaryRow, error) {
+	row := q.db.QueryRow(ctx, getTimeEntrySummary, arg.TodayStart, arg.WeekStart)
+	var i GetTimeEntrySummaryRow
+	err := row.Scan(&i.Today, &i.Week)
+	return i, err
+}
+
 const getUnfinishedTasks = `-- name: GetUnfinishedTasks :many
 SELECT id, project_id, name, description, due_at, started_at
 FROM tasks

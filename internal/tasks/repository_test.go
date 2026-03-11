@@ -201,6 +201,10 @@ func (m *mockQuerier) GetActiveTimeEntry(ctx context.Context) (tasksdb.TimeEntry
 	return tasksdb.TimeEntry{}, nil
 }
 
+func (m *mockQuerier) GetTimeEntrySummary(ctx context.Context, arg tasksdb.GetTimeEntrySummaryParams) (tasksdb.GetTimeEntrySummaryRow, error) {
+	return tasksdb.GetTimeEntrySummaryRow{}, nil
+}
+
 func TestRepository_CreateProject(t *testing.T) {
 	t.Run("maps response correctly", func(t *testing.T) {
 		desc := "test desc"

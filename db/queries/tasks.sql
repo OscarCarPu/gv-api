@@ -172,6 +172,15 @@ DELETE FROM todos WHERE id = $1;
 -- name: DeleteTimeEntry :exec
 DELETE FROM time_entries WHERE id = $1;
 
+-- name: GetTimeEntrySummary :one
+SELECT
+    COALESCE(SUM(CASE WHEN started_at >= @today_start::timestamp
+        THEN EXTRACT(EPOCH FROM (finished_at - started_at))::bigint ELSE 0 END), 0)::bigint AS today,
+    COALESCE(SUM(EXTRACT(EPOCH FROM (finished_at - started_at))::bigint), 0)::bigint AS week
+FROM time_entries
+WHERE finished_at IS NOT NULL
+  AND started_at >= @week_start::timestamp;
+
 -- name: GetTimeEntriesByTaskID :many
 WITH task_info AS (
     SELECT t.id, t.project_id, t.name, t.description, t.due_at, t.started_at, t.finished_at,

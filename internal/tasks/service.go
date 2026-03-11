@@ -177,6 +177,18 @@ func (s *Service) GetActiveTimeEntry(ctx context.Context) (TimeEntryResponse, er
 	return s.repo.GetActiveTimeEntry(ctx)
 }
 
+func (s *Service) GetTimeEntrySummary(ctx context.Context) (TimeEntrySummaryResponse, error) {
+	now := time.Now().In(s.location)
+	todayStart := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, s.location)
+
+	// Find last Monday at 00:00
+	weekday := now.Weekday()
+	daysSinceMonday := (int(weekday) + 6) % 7 // Monday=0, Sunday=6
+	weekStart := time.Date(now.Year(), now.Month(), now.Day()-daysSinceMonday, 0, 0, 0, 0, s.location)
+
+	return s.repo.GetTimeEntrySummary(ctx, todayStart, weekStart)
+}
+
 func (s *Service) GetRootProjects(ctx context.Context) ([]ProjectResponse, error) {
 	return s.repo.GetRootProjects(ctx)
 }

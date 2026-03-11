@@ -180,6 +180,10 @@ func (m *mockService) GetActiveTimeEntry(ctx context.Context) (TimeEntryResponse
 	return TimeEntryResponse{}, nil
 }
 
+func (m *mockService) GetTimeEntrySummary(ctx context.Context) (TimeEntrySummaryResponse, error) {
+	return TimeEntrySummaryResponse{}, nil
+}
+
 // --- Handler Tests ---
 
 func TestHandler_CreateProject(t *testing.T) {
