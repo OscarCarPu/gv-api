@@ -97,10 +97,10 @@ RETURNING id, task_id, started_at, finished_at, comment
 `
 
 type CreateTimeEntryParams struct {
-	TaskID     int32            `db:"task_id" json:"task_id"`
-	StartedAt  pgtype.Timestamp `db:"started_at" json:"started_at"`
-	FinishedAt pgtype.Timestamp `db:"finished_at" json:"finished_at"`
-	Comment    *string          `db:"comment" json:"comment"`
+	TaskID     int32              `db:"task_id" json:"task_id"`
+	StartedAt  pgtype.Timestamptz `db:"started_at" json:"started_at"`
+	FinishedAt pgtype.Timestamptz `db:"finished_at" json:"finished_at"`
+	Comment    *string            `db:"comment" json:"comment"`
 }
 
 func (q *Queries) CreateTimeEntry(ctx context.Context, arg CreateTimeEntryParams) (TimeEntry, error) {
@@ -286,14 +286,14 @@ ORDER BY depth, name
 `
 
 type GetProjectWithDescendantsRow struct {
-	ID          int32            `db:"id" json:"id"`
-	ParentID    *int32           `db:"parent_id" json:"parent_id"`
-	Name        string           `db:"name" json:"name"`
-	Description *string          `db:"description" json:"description"`
-	DueAt       pgtype.Date      `db:"due_at" json:"due_at"`
-	StartedAt   pgtype.Timestamp `db:"started_at" json:"started_at"`
-	FinishedAt  pgtype.Timestamp `db:"finished_at" json:"finished_at"`
-	Depth       int32            `db:"depth" json:"depth"`
+	ID          int32              `db:"id" json:"id"`
+	ParentID    *int32             `db:"parent_id" json:"parent_id"`
+	Name        string             `db:"name" json:"name"`
+	Description *string            `db:"description" json:"description"`
+	DueAt       pgtype.Date        `db:"due_at" json:"due_at"`
+	StartedAt   pgtype.Timestamptz `db:"started_at" json:"started_at"`
+	FinishedAt  pgtype.Timestamptz `db:"finished_at" json:"finished_at"`
+	Depth       int32              `db:"depth" json:"depth"`
 }
 
 func (q *Queries) GetProjectWithDescendants(ctx context.Context, id int32) ([]GetProjectWithDescendantsRow, error) {
@@ -333,12 +333,12 @@ ORDER BY name
 `
 
 type GetRootProjectsRow struct {
-	ID          int32            `db:"id" json:"id"`
-	Name        string           `db:"name" json:"name"`
-	Description *string          `db:"description" json:"description"`
-	DueAt       pgtype.Date      `db:"due_at" json:"due_at"`
-	ParentID    *int32           `db:"parent_id" json:"parent_id"`
-	StartedAt   pgtype.Timestamp `db:"started_at" json:"started_at"`
+	ID          int32              `db:"id" json:"id"`
+	Name        string             `db:"name" json:"name"`
+	Description *string            `db:"description" json:"description"`
+	DueAt       pgtype.Date        `db:"due_at" json:"due_at"`
+	ParentID    *int32             `db:"parent_id" json:"parent_id"`
+	StartedAt   pgtype.Timestamptz `db:"started_at" json:"started_at"`
 }
 
 func (q *Queries) GetRootProjects(ctx context.Context) ([]GetRootProjectsRow, error) {
@@ -386,17 +386,17 @@ ORDER BY td.is_done ASC NULLS LAST, td.id
 `
 
 type GetTaskByIDRow struct {
-	ID          int32            `db:"id" json:"id"`
-	ProjectID   *int32           `db:"project_id" json:"project_id"`
-	Name        string           `db:"name" json:"name"`
-	Description *string          `db:"description" json:"description"`
-	DueAt       pgtype.Date      `db:"due_at" json:"due_at"`
-	StartedAt   pgtype.Timestamp `db:"started_at" json:"started_at"`
-	FinishedAt  pgtype.Timestamp `db:"finished_at" json:"finished_at"`
-	TimeSpent   int64            `db:"time_spent" json:"time_spent"`
-	TodoID      *int32           `db:"todo_id" json:"todo_id"`
-	TodoName    *string          `db:"todo_name" json:"todo_name"`
-	TodoIsDone  *bool            `db:"todo_is_done" json:"todo_is_done"`
+	ID          int32              `db:"id" json:"id"`
+	ProjectID   *int32             `db:"project_id" json:"project_id"`
+	Name        string             `db:"name" json:"name"`
+	Description *string            `db:"description" json:"description"`
+	DueAt       pgtype.Date        `db:"due_at" json:"due_at"`
+	StartedAt   pgtype.Timestamptz `db:"started_at" json:"started_at"`
+	FinishedAt  pgtype.Timestamptz `db:"finished_at" json:"finished_at"`
+	TimeSpent   int64              `db:"time_spent" json:"time_spent"`
+	TodoID      *int32             `db:"todo_id" json:"todo_id"`
+	TodoName    *string            `db:"todo_name" json:"todo_name"`
+	TodoIsDone  *bool              `db:"todo_is_done" json:"todo_is_done"`
 }
 
 func (q *Queries) GetTaskByID(ctx context.Context, id int32) ([]GetTaskByIDRow, error) {
@@ -446,15 +446,15 @@ ORDER BY t.due_at ASC NULLS LAST, p.due_at ASC NULLS LAST, t.name
 `
 
 type GetTasksByDueDateRow struct {
-	ID           int32            `db:"id" json:"id"`
-	Name         string           `db:"name" json:"name"`
-	Description  *string          `db:"description" json:"description"`
-	DueAt        pgtype.Date      `db:"due_at" json:"due_at"`
-	StartedAt    pgtype.Timestamp `db:"started_at" json:"started_at"`
-	ProjectID    *int32           `db:"project_id" json:"project_id"`
-	ProjectName  *string          `db:"project_name" json:"project_name"`
-	ProjectDueAt pgtype.Date      `db:"project_due_at" json:"project_due_at"`
-	TimeSpent    int64            `db:"time_spent" json:"time_spent"`
+	ID           int32              `db:"id" json:"id"`
+	Name         string             `db:"name" json:"name"`
+	Description  *string            `db:"description" json:"description"`
+	DueAt        pgtype.Date        `db:"due_at" json:"due_at"`
+	StartedAt    pgtype.Timestamptz `db:"started_at" json:"started_at"`
+	ProjectID    *int32             `db:"project_id" json:"project_id"`
+	ProjectName  *string            `db:"project_name" json:"project_name"`
+	ProjectDueAt pgtype.Date        `db:"project_due_at" json:"project_due_at"`
+	TimeSpent    int64              `db:"time_spent" json:"time_spent"`
 }
 
 func (q *Queries) GetTasksByDueDate(ctx context.Context) ([]GetTasksByDueDateRow, error) {
@@ -507,17 +507,17 @@ ORDER BY tt.finished_at NULLS FIRST, tt.name, td.is_done ASC NULLS LAST, todo_id
 `
 
 type GetTasksByProjectIDsRow struct {
-	ID          int32            `db:"id" json:"id"`
-	ProjectID   *int32           `db:"project_id" json:"project_id"`
-	Name        string           `db:"name" json:"name"`
-	Description *string          `db:"description" json:"description"`
-	DueAt       pgtype.Date      `db:"due_at" json:"due_at"`
-	StartedAt   pgtype.Timestamp `db:"started_at" json:"started_at"`
-	FinishedAt  pgtype.Timestamp `db:"finished_at" json:"finished_at"`
-	TimeSpent   int64            `db:"time_spent" json:"time_spent"`
-	TodoID      *int32           `db:"todo_id" json:"todo_id"`
-	TodoName    *string          `db:"todo_name" json:"todo_name"`
-	TodoIsDone  *bool            `db:"todo_is_done" json:"todo_is_done"`
+	ID          int32              `db:"id" json:"id"`
+	ProjectID   *int32             `db:"project_id" json:"project_id"`
+	Name        string             `db:"name" json:"name"`
+	Description *string            `db:"description" json:"description"`
+	DueAt       pgtype.Date        `db:"due_at" json:"due_at"`
+	StartedAt   pgtype.Timestamptz `db:"started_at" json:"started_at"`
+	FinishedAt  pgtype.Timestamptz `db:"finished_at" json:"finished_at"`
+	TimeSpent   int64              `db:"time_spent" json:"time_spent"`
+	TodoID      *int32             `db:"todo_id" json:"todo_id"`
+	TodoName    *string            `db:"todo_name" json:"todo_name"`
+	TodoIsDone  *bool              `db:"todo_is_done" json:"todo_is_done"`
 }
 
 func (q *Queries) GetTasksByProjectIDs(ctx context.Context, projectIds []int32) ([]GetTasksByProjectIDsRow, error) {
@@ -571,18 +571,18 @@ ORDER BY te.started_at
 `
 
 type GetTimeEntriesByTaskIDRow struct {
-	TaskID          int32            `db:"task_id" json:"task_id"`
-	ProjectID       *int32           `db:"project_id" json:"project_id"`
-	Name            string           `db:"name" json:"name"`
-	Description     *string          `db:"description" json:"description"`
-	DueAt           pgtype.Date      `db:"due_at" json:"due_at"`
-	TaskStartedAt   pgtype.Timestamp `db:"task_started_at" json:"task_started_at"`
-	TaskFinishedAt  pgtype.Timestamp `db:"task_finished_at" json:"task_finished_at"`
-	TimeSpent       int64            `db:"time_spent" json:"time_spent"`
-	TimeEntryID     *int32           `db:"time_entry_id" json:"time_entry_id"`
-	EntryStartedAt  pgtype.Timestamp `db:"entry_started_at" json:"entry_started_at"`
-	EntryFinishedAt pgtype.Timestamp `db:"entry_finished_at" json:"entry_finished_at"`
-	Comment         *string          `db:"comment" json:"comment"`
+	TaskID          int32              `db:"task_id" json:"task_id"`
+	ProjectID       *int32             `db:"project_id" json:"project_id"`
+	Name            string             `db:"name" json:"name"`
+	Description     *string            `db:"description" json:"description"`
+	DueAt           pgtype.Date        `db:"due_at" json:"due_at"`
+	TaskStartedAt   pgtype.Timestamptz `db:"task_started_at" json:"task_started_at"`
+	TaskFinishedAt  pgtype.Timestamptz `db:"task_finished_at" json:"task_finished_at"`
+	TimeSpent       int64              `db:"time_spent" json:"time_spent"`
+	TimeEntryID     *int32             `db:"time_entry_id" json:"time_entry_id"`
+	EntryStartedAt  pgtype.Timestamptz `db:"entry_started_at" json:"entry_started_at"`
+	EntryFinishedAt pgtype.Timestamptz `db:"entry_finished_at" json:"entry_finished_at"`
+	Comment         *string            `db:"comment" json:"comment"`
 }
 
 func (q *Queries) GetTimeEntriesByTaskID(ctx context.Context, id int32) ([]GetTimeEntriesByTaskIDRow, error) {
@@ -620,17 +620,17 @@ func (q *Queries) GetTimeEntriesByTaskID(ctx context.Context, id int32) ([]GetTi
 
 const getTimeEntrySummary = `-- name: GetTimeEntrySummary :one
 SELECT
-    COALESCE(SUM(CASE WHEN finished_at >= $1::timestamp
-        THEN EXTRACT(EPOCH FROM (finished_at - GREATEST(started_at, $1::timestamp)))::bigint ELSE 0 END), 0)::bigint AS today,
-    COALESCE(SUM(EXTRACT(EPOCH FROM (finished_at - GREATEST(started_at, $2::timestamp)))::bigint), 0)::bigint AS week
+    COALESCE(SUM(CASE WHEN finished_at >= $1::timestamptz
+        THEN EXTRACT(EPOCH FROM (finished_at - GREATEST(started_at, $1::timestamptz)))::bigint ELSE 0 END), 0)::bigint AS today,
+    COALESCE(SUM(EXTRACT(EPOCH FROM (finished_at - GREATEST(started_at, $2::timestamptz)))::bigint), 0)::bigint AS week
 FROM time_entries
 WHERE finished_at IS NOT NULL
-  AND finished_at >= $2::timestamp
+  AND finished_at >= $2::timestamptz
 `
 
 type GetTimeEntrySummaryParams struct {
-	TodayStart pgtype.Timestamp `db:"today_start" json:"today_start"`
-	WeekStart  pgtype.Timestamp `db:"week_start" json:"week_start"`
+	TodayStart pgtype.Timestamptz `db:"today_start" json:"today_start"`
+	WeekStart  pgtype.Timestamptz `db:"week_start" json:"week_start"`
 }
 
 type GetTimeEntrySummaryRow struct {
@@ -653,12 +653,12 @@ ORDER BY name
 `
 
 type GetUnfinishedTasksRow struct {
-	ID          int32            `db:"id" json:"id"`
-	ProjectID   *int32           `db:"project_id" json:"project_id"`
-	Name        string           `db:"name" json:"name"`
-	Description *string          `db:"description" json:"description"`
-	DueAt       pgtype.Date      `db:"due_at" json:"due_at"`
-	StartedAt   pgtype.Timestamp `db:"started_at" json:"started_at"`
+	ID          int32              `db:"id" json:"id"`
+	ProjectID   *int32             `db:"project_id" json:"project_id"`
+	Name        string             `db:"name" json:"name"`
+	Description *string            `db:"description" json:"description"`
+	DueAt       pgtype.Date        `db:"due_at" json:"due_at"`
+	StartedAt   pgtype.Timestamptz `db:"started_at" json:"started_at"`
 }
 
 func (q *Queries) GetUnfinishedTasks(ctx context.Context) ([]GetUnfinishedTasksRow, error) {
@@ -694,26 +694,26 @@ UPDATE projects SET
     description = CASE WHEN $3::bool  THEN $4::text      ELSE description END,
     due_at      = CASE WHEN $5::bool       THEN $6::date           ELSE due_at END,
     parent_id   = CASE WHEN $7::bool    THEN $8::int         ELSE parent_id END,
-    started_at  = CASE WHEN $9::bool   THEN $10::timestamp  ELSE started_at END,
-    finished_at = CASE WHEN $11::bool  THEN $12::timestamp ELSE finished_at END
+    started_at  = CASE WHEN $9::bool   THEN $10::timestamptz  ELSE started_at END,
+    finished_at = CASE WHEN $11::bool  THEN $12::timestamptz ELSE finished_at END
 WHERE id = $13
 RETURNING id, parent_id, name, description, due_at, started_at, finished_at
 `
 
 type UpdateProjectParams struct {
-	SetName        bool             `db:"set_name" json:"set_name"`
-	Name           string           `db:"name" json:"name"`
-	SetDescription bool             `db:"set_description" json:"set_description"`
-	Description    string           `db:"description" json:"description"`
-	SetDueAt       bool             `db:"set_due_at" json:"set_due_at"`
-	DueAt          time.Time        `db:"due_at" json:"due_at"`
-	SetParentID    bool             `db:"set_parent_id" json:"set_parent_id"`
-	ParentID       int32            `db:"parent_id" json:"parent_id"`
-	SetStartedAt   bool             `db:"set_started_at" json:"set_started_at"`
-	StartedAt      pgtype.Timestamp `db:"started_at" json:"started_at"`
-	SetFinishedAt  bool             `db:"set_finished_at" json:"set_finished_at"`
-	FinishedAt     pgtype.Timestamp `db:"finished_at" json:"finished_at"`
-	ID             int32            `db:"id" json:"id"`
+	SetName        bool               `db:"set_name" json:"set_name"`
+	Name           string             `db:"name" json:"name"`
+	SetDescription bool               `db:"set_description" json:"set_description"`
+	Description    string             `db:"description" json:"description"`
+	SetDueAt       bool               `db:"set_due_at" json:"set_due_at"`
+	DueAt          time.Time          `db:"due_at" json:"due_at"`
+	SetParentID    bool               `db:"set_parent_id" json:"set_parent_id"`
+	ParentID       int32              `db:"parent_id" json:"parent_id"`
+	SetStartedAt   bool               `db:"set_started_at" json:"set_started_at"`
+	StartedAt      pgtype.Timestamptz `db:"started_at" json:"started_at"`
+	SetFinishedAt  bool               `db:"set_finished_at" json:"set_finished_at"`
+	FinishedAt     pgtype.Timestamptz `db:"finished_at" json:"finished_at"`
+	ID             int32              `db:"id" json:"id"`
 }
 
 func (q *Queries) UpdateProject(ctx context.Context, arg UpdateProjectParams) (Project, error) {
@@ -751,26 +751,26 @@ UPDATE tasks SET
     description = CASE WHEN $3::bool  THEN $4::text      ELSE description END,
     due_at      = CASE WHEN $5::bool       THEN $6::date           ELSE due_at END,
     project_id  = CASE WHEN $7::bool   THEN $8::int        ELSE project_id END,
-    started_at  = CASE WHEN $9::bool   THEN $10::timestamp  ELSE started_at END,
-    finished_at = CASE WHEN $11::bool  THEN $12::timestamp ELSE finished_at END
+    started_at  = CASE WHEN $9::bool   THEN $10::timestamptz  ELSE started_at END,
+    finished_at = CASE WHEN $11::bool  THEN $12::timestamptz ELSE finished_at END
 WHERE id = $13
 RETURNING id, project_id, name, description, due_at, started_at, finished_at
 `
 
 type UpdateTaskParams struct {
-	SetName        bool             `db:"set_name" json:"set_name"`
-	Name           string           `db:"name" json:"name"`
-	SetDescription bool             `db:"set_description" json:"set_description"`
-	Description    string           `db:"description" json:"description"`
-	SetDueAt       bool             `db:"set_due_at" json:"set_due_at"`
-	DueAt          time.Time        `db:"due_at" json:"due_at"`
-	SetProjectID   bool             `db:"set_project_id" json:"set_project_id"`
-	ProjectID      int32            `db:"project_id" json:"project_id"`
-	SetStartedAt   bool             `db:"set_started_at" json:"set_started_at"`
-	StartedAt      pgtype.Timestamp `db:"started_at" json:"started_at"`
-	SetFinishedAt  bool             `db:"set_finished_at" json:"set_finished_at"`
-	FinishedAt     pgtype.Timestamp `db:"finished_at" json:"finished_at"`
-	ID             int32            `db:"id" json:"id"`
+	SetName        bool               `db:"set_name" json:"set_name"`
+	Name           string             `db:"name" json:"name"`
+	SetDescription bool               `db:"set_description" json:"set_description"`
+	Description    string             `db:"description" json:"description"`
+	SetDueAt       bool               `db:"set_due_at" json:"set_due_at"`
+	DueAt          time.Time          `db:"due_at" json:"due_at"`
+	SetProjectID   bool               `db:"set_project_id" json:"set_project_id"`
+	ProjectID      int32              `db:"project_id" json:"project_id"`
+	SetStartedAt   bool               `db:"set_started_at" json:"set_started_at"`
+	StartedAt      pgtype.Timestamptz `db:"started_at" json:"started_at"`
+	SetFinishedAt  bool               `db:"set_finished_at" json:"set_finished_at"`
+	FinishedAt     pgtype.Timestamptz `db:"finished_at" json:"finished_at"`
+	ID             int32              `db:"id" json:"id"`
 }
 
 func (q *Queries) UpdateTask(ctx context.Context, arg UpdateTaskParams) (Task, error) {
@@ -805,23 +805,23 @@ func (q *Queries) UpdateTask(ctx context.Context, arg UpdateTaskParams) (Task, e
 const updateTimeEntry = `-- name: UpdateTimeEntry :one
 UPDATE time_entries SET
     task_id     = CASE WHEN $1::bool     THEN $2::int           ELSE task_id END,
-    started_at  = CASE WHEN $3::bool  THEN $4::timestamp  ELSE started_at END,
-    finished_at = CASE WHEN $5::bool  THEN $6::timestamp ELSE finished_at END,
+    started_at  = CASE WHEN $3::bool  THEN $4::timestamptz  ELSE started_at END,
+    finished_at = CASE WHEN $5::bool  THEN $6::timestamptz ELSE finished_at END,
     comment     = CASE WHEN $7::bool      THEN $8::text          ELSE comment END
 WHERE id = $9
 RETURNING id, task_id, started_at, finished_at, comment
 `
 
 type UpdateTimeEntryParams struct {
-	SetTaskID     bool             `db:"set_task_id" json:"set_task_id"`
-	TaskID        int32            `db:"task_id" json:"task_id"`
-	SetStartedAt  bool             `db:"set_started_at" json:"set_started_at"`
-	StartedAt     pgtype.Timestamp `db:"started_at" json:"started_at"`
-	SetFinishedAt bool             `db:"set_finished_at" json:"set_finished_at"`
-	FinishedAt    pgtype.Timestamp `db:"finished_at" json:"finished_at"`
-	SetComment    bool             `db:"set_comment" json:"set_comment"`
-	Comment       string           `db:"comment" json:"comment"`
-	ID            int32            `db:"id" json:"id"`
+	SetTaskID     bool               `db:"set_task_id" json:"set_task_id"`
+	TaskID        int32              `db:"task_id" json:"task_id"`
+	SetStartedAt  bool               `db:"set_started_at" json:"set_started_at"`
+	StartedAt     pgtype.Timestamptz `db:"started_at" json:"started_at"`
+	SetFinishedAt bool               `db:"set_finished_at" json:"set_finished_at"`
+	FinishedAt    pgtype.Timestamptz `db:"finished_at" json:"finished_at"`
+	SetComment    bool               `db:"set_comment" json:"set_comment"`
+	Comment       string             `db:"comment" json:"comment"`
+	ID            int32              `db:"id" json:"id"`
 }
 
 func (q *Queries) UpdateTimeEntry(ctx context.Context, arg UpdateTimeEntryParams) (TimeEntry, error) {

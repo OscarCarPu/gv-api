@@ -23,31 +23,31 @@ type HabitLog struct {
 }
 
 type Project struct {
-	ID          int32            `db:"id" json:"id"`
-	ParentID    *int32           `db:"parent_id" json:"parent_id"`
-	Name        string           `db:"name" json:"name"`
-	Description *string          `db:"description" json:"description"`
-	DueAt       pgtype.Date      `db:"due_at" json:"due_at"`
-	StartedAt   pgtype.Timestamp `db:"started_at" json:"started_at"`
-	FinishedAt  pgtype.Timestamp `db:"finished_at" json:"finished_at"`
+	ID          int32              `db:"id" json:"id"`
+	ParentID    *int32             `db:"parent_id" json:"parent_id"`
+	Name        string             `db:"name" json:"name"`
+	Description *string            `db:"description" json:"description"`
+	DueAt       pgtype.Date        `db:"due_at" json:"due_at"`
+	StartedAt   pgtype.Timestamptz `db:"started_at" json:"started_at"`
+	FinishedAt  pgtype.Timestamptz `db:"finished_at" json:"finished_at"`
 }
 
 type Task struct {
-	ID          int32            `db:"id" json:"id"`
-	ProjectID   *int32           `db:"project_id" json:"project_id"`
-	Name        string           `db:"name" json:"name"`
-	Description *string          `db:"description" json:"description"`
-	DueAt       pgtype.Date      `db:"due_at" json:"due_at"`
-	StartedAt   pgtype.Timestamp `db:"started_at" json:"started_at"`
-	FinishedAt  pgtype.Timestamp `db:"finished_at" json:"finished_at"`
+	ID          int32              `db:"id" json:"id"`
+	ProjectID   *int32             `db:"project_id" json:"project_id"`
+	Name        string             `db:"name" json:"name"`
+	Description *string            `db:"description" json:"description"`
+	DueAt       pgtype.Date        `db:"due_at" json:"due_at"`
+	StartedAt   pgtype.Timestamptz `db:"started_at" json:"started_at"`
+	FinishedAt  pgtype.Timestamptz `db:"finished_at" json:"finished_at"`
 }
 
 type TimeEntry struct {
-	ID         int32            `db:"id" json:"id"`
-	TaskID     int32            `db:"task_id" json:"task_id"`
-	StartedAt  pgtype.Timestamp `db:"started_at" json:"started_at"`
-	FinishedAt pgtype.Timestamp `db:"finished_at" json:"finished_at"`
-	Comment    *string          `db:"comment" json:"comment"`
+	ID         int32              `db:"id" json:"id"`
+	TaskID     int32              `db:"task_id" json:"task_id"`
+	StartedAt  pgtype.Timestamptz `db:"started_at" json:"started_at"`
+	FinishedAt pgtype.Timestamptz `db:"finished_at" json:"finished_at"`
+	Comment    *string            `db:"comment" json:"comment"`
 }
 
 type Todo struct {

@@ -21,8 +21,8 @@ RETURNING id, task_id, started_at, finished_at, comment;
 -- name: UpdateTimeEntry :one
 UPDATE time_entries SET
     task_id     = CASE WHEN @set_task_id::bool     THEN @task_id::int           ELSE task_id END,
-    started_at  = CASE WHEN @set_started_at::bool  THEN @started_at::timestamp  ELSE started_at END,
-    finished_at = CASE WHEN @set_finished_at::bool  THEN @finished_at::timestamp ELSE finished_at END,
+    started_at  = CASE WHEN @set_started_at::bool  THEN @started_at::timestamptz  ELSE started_at END,
+    finished_at = CASE WHEN @set_finished_at::bool  THEN @finished_at::timestamptz ELSE finished_at END,
     comment     = CASE WHEN @set_comment::bool      THEN @comment::text          ELSE comment END
 WHERE id = @id
 RETURNING id, task_id, started_at, finished_at, comment;
@@ -33,8 +33,8 @@ UPDATE tasks SET
     description = CASE WHEN @set_description::bool  THEN @description::text      ELSE description END,
     due_at      = CASE WHEN @set_due_at::bool       THEN @due_at::date           ELSE due_at END,
     project_id  = CASE WHEN @set_project_id::bool   THEN @project_id::int        ELSE project_id END,
-    started_at  = CASE WHEN @set_started_at::bool   THEN @started_at::timestamp  ELSE started_at END,
-    finished_at = CASE WHEN @set_finished_at::bool  THEN @finished_at::timestamp ELSE finished_at END
+    started_at  = CASE WHEN @set_started_at::bool   THEN @started_at::timestamptz  ELSE started_at END,
+    finished_at = CASE WHEN @set_finished_at::bool  THEN @finished_at::timestamptz ELSE finished_at END
 WHERE id = @id
 RETURNING id, project_id, name, description, due_at, started_at, finished_at;
 
@@ -44,8 +44,8 @@ UPDATE projects SET
     description = CASE WHEN @set_description::bool  THEN @description::text      ELSE description END,
     due_at      = CASE WHEN @set_due_at::bool       THEN @due_at::date           ELSE due_at END,
     parent_id   = CASE WHEN @set_parent_id::bool    THEN @parent_id::int         ELSE parent_id END,
-    started_at  = CASE WHEN @set_started_at::bool   THEN @started_at::timestamp  ELSE started_at END,
-    finished_at = CASE WHEN @set_finished_at::bool  THEN @finished_at::timestamp ELSE finished_at END
+    started_at  = CASE WHEN @set_started_at::bool   THEN @started_at::timestamptz  ELSE started_at END,
+    finished_at = CASE WHEN @set_finished_at::bool  THEN @finished_at::timestamptz ELSE finished_at END
 WHERE id = @id
 RETURNING id, parent_id, name, description, due_at, started_at, finished_at;
 
@@ -174,12 +174,12 @@ DELETE FROM time_entries WHERE id = $1;
 
 -- name: GetTimeEntrySummary :one
 SELECT
-    COALESCE(SUM(CASE WHEN finished_at >= @today_start::timestamp
-        THEN EXTRACT(EPOCH FROM (finished_at - GREATEST(started_at, @today_start::timestamp)))::bigint ELSE 0 END), 0)::bigint AS today,
-    COALESCE(SUM(EXTRACT(EPOCH FROM (finished_at - GREATEST(started_at, @week_start::timestamp)))::bigint), 0)::bigint AS week
+    COALESCE(SUM(CASE WHEN finished_at >= @today_start::timestamptz
+        THEN EXTRACT(EPOCH FROM (finished_at - GREATEST(started_at, @today_start::timestamptz)))::bigint ELSE 0 END), 0)::bigint AS today,
+    COALESCE(SUM(EXTRACT(EPOCH FROM (finished_at - GREATEST(started_at, @week_start::timestamptz)))::bigint), 0)::bigint AS week
 FROM time_entries
 WHERE finished_at IS NOT NULL
-  AND finished_at >= @week_start::timestamp;
+  AND finished_at >= @week_start::timestamptz;
 
 -- name: GetTimeEntriesByTaskID :many
 WITH task_info AS (

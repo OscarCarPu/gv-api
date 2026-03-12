@@ -493,8 +493,8 @@ func TestRepository_UpdateProject(t *testing.T) {
 					Name:        "updated",
 					Description: &desc,
 					DueAt:       dueDate,
-					StartedAt:   pgtype.Timestamp{Time: startedAt, Valid: true},
-					FinishedAt:  pgtype.Timestamp{Time: finishedAt, Valid: true},
+					StartedAt:   pgtype.Timestamptz{Time: startedAt, Valid: true},
+					FinishedAt:  pgtype.Timestamptz{Time: finishedAt, Valid: true},
 				}, nil
 			},
 		}
@@ -559,8 +559,8 @@ func TestRepository_UpdateTask(t *testing.T) {
 					Name:        "test task",
 					Description: &desc,
 					DueAt:       dueDate,
-					StartedAt:   pgtype.Timestamp{Time: startedAt, Valid: true},
-					FinishedAt:  pgtype.Timestamp{Time: finishedAt, Valid: true},
+					StartedAt:   pgtype.Timestamptz{Time: startedAt, Valid: true},
+					FinishedAt:  pgtype.Timestamptz{Time: finishedAt, Valid: true},
 				}, nil
 			},
 		}
@@ -669,8 +669,8 @@ func TestRepository_UpdateTimeEntry(t *testing.T) {
 				return tasksdb.TimeEntry{
 					ID:         1,
 					TaskID:     3,
-					StartedAt:  pgtype.Timestamp{Time: startedAt, Valid: true},
-					FinishedAt: pgtype.Timestamp{Time: finishedAt, Valid: true},
+					StartedAt:  pgtype.Timestamptz{Time: startedAt, Valid: true},
+					FinishedAt: pgtype.Timestamptz{Time: finishedAt, Valid: true},
 					Comment:    &comment,
 				}, nil
 			},
@@ -770,7 +770,7 @@ func TestRepository_GetUnfinishedTasks(t *testing.T) {
 	projectID := int32(5)
 	desc := "do something"
 	dueDate := pgtype.Date{Time: time.Date(2026, 7, 1, 0, 0, 0, 0, time.UTC), Valid: true}
-	startedAt := pgtype.Timestamp{Time: time.Date(2026, 3, 1, 9, 0, 0, 0, time.UTC), Valid: true}
+	startedAt := pgtype.Timestamptz{Time: time.Date(2026, 3, 1, 9, 0, 0, 0, time.UTC), Valid: true}
 
 	t.Run("maps rows correctly", func(t *testing.T) {
 		mock := &mockQuerier{
@@ -831,7 +831,7 @@ func TestRepository_GetUnfinishedTasks(t *testing.T) {
 
 func TestRepository_GetProjectChildren(t *testing.T) {
 	parentID := int32(1)
-	finishedAt := pgtype.Timestamp{Time: time.Date(2026, 3, 1, 17, 0, 0, 0, time.UTC), Valid: true}
+	finishedAt := pgtype.Timestamptz{Time: time.Date(2026, 3, 1, 17, 0, 0, 0, time.UTC), Valid: true}
 
 	t.Run("project with sub-projects and tasks", func(t *testing.T) {
 		mock := &mockQuerier{
@@ -1127,15 +1127,15 @@ func TestRepository_GetTaskTimeEntries(t *testing.T) {
 	desc := "task desc"
 	comment1 := "first"
 	comment2 := "second"
-	startedAt := pgtype.Timestamp{Time: time.Date(2026, 3, 1, 9, 0, 0, 0, time.UTC), Valid: true}
-	finishedAt := pgtype.Timestamp{Time: time.Date(2026, 3, 1, 17, 0, 0, 0, time.UTC), Valid: true}
+	startedAt := pgtype.Timestamptz{Time: time.Date(2026, 3, 1, 9, 0, 0, 0, time.UTC), Valid: true}
+	finishedAt := pgtype.Timestamptz{Time: time.Date(2026, 3, 1, 17, 0, 0, 0, time.UTC), Valid: true}
 	dueDate := pgtype.Date{Time: time.Date(2026, 6, 15, 0, 0, 0, 0, time.UTC), Valid: true}
 
 	t.Run("maps task and time entries correctly", func(t *testing.T) {
 		entryID1, entryID2 := int32(10), int32(11)
-		entryStart1 := pgtype.Timestamp{Time: time.Date(2026, 3, 1, 9, 0, 0, 0, time.UTC), Valid: true}
-		entryEnd1 := pgtype.Timestamp{Time: time.Date(2026, 3, 1, 10, 0, 0, 0, time.UTC), Valid: true}
-		entryStart2 := pgtype.Timestamp{Time: time.Date(2026, 3, 1, 11, 0, 0, 0, time.UTC), Valid: true}
+		entryStart1 := pgtype.Timestamptz{Time: time.Date(2026, 3, 1, 9, 0, 0, 0, time.UTC), Valid: true}
+		entryEnd1 := pgtype.Timestamptz{Time: time.Date(2026, 3, 1, 10, 0, 0, 0, time.UTC), Valid: true}
+		entryStart2 := pgtype.Timestamptz{Time: time.Date(2026, 3, 1, 11, 0, 0, 0, time.UTC), Valid: true}
 
 		mock := &mockQuerier{
 			getTimeEntriesByTaskIDFn: func(ctx context.Context, id int32) ([]tasksdb.GetTimeEntriesByTaskIDRow, error) {
@@ -1230,7 +1230,7 @@ func TestRepository_GetTasksByDueDate(t *testing.T) {
 	projectName := "My Project"
 	taskDueDate := pgtype.Date{Time: time.Date(2026, 6, 15, 0, 0, 0, 0, time.UTC), Valid: true}
 	projDueDate := pgtype.Date{Time: time.Date(2026, 12, 31, 0, 0, 0, 0, time.UTC), Valid: true}
-	startedAt := pgtype.Timestamp{Time: time.Date(2026, 3, 1, 9, 0, 0, 0, time.UTC), Valid: true}
+	startedAt := pgtype.Timestamptz{Time: time.Date(2026, 3, 1, 9, 0, 0, 0, time.UTC), Valid: true}
 
 	t.Run("maps rows correctly", func(t *testing.T) {
 		mock := &mockQuerier{

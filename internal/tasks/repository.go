@@ -50,7 +50,7 @@ func NewRepository(q tasksdb.Querier) *PostgresRepository {
 	return &PostgresRepository{q: q}
 }
 
-func pgTimestampToPtr(ts pgtype.Timestamp) *time.Time {
+func pgTimestamptzToPtr(ts pgtype.Timestamptz) *time.Time {
 	if ts.Valid {
 		t := ts.Time
 		return &t
@@ -152,11 +152,11 @@ func (r *PostgresRepository) UpdateProject(ctx context.Context, req UpdateProjec
 	}
 	if req.StartedAt != nil {
 		params.SetStartedAt = true
-		params.StartedAt = pgtype.Timestamp{Time: *req.StartedAt, Valid: true}
+		params.StartedAt = pgtype.Timestamptz{Time: *req.StartedAt, Valid: true}
 	}
 	if req.FinishedAt != nil {
 		params.SetFinishedAt = true
-		params.FinishedAt = pgtype.Timestamp{Time: *req.FinishedAt, Valid: true}
+		params.FinishedAt = pgtype.Timestamptz{Time: *req.FinishedAt, Valid: true}
 	}
 
 	row, err := r.q.UpdateProject(ctx, params)
@@ -173,8 +173,8 @@ func (r *PostgresRepository) UpdateProject(ctx context.Context, req UpdateProjec
 		Description: row.Description,
 		DueAt:       pgDateToPtr(row.DueAt),
 		ParentID:    row.ParentID,
-		StartedAt:   pgTimestampToPtr(row.StartedAt),
-		FinishedAt:  pgTimestampToPtr(row.FinishedAt),
+		StartedAt:   pgTimestamptzToPtr(row.StartedAt),
+		FinishedAt:  pgTimestamptzToPtr(row.FinishedAt),
 	}, nil
 }
 
@@ -198,11 +198,11 @@ func (r *PostgresRepository) UpdateTask(ctx context.Context, req UpdateTaskReque
 	}
 	if req.StartedAt != nil {
 		params.SetStartedAt = true
-		params.StartedAt = pgtype.Timestamp{Time: *req.StartedAt, Valid: true}
+		params.StartedAt = pgtype.Timestamptz{Time: *req.StartedAt, Valid: true}
 	}
 	if req.FinishedAt != nil {
 		params.SetFinishedAt = true
-		params.FinishedAt = pgtype.Timestamp{Time: *req.FinishedAt, Valid: true}
+		params.FinishedAt = pgtype.Timestamptz{Time: *req.FinishedAt, Valid: true}
 	}
 
 	row, err := r.q.UpdateTask(ctx, params)
@@ -219,8 +219,8 @@ func (r *PostgresRepository) UpdateTask(ctx context.Context, req UpdateTaskReque
 		Name:        row.Name,
 		Description: row.Description,
 		DueAt:       pgDateToPtr(row.DueAt),
-		StartedAt:   pgTimestampToPtr(row.StartedAt),
-		FinishedAt:  pgTimestampToPtr(row.FinishedAt),
+		StartedAt:   pgTimestamptzToPtr(row.StartedAt),
+		FinishedAt:  pgTimestamptzToPtr(row.FinishedAt),
 	}, nil
 }
 
@@ -263,11 +263,11 @@ func (r *PostgresRepository) UpdateTimeEntry(ctx context.Context, req UpdateTime
 	}
 	if req.StartedAt != nil {
 		params.SetStartedAt = true
-		params.StartedAt = pgtype.Timestamp{Time: *req.StartedAt, Valid: true}
+		params.StartedAt = pgtype.Timestamptz{Time: *req.StartedAt, Valid: true}
 	}
 	if req.FinishedAt != nil {
 		params.SetFinishedAt = true
-		params.FinishedAt = pgtype.Timestamp{Time: *req.FinishedAt, Valid: true}
+		params.FinishedAt = pgtype.Timestamptz{Time: *req.FinishedAt, Valid: true}
 	}
 	if req.Comment != nil {
 		params.SetComment = true
@@ -286,17 +286,17 @@ func (r *PostgresRepository) UpdateTimeEntry(ctx context.Context, req UpdateTime
 		ID:         row.ID,
 		TaskID:     row.TaskID,
 		StartedAt:  row.StartedAt.Time,
-		FinishedAt: pgTimestampToPtr(row.FinishedAt),
+		FinishedAt: pgTimestamptzToPtr(row.FinishedAt),
 		Comment:    row.Comment,
 	}, nil
 }
 
 func (r *PostgresRepository) CreateTimeEntry(ctx context.Context, taskID int32, startedAt time.Time, finishedAt *time.Time, comment *string) (TimeEntryResponse, error) {
-	pgStartedAt := pgtype.Timestamp{Time: startedAt, Valid: true}
+	pgStartedAt := pgtype.Timestamptz{Time: startedAt, Valid: true}
 
-	var pgFinishedAt pgtype.Timestamp
+	var pgFinishedAt pgtype.Timestamptz
 	if finishedAt != nil {
-		pgFinishedAt = pgtype.Timestamp{Time: *finishedAt, Valid: true}
+		pgFinishedAt = pgtype.Timestamptz{Time: *finishedAt, Valid: true}
 	}
 
 	row, err := r.q.CreateTimeEntry(ctx, tasksdb.CreateTimeEntryParams{
@@ -313,7 +313,7 @@ func (r *PostgresRepository) CreateTimeEntry(ctx context.Context, taskID int32, 
 		ID:         row.ID,
 		TaskID:     row.TaskID,
 		StartedAt:  row.StartedAt.Time,
-		FinishedAt: pgTimestampToPtr(row.FinishedAt),
+		FinishedAt: pgTimestamptzToPtr(row.FinishedAt),
 		Comment:    row.Comment,
 	}, nil
 }
@@ -352,7 +352,7 @@ func (r *PostgresRepository) GetUnfinishedTasks(ctx context.Context) ([]Unfinish
 			Description: row.Description,
 			DueAt:       pgDateToPtr(row.DueAt),
 			Started:     row.StartedAt.Valid,
-			StartedAt:   pgTimestampToPtr(row.StartedAt),
+			StartedAt:   pgTimestamptzToPtr(row.StartedAt),
 		}
 	}
 	return tasks, nil
@@ -397,8 +397,8 @@ func (r *PostgresRepository) GetTask(ctx context.Context, id int32) (TaskFullRes
 		Name:        first.Name,
 		Description: first.Description,
 		DueAt:       pgDateToPtr(first.DueAt),
-		StartedAt:   pgTimestampToPtr(first.StartedAt),
-		FinishedAt:  pgTimestampToPtr(first.FinishedAt),
+		StartedAt:   pgTimestamptzToPtr(first.StartedAt),
+		FinishedAt:  pgTimestamptzToPtr(first.FinishedAt),
 		TimeSpent:   first.TimeSpent,
 		Todos:       todos,
 	}, nil
@@ -464,8 +464,8 @@ func (r *PostgresRepository) GetProjectChildren(ctx context.Context, projectID i
 			Name:        tw.row.Name,
 			Description: tw.row.Description,
 			DueAt:       pgDateToPtr(tw.row.DueAt),
-			StartedAt:   pgTimestampToPtr(tw.row.StartedAt),
-			FinishedAt:  pgTimestampToPtr(tw.row.FinishedAt),
+			StartedAt:   pgTimestamptzToPtr(tw.row.StartedAt),
+			FinishedAt:  pgTimestamptzToPtr(tw.row.FinishedAt),
 			TimeSpent:   tw.row.TimeSpent,
 			ProjectID:   tw.row.ProjectID,
 			Todos:       tw.todos,
@@ -512,8 +512,8 @@ func (r *PostgresRepository) GetProjectChildren(ctx context.Context, projectID i
 		Name:        root.Name,
 		Description: root.Description,
 		DueAt:       pgDateToPtr(root.DueAt),
-		StartedAt:   pgTimestampToPtr(root.StartedAt),
-		FinishedAt:  pgTimestampToPtr(root.FinishedAt),
+		StartedAt:   pgTimestamptzToPtr(root.StartedAt),
+		FinishedAt:  pgTimestamptzToPtr(root.FinishedAt),
 		TimeSpent:   projectTimeSpent[root.ID],
 	}
 
@@ -527,8 +527,8 @@ func (r *PostgresRepository) GetProjectChildren(ctx context.Context, projectID i
 				Name:        d.Name,
 				Description: d.Description,
 				DueAt:       pgDateToPtr(d.DueAt),
-				StartedAt:   pgTimestampToPtr(d.StartedAt),
-				FinishedAt:  pgTimestampToPtr(d.FinishedAt),
+				StartedAt:   pgTimestamptzToPtr(d.StartedAt),
+				FinishedAt:  pgTimestamptzToPtr(d.FinishedAt),
 				TimeSpent:   projectTimeSpent[d.ID],
 				ParentID:    d.ParentID,
 			})
@@ -567,7 +567,7 @@ func (r *PostgresRepository) GetTaskTimeEntries(ctx context.Context, taskID int3
 			ID:         *row.TimeEntryID,
 			TaskID:     row.TaskID,
 			StartedAt:  row.EntryStartedAt.Time,
-			FinishedAt: pgTimestampToPtr(row.EntryFinishedAt),
+			FinishedAt: pgTimestamptzToPtr(row.EntryFinishedAt),
 			Comment:    row.Comment,
 		})
 	}
@@ -583,8 +583,8 @@ func (r *PostgresRepository) GetTaskTimeEntries(ctx context.Context, taskID int3
 			Name:        first.Name,
 			Description: first.Description,
 			DueAt:       pgDateToPtr(first.DueAt),
-			StartedAt:   pgTimestampToPtr(first.TaskStartedAt),
-			FinishedAt:  pgTimestampToPtr(first.TaskFinishedAt),
+			StartedAt:   pgTimestamptzToPtr(first.TaskStartedAt),
+			FinishedAt:  pgTimestamptzToPtr(first.TaskFinishedAt),
 			TimeSpent:   first.TimeSpent,
 		},
 		TimeEntries: entries,
@@ -604,7 +604,7 @@ func (r *PostgresRepository) GetTasksByDueDate(ctx context.Context) ([]TaskByDue
 			Name:         row.Name,
 			Description:  row.Description,
 			DueAt:        pgDateToPtr(row.DueAt),
-			StartedAt:    pgTimestampToPtr(row.StartedAt),
+			StartedAt:    pgTimestamptzToPtr(row.StartedAt),
 			TimeSpent:    row.TimeSpent,
 			ProjectID:    row.ProjectID,
 			ProjectName:  row.ProjectName,
@@ -651,15 +651,15 @@ func (r *PostgresRepository) GetActiveTimeEntry(ctx context.Context) (TimeEntryR
 		ID:         row.ID,
 		TaskID:     row.TaskID,
 		StartedAt:  row.StartedAt.Time,
-		FinishedAt: pgTimestampToPtr(row.FinishedAt),
+		FinishedAt: pgTimestamptzToPtr(row.FinishedAt),
 		Comment:    row.Comment,
 	}, nil
 }
 
 func (r *PostgresRepository) GetTimeEntrySummary(ctx context.Context, todayStart, weekStart time.Time) (TimeEntrySummaryResponse, error) {
 	row, err := r.q.GetTimeEntrySummary(ctx, tasksdb.GetTimeEntrySummaryParams{
-		TodayStart: pgtype.Timestamp{Time: todayStart, Valid: true},
-		WeekStart:  pgtype.Timestamp{Time: weekStart, Valid: true},
+		TodayStart: pgtype.Timestamptz{Time: todayStart, Valid: true},
+		WeekStart:  pgtype.Timestamptz{Time: weekStart, Valid: true},
 	})
 	if err != nil {
 		return TimeEntrySummaryResponse{}, err
