@@ -620,12 +620,12 @@ func (q *Queries) GetTimeEntriesByTaskID(ctx context.Context, id int32) ([]GetTi
 
 const getTimeEntrySummary = `-- name: GetTimeEntrySummary :one
 SELECT
-    COALESCE(SUM(CASE WHEN started_at >= $1::timestamp
-        THEN EXTRACT(EPOCH FROM (finished_at - started_at))::bigint ELSE 0 END), 0)::bigint AS today,
-    COALESCE(SUM(EXTRACT(EPOCH FROM (finished_at - started_at))::bigint), 0)::bigint AS week
+    COALESCE(SUM(CASE WHEN finished_at >= $1::timestamp
+        THEN EXTRACT(EPOCH FROM (finished_at - GREATEST(started_at, $1::timestamp)))::bigint ELSE 0 END), 0)::bigint AS today,
+    COALESCE(SUM(EXTRACT(EPOCH FROM (finished_at - GREATEST(started_at, $2::timestamp)))::bigint), 0)::bigint AS week
 FROM time_entries
 WHERE finished_at IS NOT NULL
-  AND started_at >= $2::timestamp
+  AND finished_at >= $2::timestamp
 `
 
 type GetTimeEntrySummaryParams struct {
