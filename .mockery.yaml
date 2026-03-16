@@ -1,0 +1,16 @@
+all: false
+with-expecter: true
+packages:
+  gv-api/internal/tasks:
+    config:
+      dir: internal/tasks/mocks
+      outpkg: mocks
+    interfaces:
+      Repository:
+      ServiceInterface:
+  gv-api/internal/habits:
+    config:
+      dir: internal/habits/mocks
+      outpkg: mocks
+    interfaces:
+      ServiceInterface:
