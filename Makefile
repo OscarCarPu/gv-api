@@ -67,18 +67,6 @@ include .env
 INNER_TEST_DB_URL=postgresql://$(POSTGRES_USER):$(POSTGRES_PASSWORD)@db:5432/$(TEST_DB)?sslmode=disable
 OUTSIDE_TEST_DB_URL=postgresql://$(POSTGRES_USER):$(POSTGRES_PASSWORD)@127.0.0.1:5432/$(TEST_DB)?sslmode=disable
 
-test-db-setup:
-	@printf "$(CYAN)>>> Starting database...$(NC)\n"
-	@docker compose stop gv-api > /dev/null 2>&1 || true
-	@docker compose up -d --wait db > /dev/null
-	@printf "$(YELLOW)>>> Dropping test database if exists...$(NC)\n"
-	@docker compose exec -T db psql -U $(POSTGRES_USER) -d postgres -c "DROP DATABASE IF EXISTS \"$(TEST_DB)\";" > /dev/null 2>&1
-	@printf "$(YELLOW)>>> Creating test database...$(NC)\n"
-	@docker compose exec -T db psql -U $(POSTGRES_USER) -d postgres -c "CREATE DATABASE \"$(TEST_DB)\";" > /dev/null
-	@printf "$(YELLOW)>>> Running migrations...$(NC)\n"
-	@docker compose exec -T db bash -c 'for f in $$(ls /docker-entrypoint-initdb.d/*.up.sql | sort); do psql -U $(POSTGRES_USER) -d $(TEST_DB) -f "$$f"; done' > /dev/null
-	@printf "$(GREEN)>>> Test database ready$(NC)\n"
-
 test-db-cleanup:
 	@printf "$(YELLOW)>>> Cleaning up test database...$(NC)\n"
 	@docker compose stop gv-api > /dev/null 2>&1 || true
@@ -86,9 +74,15 @@ test-db-cleanup:
 	@docker compose up -d --wait gv-api > /dev/null 2>&1 || true
 	@printf "$(GREEN)>>> Cleanup complete$(NC)\n"
 
-test-api-setup: test-db-setup
-	@printf "$(CYAN)>>> Rebuilding and restarting API with test database...$(NC)\n"
+test-api-setup:
+	@printf "$(CYAN)>>> Starting database...$(NC)\n"
 	@docker compose stop gv-api > /dev/null 2>&1 || true
+	@docker compose up -d --wait db > /dev/null
+	@printf "$(YELLOW)>>> Dropping test database if exists...$(NC)\n"
+	@docker compose exec -T db psql -U $(POSTGRES_USER) -d postgres -c "DROP DATABASE IF EXISTS \"$(TEST_DB)\";" > /dev/null 2>&1
+	@printf "$(YELLOW)>>> Creating test database...$(NC)\n"
+	@docker compose exec -T db psql -U $(POSTGRES_USER) -d postgres -c "CREATE DATABASE \"$(TEST_DB)\";" > /dev/null
+	@printf "$(CYAN)>>> Rebuilding and restarting API with test database...$(NC)\n"
 	@docker compose -f docker-compose.yaml -f docker-compose.test.yaml up -d --wait --build gv-api > /dev/null
 	@printf "$(GREEN)>>> API ready$(NC)\n"
 
@@ -107,7 +101,7 @@ test-unit:
 	@go test -v -short ./internal/...
 
 # Integration tests: require a running database
-test-integration: test-db-setup
+test-integration: test-api-setup
 	@printf "$(CYAN)>>> Running integration tests...$(NC)\n"
 	@TEST_DB_URL=$(OUTSIDE_TEST_DB_URL) go test -v -run Integration ./internal/...
 	@$(MAKE) test-db-cleanup --no-print-directory

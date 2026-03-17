@@ -11,20 +11,35 @@ import (
 )
 
 const createHabit = `-- name: CreateHabit :one
-INSERT INTO habits (name, description)
-VALUES ($1, $2)
-RETURNING id, name, description
+INSERT INTO habits (name, description, frequency, objective)
+VALUES ($1, $2, $3, $4)
+RETURNING id, name, description, frequency, objective, current_streak, longest_streak
 `
 
 type CreateHabitParams struct {
-	Name        string  `db:"name" json:"name"`
-	Description *string `db:"description" json:"description"`
+	Name        string   `db:"name" json:"name"`
+	Description *string  `db:"description" json:"description"`
+	Frequency   string   `db:"frequency" json:"frequency"`
+	Objective   *float32 `db:"objective" json:"objective"`
 }
 
 func (q *Queries) CreateHabit(ctx context.Context, arg CreateHabitParams) (Habit, error) {
-	row := q.db.QueryRow(ctx, createHabit, arg.Name, arg.Description)
+	row := q.db.QueryRow(ctx, createHabit,
+		arg.Name,
+		arg.Description,
+		arg.Frequency,
+		arg.Objective,
+	)
 	var i Habit
-	err := row.Scan(&i.ID, &i.Name, &i.Description)
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.Description,
+		&i.Frequency,
+		&i.Objective,
+		&i.CurrentStreak,
+		&i.LongestStreak,
+	)
 	return i, err
 }
 
@@ -37,21 +52,94 @@ func (q *Queries) DeleteHabit(ctx context.Context, id int32) error {
 	return err
 }
 
+const getHabitByID = `-- name: GetHabitByID :one
+SELECT id, name, description, frequency, objective, current_streak, longest_streak
+FROM habits WHERE id = $1
+`
+
+func (q *Queries) GetHabitByID(ctx context.Context, id int32) (Habit, error) {
+	row := q.db.QueryRow(ctx, getHabitByID, id)
+	var i Habit
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.Description,
+		&i.Frequency,
+		&i.Objective,
+		&i.CurrentStreak,
+		&i.LongestStreak,
+	)
+	return i, err
+}
+
+const getHabitLogs = `-- name: GetHabitLogs :many
+SELECT habit_id, log_date, value
+FROM habit_logs
+WHERE habit_id = $1
+ORDER BY log_date DESC
+`
+
+func (q *Queries) GetHabitLogs(ctx context.Context, habitID int32) ([]HabitLog, error) {
+	rows, err := q.db.Query(ctx, getHabitLogs, habitID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []HabitLog{}
+	for rows.Next() {
+		var i HabitLog
+		if err := rows.Scan(&i.HabitID, &i.LogDate, &i.Value); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getHabitsWithLogs = `-- name: GetHabitsWithLogs :many
-SELECT h.id, h.name, h.description, hl.value
-FROM habits h 
+SELECT
+    h.id, h.name, h.description,
+    h.frequency, h.objective, h.current_streak, h.longest_streak,
+    hl.value AS log_value,
+    COALESCE(
+        (SELECT SUM(hl2.value)
+         FROM habit_logs hl2
+         WHERE hl2.habit_id = h.id
+           AND hl2.log_date BETWEEN
+               CASE h.frequency
+                   WHEN 'daily' THEN $1::date
+                   WHEN 'weekly' THEN date_trunc('week', $1::date)::date
+                   WHEN 'monthly' THEN date_trunc('month', $1::date)::date
+               END
+               AND
+               CASE h.frequency
+                   WHEN 'daily' THEN $1::date
+                   WHEN 'weekly' THEN (date_trunc('week', $1::date) + INTERVAL '6 days')::date
+                   WHEN 'monthly' THEN (date_trunc('month', $1::date) + INTERVAL '1 month - 1 day')::date
+               END
+        ), 0
+    )::REAL AS period_value
+FROM habits h
 LEFT JOIN habit_logs hl ON h.id = hl.habit_id AND hl.log_date = $1
 `
 
 type GetHabitsWithLogsRow struct {
-	ID          int32    `db:"id" json:"id"`
-	Name        string   `db:"name" json:"name"`
-	Description *string  `db:"description" json:"description"`
-	Value       *float32 `db:"value" json:"value"`
+	ID            int32    `db:"id" json:"id"`
+	Name          string   `db:"name" json:"name"`
+	Description   *string  `db:"description" json:"description"`
+	Frequency     string   `db:"frequency" json:"frequency"`
+	Objective     *float32 `db:"objective" json:"objective"`
+	CurrentStreak int32    `db:"current_streak" json:"current_streak"`
+	LongestStreak int32    `db:"longest_streak" json:"longest_streak"`
+	LogValue      *float32 `db:"log_value" json:"log_value"`
+	PeriodValue   float32  `db:"period_value" json:"period_value"`
 }
 
-func (q *Queries) GetHabitsWithLogs(ctx context.Context, logDate time.Time) ([]GetHabitsWithLogsRow, error) {
-	rows, err := q.db.Query(ctx, getHabitsWithLogs, logDate)
+func (q *Queries) GetHabitsWithLogs(ctx context.Context, targetDate time.Time) ([]GetHabitsWithLogsRow, error) {
+	rows, err := q.db.Query(ctx, getHabitsWithLogs, targetDate)
 	if err != nil {
 		return nil, err
 	}
@@ -63,7 +151,12 @@ func (q *Queries) GetHabitsWithLogs(ctx context.Context, logDate time.Time) ([]G
 			&i.ID,
 			&i.Name,
 			&i.Description,
-			&i.Value,
+			&i.Frequency,
+			&i.Objective,
+			&i.CurrentStreak,
+			&i.LongestStreak,
+			&i.LogValue,
+			&i.PeriodValue,
 		); err != nil {
 			return nil, err
 		}
@@ -73,6 +166,23 @@ func (q *Queries) GetHabitsWithLogs(ctx context.Context, logDate time.Time) ([]G
 		return nil, err
 	}
 	return items, nil
+}
+
+const updateHabitStreak = `-- name: UpdateHabitStreak :exec
+UPDATE habits
+SET current_streak = $2, longest_streak = $3
+WHERE id = $1
+`
+
+type UpdateHabitStreakParams struct {
+	ID            int32 `db:"id" json:"id"`
+	CurrentStreak int32 `db:"current_streak" json:"current_streak"`
+	LongestStreak int32 `db:"longest_streak" json:"longest_streak"`
+}
+
+func (q *Queries) UpdateHabitStreak(ctx context.Context, arg UpdateHabitStreakParams) error {
+	_, err := q.db.Exec(ctx, updateHabitStreak, arg.ID, arg.CurrentStreak, arg.LongestStreak)
+	return err
 }
 
 const upsertLog = `-- name: UpsertLog :exec

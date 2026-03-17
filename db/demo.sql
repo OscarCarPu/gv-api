@@ -10,38 +10,84 @@ TRUNCATE time_entries, todos, tasks, projects, habit_logs, habits RESTART IDENTI
 -- =============================================================================
 -- HABITS
 -- =============================================================================
-INSERT INTO habits (name, description) VALUES
-    ('Exercise', 'Daily physical activity'),        -- id=1
-    ('Reading', 'Read at least 30 minutes'),        -- id=2
-    ('Meditation', 'Morning meditation session'),   -- id=3
-    ('Water intake', 'Drink 2L of water daily'),    -- id=4
-    ('Sleep', 'Hours of sleep');                     -- id=5
+INSERT INTO habits (name, description, frequency, objective, current_streak, longest_streak) VALUES
+    ('Exercise', 'Daily physical activity', 'daily', 1, 3, 5),               -- id=1  daily, target: at least 1 session
+    ('Reading', 'Read at least 30 minutes', 'daily', 1, 1, 4),              -- id=2  daily, target: at least 1 session
+    ('Meditation', 'Morning meditation session', 'weekly', 3, 2, 2),        -- id=3  weekly, target: 3 sessions/week
+    ('Water intake', 'Drink 2L of water daily', 'daily', 2, 7, 14),         -- id=4  daily, target: 2L
+    ('Sleep', 'Hours of sleep', 'monthly', 200, 1, 3);                       -- id=5  monthly, target: 200h/month
 
 -- =============================================================================
--- HABIT LOGS (last 7 days)
+-- HABIT LOGS (last 21 days for meaningful streak data)
 -- =============================================================================
 INSERT INTO habit_logs (habit_id, log_date, value) VALUES
+    -- Exercise (daily, objective=1): streak of 3 (today, yesterday, day before)
+    (1, CURRENT_DATE - INTERVAL '20 days', 1),
+    (1, CURRENT_DATE - INTERVAL '19 days', 1),
+    (1, CURRENT_DATE - INTERVAL '18 days', 1),
+    (1, CURRENT_DATE - INTERVAL '17 days', 1),
+    (1, CURRENT_DATE - INTERVAL '16 days', 1),
+    (1, CURRENT_DATE - INTERVAL '15 days', 0),   -- broke streak (longest=5)
+    (1, CURRENT_DATE - INTERVAL '14 days', 1),
+    (1, CURRENT_DATE - INTERVAL '13 days', 1),
+    (1, CURRENT_DATE - INTERVAL '12 days', 0),
     (1, CURRENT_DATE - INTERVAL '6 days', 1),
     (1, CURRENT_DATE - INTERVAL '5 days', 1),
-    (1, CURRENT_DATE - INTERVAL '4 days', 0),
-    (1, CURRENT_DATE - INTERVAL '3 days', 1),
+    (1, CURRENT_DATE - INTERVAL '4 days', 0),   -- broke streak
+    (1, CURRENT_DATE - INTERVAL '3 days', 0),
     (1, CURRENT_DATE - INTERVAL '2 days', 1),
-    (1, CURRENT_DATE - INTERVAL '1 day', 0),
+    (1, CURRENT_DATE - INTERVAL '1 day', 1),
     (1, CURRENT_DATE, 1),
-    (2, CURRENT_DATE - INTERVAL '6 days', 1),
+
+    -- Reading (daily, objective=1): streak of 1 (today only, missed yesterday)
+    (2, CURRENT_DATE - INTERVAL '10 days', 1),
+    (2, CURRENT_DATE - INTERVAL '9 days', 1),
+    (2, CURRENT_DATE - INTERVAL '8 days', 1),
+    (2, CURRENT_DATE - INTERVAL '7 days', 1),   -- longest=4
+    (2, CURRENT_DATE - INTERVAL '6 days', 0),
     (2, CURRENT_DATE - INTERVAL '4 days', 1),
     (2, CURRENT_DATE - INTERVAL '2 days', 1),
+    (2, CURRENT_DATE - INTERVAL '1 day', 0),
     (2, CURRENT_DATE, 1),
+
+    -- Meditation (weekly, objective=3): streak of 2 full weeks
+    -- Week -2 (3 sessions = meets objective)
+    (3, CURRENT_DATE - INTERVAL '20 days', 1),
+    (3, CURRENT_DATE - INTERVAL '18 days', 1),
+    (3, CURRENT_DATE - INTERVAL '16 days', 1),
+    -- Week -1 (4 sessions = meets objective)
+    (3, CURRENT_DATE - INTERVAL '13 days', 1),
+    (3, CURRENT_DATE - INTERVAL '11 days', 1),
+    (3, CURRENT_DATE - INTERVAL '9 days', 1),
+    (3, CURRENT_DATE - INTERVAL '8 days', 1),
+    -- This week (2 sessions so far, not yet meeting objective of 3)
     (3, CURRENT_DATE - INTERVAL '5 days', 1),
     (3, CURRENT_DATE - INTERVAL '3 days', 1),
-    (3, CURRENT_DATE - INTERVAL '1 day', 1),
+
+    -- Water intake (daily, objective=2): perfect streak of 7 days
     (4, CURRENT_DATE - INTERVAL '6 days', 2.0),
-    (4, CURRENT_DATE - INTERVAL '5 days', 1.5),
+    (4, CURRENT_DATE - INTERVAL '5 days', 2.5),
     (4, CURRENT_DATE - INTERVAL '4 days', 2.5),
     (4, CURRENT_DATE - INTERVAL '3 days', 2.0),
-    (4, CURRENT_DATE - INTERVAL '2 days', 1.8),
+    (4, CURRENT_DATE - INTERVAL '2 days', 2.8),
     (4, CURRENT_DATE - INTERVAL '1 day', 2.2),
     (4, CURRENT_DATE, 2.0),
+
+    -- Sleep (monthly, objective=200h): this month accumulating
+    (5, CURRENT_DATE - INTERVAL '20 days', 7.5),
+    (5, CURRENT_DATE - INTERVAL '19 days', 6.0),
+    (5, CURRENT_DATE - INTERVAL '18 days', 8.0),
+    (5, CURRENT_DATE - INTERVAL '17 days', 7.0),
+    (5, CURRENT_DATE - INTERVAL '16 days', 6.5),
+    (5, CURRENT_DATE - INTERVAL '15 days', 7.5),
+    (5, CURRENT_DATE - INTERVAL '14 days', 8.0),
+    (5, CURRENT_DATE - INTERVAL '13 days', 7.0),
+    (5, CURRENT_DATE - INTERVAL '12 days', 7.5),
+    (5, CURRENT_DATE - INTERVAL '11 days', 6.5),
+    (5, CURRENT_DATE - INTERVAL '10 days', 8.0),
+    (5, CURRENT_DATE - INTERVAL '9 days', 7.0),
+    (5, CURRENT_DATE - INTERVAL '8 days', 7.5),
+    (5, CURRENT_DATE - INTERVAL '7 days', 6.0),
     (5, CURRENT_DATE - INTERVAL '6 days', 7.5),
     (5, CURRENT_DATE - INTERVAL '5 days', 6.0),
     (5, CURRENT_DATE - INTERVAL '4 days', 8.0),

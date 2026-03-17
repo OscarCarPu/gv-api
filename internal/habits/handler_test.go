@@ -73,10 +73,11 @@ func TestHandler_GetDaily(t *testing.T) {
 		desc1 := "Daily workout"
 		desc2 := "Read a book"
 		val := float32(42.5)
+		obj := float32(50)
 		svc := mocks.NewMockServiceInterface(t)
 		svc.EXPECT().GetDailyView(mock.Anything, "2025-01-31").Return([]habits.HabitWithLog{
-			{ID: 1, Name: "Exercise", Description: &desc1, LogValue: nil},
-			{ID: 2, Name: "Reading", Description: &desc2, LogValue: &val},
+			{ID: 1, Name: "Exercise", Description: &desc1, Frequency: "daily", Objective: &obj, LogValue: nil, PeriodValue: 0, CurrentStreak: 3, LongestStreak: 10},
+			{ID: 2, Name: "Reading", Description: &desc2, Frequency: "weekly", LogValue: &val, PeriodValue: 42.5, CurrentStreak: 0, LongestStreak: 0},
 		}, nil)
 		handler := habits.NewHandler(svc)
 
@@ -92,9 +93,14 @@ func TestHandler_GetDaily(t *testing.T) {
 		require.NoError(t, json.NewDecoder(rec.Body).Decode(&got))
 		require.Len(t, got, 2)
 		assert.Equal(t, "Exercise", got[0].Name)
+		assert.Equal(t, "daily", got[0].Frequency)
+		assert.Equal(t, int32(3), got[0].CurrentStreak)
+		assert.Equal(t, int32(10), got[0].LongestStreak)
 		assert.Equal(t, "Reading", got[1].Name)
+		assert.Equal(t, "weekly", got[1].Frequency)
 		require.NotNil(t, got[1].LogValue)
 		assert.Equal(t, float32(42.5), *got[1].LogValue)
+		assert.Equal(t, float32(42.5), got[1].PeriodValue)
 	})
 
 	t.Run("returns 500 when service fails", func(t *testing.T) {
@@ -114,15 +120,16 @@ func TestHandler_GetDaily(t *testing.T) {
 func TestHandler_CreateHabit(t *testing.T) {
 	t.Run("returns 201 with created habit", func(t *testing.T) {
 		desc := "Test description"
+		obj := float32(5)
 		svc := mocks.NewMockServiceInterface(t)
 		svc.EXPECT().
 			CreateHabit(mock.Anything, mock.MatchedBy(func(req habits.CreateHabitRequest) bool {
 				return req.Name == "Exercise"
 			})).
-			Return(habits.CreateHabitResponse{ID: 1, Name: "Exercise", Description: &desc}, nil)
+			Return(habits.CreateHabitResponse{ID: 1, Name: "Exercise", Description: &desc, Frequency: "weekly", Objective: &obj}, nil)
 		handler := habits.NewHandler(svc)
 
-		body := `{"name": "Exercise", "description": "Test description"}`
+		body := `{"name": "Exercise", "description": "Test description", "frequency": "weekly", "objective": 5}`
 		req := httptest.NewRequest(http.MethodPost, "/habits", strings.NewReader(body))
 		rec := httptest.NewRecorder()
 
@@ -135,6 +142,37 @@ func TestHandler_CreateHabit(t *testing.T) {
 		assert.Equal(t, int32(1), got.ID)
 		assert.Equal(t, "Exercise", got.Name)
 		assert.Equal(t, &desc, got.Description)
+		assert.Equal(t, "weekly", got.Frequency)
+		require.NotNil(t, got.Objective)
+		assert.Equal(t, float32(5), *got.Objective)
+	})
+
+	t.Run("returns 400 for invalid frequency", func(t *testing.T) {
+		svc := mocks.NewMockServiceInterface(t)
+		handler := habits.NewHandler(svc)
+
+		body := `{"name": "Exercise", "frequency": "yearly"}`
+		req := httptest.NewRequest(http.MethodPost, "/habits", strings.NewReader(body))
+		rec := httptest.NewRecorder()
+
+		handler.CreateHabit(rec, req)
+
+		assert.Equal(t, http.StatusBadRequest, rec.Code)
+		assert.Contains(t, rec.Body.String(), "frequency must be daily, weekly, or monthly")
+	})
+
+	t.Run("returns 400 for non-positive objective", func(t *testing.T) {
+		svc := mocks.NewMockServiceInterface(t)
+		handler := habits.NewHandler(svc)
+
+		body := `{"name": "Exercise", "objective": -1}`
+		req := httptest.NewRequest(http.MethodPost, "/habits", strings.NewReader(body))
+		rec := httptest.NewRecorder()
+
+		handler.CreateHabit(rec, req)
+
+		assert.Equal(t, http.StatusBadRequest, rec.Code)
+		assert.Contains(t, rec.Body.String(), "objective must be a positive number")
 	})
 
 	t.Run("returns 400 for invalid JSON", func(t *testing.T) {

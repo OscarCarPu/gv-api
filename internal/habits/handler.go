@@ -86,6 +86,19 @@ func (h *Handler) CreateHabit(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if req.Frequency != nil {
+		valid := map[string]bool{"daily": true, "weekly": true, "monthly": true}
+		if !valid[*req.Frequency] {
+			response.Error(w, http.StatusBadRequest, "frequency must be daily, weekly, or monthly")
+			return
+		}
+	}
+
+	if req.Objective != nil && *req.Objective <= 0 {
+		response.Error(w, http.StatusBadRequest, "objective must be a positive number")
+		return
+	}
+
 	habit, err := h.service.CreateHabit(r.Context(), req)
 	if err != nil {
 		response.Error(w, http.StatusInternalServerError, "Failed to create habit")

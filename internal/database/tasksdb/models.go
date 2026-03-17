@@ -11,9 +11,13 @@ import (
 )
 
 type Habit struct {
-	ID          int32   `db:"id" json:"id"`
-	Name        string  `db:"name" json:"name"`
-	Description *string `db:"description" json:"description"`
+	ID            int32    `db:"id" json:"id"`
+	Name          string   `db:"name" json:"name"`
+	Description   *string  `db:"description" json:"description"`
+	Frequency     string   `db:"frequency" json:"frequency"`
+	Objective     *float32 `db:"objective" json:"objective"`
+	CurrentStreak int32    `db:"current_streak" json:"current_streak"`
+	LongestStreak int32    `db:"longest_streak" json:"longest_streak"`
 }
 
 type HabitLog struct {
