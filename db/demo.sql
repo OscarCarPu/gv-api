@@ -10,18 +10,19 @@ TRUNCATE time_entries, todos, tasks, projects, habit_logs, habits RESTART IDENTI
 -- =============================================================================
 -- HABITS
 -- =============================================================================
-INSERT INTO habits (name, description, frequency, objective, current_streak, longest_streak) VALUES
-    ('Exercise', 'Daily physical activity', 'daily', 1, 3, 5),               -- id=1  daily, target: at least 1 session
-    ('Reading', 'Read at least 30 minutes', 'daily', 1, 1, 4),              -- id=2  daily, target: at least 1 session
-    ('Meditation', 'Morning meditation session', 'weekly', 3, 2, 2),        -- id=3  weekly, target: 3 sessions/week
-    ('Water intake', 'Drink 2L of water daily', 'daily', 2, 7, 14),         -- id=4  daily, target: 2L
-    ('Sleep', 'Hours of sleep', 'monthly', 200, 1, 3);                       -- id=5  monthly, target: 200h/month
+INSERT INTO habits (name, description, frequency, target_min, target_max, recording_required, current_streak, longest_streak) VALUES
+    ('Exercise', 'Daily physical activity', 'daily', 1, NULL, true, 3, 5),               -- id=1  daily, target: at least 1 session
+    ('Reading', 'Read at least 30 minutes', 'daily', 1, NULL, true, 1, 4),              -- id=2  daily, target: at least 1 session
+    ('Meditation', 'Morning meditation session', 'weekly', 3, NULL, true, 2, 2),         -- id=3  weekly, target: 3 sessions/week
+    ('Water intake', 'Drink 2L of water daily', 'daily', 2, NULL, true, 7, 14),          -- id=4  daily, target: 2L
+    ('Sleep', 'Hours of sleep', 'daily', NULL, NULL, true, 0, 0),                        -- id=5  daily, no target (pure tracking)
+    ('Weight', 'Body weight in kg', 'daily', 60, 80, false, 0, 0);                       -- id=6  daily, range target, carry-forward
 
 -- =============================================================================
 -- HABIT LOGS (last 21 days for meaningful streak data)
 -- =============================================================================
 INSERT INTO habit_logs (habit_id, log_date, value) VALUES
-    -- Exercise (daily, objective=1): streak of 3 (today, yesterday, day before)
+    -- Exercise (daily, target_min=1): streak of 3 (today, yesterday, day before)
     (1, CURRENT_DATE - INTERVAL '20 days', 1),
     (1, CURRENT_DATE - INTERVAL '19 days', 1),
     (1, CURRENT_DATE - INTERVAL '18 days', 1),
@@ -39,7 +40,7 @@ INSERT INTO habit_logs (habit_id, log_date, value) VALUES
     (1, CURRENT_DATE - INTERVAL '1 day', 1),
     (1, CURRENT_DATE, 1),
 
-    -- Reading (daily, objective=1): streak of 1 (today only, missed yesterday)
+    -- Reading (daily, target_min=1): streak of 1 (today only, missed yesterday)
     (2, CURRENT_DATE - INTERVAL '10 days', 1),
     (2, CURRENT_DATE - INTERVAL '9 days', 1),
     (2, CURRENT_DATE - INTERVAL '8 days', 1),
@@ -50,21 +51,21 @@ INSERT INTO habit_logs (habit_id, log_date, value) VALUES
     (2, CURRENT_DATE - INTERVAL '1 day', 0),
     (2, CURRENT_DATE, 1),
 
-    -- Meditation (weekly, objective=3): streak of 2 full weeks
-    -- Week -2 (3 sessions = meets objective)
+    -- Meditation (weekly, target_min=3): streak of 2 full weeks
+    -- Week -2 (3 sessions = meets target)
     (3, CURRENT_DATE - INTERVAL '20 days', 1),
     (3, CURRENT_DATE - INTERVAL '18 days', 1),
     (3, CURRENT_DATE - INTERVAL '16 days', 1),
-    -- Week -1 (4 sessions = meets objective)
+    -- Week -1 (4 sessions = meets target)
     (3, CURRENT_DATE - INTERVAL '13 days', 1),
     (3, CURRENT_DATE - INTERVAL '11 days', 1),
     (3, CURRENT_DATE - INTERVAL '9 days', 1),
     (3, CURRENT_DATE - INTERVAL '8 days', 1),
-    -- This week (2 sessions so far, not yet meeting objective of 3)
+    -- This week (2 sessions so far, not yet meeting target of 3)
     (3, CURRENT_DATE - INTERVAL '5 days', 1),
     (3, CURRENT_DATE - INTERVAL '3 days', 1),
 
-    -- Water intake (daily, objective=2): perfect streak of 7 days
+    -- Water intake (daily, target_min=2): perfect streak of 7 days
     (4, CURRENT_DATE - INTERVAL '6 days', 2.0),
     (4, CURRENT_DATE - INTERVAL '5 days', 2.5),
     (4, CURRENT_DATE - INTERVAL '4 days', 2.5),
@@ -73,7 +74,7 @@ INSERT INTO habit_logs (habit_id, log_date, value) VALUES
     (4, CURRENT_DATE - INTERVAL '1 day', 2.2),
     (4, CURRENT_DATE, 2.0),
 
-    -- Sleep (monthly, objective=200h): this month accumulating
+    -- Sleep (daily, no targets): pure tracking
     (5, CURRENT_DATE - INTERVAL '20 days', 7.5),
     (5, CURRENT_DATE - INTERVAL '19 days', 6.0),
     (5, CURRENT_DATE - INTERVAL '18 days', 8.0),
@@ -94,7 +95,19 @@ INSERT INTO habit_logs (habit_id, log_date, value) VALUES
     (5, CURRENT_DATE - INTERVAL '3 days', 7.0),
     (5, CURRENT_DATE - INTERVAL '2 days', 6.5),
     (5, CURRENT_DATE - INTERVAL '1 day', 7.5),
-    (5, CURRENT_DATE, 8.0);
+    (5, CURRENT_DATE, 8.0),
+
+    -- Weight (daily, target_min=60, target_max=80, recording_required=false): values ~65-75kg
+    (6, CURRENT_DATE - INTERVAL '13 days', 72.5),
+    (6, CURRENT_DATE - INTERVAL '12 days', 72.0),
+    (6, CURRENT_DATE - INTERVAL '10 days', 71.5),
+    (6, CURRENT_DATE - INTERVAL '9 days', 71.8),
+    (6, CURRENT_DATE - INTERVAL '7 days', 71.0),
+    (6, CURRENT_DATE - INTERVAL '6 days', 70.5),
+    (6, CURRENT_DATE - INTERVAL '4 days', 70.8),
+    (6, CURRENT_DATE - INTERVAL '3 days', 70.2),
+    (6, CURRENT_DATE - INTERVAL '1 day', 69.5),
+    (6, CURRENT_DATE, 69.8);
 
 -- =============================================================================
 -- PROJECTS

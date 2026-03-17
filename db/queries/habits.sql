@@ -1,7 +1,8 @@
 -- name: GetHabitsWithLogs :many
 SELECT
     h.id, h.name, h.description,
-    h.frequency, h.objective, h.current_streak, h.longest_streak,
+    h.frequency, h.target_min, h.target_max, h.recording_required,
+    h.current_streak, h.longest_streak,
     hl.value AS log_value,
     COALESCE(
         (SELECT SUM(hl2.value)
@@ -22,7 +23,8 @@ SELECT
         ), 0
     )::REAL AS period_value
 FROM habits h
-LEFT JOIN habit_logs hl ON h.id = hl.habit_id AND hl.log_date = @target_date;
+LEFT JOIN habit_logs hl ON h.id = hl.habit_id AND hl.log_date = @target_date
+ORDER BY h.id;
 
 -- name: UpsertLog :exec
 INSERT INTO habit_logs (habit_id, log_date, value)
@@ -34,12 +36,12 @@ DO UPDATE SET value = excluded.value;
 DELETE FROM habits WHERE id = $1;
 
 -- name: CreateHabit :one
-INSERT INTO habits (name, description, frequency, objective)
-VALUES ($1, $2, $3, $4)
-RETURNING id, name, description, frequency, objective, current_streak, longest_streak;
+INSERT INTO habits (name, description, frequency, target_min, target_max, recording_required)
+VALUES ($1, $2, $3, $4, $5, $6)
+RETURNING id, name, description, frequency, target_min, target_max, recording_required, current_streak, longest_streak;
 
 -- name: GetHabitByID :one
-SELECT id, name, description, frequency, objective, current_streak, longest_streak
+SELECT id, name, description, frequency, target_min, target_max, recording_required, current_streak, longest_streak
 FROM habits WHERE id = $1;
 
 -- name: GetHabitLogs :many

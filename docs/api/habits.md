@@ -3,7 +3,7 @@
 
 - **Method:** `GET`
 - **Endpoint:** `/habits`
-- **Description:** Retrieves all habits with their logged status for a specific date. Returns today's log value, the accumulated period value (based on each habit's frequency), objective, and streak information.
+- **Description:** Retrieves all habits with their logged status for a specific date. Returns today's log value, the accumulated period value (based on each habit's frequency), targets, and streak information.
 - **Query Parameters:**
   - `date` (optional): The date for which to retrieve habits, in `YYYY-MM-DD` format. Defaults to today.
 - **Success Response:**
@@ -16,7 +16,9 @@
         "name": "Exercise",
         "description": "Go for a 30-minute run.",
         "frequency": "weekly",
-        "objective": 5,
+        "target_min": 5,
+        "target_max": null,
+        "recording_required": true,
         "log_value": 1,
         "period_value": 3,
         "current_streak": 4,
@@ -24,14 +26,16 @@
       },
       {
         "id": 2,
-        "name": "Read",
-        "description": "Read for 15 minutes.",
+        "name": "Weight",
+        "description": "Body weight in kg",
         "frequency": "daily",
-        "objective": null,
-        "log_value": null,
-        "period_value": 0,
-        "current_streak": 0,
-        "longest_streak": 0
+        "target_min": 60,
+        "target_max": 80,
+        "recording_required": false,
+        "log_value": 70.5,
+        "period_value": 70.5,
+        "current_streak": 14,
+        "longest_streak": 14
       }
     ]
     ```
@@ -39,8 +43,10 @@
     - `log_value`: The log value for the specific requested date (null if not logged).
     - `period_value`: Sum of all log values within the current period (daily/weekly/monthly depending on the habit's frequency).
     - `frequency`: The habit's tracking frequency (`daily`, `weekly`, or `monthly`).
-    - `objective`: The target value to reach per period (null if no objective set).
-    - `current_streak`: Number of consecutive completed periods (where period value >= objective).
+    - `target_min`: The minimum target value per period (null if not set).
+    - `target_max`: The maximum target value per period (null if not set).
+    - `recording_required`: Whether missing days break the streak (true) or carry forward the last value (false).
+    - `current_streak`: Number of consecutive completed periods (where period value meets target criteria).
     - `longest_streak`: All-time highest streak.
 - **Error Response:**
   - **Code:** `500 Internal Server Error`
@@ -81,20 +87,24 @@
 
 - **Method:** `POST`
 - **Endpoint:** `/habits`
-- **Description:** Creates a new habit with optional frequency and objective.
+- **Description:** Creates a new habit with optional frequency and targets.
 - **Request Body:**
   ```json
   {
     "name": "Exercise",
     "description": "Go for a 30-minute run.",
     "frequency": "weekly",
-    "objective": 5
+    "target_min": 5,
+    "target_max": null,
+    "recording_required": true
   }
   ```
   - `name` (required): The name of the habit.
   - `description` (optional): A description of the habit.
   - `frequency` (optional): `daily`, `weekly`, or `monthly`. Defaults to `daily`.
-  - `objective` (optional): A positive number representing the target value per period. If omitted, no streak tracking is performed.
+  - `target_min` (optional): Minimum target value per period (must be >= 0).
+  - `target_max` (optional): Maximum target value per period (must be >= 0, must be >= target_min if both set).
+  - `recording_required` (optional): Whether missing days break the streak. Defaults to `true`.
 - **Success Response:**
   - **Code:** `201 Created`
   - **Content:**
@@ -104,14 +114,16 @@
       "name": "Exercise",
       "description": "Go for a 30-minute run.",
       "frequency": "weekly",
-      "objective": 5,
+      "target_min": 5,
+      "target_max": null,
+      "recording_required": true,
       "current_streak": 0,
       "longest_streak": 0
     }
     ```
 - **Error Responses:**
   - **Code:** `400 Bad Request`
-    - **Content:** `Invalid Body`, `name is required`, `frequency must be daily, weekly, or monthly`, or `objective must be a positive number`
+    - **Content:** `Invalid Body`, `name is required`, `frequency must be daily, weekly, or monthly`, `target_min must be >= 0`, `target_max must be >= 0`, or `target_min must be <= target_max`
   - **Code:** `500 Internal Server Error`
     - **Content:** `Failed to create habit`
 

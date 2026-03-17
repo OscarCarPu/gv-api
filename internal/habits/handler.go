@@ -94,8 +94,18 @@ func (h *Handler) CreateHabit(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	if req.Objective != nil && *req.Objective <= 0 {
-		response.Error(w, http.StatusBadRequest, "objective must be a positive number")
+	if req.TargetMin != nil && *req.TargetMin < 0 {
+		response.Error(w, http.StatusBadRequest, "target_min must be >= 0")
+		return
+	}
+
+	if req.TargetMax != nil && *req.TargetMax < 0 {
+		response.Error(w, http.StatusBadRequest, "target_max must be >= 0")
+		return
+	}
+
+	if req.TargetMin != nil && req.TargetMax != nil && *req.TargetMin > *req.TargetMax {
+		response.Error(w, http.StatusBadRequest, "target_min must be <= target_max")
 		return
 	}
 

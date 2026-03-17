@@ -11,32 +11,50 @@ import (
 )
 
 const createHabit = `-- name: CreateHabit :one
-INSERT INTO habits (name, description, frequency, objective)
-VALUES ($1, $2, $3, $4)
-RETURNING id, name, description, frequency, objective, current_streak, longest_streak
+INSERT INTO habits (name, description, frequency, target_min, target_max, recording_required)
+VALUES ($1, $2, $3, $4, $5, $6)
+RETURNING id, name, description, frequency, target_min, target_max, recording_required, current_streak, longest_streak
 `
 
 type CreateHabitParams struct {
-	Name        string   `db:"name" json:"name"`
-	Description *string  `db:"description" json:"description"`
-	Frequency   string   `db:"frequency" json:"frequency"`
-	Objective   *float32 `db:"objective" json:"objective"`
+	Name              string   `db:"name" json:"name"`
+	Description       *string  `db:"description" json:"description"`
+	Frequency         string   `db:"frequency" json:"frequency"`
+	TargetMin         *float32 `db:"target_min" json:"target_min"`
+	TargetMax         *float32 `db:"target_max" json:"target_max"`
+	RecordingRequired bool     `db:"recording_required" json:"recording_required"`
 }
 
-func (q *Queries) CreateHabit(ctx context.Context, arg CreateHabitParams) (Habit, error) {
+type CreateHabitRow struct {
+	ID                int32    `db:"id" json:"id"`
+	Name              string   `db:"name" json:"name"`
+	Description       *string  `db:"description" json:"description"`
+	Frequency         string   `db:"frequency" json:"frequency"`
+	TargetMin         *float32 `db:"target_min" json:"target_min"`
+	TargetMax         *float32 `db:"target_max" json:"target_max"`
+	RecordingRequired bool     `db:"recording_required" json:"recording_required"`
+	CurrentStreak     int32    `db:"current_streak" json:"current_streak"`
+	LongestStreak     int32    `db:"longest_streak" json:"longest_streak"`
+}
+
+func (q *Queries) CreateHabit(ctx context.Context, arg CreateHabitParams) (CreateHabitRow, error) {
 	row := q.db.QueryRow(ctx, createHabit,
 		arg.Name,
 		arg.Description,
 		arg.Frequency,
-		arg.Objective,
+		arg.TargetMin,
+		arg.TargetMax,
+		arg.RecordingRequired,
 	)
-	var i Habit
+	var i CreateHabitRow
 	err := row.Scan(
 		&i.ID,
 		&i.Name,
 		&i.Description,
 		&i.Frequency,
-		&i.Objective,
+		&i.TargetMin,
+		&i.TargetMax,
+		&i.RecordingRequired,
 		&i.CurrentStreak,
 		&i.LongestStreak,
 	)
@@ -53,19 +71,33 @@ func (q *Queries) DeleteHabit(ctx context.Context, id int32) error {
 }
 
 const getHabitByID = `-- name: GetHabitByID :one
-SELECT id, name, description, frequency, objective, current_streak, longest_streak
+SELECT id, name, description, frequency, target_min, target_max, recording_required, current_streak, longest_streak
 FROM habits WHERE id = $1
 `
 
-func (q *Queries) GetHabitByID(ctx context.Context, id int32) (Habit, error) {
+type GetHabitByIDRow struct {
+	ID                int32    `db:"id" json:"id"`
+	Name              string   `db:"name" json:"name"`
+	Description       *string  `db:"description" json:"description"`
+	Frequency         string   `db:"frequency" json:"frequency"`
+	TargetMin         *float32 `db:"target_min" json:"target_min"`
+	TargetMax         *float32 `db:"target_max" json:"target_max"`
+	RecordingRequired bool     `db:"recording_required" json:"recording_required"`
+	CurrentStreak     int32    `db:"current_streak" json:"current_streak"`
+	LongestStreak     int32    `db:"longest_streak" json:"longest_streak"`
+}
+
+func (q *Queries) GetHabitByID(ctx context.Context, id int32) (GetHabitByIDRow, error) {
 	row := q.db.QueryRow(ctx, getHabitByID, id)
-	var i Habit
+	var i GetHabitByIDRow
 	err := row.Scan(
 		&i.ID,
 		&i.Name,
 		&i.Description,
 		&i.Frequency,
-		&i.Objective,
+		&i.TargetMin,
+		&i.TargetMax,
+		&i.RecordingRequired,
 		&i.CurrentStreak,
 		&i.LongestStreak,
 	)
@@ -102,7 +134,8 @@ func (q *Queries) GetHabitLogs(ctx context.Context, habitID int32) ([]HabitLog, 
 const getHabitsWithLogs = `-- name: GetHabitsWithLogs :many
 SELECT
     h.id, h.name, h.description,
-    h.frequency, h.objective, h.current_streak, h.longest_streak,
+    h.frequency, h.target_min, h.target_max, h.recording_required,
+    h.current_streak, h.longest_streak,
     hl.value AS log_value,
     COALESCE(
         (SELECT SUM(hl2.value)
@@ -124,18 +157,21 @@ SELECT
     )::REAL AS period_value
 FROM habits h
 LEFT JOIN habit_logs hl ON h.id = hl.habit_id AND hl.log_date = $1
+ORDER BY h.id
 `
 
 type GetHabitsWithLogsRow struct {
-	ID            int32    `db:"id" json:"id"`
-	Name          string   `db:"name" json:"name"`
-	Description   *string  `db:"description" json:"description"`
-	Frequency     string   `db:"frequency" json:"frequency"`
-	Objective     *float32 `db:"objective" json:"objective"`
-	CurrentStreak int32    `db:"current_streak" json:"current_streak"`
-	LongestStreak int32    `db:"longest_streak" json:"longest_streak"`
-	LogValue      *float32 `db:"log_value" json:"log_value"`
-	PeriodValue   float32  `db:"period_value" json:"period_value"`
+	ID                int32    `db:"id" json:"id"`
+	Name              string   `db:"name" json:"name"`
+	Description       *string  `db:"description" json:"description"`
+	Frequency         string   `db:"frequency" json:"frequency"`
+	TargetMin         *float32 `db:"target_min" json:"target_min"`
+	TargetMax         *float32 `db:"target_max" json:"target_max"`
+	RecordingRequired bool     `db:"recording_required" json:"recording_required"`
+	CurrentStreak     int32    `db:"current_streak" json:"current_streak"`
+	LongestStreak     int32    `db:"longest_streak" json:"longest_streak"`
+	LogValue          *float32 `db:"log_value" json:"log_value"`
+	PeriodValue       float32  `db:"period_value" json:"period_value"`
 }
 
 func (q *Queries) GetHabitsWithLogs(ctx context.Context, targetDate time.Time) ([]GetHabitsWithLogsRow, error) {
@@ -152,7 +188,9 @@ func (q *Queries) GetHabitsWithLogs(ctx context.Context, targetDate time.Time) (
 			&i.Name,
 			&i.Description,
 			&i.Frequency,
-			&i.Objective,
+			&i.TargetMin,
+			&i.TargetMax,
+			&i.RecordingRequired,
 			&i.CurrentStreak,
 			&i.LongestStreak,
 			&i.LogValue,

@@ -32,6 +32,29 @@ func previousPeriodStart(start time.Time, frequency string) time.Time {
 	}
 }
 
+// nextPeriodStart returns the start of the period immediately after the given period start.
+func nextPeriodStart(start time.Time, frequency string) time.Time {
+	switch frequency {
+	case "weekly":
+		return start.AddDate(0, 0, 7)
+	case "monthly":
+		return start.AddDate(0, 1, 0)
+	default: // daily
+		return start.AddDate(0, 0, 1)
+	}
+}
+
+// meetsTarget returns true if value satisfies the target bounds.
+func meetsTarget(value float32, targetMin, targetMax *float32) bool {
+	if targetMin != nil && value < *targetMin {
+		return false
+	}
+	if targetMax != nil && value > *targetMax {
+		return false
+	}
+	return targetMin != nil || targetMax != nil
+}
+
 // groupLogsByPeriod sums log values by their period start date.
 func groupLogsByPeriod(logs []habitsdb.HabitLog, frequency string) map[time.Time]float32 {
 	sums := make(map[time.Time]float32)

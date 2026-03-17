@@ -11,13 +11,15 @@ import (
 )
 
 type Habit struct {
-	ID            int32    `db:"id" json:"id"`
-	Name          string   `db:"name" json:"name"`
-	Description   *string  `db:"description" json:"description"`
-	Frequency     string   `db:"frequency" json:"frequency"`
-	Objective     *float32 `db:"objective" json:"objective"`
-	CurrentStreak int32    `db:"current_streak" json:"current_streak"`
-	LongestStreak int32    `db:"longest_streak" json:"longest_streak"`
+	ID                int32    `db:"id" json:"id"`
+	Name              string   `db:"name" json:"name"`
+	Description       *string  `db:"description" json:"description"`
+	Frequency         string   `db:"frequency" json:"frequency"`
+	CurrentStreak     int32    `db:"current_streak" json:"current_streak"`
+	LongestStreak     int32    `db:"longest_streak" json:"longest_streak"`
+	TargetMin         *float32 `db:"target_min" json:"target_min"`
+	TargetMax         *float32 `db:"target_max" json:"target_max"`
+	RecordingRequired bool     `db:"recording_required" json:"recording_required"`
 }
 
 type HabitLog struct {

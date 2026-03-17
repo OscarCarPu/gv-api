@@ -26,9 +26,9 @@ func (_m *MockRepository) EXPECT() *MockRepository_Expecter {
 	return &MockRepository_Expecter{mock: &_m.Mock}
 }
 
-// CreateHabit provides a mock function with given fields: ctx, name, description, frequency, objective
-func (_m *MockRepository) CreateHabit(ctx context.Context, name string, description *string, frequency string, objective *float32) (habits.CreateHabitResponse, error) {
-	ret := _m.Called(ctx, name, description, frequency, objective)
+// CreateHabit provides a mock function with given fields: ctx, name, description, frequency, targetMin, targetMax, recordingRequired
+func (_m *MockRepository) CreateHabit(ctx context.Context, name string, description *string, frequency string, targetMin *float32, targetMax *float32, recordingRequired bool) (habits.CreateHabitResponse, error) {
+	ret := _m.Called(ctx, name, description, frequency, targetMin, targetMax, recordingRequired)
 
 	if len(ret) == 0 {
 		panic("no return value specified for CreateHabit")
@@ -36,17 +36,17 @@ func (_m *MockRepository) CreateHabit(ctx context.Context, name string, descript
 
 	var r0 habits.CreateHabitResponse
 	var r1 error
-	if rf, ok := ret.Get(0).(func(context.Context, string, *string, string, *float32) (habits.CreateHabitResponse, error)); ok {
-		return rf(ctx, name, description, frequency, objective)
+	if rf, ok := ret.Get(0).(func(context.Context, string, *string, string, *float32, *float32, bool) (habits.CreateHabitResponse, error)); ok {
+		return rf(ctx, name, description, frequency, targetMin, targetMax, recordingRequired)
 	}
-	if rf, ok := ret.Get(0).(func(context.Context, string, *string, string, *float32) habits.CreateHabitResponse); ok {
-		r0 = rf(ctx, name, description, frequency, objective)
+	if rf, ok := ret.Get(0).(func(context.Context, string, *string, string, *float32, *float32, bool) habits.CreateHabitResponse); ok {
+		r0 = rf(ctx, name, description, frequency, targetMin, targetMax, recordingRequired)
 	} else {
 		r0 = ret.Get(0).(habits.CreateHabitResponse)
 	}
 
-	if rf, ok := ret.Get(1).(func(context.Context, string, *string, string, *float32) error); ok {
-		r1 = rf(ctx, name, description, frequency, objective)
+	if rf, ok := ret.Get(1).(func(context.Context, string, *string, string, *float32, *float32, bool) error); ok {
+		r1 = rf(ctx, name, description, frequency, targetMin, targetMax, recordingRequired)
 	} else {
 		r1 = ret.Error(1)
 	}
@@ -64,14 +64,16 @@ type MockRepository_CreateHabit_Call struct {
 //   - name string
 //   - description *string
 //   - frequency string
-//   - objective *float32
-func (_e *MockRepository_Expecter) CreateHabit(ctx interface{}, name interface{}, description interface{}, frequency interface{}, objective interface{}) *MockRepository_CreateHabit_Call {
-	return &MockRepository_CreateHabit_Call{Call: _e.mock.On("CreateHabit", ctx, name, description, frequency, objective)}
+//   - targetMin *float32
+//   - targetMax *float32
+//   - recordingRequired bool
+func (_e *MockRepository_Expecter) CreateHabit(ctx interface{}, name interface{}, description interface{}, frequency interface{}, targetMin interface{}, targetMax interface{}, recordingRequired interface{}) *MockRepository_CreateHabit_Call {
+	return &MockRepository_CreateHabit_Call{Call: _e.mock.On("CreateHabit", ctx, name, description, frequency, targetMin, targetMax, recordingRequired)}
 }
 
-func (_c *MockRepository_CreateHabit_Call) Run(run func(ctx context.Context, name string, description *string, frequency string, objective *float32)) *MockRepository_CreateHabit_Call {
+func (_c *MockRepository_CreateHabit_Call) Run(run func(ctx context.Context, name string, description *string, frequency string, targetMin *float32, targetMax *float32, recordingRequired bool)) *MockRepository_CreateHabit_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].(context.Context), args[1].(string), args[2].(*string), args[3].(string), args[4].(*float32))
+		run(args[0].(context.Context), args[1].(string), args[2].(*string), args[3].(string), args[4].(*float32), args[5].(*float32), args[6].(bool))
 	})
 	return _c
 }
@@ -81,7 +83,7 @@ func (_c *MockRepository_CreateHabit_Call) Return(_a0 habits.CreateHabitResponse
 	return _c
 }
 
-func (_c *MockRepository_CreateHabit_Call) RunAndReturn(run func(context.Context, string, *string, string, *float32) (habits.CreateHabitResponse, error)) *MockRepository_CreateHabit_Call {
+func (_c *MockRepository_CreateHabit_Call) RunAndReturn(run func(context.Context, string, *string, string, *float32, *float32, bool) (habits.CreateHabitResponse, error)) *MockRepository_CreateHabit_Call {
 	_c.Call.Return(run)
 	return _c
 }
@@ -134,22 +136,22 @@ func (_c *MockRepository_DeleteHabit_Call) RunAndReturn(run func(context.Context
 }
 
 // GetHabitByID provides a mock function with given fields: ctx, id
-func (_m *MockRepository) GetHabitByID(ctx context.Context, id int32) (habitsdb.Habit, error) {
+func (_m *MockRepository) GetHabitByID(ctx context.Context, id int32) (habitsdb.GetHabitByIDRow, error) {
 	ret := _m.Called(ctx, id)
 
 	if len(ret) == 0 {
 		panic("no return value specified for GetHabitByID")
 	}
 
-	var r0 habitsdb.Habit
+	var r0 habitsdb.GetHabitByIDRow
 	var r1 error
-	if rf, ok := ret.Get(0).(func(context.Context, int32) (habitsdb.Habit, error)); ok {
+	if rf, ok := ret.Get(0).(func(context.Context, int32) (habitsdb.GetHabitByIDRow, error)); ok {
 		return rf(ctx, id)
 	}
-	if rf, ok := ret.Get(0).(func(context.Context, int32) habitsdb.Habit); ok {
+	if rf, ok := ret.Get(0).(func(context.Context, int32) habitsdb.GetHabitByIDRow); ok {
 		r0 = rf(ctx, id)
 	} else {
-		r0 = ret.Get(0).(habitsdb.Habit)
+		r0 = ret.Get(0).(habitsdb.GetHabitByIDRow)
 	}
 
 	if rf, ok := ret.Get(1).(func(context.Context, int32) error); ok {
@@ -180,12 +182,12 @@ func (_c *MockRepository_GetHabitByID_Call) Run(run func(ctx context.Context, id
 	return _c
 }
 
-func (_c *MockRepository_GetHabitByID_Call) Return(_a0 habitsdb.Habit, _a1 error) *MockRepository_GetHabitByID_Call {
+func (_c *MockRepository_GetHabitByID_Call) Return(_a0 habitsdb.GetHabitByIDRow, _a1 error) *MockRepository_GetHabitByID_Call {
 	_c.Call.Return(_a0, _a1)
 	return _c
 }
 
-func (_c *MockRepository_GetHabitByID_Call) RunAndReturn(run func(context.Context, int32) (habitsdb.Habit, error)) *MockRepository_GetHabitByID_Call {
+func (_c *MockRepository_GetHabitByID_Call) RunAndReturn(run func(context.Context, int32) (habitsdb.GetHabitByIDRow, error)) *MockRepository_GetHabitByID_Call {
 	_c.Call.Return(run)
 	return _c
 }

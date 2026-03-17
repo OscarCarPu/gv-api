@@ -73,11 +73,11 @@ func TestHandler_GetDaily(t *testing.T) {
 		desc1 := "Daily workout"
 		desc2 := "Read a book"
 		val := float32(42.5)
-		obj := float32(50)
+		tmin := float32(50)
 		svc := mocks.NewMockServiceInterface(t)
 		svc.EXPECT().GetDailyView(mock.Anything, "2025-01-31").Return([]habits.HabitWithLog{
-			{ID: 1, Name: "Exercise", Description: &desc1, Frequency: "daily", Objective: &obj, LogValue: nil, PeriodValue: 0, CurrentStreak: 3, LongestStreak: 10},
-			{ID: 2, Name: "Reading", Description: &desc2, Frequency: "weekly", LogValue: &val, PeriodValue: 42.5, CurrentStreak: 0, LongestStreak: 0},
+			{ID: 1, Name: "Exercise", Description: &desc1, Frequency: "daily", TargetMin: &tmin, RecordingRequired: true, LogValue: nil, PeriodValue: 0, CurrentStreak: 3, LongestStreak: 10},
+			{ID: 2, Name: "Reading", Description: &desc2, Frequency: "weekly", RecordingRequired: true, LogValue: &val, PeriodValue: 42.5, CurrentStreak: 0, LongestStreak: 0},
 		}, nil)
 		handler := habits.NewHandler(svc)
 
@@ -120,16 +120,16 @@ func TestHandler_GetDaily(t *testing.T) {
 func TestHandler_CreateHabit(t *testing.T) {
 	t.Run("returns 201 with created habit", func(t *testing.T) {
 		desc := "Test description"
-		obj := float32(5)
+		tmin := float32(5)
 		svc := mocks.NewMockServiceInterface(t)
 		svc.EXPECT().
 			CreateHabit(mock.Anything, mock.MatchedBy(func(req habits.CreateHabitRequest) bool {
 				return req.Name == "Exercise"
 			})).
-			Return(habits.CreateHabitResponse{ID: 1, Name: "Exercise", Description: &desc, Frequency: "weekly", Objective: &obj}, nil)
+			Return(habits.CreateHabitResponse{ID: 1, Name: "Exercise", Description: &desc, Frequency: "weekly", TargetMin: &tmin, RecordingRequired: true}, nil)
 		handler := habits.NewHandler(svc)
 
-		body := `{"name": "Exercise", "description": "Test description", "frequency": "weekly", "objective": 5}`
+		body := `{"name": "Exercise", "description": "Test description", "frequency": "weekly", "target_min": 5}`
 		req := httptest.NewRequest(http.MethodPost, "/habits", strings.NewReader(body))
 		rec := httptest.NewRecorder()
 
@@ -143,8 +143,8 @@ func TestHandler_CreateHabit(t *testing.T) {
 		assert.Equal(t, "Exercise", got.Name)
 		assert.Equal(t, &desc, got.Description)
 		assert.Equal(t, "weekly", got.Frequency)
-		require.NotNil(t, got.Objective)
-		assert.Equal(t, float32(5), *got.Objective)
+		require.NotNil(t, got.TargetMin)
+		assert.Equal(t, float32(5), *got.TargetMin)
 	})
 
 	t.Run("returns 400 for invalid frequency", func(t *testing.T) {
@@ -161,18 +161,46 @@ func TestHandler_CreateHabit(t *testing.T) {
 		assert.Contains(t, rec.Body.String(), "frequency must be daily, weekly, or monthly")
 	})
 
-	t.Run("returns 400 for non-positive objective", func(t *testing.T) {
+	t.Run("returns 400 for negative target_min", func(t *testing.T) {
 		svc := mocks.NewMockServiceInterface(t)
 		handler := habits.NewHandler(svc)
 
-		body := `{"name": "Exercise", "objective": -1}`
+		body := `{"name": "Exercise", "target_min": -1}`
 		req := httptest.NewRequest(http.MethodPost, "/habits", strings.NewReader(body))
 		rec := httptest.NewRecorder()
 
 		handler.CreateHabit(rec, req)
 
 		assert.Equal(t, http.StatusBadRequest, rec.Code)
-		assert.Contains(t, rec.Body.String(), "objective must be a positive number")
+		assert.Contains(t, rec.Body.String(), "target_min must be")
+	})
+
+	t.Run("returns 400 for negative target_max", func(t *testing.T) {
+		svc := mocks.NewMockServiceInterface(t)
+		handler := habits.NewHandler(svc)
+
+		body := `{"name": "Exercise", "target_max": -1}`
+		req := httptest.NewRequest(http.MethodPost, "/habits", strings.NewReader(body))
+		rec := httptest.NewRecorder()
+
+		handler.CreateHabit(rec, req)
+
+		assert.Equal(t, http.StatusBadRequest, rec.Code)
+		assert.Contains(t, rec.Body.String(), "target_max must be")
+	})
+
+	t.Run("returns 400 when target_min > target_max", func(t *testing.T) {
+		svc := mocks.NewMockServiceInterface(t)
+		handler := habits.NewHandler(svc)
+
+		body := `{"name": "Exercise", "target_min": 10, "target_max": 5}`
+		req := httptest.NewRequest(http.MethodPost, "/habits", strings.NewReader(body))
+		rec := httptest.NewRecorder()
+
+		handler.CreateHabit(rec, req)
+
+		assert.Equal(t, http.StatusBadRequest, rec.Code)
+		assert.Contains(t, rec.Body.String(), "target_min must be")
 	})
 
 	t.Run("returns 400 for invalid JSON", func(t *testing.T) {
