@@ -192,6 +192,130 @@ func (_c *MockRepository_GetHabitByID_Call) RunAndReturn(run func(context.Contex
 	return _c
 }
 
+// GetHabitHistory provides a mock function with given fields: ctx, habitID, frequency, startAt, endAt
+func (_m *MockRepository) GetHabitHistory(ctx context.Context, habitID int32, frequency string, startAt time.Time, endAt time.Time) ([]habits.HistoryPoint, error) {
+	ret := _m.Called(ctx, habitID, frequency, startAt, endAt)
+
+	if len(ret) == 0 {
+		panic("no return value specified for GetHabitHistory")
+	}
+
+	var r0 []habits.HistoryPoint
+	var r1 error
+	if rf, ok := ret.Get(0).(func(context.Context, int32, string, time.Time, time.Time) ([]habits.HistoryPoint, error)); ok {
+		return rf(ctx, habitID, frequency, startAt, endAt)
+	}
+	if rf, ok := ret.Get(0).(func(context.Context, int32, string, time.Time, time.Time) []habits.HistoryPoint); ok {
+		r0 = rf(ctx, habitID, frequency, startAt, endAt)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).([]habits.HistoryPoint)
+		}
+	}
+
+	if rf, ok := ret.Get(1).(func(context.Context, int32, string, time.Time, time.Time) error); ok {
+		r1 = rf(ctx, habitID, frequency, startAt, endAt)
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
+}
+
+// MockRepository_GetHabitHistory_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'GetHabitHistory'
+type MockRepository_GetHabitHistory_Call struct {
+	*mock.Call
+}
+
+// GetHabitHistory is a helper method to define mock.On call
+//   - ctx context.Context
+//   - habitID int32
+//   - frequency string
+//   - startAt time.Time
+//   - endAt time.Time
+func (_e *MockRepository_Expecter) GetHabitHistory(ctx interface{}, habitID interface{}, frequency interface{}, startAt interface{}, endAt interface{}) *MockRepository_GetHabitHistory_Call {
+	return &MockRepository_GetHabitHistory_Call{Call: _e.mock.On("GetHabitHistory", ctx, habitID, frequency, startAt, endAt)}
+}
+
+func (_c *MockRepository_GetHabitHistory_Call) Run(run func(ctx context.Context, habitID int32, frequency string, startAt time.Time, endAt time.Time)) *MockRepository_GetHabitHistory_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].(context.Context), args[1].(int32), args[2].(string), args[3].(time.Time), args[4].(time.Time))
+	})
+	return _c
+}
+
+func (_c *MockRepository_GetHabitHistory_Call) Return(_a0 []habits.HistoryPoint, _a1 error) *MockRepository_GetHabitHistory_Call {
+	_c.Call.Return(_a0, _a1)
+	return _c
+}
+
+func (_c *MockRepository_GetHabitHistory_Call) RunAndReturn(run func(context.Context, int32, string, time.Time, time.Time) ([]habits.HistoryPoint, error)) *MockRepository_GetHabitHistory_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// GetHabitHistoryAvg provides a mock function with given fields: ctx, habitID, frequency, startAt, endAt
+func (_m *MockRepository) GetHabitHistoryAvg(ctx context.Context, habitID int32, frequency string, startAt time.Time, endAt time.Time) ([]habits.HistoryPoint, error) {
+	ret := _m.Called(ctx, habitID, frequency, startAt, endAt)
+
+	if len(ret) == 0 {
+		panic("no return value specified for GetHabitHistoryAvg")
+	}
+
+	var r0 []habits.HistoryPoint
+	var r1 error
+	if rf, ok := ret.Get(0).(func(context.Context, int32, string, time.Time, time.Time) ([]habits.HistoryPoint, error)); ok {
+		return rf(ctx, habitID, frequency, startAt, endAt)
+	}
+	if rf, ok := ret.Get(0).(func(context.Context, int32, string, time.Time, time.Time) []habits.HistoryPoint); ok {
+		r0 = rf(ctx, habitID, frequency, startAt, endAt)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).([]habits.HistoryPoint)
+		}
+	}
+
+	if rf, ok := ret.Get(1).(func(context.Context, int32, string, time.Time, time.Time) error); ok {
+		r1 = rf(ctx, habitID, frequency, startAt, endAt)
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
+}
+
+// MockRepository_GetHabitHistoryAvg_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'GetHabitHistoryAvg'
+type MockRepository_GetHabitHistoryAvg_Call struct {
+	*mock.Call
+}
+
+// GetHabitHistoryAvg is a helper method to define mock.On call
+//   - ctx context.Context
+//   - habitID int32
+//   - frequency string
+//   - startAt time.Time
+//   - endAt time.Time
+func (_e *MockRepository_Expecter) GetHabitHistoryAvg(ctx interface{}, habitID interface{}, frequency interface{}, startAt interface{}, endAt interface{}) *MockRepository_GetHabitHistoryAvg_Call {
+	return &MockRepository_GetHabitHistoryAvg_Call{Call: _e.mock.On("GetHabitHistoryAvg", ctx, habitID, frequency, startAt, endAt)}
+}
+
+func (_c *MockRepository_GetHabitHistoryAvg_Call) Run(run func(ctx context.Context, habitID int32, frequency string, startAt time.Time, endAt time.Time)) *MockRepository_GetHabitHistoryAvg_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].(context.Context), args[1].(int32), args[2].(string), args[3].(time.Time), args[4].(time.Time))
+	})
+	return _c
+}
+
+func (_c *MockRepository_GetHabitHistoryAvg_Call) Return(_a0 []habits.HistoryPoint, _a1 error) *MockRepository_GetHabitHistoryAvg_Call {
+	_c.Call.Return(_a0, _a1)
+	return _c
+}
+
+func (_c *MockRepository_GetHabitHistoryAvg_Call) RunAndReturn(run func(context.Context, int32, string, time.Time, time.Time) ([]habits.HistoryPoint, error)) *MockRepository_GetHabitHistoryAvg_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // GetHabitLogs provides a mock function with given fields: ctx, habitID
 func (_m *MockRepository) GetHabitLogs(ctx context.Context, habitID int32) ([]habitsdb.HabitLog, error) {
 	ret := _m.Called(ctx, habitID)

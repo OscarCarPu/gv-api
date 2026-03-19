@@ -104,6 +104,104 @@ func (q *Queries) GetHabitByID(ctx context.Context, id int32) (GetHabitByIDRow, 
 	return i, err
 }
 
+const getHabitHistory = `-- name: GetHabitHistory :many
+SELECT
+    date_trunc($1::text, hl.log_date::timestamp)::date AS date,
+    SUM(hl.value)::REAL AS value
+FROM habit_logs hl
+WHERE hl.habit_id = $2
+  AND hl.log_date >= $3::date
+  AND hl.log_date <= $4::date
+GROUP BY date_trunc($1::text, hl.log_date::timestamp)
+ORDER BY date
+`
+
+type GetHabitHistoryParams struct {
+	Frequency string    `db:"frequency" json:"frequency"`
+	HabitID   int32     `db:"habit_id" json:"habit_id"`
+	StartAt   time.Time `db:"start_at" json:"start_at"`
+	EndAt     time.Time `db:"end_at" json:"end_at"`
+}
+
+type GetHabitHistoryRow struct {
+	Date  time.Time `db:"date" json:"date"`
+	Value float32   `db:"value" json:"value"`
+}
+
+func (q *Queries) GetHabitHistory(ctx context.Context, arg GetHabitHistoryParams) ([]GetHabitHistoryRow, error) {
+	rows, err := q.db.Query(ctx, getHabitHistory,
+		arg.Frequency,
+		arg.HabitID,
+		arg.StartAt,
+		arg.EndAt,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []GetHabitHistoryRow{}
+	for rows.Next() {
+		var i GetHabitHistoryRow
+		if err := rows.Scan(&i.Date, &i.Value); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const getHabitHistoryAvg = `-- name: GetHabitHistoryAvg :many
+SELECT
+    date_trunc($1::text, hl.log_date::timestamp)::date AS date,
+    AVG(hl.value)::REAL AS value
+FROM habit_logs hl
+WHERE hl.habit_id = $2
+  AND hl.log_date >= $3::date
+  AND hl.log_date <= $4::date
+GROUP BY date_trunc($1::text, hl.log_date::timestamp)
+ORDER BY date
+`
+
+type GetHabitHistoryAvgParams struct {
+	Frequency string    `db:"frequency" json:"frequency"`
+	HabitID   int32     `db:"habit_id" json:"habit_id"`
+	StartAt   time.Time `db:"start_at" json:"start_at"`
+	EndAt     time.Time `db:"end_at" json:"end_at"`
+}
+
+type GetHabitHistoryAvgRow struct {
+	Date  time.Time `db:"date" json:"date"`
+	Value float32   `db:"value" json:"value"`
+}
+
+func (q *Queries) GetHabitHistoryAvg(ctx context.Context, arg GetHabitHistoryAvgParams) ([]GetHabitHistoryAvgRow, error) {
+	rows, err := q.db.Query(ctx, getHabitHistoryAvg,
+		arg.Frequency,
+		arg.HabitID,
+		arg.StartAt,
+		arg.EndAt,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []GetHabitHistoryAvgRow{}
+	for rows.Next() {
+		var i GetHabitHistoryAvgRow
+		if err := rows.Scan(&i.Date, &i.Value); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getHabitLogs = `-- name: GetHabitLogs :many
 SELECT habit_id, log_date, value
 FROM habit_logs

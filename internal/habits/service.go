@@ -69,6 +69,111 @@ func (s *Service) DeleteHabit(ctx context.Context, id int32) error {
 	return s.repo.DeleteHabit(ctx, id)
 }
 
+// frequencyToTrunc maps API frequency names to PostgreSQL date_trunc names.
+var frequencyToTrunc = map[string]string{
+	"daily":   "day",
+	"weekly":  "week",
+	"monthly": "month",
+}
+
+// frequencyRank orders frequencies from finest to coarsest.
+var frequencyRank = map[string]int{
+	"daily":   0,
+	"weekly":  1,
+	"monthly": 2,
+}
+
+func defaultStartDate(today time.Time, frequency string) time.Time {
+	switch frequency {
+	case "weekly":
+		return today.AddDate(0, 0, -12*7)
+	case "monthly":
+		return today.AddDate(-1, 0, 0)
+	default: // daily
+		return today.AddDate(0, -1, 0)
+	}
+}
+
+func (s *Service) GetHistory(ctx context.Context, habitID int32, frequency, startAt, endAt string) (HistoryResponse, error) {
+	habit, err := s.repo.GetHabitByID(ctx, habitID)
+	if err != nil {
+		return HistoryResponse{}, err
+	}
+
+	if frequency == "" {
+		frequency = habit.Frequency
+	}
+
+	trunc, ok := frequencyToTrunc[frequency]
+	if !ok {
+		return HistoryResponse{}, fmt.Errorf("invalid frequency: %s", frequency)
+	}
+
+	now := time.Now().In(s.location)
+	today := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC)
+
+	end := today
+	if endAt != "" {
+		parsed, err := time.Parse("2006-01-02", endAt)
+		if err != nil {
+			return HistoryResponse{}, fmt.Errorf("invalid end_at date")
+		}
+		end = parsed
+	}
+
+	start := defaultStartDate(today, frequency)
+	if startAt != "" {
+		parsed, err := time.Parse("2006-01-02", startAt)
+		if err != nil {
+			return HistoryResponse{}, fmt.Errorf("invalid start_at date")
+		}
+		start = parsed
+	}
+
+	// Use AVG when viewing at a coarser frequency than the habit's native one.
+	var data []HistoryPoint
+	if frequencyRank[frequency] > frequencyRank[habit.Frequency] {
+		data, err = s.repo.GetHabitHistoryAvg(ctx, habitID, trunc, start, end)
+	} else {
+		data, err = s.repo.GetHabitHistory(ctx, habitID, trunc, start, end)
+	}
+	if err != nil {
+		return HistoryResponse{}, err
+	}
+
+	if habit.RecordingRequired {
+		data = fillMissingPeriods(data, start, end, frequency)
+	}
+
+	return HistoryResponse{
+		StartAt: periodStart(start, frequency).Format("2006-01-02"),
+		EndAt:   periodStart(end, frequency).Format("2006-01-02"),
+		Data:    data,
+	}, nil
+}
+
+// fillMissingPeriods inserts zero-valued points for any periods in the range that have no data.
+func fillMissingPeriods(data []HistoryPoint, start, end time.Time, frequency string) []HistoryPoint {
+	existing := make(map[string]HistoryPoint, len(data))
+	for _, p := range data {
+		existing[p.Date] = p
+	}
+
+	var filled []HistoryPoint
+	ps := periodStart(start, frequency)
+	endPS := periodStart(end, frequency)
+	for !ps.After(endPS) {
+		key := ps.Format("2006-01-02")
+		if p, ok := existing[key]; ok {
+			filled = append(filled, p)
+		} else {
+			filled = append(filled, HistoryPoint{Date: key, Value: 0})
+		}
+		ps = nextPeriodStart(ps, frequency)
+	}
+	return filled
+}
+
 func (s *Service) recalculateStreak(ctx context.Context, habitID int32) error {
 	habit, err := s.repo.GetHabitByID(ctx, habitID)
 	if err != nil {

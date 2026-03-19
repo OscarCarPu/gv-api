@@ -185,6 +185,66 @@ func (_c *MockServiceInterface_GetDailyView_Call) RunAndReturn(run func(context.
 	return _c
 }
 
+// GetHistory provides a mock function with given fields: ctx, habitID, frequency, startAt, endAt
+func (_m *MockServiceInterface) GetHistory(ctx context.Context, habitID int32, frequency string, startAt string, endAt string) (habits.HistoryResponse, error) {
+	ret := _m.Called(ctx, habitID, frequency, startAt, endAt)
+
+	if len(ret) == 0 {
+		panic("no return value specified for GetHistory")
+	}
+
+	var r0 habits.HistoryResponse
+	var r1 error
+	if rf, ok := ret.Get(0).(func(context.Context, int32, string, string, string) (habits.HistoryResponse, error)); ok {
+		return rf(ctx, habitID, frequency, startAt, endAt)
+	}
+	if rf, ok := ret.Get(0).(func(context.Context, int32, string, string, string) habits.HistoryResponse); ok {
+		r0 = rf(ctx, habitID, frequency, startAt, endAt)
+	} else {
+		r0 = ret.Get(0).(habits.HistoryResponse)
+	}
+
+	if rf, ok := ret.Get(1).(func(context.Context, int32, string, string, string) error); ok {
+		r1 = rf(ctx, habitID, frequency, startAt, endAt)
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
+}
+
+// MockServiceInterface_GetHistory_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'GetHistory'
+type MockServiceInterface_GetHistory_Call struct {
+	*mock.Call
+}
+
+// GetHistory is a helper method to define mock.On call
+//   - ctx context.Context
+//   - habitID int32
+//   - frequency string
+//   - startAt string
+//   - endAt string
+func (_e *MockServiceInterface_Expecter) GetHistory(ctx interface{}, habitID interface{}, frequency interface{}, startAt interface{}, endAt interface{}) *MockServiceInterface_GetHistory_Call {
+	return &MockServiceInterface_GetHistory_Call{Call: _e.mock.On("GetHistory", ctx, habitID, frequency, startAt, endAt)}
+}
+
+func (_c *MockServiceInterface_GetHistory_Call) Run(run func(ctx context.Context, habitID int32, frequency string, startAt string, endAt string)) *MockServiceInterface_GetHistory_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].(context.Context), args[1].(int32), args[2].(string), args[3].(string), args[4].(string))
+	})
+	return _c
+}
+
+func (_c *MockServiceInterface_GetHistory_Call) Return(_a0 habits.HistoryResponse, _a1 error) *MockServiceInterface_GetHistory_Call {
+	_c.Call.Return(_a0, _a1)
+	return _c
+}
+
+func (_c *MockServiceInterface_GetHistory_Call) RunAndReturn(run func(context.Context, int32, string, string, string) (habits.HistoryResponse, error)) *MockServiceInterface_GetHistory_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // LogHabit provides a mock function with given fields: ctx, req
 func (_m *MockServiceInterface) LogHabit(ctx context.Context, req habits.LogUpsertRequest) error {
 	ret := _m.Called(ctx, req)

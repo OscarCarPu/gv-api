@@ -291,3 +291,66 @@ func TestHandler_DeleteHabit(t *testing.T) {
 		assert.Contains(t, rec.Body.String(), "Failed to delete habit")
 	})
 }
+
+func TestHandler_GetHistory(t *testing.T) {
+	t.Run("returns 400 for invalid ID", func(t *testing.T) {
+		svc := mocks.NewMockServiceInterface(t)
+		handler := habits.NewHandler(svc)
+
+		req := httptest.NewRequest(http.MethodGet, "/habits/abc/history", nil)
+		rctx := chi.NewRouteContext()
+		rctx.URLParams.Add("id", "abc")
+		req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
+
+		rec := httptest.NewRecorder()
+		handler.GetHistory(rec, req)
+		assert.Equal(t, http.StatusBadRequest, rec.Code)
+		assert.Contains(t, rec.Body.String(), "invalid habit id")
+	})
+
+	t.Run("returns 400 for invalid frequency", func(t *testing.T) {
+		svc := mocks.NewMockServiceInterface(t)
+		handler := habits.NewHandler(svc)
+
+		req := httptest.NewRequest(http.MethodGet, "/habits/1/history?frequency=yearly", nil)
+		rctx := chi.NewRouteContext()
+		rctx.URLParams.Add("id", "1")
+		req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
+
+		rec := httptest.NewRecorder()
+		handler.GetHistory(rec, req)
+		assert.Equal(t, http.StatusBadRequest, rec.Code)
+		assert.Contains(t, rec.Body.String(), "frequency must be daily, weekly, or monthly")
+	})
+
+	t.Run("returns 200 with history", func(t *testing.T) {
+		svc := mocks.NewMockServiceInterface(t)
+		svc.EXPECT().GetHistory(mock.Anything, int32(1), "daily", "2026-03-01", "2026-03-19").
+			Return(habits.HistoryResponse{
+				StartAt: "2026-03-01",
+				EndAt:   "2026-03-19",
+				Data: []habits.HistoryPoint{
+					{Date: "2026-03-01", Value: 5},
+					{Date: "2026-03-02", Value: 3},
+				},
+			}, nil)
+		handler := habits.NewHandler(svc)
+
+		req := httptest.NewRequest(http.MethodGet, "/habits/1/history?frequency=daily&start_at=2026-03-01&end_at=2026-03-19", nil)
+		rctx := chi.NewRouteContext()
+		rctx.URLParams.Add("id", "1")
+		req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
+
+		rec := httptest.NewRecorder()
+		handler.GetHistory(rec, req)
+		assert.Equal(t, http.StatusOK, rec.Code)
+
+		var result habits.HistoryResponse
+		require.NoError(t, json.NewDecoder(rec.Body).Decode(&result))
+		assert.Equal(t, "2026-03-01", result.StartAt)
+		assert.Equal(t, "2026-03-19", result.EndAt)
+		assert.Len(t, result.Data, 2)
+		assert.Equal(t, "2026-03-01", result.Data[0].Date)
+		assert.Equal(t, float32(5), result.Data[0].Value)
+	})
+}

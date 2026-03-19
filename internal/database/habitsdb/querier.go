@@ -13,6 +13,8 @@ type Querier interface {
 	CreateHabit(ctx context.Context, arg CreateHabitParams) (CreateHabitRow, error)
 	DeleteHabit(ctx context.Context, id int32) error
 	GetHabitByID(ctx context.Context, id int32) (GetHabitByIDRow, error)
+	GetHabitHistory(ctx context.Context, arg GetHabitHistoryParams) ([]GetHabitHistoryRow, error)
+	GetHabitHistoryAvg(ctx context.Context, arg GetHabitHistoryAvgParams) ([]GetHabitHistoryAvgRow, error)
 	GetHabitLogs(ctx context.Context, habitID int32) ([]HabitLog, error)
 	GetHabitsWithLogs(ctx context.Context, targetDate time.Time) ([]GetHabitsWithLogsRow, error)
 	UpdateHabitStreak(ctx context.Context, arg UpdateHabitStreakParams) error

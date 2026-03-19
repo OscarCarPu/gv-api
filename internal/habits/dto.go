@@ -31,6 +31,17 @@ type CreateHabitRequest struct {
 	RecordingRequired *bool    `json:"recording_required"`
 }
 
+type HistoryPoint struct {
+	Date  string  `json:"date"`
+	Value float32 `json:"value"`
+}
+
+type HistoryResponse struct {
+	StartAt string         `json:"start_at"`
+	EndAt   string         `json:"end_at"`
+	Data    []HistoryPoint `json:"data"`
+}
+
 type CreateHabitResponse struct {
 	ID                int32    `json:"id"`
 	Name              string   `json:"name"`

@@ -15,6 +15,8 @@ type Repository interface {
 	GetHabitByID(ctx context.Context, id int32) (habitsdb.GetHabitByIDRow, error)
 	GetHabitLogs(ctx context.Context, habitID int32) ([]habitsdb.HabitLog, error)
 	UpdateHabitStreak(ctx context.Context, id int32, currentStreak, longestStreak int32) error
+	GetHabitHistory(ctx context.Context, habitID int32, frequency string, startAt, endAt time.Time) ([]HistoryPoint, error)
+	GetHabitHistoryAvg(ctx context.Context, habitID int32, frequency string, startAt, endAt time.Time) ([]HistoryPoint, error)
 }
 
 type PostgresRepository struct {
@@ -104,4 +106,46 @@ func (r *PostgresRepository) UpdateHabitStreak(ctx context.Context, id int32, cu
 		CurrentStreak: currentStreak,
 		LongestStreak: longestStreak,
 	})
+}
+
+func (r *PostgresRepository) GetHabitHistory(ctx context.Context, habitID int32, frequency string, startAt, endAt time.Time) ([]HistoryPoint, error) {
+	rows, err := r.q.GetHabitHistory(ctx, habitsdb.GetHabitHistoryParams{
+		HabitID:   habitID,
+		Frequency: frequency,
+		StartAt:   startAt,
+		EndAt:     endAt,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	results := make([]HistoryPoint, len(rows))
+	for i, row := range rows {
+		results[i] = HistoryPoint{
+			Date:  row.Date.Format("2006-01-02"),
+			Value: row.Value,
+		}
+	}
+	return results, nil
+}
+
+func (r *PostgresRepository) GetHabitHistoryAvg(ctx context.Context, habitID int32, frequency string, startAt, endAt time.Time) ([]HistoryPoint, error) {
+	rows, err := r.q.GetHabitHistoryAvg(ctx, habitsdb.GetHabitHistoryAvgParams{
+		HabitID:   habitID,
+		Frequency: frequency,
+		StartAt:   startAt,
+		EndAt:     endAt,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	results := make([]HistoryPoint, len(rows))
+	for i, row := range rows {
+		results[i] = HistoryPoint{
+			Date:  row.Date.Format("2006-01-02"),
+			Value: row.Value,
+		}
+	}
+	return results, nil
 }

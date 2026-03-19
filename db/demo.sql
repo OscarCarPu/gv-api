@@ -16,22 +16,37 @@ INSERT INTO habits (name, description, frequency, target_min, target_max, record
     ('Meditation', 'Morning meditation session', 'weekly', 3, NULL, true, 2, 2),         -- id=3  weekly, target: 3 sessions/week
     ('Water intake', 'Drink 2L of water daily', 'daily', 2, NULL, true, 7, 14),          -- id=4  daily, target: 2L
     ('Sleep', 'Hours of sleep', 'daily', NULL, NULL, true, 0, 0),                        -- id=5  daily, no target (pure tracking)
-    ('Weight', 'Body weight in kg', 'daily', 60, 80, false, 0, 0);                       -- id=6  daily, range target, carry-forward
+    ('Weight', 'Body weight in kg', 'daily', 60, 80, false, 0, 0),                       -- id=6  daily, range target, carry-forward
+    ('Running', 'Kilometers run', 'monthly', 50, NULL, true, 2, 2);                      -- id=7  monthly, target: 50km/month
 
 -- =============================================================================
--- HABIT LOGS (last 21 days for meaningful streak data)
+-- HABIT LOGS (last 30 days for meaningful history and streak data)
 -- =============================================================================
 INSERT INTO habit_logs (habit_id, log_date, value) VALUES
     -- Exercise (daily, target_min=1): streak of 3 (today, yesterday, day before)
+    (1, CURRENT_DATE - INTERVAL '29 days', 1),
+    (1, CURRENT_DATE - INTERVAL '28 days', 1),
+    (1, CURRENT_DATE - INTERVAL '27 days', 1),
+    (1, CURRENT_DATE - INTERVAL '26 days', 1),
+    (1, CURRENT_DATE - INTERVAL '25 days', 1),
+    (1, CURRENT_DATE - INTERVAL '24 days', 0),   -- broke streak (longest=5)
+    (1, CURRENT_DATE - INTERVAL '23 days', 1),
+    (1, CURRENT_DATE - INTERVAL '22 days', 1),
+    (1, CURRENT_DATE - INTERVAL '21 days', 0),
     (1, CURRENT_DATE - INTERVAL '20 days', 1),
     (1, CURRENT_DATE - INTERVAL '19 days', 1),
     (1, CURRENT_DATE - INTERVAL '18 days', 1),
-    (1, CURRENT_DATE - INTERVAL '17 days', 1),
+    (1, CURRENT_DATE - INTERVAL '17 days', 0),
     (1, CURRENT_DATE - INTERVAL '16 days', 1),
-    (1, CURRENT_DATE - INTERVAL '15 days', 0),   -- broke streak (longest=5)
-    (1, CURRENT_DATE - INTERVAL '14 days', 1),
+    (1, CURRENT_DATE - INTERVAL '15 days', 1),
+    (1, CURRENT_DATE - INTERVAL '14 days', 0),
     (1, CURRENT_DATE - INTERVAL '13 days', 1),
-    (1, CURRENT_DATE - INTERVAL '12 days', 0),
+    (1, CURRENT_DATE - INTERVAL '12 days', 1),
+    (1, CURRENT_DATE - INTERVAL '11 days', 0),
+    (1, CURRENT_DATE - INTERVAL '10 days', 1),
+    (1, CURRENT_DATE - INTERVAL '9 days', 1),
+    (1, CURRENT_DATE - INTERVAL '8 days', 1),
+    (1, CURRENT_DATE - INTERVAL '7 days', 1),
     (1, CURRENT_DATE - INTERVAL '6 days', 1),
     (1, CURRENT_DATE - INTERVAL '5 days', 1),
     (1, CURRENT_DATE - INTERVAL '4 days', 0),   -- broke streak
@@ -41,31 +56,107 @@ INSERT INTO habit_logs (habit_id, log_date, value) VALUES
     (1, CURRENT_DATE, 1),
 
     -- Reading (daily, target_min=1): streak of 1 (today only, missed yesterday)
+    (2, CURRENT_DATE - INTERVAL '29 days', 1),
+    (2, CURRENT_DATE - INTERVAL '28 days', 0),
+    (2, CURRENT_DATE - INTERVAL '27 days', 1),
+    (2, CURRENT_DATE - INTERVAL '26 days', 1),
+    (2, CURRENT_DATE - INTERVAL '25 days', 0),
+    (2, CURRENT_DATE - INTERVAL '24 days', 1),
+    (2, CURRENT_DATE - INTERVAL '23 days', 1),
+    (2, CURRENT_DATE - INTERVAL '22 days', 1),
+    (2, CURRENT_DATE - INTERVAL '21 days', 0),
+    (2, CURRENT_DATE - INTERVAL '20 days', 1),
+    (2, CURRENT_DATE - INTERVAL '19 days', 0),
+    (2, CURRENT_DATE - INTERVAL '18 days', 1),
+    (2, CURRENT_DATE - INTERVAL '17 days', 1),
+    (2, CURRENT_DATE - INTERVAL '16 days', 1),
+    (2, CURRENT_DATE - INTERVAL '15 days', 1),   -- longest=4
+    (2, CURRENT_DATE - INTERVAL '14 days', 0),
+    (2, CURRENT_DATE - INTERVAL '13 days', 1),
+    (2, CURRENT_DATE - INTERVAL '12 days', 0),
     (2, CURRENT_DATE - INTERVAL '10 days', 1),
     (2, CURRENT_DATE - INTERVAL '9 days', 1),
     (2, CURRENT_DATE - INTERVAL '8 days', 1),
-    (2, CURRENT_DATE - INTERVAL '7 days', 1),   -- longest=4
+    (2, CURRENT_DATE - INTERVAL '7 days', 1),
     (2, CURRENT_DATE - INTERVAL '6 days', 0),
     (2, CURRENT_DATE - INTERVAL '4 days', 1),
     (2, CURRENT_DATE - INTERVAL '2 days', 1),
     (2, CURRENT_DATE - INTERVAL '1 day', 0),
     (2, CURRENT_DATE, 1),
 
-    -- Meditation (weekly, target_min=3): streak of 2 full weeks
+    -- Meditation (weekly, target_min=3): 12 weeks of data, streak of 2 full weeks
+    -- Week -12 (2 sessions = does NOT meet target)
+    (3, CURRENT_DATE - INTERVAL '84 days', 1),
+    (3, CURRENT_DATE - INTERVAL '82 days', 1),
+    -- Week -11 (3 sessions = meets target)
+    (3, CURRENT_DATE - INTERVAL '77 days', 1),
+    (3, CURRENT_DATE - INTERVAL '75 days', 1),
+    (3, CURRENT_DATE - INTERVAL '73 days', 1),
+    -- Week -10 (2 sessions = does NOT meet target)
+    (3, CURRENT_DATE - INTERVAL '70 days', 1),
+    (3, CURRENT_DATE - INTERVAL '68 days', 1),
+    -- Week -9 (3 sessions = meets target)
+    (3, CURRENT_DATE - INTERVAL '63 days', 1),
+    (3, CURRENT_DATE - INTERVAL '61 days', 1),
+    (3, CURRENT_DATE - INTERVAL '59 days', 1),
+    -- Week -8 (3 sessions = meets target)
+    (3, CURRENT_DATE - INTERVAL '56 days', 1),
+    (3, CURRENT_DATE - INTERVAL '54 days', 1),
+    (3, CURRENT_DATE - INTERVAL '52 days', 1),
+    -- Week -7 (2 sessions = does NOT meet target)
+    (3, CURRENT_DATE - INTERVAL '49 days', 1),
+    (3, CURRENT_DATE - INTERVAL '47 days', 1),
+    -- Week -6 (3 sessions = meets target)
+    (3, CURRENT_DATE - INTERVAL '42 days', 1),
+    (3, CURRENT_DATE - INTERVAL '40 days', 1),
+    (3, CURRENT_DATE - INTERVAL '38 days', 1),
+    -- Week -5 (3 sessions = meets target)
+    (3, CURRENT_DATE - INTERVAL '35 days', 1),
+    (3, CURRENT_DATE - INTERVAL '33 days', 1),
+    (3, CURRENT_DATE - INTERVAL '31 days', 1),
+    -- Week -4 (2 sessions = does NOT meet target)
+    (3, CURRENT_DATE - INTERVAL '29 days', 1),
+    (3, CURRENT_DATE - INTERVAL '26 days', 1),
+    -- Week -3 (3 sessions = meets target)
+    (3, CURRENT_DATE - INTERVAL '23 days', 1),
+    (3, CURRENT_DATE - INTERVAL '21 days', 1),
+    (3, CURRENT_DATE - INTERVAL '19 days', 1),
     -- Week -2 (3 sessions = meets target)
-    (3, CURRENT_DATE - INTERVAL '20 days', 1),
-    (3, CURRENT_DATE - INTERVAL '18 days', 1),
     (3, CURRENT_DATE - INTERVAL '16 days', 1),
+    (3, CURRENT_DATE - INTERVAL '14 days', 1),
+    (3, CURRENT_DATE - INTERVAL '12 days', 1),
     -- Week -1 (4 sessions = meets target)
-    (3, CURRENT_DATE - INTERVAL '13 days', 1),
-    (3, CURRENT_DATE - INTERVAL '11 days', 1),
+    (3, CURRENT_DATE - INTERVAL '10 days', 1),
     (3, CURRENT_DATE - INTERVAL '9 days', 1),
     (3, CURRENT_DATE - INTERVAL '8 days', 1),
+    (3, CURRENT_DATE - INTERVAL '7 days', 1),
     -- This week (2 sessions so far, not yet meeting target of 3)
     (3, CURRENT_DATE - INTERVAL '5 days', 1),
     (3, CURRENT_DATE - INTERVAL '3 days', 1),
 
-    -- Water intake (daily, target_min=2): perfect streak of 7 days
+    -- Water intake (daily, target_min=2): perfect streak of 7 days (gap before that)
+    (4, CURRENT_DATE - INTERVAL '29 days', 2.0),
+    (4, CURRENT_DATE - INTERVAL '28 days', 1.5),  -- below target
+    (4, CURRENT_DATE - INTERVAL '27 days', 2.2),
+    (4, CURRENT_DATE - INTERVAL '26 days', 2.0),
+    (4, CURRENT_DATE - INTERVAL '25 days', 1.8),  -- below target
+    (4, CURRENT_DATE - INTERVAL '24 days', 2.5),
+    (4, CURRENT_DATE - INTERVAL '23 days', 2.0),
+    (4, CURRENT_DATE - INTERVAL '22 days', 2.3),
+    (4, CURRENT_DATE - INTERVAL '21 days', 1.0),  -- below target
+    (4, CURRENT_DATE - INTERVAL '20 days', 2.0),
+    (4, CURRENT_DATE - INTERVAL '19 days', 2.5),
+    (4, CURRENT_DATE - INTERVAL '18 days', 2.0),
+    (4, CURRENT_DATE - INTERVAL '17 days', 1.5),  -- below target
+    (4, CURRENT_DATE - INTERVAL '16 days', 2.0),
+    (4, CURRENT_DATE - INTERVAL '15 days', 2.2),
+    (4, CURRENT_DATE - INTERVAL '14 days', 2.5),
+    (4, CURRENT_DATE - INTERVAL '13 days', 2.0),
+    (4, CURRENT_DATE - INTERVAL '12 days', 1.8),  -- below target
+    (4, CURRENT_DATE - INTERVAL '11 days', 2.0),
+    (4, CURRENT_DATE - INTERVAL '10 days', 2.5),
+    (4, CURRENT_DATE - INTERVAL '9 days', 1.5),   -- below target
+    (4, CURRENT_DATE - INTERVAL '8 days', 1.2),   -- below target, broke streak
     (4, CURRENT_DATE - INTERVAL '6 days', 2.0),
     (4, CURRENT_DATE - INTERVAL '5 days', 2.5),
     (4, CURRENT_DATE - INTERVAL '4 days', 2.5),
@@ -74,7 +165,16 @@ INSERT INTO habit_logs (habit_id, log_date, value) VALUES
     (4, CURRENT_DATE - INTERVAL '1 day', 2.2),
     (4, CURRENT_DATE, 2.0),
 
-    -- Sleep (daily, no targets): pure tracking
+    -- Sleep (daily, no targets): pure tracking, 30 days
+    (5, CURRENT_DATE - INTERVAL '29 days', 7.0),
+    (5, CURRENT_DATE - INTERVAL '28 days', 6.5),
+    (5, CURRENT_DATE - INTERVAL '27 days', 8.0),
+    (5, CURRENT_DATE - INTERVAL '26 days', 7.5),
+    (5, CURRENT_DATE - INTERVAL '25 days', 6.0),
+    (5, CURRENT_DATE - INTERVAL '24 days', 7.0),
+    (5, CURRENT_DATE - INTERVAL '23 days', 8.5),
+    (5, CURRENT_DATE - INTERVAL '22 days', 7.0),
+    (5, CURRENT_DATE - INTERVAL '21 days', 6.5),
     (5, CURRENT_DATE - INTERVAL '20 days', 7.5),
     (5, CURRENT_DATE - INTERVAL '19 days', 6.0),
     (5, CURRENT_DATE - INTERVAL '18 days', 8.0),
@@ -97,7 +197,15 @@ INSERT INTO habit_logs (habit_id, log_date, value) VALUES
     (5, CURRENT_DATE - INTERVAL '1 day', 7.5),
     (5, CURRENT_DATE, 8.0),
 
-    -- Weight (daily, target_min=60, target_max=80, recording_required=false): values ~65-75kg
+    -- Weight (daily, target_min=60, target_max=80, recording_required=false): gradual downtrend ~73->70kg
+    (6, CURRENT_DATE - INTERVAL '29 days', 73.2),
+    (6, CURRENT_DATE - INTERVAL '27 days', 73.0),
+    (6, CURRENT_DATE - INTERVAL '25 days', 72.8),
+    (6, CURRENT_DATE - INTERVAL '23 days', 73.1),
+    (6, CURRENT_DATE - INTERVAL '21 days', 72.5),
+    (6, CURRENT_DATE - INTERVAL '19 days', 72.3),
+    (6, CURRENT_DATE - INTERVAL '17 days', 72.0),
+    (6, CURRENT_DATE - INTERVAL '15 days', 71.8),
     (6, CURRENT_DATE - INTERVAL '13 days', 72.5),
     (6, CURRENT_DATE - INTERVAL '12 days', 72.0),
     (6, CURRENT_DATE - INTERVAL '10 days', 71.5),
@@ -107,7 +215,115 @@ INSERT INTO habit_logs (habit_id, log_date, value) VALUES
     (6, CURRENT_DATE - INTERVAL '4 days', 70.8),
     (6, CURRENT_DATE - INTERVAL '3 days', 70.2),
     (6, CURRENT_DATE - INTERVAL '1 day', 69.5),
-    (6, CURRENT_DATE, 69.8);
+    (6, CURRENT_DATE, 69.8),
+
+    -- Running (monthly, target_min=50km): 12 months of data, streak of 2 months
+    -- 12 months ago (~40km = does NOT meet target)
+    (7, CURRENT_DATE - INTERVAL '365 days', 5),
+    (7, CURRENT_DATE - INTERVAL '360 days', 8),
+    (7, CURRENT_DATE - INTERVAL '355 days', 6),
+    (7, CURRENT_DATE - INTERVAL '350 days', 7),
+    (7, CURRENT_DATE - INTERVAL '345 days', 4),
+    (7, CURRENT_DATE - INTERVAL '340 days', 10),
+    -- 11 months ago (~52km = meets target)
+    (7, CURRENT_DATE - INTERVAL '335 days', 6),
+    (7, CURRENT_DATE - INTERVAL '330 days', 8),
+    (7, CURRENT_DATE - INTERVAL '325 days', 5),
+    (7, CURRENT_DATE - INTERVAL '320 days', 12),
+    (7, CURRENT_DATE - INTERVAL '315 days', 7),
+    (7, CURRENT_DATE - INTERVAL '310 days', 10),
+    (7, CURRENT_DATE - INTERVAL '305 days', 4),
+    -- 10 months ago (~48km = does NOT meet target)
+    (7, CURRENT_DATE - INTERVAL '300 days', 8),
+    (7, CURRENT_DATE - INTERVAL '295 days', 6),
+    (7, CURRENT_DATE - INTERVAL '290 days', 5),
+    (7, CURRENT_DATE - INTERVAL '285 days', 10),
+    (7, CURRENT_DATE - INTERVAL '280 days', 7),
+    (7, CURRENT_DATE - INTERVAL '275 days', 4),
+    (7, CURRENT_DATE - INTERVAL '270 days', 8),
+    -- 9 months ago (~55km = meets target)
+    (7, CURRENT_DATE - INTERVAL '265 days', 6),
+    (7, CURRENT_DATE - INTERVAL '260 days', 10),
+    (7, CURRENT_DATE - INTERVAL '255 days', 8),
+    (7, CURRENT_DATE - INTERVAL '250 days', 12),
+    (7, CURRENT_DATE - INTERVAL '245 days', 7),
+    (7, CURRENT_DATE - INTERVAL '240 days', 5),
+    (7, CURRENT_DATE - INTERVAL '235 days', 7),
+    -- 8 months ago (~53km = meets target)
+    (7, CURRENT_DATE - INTERVAL '230 days', 8),
+    (7, CURRENT_DATE - INTERVAL '225 days', 5),
+    (7, CURRENT_DATE - INTERVAL '220 days', 10),
+    (7, CURRENT_DATE - INTERVAL '215 days', 6),
+    (7, CURRENT_DATE - INTERVAL '210 days', 12),
+    (7, CURRENT_DATE - INTERVAL '205 days', 8),
+    (7, CURRENT_DATE - INTERVAL '200 days', 4),
+    -- 7 months ago (~42km = does NOT meet target)
+    (7, CURRENT_DATE - INTERVAL '195 days', 6),
+    (7, CURRENT_DATE - INTERVAL '190 days', 8),
+    (7, CURRENT_DATE - INTERVAL '185 days', 5),
+    (7, CURRENT_DATE - INTERVAL '180 days', 10),
+    (7, CURRENT_DATE - INTERVAL '175 days', 7),
+    (7, CURRENT_DATE - INTERVAL '170 days', 6),
+    -- 6 months ago (~56km = meets target)
+    (7, CURRENT_DATE - INTERVAL '165 days', 8),
+    (7, CURRENT_DATE - INTERVAL '160 days', 10),
+    (7, CURRENT_DATE - INTERVAL '155 days', 6),
+    (7, CURRENT_DATE - INTERVAL '150 days', 12),
+    (7, CURRENT_DATE - INTERVAL '145 days', 5),
+    (7, CURRENT_DATE - INTERVAL '140 days', 8),
+    (7, CURRENT_DATE - INTERVAL '135 days', 7),
+    -- 5 months ago (~45km = does NOT meet target)
+    (7, CURRENT_DATE - INTERVAL '130 days', 5),
+    (7, CURRENT_DATE - INTERVAL '125 days', 8),
+    (7, CURRENT_DATE - INTERVAL '120 days', 6),
+    (7, CURRENT_DATE - INTERVAL '115 days', 10),
+    (7, CURRENT_DATE - INTERVAL '110 days', 7),
+    (7, CURRENT_DATE - INTERVAL '105 days', 9),
+    -- 4 months ago (~51km = meets target)
+    (7, CURRENT_DATE - INTERVAL '100 days', 8),
+    (7, CURRENT_DATE - INTERVAL '95 days', 5),
+    (7, CURRENT_DATE - INTERVAL '90 days', 12),
+    (7, CURRENT_DATE - INTERVAL '87 days', 6),
+    (7, CURRENT_DATE - INTERVAL '84 days', 10),
+    (7, CURRENT_DATE - INTERVAL '81 days', 7),
+    (7, CURRENT_DATE - INTERVAL '78 days', 3),
+    -- 3 months ago (~55km = meets target)
+    (7, CURRENT_DATE - INTERVAL '85 days', 5),
+    (7, CURRENT_DATE - INTERVAL '82 days', 3),
+    (7, CURRENT_DATE - INTERVAL '79 days', 8),
+    (7, CURRENT_DATE - INTERVAL '76 days', 4),
+    (7, CURRENT_DATE - INTERVAL '73 days', 6),
+    (7, CURRENT_DATE - INTERVAL '70 days', 10),
+    (7, CURRENT_DATE - INTERVAL '67 days', 3),
+    (7, CURRENT_DATE - INTERVAL '64 days', 7),
+    (7, CURRENT_DATE - INTERVAL '61 days', 5),
+    (7, CURRENT_DATE - INTERVAL '59 days', 4),
+    -- 2 months ago (~62km = meets target)
+    (7, CURRENT_DATE - INTERVAL '55 days', 8),
+    (7, CURRENT_DATE - INTERVAL '52 days', 5),
+    (7, CURRENT_DATE - INTERVAL '49 days', 12),
+    (7, CURRENT_DATE - INTERVAL '46 days', 3),
+    (7, CURRENT_DATE - INTERVAL '43 days', 6),
+    (7, CURRENT_DATE - INTERVAL '40 days', 10),
+    (7, CURRENT_DATE - INTERVAL '37 days', 4),
+    (7, CURRENT_DATE - INTERVAL '34 days', 7),
+    (7, CURRENT_DATE - INTERVAL '31 days', 5),
+    (7, CURRENT_DATE - INTERVAL '30 days', 2),
+    -- Last month (~62km = meets target)
+    (7, CURRENT_DATE - INTERVAL '29 days', 8),
+    (7, CURRENT_DATE - INTERVAL '27 days', 5),
+    (7, CURRENT_DATE - INTERVAL '24 days', 12),
+    (7, CURRENT_DATE - INTERVAL '21 days', 3),
+    (7, CURRENT_DATE - INTERVAL '18 days', 6),
+    (7, CURRENT_DATE - INTERVAL '15 days', 10),
+    (7, CURRENT_DATE - INTERVAL '12 days', 4),
+    (7, CURRENT_DATE - INTERVAL '9 days', 7),
+    (7, CURRENT_DATE - INTERVAL '6 days', 5),
+    (7, CURRENT_DATE - INTERVAL '3 days', 2),
+    -- This month (in progress, ~23km so far)
+    (7, CURRENT_DATE - INTERVAL '2 days', 8),
+    (7, CURRENT_DATE - INTERVAL '1 day', 10),
+    (7, CURRENT_DATE, 5);
 
 -- =============================================================================
 -- PROJECTS

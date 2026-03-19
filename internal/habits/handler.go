@@ -17,6 +17,7 @@ type ServiceInterface interface {
 	LogHabit(ctx context.Context, req LogUpsertRequest) error
 	CreateHabit(ctx context.Context, req CreateHabitRequest) (CreateHabitResponse, error)
 	DeleteHabit(ctx context.Context, id int32) error
+	GetHistory(ctx context.Context, habitID int32, frequency, startAt, endAt string) (HistoryResponse, error)
 }
 
 type Handler struct {
@@ -71,6 +72,36 @@ func (h *Handler) DeleteHabit(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.WriteHeader(http.StatusNoContent)
+}
+
+// GetHistory -> GET /habits/{id}/history
+func (h *Handler) GetHistory(w http.ResponseWriter, r *http.Request) {
+	idStr := chi.URLParam(r, "id")
+	id, err := strconv.Atoi(idStr)
+	if err != nil {
+		response.Error(w, http.StatusBadRequest, "invalid habit id")
+		return
+	}
+
+	frequency := r.URL.Query().Get("frequency")
+	if frequency != "" {
+		valid := map[string]bool{"daily": true, "weekly": true, "monthly": true}
+		if !valid[frequency] {
+			response.Error(w, http.StatusBadRequest, "frequency must be daily, weekly, or monthly")
+			return
+		}
+	}
+
+	startAt := r.URL.Query().Get("start_at")
+	endAt := r.URL.Query().Get("end_at")
+
+	history, err := h.service.GetHistory(r.Context(), int32(id), frequency, startAt, endAt)
+	if err != nil {
+		response.Error(w, http.StatusInternalServerError, "Failed to get history")
+		return
+	}
+
+	response.JSON(w, http.StatusOK, history)
 }
 
 // CreateHabit -> POST /habits

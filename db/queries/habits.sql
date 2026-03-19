@@ -54,3 +54,25 @@ ORDER BY log_date DESC;
 UPDATE habits
 SET current_streak = $2, longest_streak = $3
 WHERE id = $1;
+
+-- name: GetHabitHistory :many
+SELECT
+    date_trunc(@frequency::text, hl.log_date::timestamp)::date AS date,
+    SUM(hl.value)::REAL AS value
+FROM habit_logs hl
+WHERE hl.habit_id = @habit_id
+  AND hl.log_date >= @start_at::date
+  AND hl.log_date <= @end_at::date
+GROUP BY date_trunc(@frequency::text, hl.log_date::timestamp)
+ORDER BY date;
+
+-- name: GetHabitHistoryAvg :many
+SELECT
+    date_trunc(@frequency::text, hl.log_date::timestamp)::date AS date,
+    AVG(hl.value)::REAL AS value
+FROM habit_logs hl
+WHERE hl.habit_id = @habit_id
+  AND hl.log_date >= @start_at::date
+  AND hl.log_date <= @end_at::date
+GROUP BY date_trunc(@frequency::text, hl.log_date::timestamp)
+ORDER BY date;

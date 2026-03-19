@@ -129,6 +129,50 @@
 
 ---
 
+## Get Habit History
+
+- **Method:** `GET`
+- **Endpoint:** `/habits/{id}/history`
+- **Description:** Returns aggregated habit log values over a date range, bucketed by a chosen frequency. When the requested frequency is coarser than the habit's native frequency (e.g. viewing a daily habit as weekly), values are averaged instead of summed. For habits with `recording_required=true`, missing periods are filled with zero values.
+- **Path Parameters:**
+  - `id` (required): The habit ID.
+- **Query Parameters:**
+  - `frequency` (optional): `daily`, `weekly`, or `monthly`. Defaults to the habit's own frequency.
+  - `start_at` (optional): Start date in `YYYY-MM-DD` format. Default depends on frequency: daily = 1 month ago, weekly = 12 weeks ago, monthly = 12 months ago.
+  - `end_at` (optional): End date in `YYYY-MM-DD` format. Defaults to today.
+- **Success Response:**
+  - **Code:** `200 OK`
+  - **Content:** A wrapper object containing the date range and history data. The `start_at` and `end_at` values are truncated to the period boundary (Monday for weekly, 1st of month for monthly).
+    ```json
+    {
+      "start_at": "2026-02-23",
+      "end_at": "2026-03-16",
+      "data": [
+        {
+          "date": "2026-03-02",
+          "value": 15.0
+        },
+        {
+          "date": "2026-03-09",
+          "value": 12.0
+        }
+      ]
+    }
+    ```
+  - **Fields:**
+    - `start_at`: Start of the date range, truncated to the period boundary (`YYYY-MM-DD`).
+    - `end_at`: End of the date range, truncated to the period boundary (`YYYY-MM-DD`).
+    - `data`: Array of history points.
+    - `data[].date`: The start date of the aggregation period (`YYYY-MM-DD`).
+    - `data[].value`: Sum of log values within the period (or average, when viewing at a coarser frequency than the habit's native one).
+- **Error Responses:**
+  - **Code:** `400 Bad Request`
+    - **Content:** `invalid habit id` or `frequency must be daily, weekly, or monthly`
+  - **Code:** `500 Internal Server Error`
+    - **Content:** `Failed to get history`
+
+---
+
 ## Delete Habit
 
 - **Method:** `DELETE`

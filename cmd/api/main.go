@@ -97,6 +97,7 @@ func main() {
 		r.Delete("/tasks/tasks/{id}", taskHandler.DeleteTask)
 		r.Delete("/tasks/todos/{id}", taskHandler.DeleteTodo)
 		r.Delete("/tasks/time-entries/{id}", taskHandler.DeleteTimeEntry)
+		r.Get("/habits/{id}/history", habitHandler.GetHistory)
 		r.Delete("/habits/{id}", habitHandler.DeleteHabit)
 	})
 
