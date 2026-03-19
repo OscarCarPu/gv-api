@@ -130,6 +130,10 @@ func (s *Service) GetHistory(ctx context.Context, habitID int32, frequency, star
 		start = parsed
 	}
 
+	// Snap start to the previous period boundary and end to the next one.
+	start = periodStart(start, frequency)
+	end = periodCeil(end, frequency)
+
 	// Use AVG when viewing at a coarser frequency than the habit's native one.
 	var data []HistoryPoint
 	if frequencyRank[frequency] > frequencyRank[habit.Frequency] {
@@ -146,8 +150,8 @@ func (s *Service) GetHistory(ctx context.Context, habitID int32, frequency, star
 	}
 
 	return HistoryResponse{
-		StartAt: periodStart(start, frequency).Format("2006-01-02"),
-		EndAt:   periodStart(end, frequency).Format("2006-01-02"),
+		StartAt: start.Format("2006-01-02"),
+		EndAt:   end.Format("2006-01-02"),
 		Data:    data,
 	}, nil
 }

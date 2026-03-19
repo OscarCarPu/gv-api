@@ -20,6 +20,16 @@ func periodStart(date time.Time, frequency string) time.Time {
 	}
 }
 
+// periodCeil returns the start of the next period if date is not already on a period boundary.
+// If date is already on a boundary (Monday for weekly, 1st for monthly), it returns date unchanged.
+func periodCeil(date time.Time, frequency string) time.Time {
+	floor := periodStart(date, frequency)
+	if floor.Equal(date) {
+		return date
+	}
+	return nextPeriodStart(floor, frequency)
+}
+
 // previousPeriodStart returns the start of the period immediately before the given period start.
 func previousPeriodStart(start time.Time, frequency string) time.Time {
 	switch frequency {

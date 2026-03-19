@@ -26,6 +26,21 @@ func truncateToMonday(d time.Time) time.Time {
 	return d.AddDate(0, 0, -offset)
 }
 
+func ceilToMonday(d time.Time) time.Time {
+	if d.Weekday() == time.Monday {
+		return d
+	}
+	offset := (int(time.Monday) - int(d.Weekday()) + 7) % 7
+	return d.AddDate(0, 0, offset)
+}
+
+func ceilToFirstOfMonth(d time.Time) time.Time {
+	if d.Day() == 1 {
+		return d
+	}
+	return time.Date(d.Year(), d.Month()+1, 1, 0, 0, 0, 0, d.Location())
+}
+
 // --- LogHabit + streak recalculation ---
 
 func TestService_LogHabit_RecalculatesStreak_Daily(t *testing.T) {
@@ -417,9 +432,9 @@ func TestService_GetHistory_DefaultFrequencyFromHabit(t *testing.T) {
 
 	result, err := svc.GetHistory(ctx, 1, "", "2026-03-01", "2026-03-19")
 	require.NoError(t, err)
-	// 2026-03-01 is a Sunday -> Monday is 2026-02-23; 2026-03-19 is a Thursday -> Monday is 2026-03-16
+	// 2026-03-01 is a Sunday -> previous Monday is 2026-02-23; 2026-03-19 is a Thursday -> next Monday is 2026-03-23
 	assert.Equal(t, "2026-02-23", result.StartAt)
-	assert.Equal(t, "2026-03-16", result.EndAt)
+	assert.Equal(t, "2026-03-23", result.EndAt)
 	assert.Len(t, result.Data, 1)
 	assert.Equal(t, "2026-03-10", result.Data[0].Date)
 }
@@ -474,16 +489,16 @@ func TestService_GetHistory_DefaultDates_Weekly(t *testing.T) {
 	today := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC)
 	twelveWeeksAgo := today.AddDate(0, 0, -12*7)
 
-	// periodStart truncates to Monday
+	// start snaps to previous Monday, end snaps to next Monday (or stays if already Monday)
 	mondayOfStart := truncateToMonday(twelveWeeksAgo)
-	mondayOfEnd := truncateToMonday(today)
+	mondayOfEnd := ceilToMonday(today)
 
 	repo.EXPECT().GetHabitByID(mock.Anything, int32(1)).Return(habitsdb.GetHabitByIDRow{
 		ID: 1, Frequency: "weekly", RecordingRequired: false,
 	}, nil)
 	repo.EXPECT().GetHabitHistory(mock.Anything, int32(1), "week",
-		mock.MatchedBy(func(t time.Time) bool { return t.Equal(twelveWeeksAgo) }),
-		mock.MatchedBy(func(t time.Time) bool { return t.Equal(today) }),
+		mock.MatchedBy(func(t time.Time) bool { return t.Equal(mondayOfStart) }),
+		mock.MatchedBy(func(t time.Time) bool { return t.Equal(mondayOfEnd) }),
 	).Return([]habits.HistoryPoint{}, nil)
 
 	result, err := svc.GetHistory(ctx, 1, "weekly", "", "")
@@ -501,16 +516,16 @@ func TestService_GetHistory_DefaultDates_Monthly(t *testing.T) {
 	today := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC)
 	twelveMonthsAgo := today.AddDate(-1, 0, 0)
 
-	// periodStart truncates to 1st of month
+	// start snaps to 1st of month, end snaps to next 1st (or stays if already 1st)
 	firstOfStartMonth := time.Date(twelveMonthsAgo.Year(), twelveMonthsAgo.Month(), 1, 0, 0, 0, 0, time.UTC)
-	firstOfEndMonth := time.Date(today.Year(), today.Month(), 1, 0, 0, 0, 0, time.UTC)
+	firstOfEndMonth := ceilToFirstOfMonth(today)
 
 	repo.EXPECT().GetHabitByID(mock.Anything, int32(1)).Return(habitsdb.GetHabitByIDRow{
 		ID: 1, Frequency: "monthly", RecordingRequired: false,
 	}, nil)
 	repo.EXPECT().GetHabitHistory(mock.Anything, int32(1), "month",
-		mock.MatchedBy(func(t time.Time) bool { return t.Equal(twelveMonthsAgo) }),
-		mock.MatchedBy(func(t time.Time) bool { return t.Equal(today) }),
+		mock.MatchedBy(func(t time.Time) bool { return t.Equal(firstOfStartMonth) }),
+		mock.MatchedBy(func(t time.Time) bool { return t.Equal(firstOfEndMonth) }),
 	).Return([]habits.HistoryPoint{}, nil)
 
 	result, err := svc.GetHistory(ctx, 1, "monthly", "", "")
@@ -575,7 +590,7 @@ func TestService_GetHistory_RecordingRequired_FillsZeros_Monthly(t *testing.T) {
 	repo.EXPECT().GetHabitByID(mock.Anything, int32(1)).Return(habitsdb.GetHabitByIDRow{
 		ID: 1, Frequency: "monthly", RecordingRequired: true,
 	}, nil)
-	// Jan to Mar — only Jan and Mar have data
+	// Jan 15 floors to Jan 1, Mar 19 ceils to Apr 1 — only Jan and Mar have data
 	repo.EXPECT().GetHabitHistory(mock.Anything, int32(1), "month", mock.Anything, mock.Anything).
 		Return([]habits.HistoryPoint{
 			{Date: "2026-01-01", Value: 55},
@@ -584,10 +599,11 @@ func TestService_GetHistory_RecordingRequired_FillsZeros_Monthly(t *testing.T) {
 
 	result, err := svc.GetHistory(ctx, 1, "monthly", "2026-01-15", "2026-03-19")
 	require.NoError(t, err)
-	require.Len(t, result.Data, 3)
+	require.Len(t, result.Data, 4)
 	assert.Equal(t, habits.HistoryPoint{Date: "2026-01-01", Value: 55}, result.Data[0])
 	assert.Equal(t, habits.HistoryPoint{Date: "2026-02-01", Value: 0}, result.Data[1])
 	assert.Equal(t, habits.HistoryPoint{Date: "2026-03-01", Value: 42}, result.Data[2])
+	assert.Equal(t, habits.HistoryPoint{Date: "2026-04-01", Value: 0}, result.Data[3])
 }
 
 func TestService_GetHistory_RecordingNotRequired_NoZeroFill(t *testing.T) {
