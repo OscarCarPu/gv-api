@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"gv-api/internal/database/tasksdb"
+	"gv-api/internal/history"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -40,6 +41,7 @@ type Repository interface {
 	DeleteTimeEntry(ctx context.Context, id int32) error
 	GetActiveTimeEntry(ctx context.Context) (TimeEntryResponse, error)
 	GetTimeEntrySummary(ctx context.Context, todayStart, weekStart time.Time) (TimeEntrySummaryResponse, error)
+	GetTimeEntryHistory(ctx context.Context, frequency, timezone string, startAt, endAt time.Time) ([]history.Point, error)
 }
 
 type PostgresRepository struct {
@@ -669,6 +671,27 @@ func (r *PostgresRepository) GetTimeEntrySummary(ctx context.Context, todayStart
 		Today: row.Today,
 		Week:  row.Week,
 	}, nil
+}
+
+func (r *PostgresRepository) GetTimeEntryHistory(ctx context.Context, frequency, timezone string, startAt, endAt time.Time) ([]history.Point, error) {
+	rows, err := r.q.GetTimeEntryHistory(ctx, tasksdb.GetTimeEntryHistoryParams{
+		Frequency: frequency,
+		Timezone:  timezone,
+		StartAt:   startAt,
+		EndAt:     endAt,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	results := make([]history.Point, len(rows))
+	for i, row := range rows {
+		results[i] = history.Point{
+			Date:  row.Date.Format("2006-01-02"),
+			Value: row.Value,
+		}
+	}
+	return results, nil
 }
 
 func (r *PostgresRepository) GetRootProjects(ctx context.Context) ([]ProjectResponse, error) {

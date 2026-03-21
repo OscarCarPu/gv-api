@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"gv-api/internal/database/habitsdb"
+	"gv-api/internal/history"
 
 	"github.com/stretchr/testify/assert"
 )
@@ -31,16 +32,16 @@ func TestPeriodStart(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			got := periodStart(tc.date, tc.frequency)
+			got := history.PeriodStart(tc.date, tc.frequency)
 			assert.Equal(t, tc.want, got)
 		})
 	}
 }
 
 func TestPreviousPeriodStart(t *testing.T) {
-	assert.Equal(t, date(2026, 3, 16), previousPeriodStart(date(2026, 3, 17), "daily"))
-	assert.Equal(t, date(2026, 3, 9), previousPeriodStart(date(2026, 3, 16), "weekly"))
-	assert.Equal(t, date(2026, 2, 1), previousPeriodStart(date(2026, 3, 1), "monthly"))
+	assert.Equal(t, date(2026, 3, 16), history.PreviousPeriodStart(date(2026, 3, 17), "daily"))
+	assert.Equal(t, date(2026, 3, 9), history.PreviousPeriodStart(date(2026, 3, 16), "weekly"))
+	assert.Equal(t, date(2026, 2, 1), history.PreviousPeriodStart(date(2026, 3, 1), "monthly"))
 }
 
 func TestGroupLogsByPeriod(t *testing.T) {

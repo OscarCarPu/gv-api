@@ -181,6 +181,17 @@ FROM time_entries
 WHERE finished_at IS NOT NULL
   AND finished_at >= @week_start::timestamptz;
 
+-- name: GetTimeEntryHistory :many
+SELECT
+    date_trunc(@frequency::text, started_at AT TIME ZONE @timezone::text)::date AS date,
+    (SUM(EXTRACT(EPOCH FROM (finished_at - started_at))) / 3600)::REAL AS value
+FROM time_entries
+WHERE finished_at IS NOT NULL
+  AND (started_at AT TIME ZONE @timezone::text)::date >= @start_at::date
+  AND (started_at AT TIME ZONE @timezone::text)::date <= @end_at::date
+GROUP BY date_trunc(@frequency::text, started_at AT TIME ZONE @timezone::text)
+ORDER BY date;
+
 -- name: GetTimeEntriesByTaskID :many
 WITH task_info AS (
     SELECT t.id, t.project_id, t.name, t.description, t.due_at, t.started_at, t.finished_at,

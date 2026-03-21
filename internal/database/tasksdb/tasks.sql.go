@@ -618,6 +618,55 @@ func (q *Queries) GetTimeEntriesByTaskID(ctx context.Context, id int32) ([]GetTi
 	return items, nil
 }
 
+const getTimeEntryHistory = `-- name: GetTimeEntryHistory :many
+SELECT
+    date_trunc($1::text, started_at AT TIME ZONE $2::text)::date AS date,
+    (SUM(EXTRACT(EPOCH FROM (finished_at - started_at))) / 3600)::REAL AS value
+FROM time_entries
+WHERE finished_at IS NOT NULL
+  AND (started_at AT TIME ZONE $2::text)::date >= $3::date
+  AND (started_at AT TIME ZONE $2::text)::date <= $4::date
+GROUP BY date_trunc($1::text, started_at AT TIME ZONE $2::text)
+ORDER BY date
+`
+
+type GetTimeEntryHistoryParams struct {
+	Frequency string    `db:"frequency" json:"frequency"`
+	Timezone  string    `db:"timezone" json:"timezone"`
+	StartAt   time.Time `db:"start_at" json:"start_at"`
+	EndAt     time.Time `db:"end_at" json:"end_at"`
+}
+
+type GetTimeEntryHistoryRow struct {
+	Date  time.Time `db:"date" json:"date"`
+	Value float32   `db:"value" json:"value"`
+}
+
+func (q *Queries) GetTimeEntryHistory(ctx context.Context, arg GetTimeEntryHistoryParams) ([]GetTimeEntryHistoryRow, error) {
+	rows, err := q.db.Query(ctx, getTimeEntryHistory,
+		arg.Frequency,
+		arg.Timezone,
+		arg.StartAt,
+		arg.EndAt,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []GetTimeEntryHistoryRow{}
+	for rows.Next() {
+		var i GetTimeEntryHistoryRow
+		if err := rows.Scan(&i.Date, &i.Value); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getTimeEntrySummary = `-- name: GetTimeEntrySummary :one
 SELECT
     COALESCE(SUM(CASE WHEN finished_at >= $1::timestamptz

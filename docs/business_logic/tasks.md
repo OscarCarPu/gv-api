@@ -68,3 +68,23 @@ Users can move tasks between projects and make partial updates.
 - Partial updates only modify the fields sent in the request; other fields remain unchanged.
 - Orphan tasks (no `project_id`) can be assigned to a project later.
 - When a task moves, its time entries move with it, affecting `time_spent` on both source and destination projects.
+
+## 7. Time Entry History
+
+The history endpoint aggregates finished time entries into periodic buckets (daily, weekly, monthly).
+
+**Aggregation logic:**
+- Groups time entries by `date_trunc(frequency, started_at AT TIME ZONE tz)` — the started_at timestamp is converted to the server's configured timezone before truncating.
+- Sums `finished_at - started_at` duration for each period and converts to hours (decimal).
+- Only finished entries (`finished_at IS NOT NULL`) are included.
+
+**Date range defaults:**
+- Daily: last 30 days
+- Weekly: last 12 weeks
+- Monthly: last 12 months
+
+Start and end dates are snapped to period boundaries (Monday for weekly, 1st of month for monthly).
+
+**Zero-filling:** All periods within the range are included in the response. Periods with no tracked time have `value: 0`.
+
+**Shared logic:** Period boundary calculations (PeriodStart, PeriodCeil, NextPeriodStart, FillMissingPeriods, ParseDateRange) live in `internal/history/` and are shared with the habits domain.

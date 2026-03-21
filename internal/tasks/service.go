@@ -3,6 +3,8 @@ package tasks
 import (
 	"context"
 	"time"
+
+	"gv-api/internal/history"
 )
 
 type Service struct {
@@ -207,4 +209,29 @@ func (s *Service) DeleteTodo(ctx context.Context, id int32) error {
 
 func (s *Service) DeleteTimeEntry(ctx context.Context, id int32) error {
 	return s.repo.DeleteTimeEntry(ctx, id)
+}
+
+func (s *Service) GetTimeEntryHistory(ctx context.Context, frequency, startAt, endAt string) (history.Response, error) {
+	trunc, err := history.ValidFrequency(frequency)
+	if err != nil {
+		return history.Response{}, err
+	}
+
+	start, end, err := history.ParseDateRange(s.location, frequency, startAt, endAt)
+	if err != nil {
+		return history.Response{}, err
+	}
+
+	data, err := s.repo.GetTimeEntryHistory(ctx, trunc, s.location.String(), start, end)
+	if err != nil {
+		return history.Response{}, err
+	}
+
+	data = history.FillMissingPeriods(data, start, end, frequency)
+
+	return history.Response{
+		StartAt: start.Format("2006-01-02"),
+		EndAt:   end.Format("2006-01-02"),
+		Data:    data,
+	}, nil
 }

@@ -27,6 +27,7 @@ type Querier interface {
 	GetTasksByDueDate(ctx context.Context) ([]GetTasksByDueDateRow, error)
 	GetTasksByProjectIDs(ctx context.Context, projectIds []int32) ([]GetTasksByProjectIDsRow, error)
 	GetTimeEntriesByTaskID(ctx context.Context, id int32) ([]GetTimeEntriesByTaskIDRow, error)
+	GetTimeEntryHistory(ctx context.Context, arg GetTimeEntryHistoryParams) ([]GetTimeEntryHistoryRow, error)
 	GetTimeEntrySummary(ctx context.Context, arg GetTimeEntrySummaryParams) (GetTimeEntrySummaryRow, error)
 	GetUnfinishedTasks(ctx context.Context) ([]GetUnfinishedTasksRow, error)
 	UpdateProject(ctx context.Context, arg UpdateProjectParams) (Project, error)

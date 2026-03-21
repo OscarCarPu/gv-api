@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"gv-api/internal/database/habitsdb"
+	"gv-api/internal/history"
 )
 
 type Service struct {
@@ -69,29 +70,11 @@ func (s *Service) DeleteHabit(ctx context.Context, id int32) error {
 	return s.repo.DeleteHabit(ctx, id)
 }
 
-// frequencyToTrunc maps API frequency names to PostgreSQL date_trunc names.
-var frequencyToTrunc = map[string]string{
-	"daily":   "day",
-	"weekly":  "week",
-	"monthly": "month",
-}
-
 // frequencyRank orders frequencies from finest to coarsest.
 var frequencyRank = map[string]int{
 	"daily":   0,
 	"weekly":  1,
 	"monthly": 2,
-}
-
-func defaultStartDate(today time.Time, frequency string) time.Time {
-	switch frequency {
-	case "weekly":
-		return today.AddDate(0, 0, -12*7)
-	case "monthly":
-		return today.AddDate(-1, 0, 0)
-	default: // daily
-		return today.AddDate(0, -1, 0)
-	}
 }
 
 func (s *Service) GetHistory(ctx context.Context, habitID int32, frequency, startAt, endAt string) (HistoryResponse, error) {
@@ -104,35 +87,15 @@ func (s *Service) GetHistory(ctx context.Context, habitID int32, frequency, star
 		frequency = habit.Frequency
 	}
 
-	trunc, ok := frequencyToTrunc[frequency]
-	if !ok {
-		return HistoryResponse{}, fmt.Errorf("invalid frequency: %s", frequency)
+	trunc, err := history.ValidFrequency(frequency)
+	if err != nil {
+		return HistoryResponse{}, err
 	}
 
-	now := time.Now().In(s.location)
-	today := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC)
-
-	end := today
-	if endAt != "" {
-		parsed, err := time.Parse("2006-01-02", endAt)
-		if err != nil {
-			return HistoryResponse{}, fmt.Errorf("invalid end_at date")
-		}
-		end = parsed
+	start, end, err := history.ParseDateRange(s.location, frequency, startAt, endAt)
+	if err != nil {
+		return HistoryResponse{}, err
 	}
-
-	start := defaultStartDate(today, frequency)
-	if startAt != "" {
-		parsed, err := time.Parse("2006-01-02", startAt)
-		if err != nil {
-			return HistoryResponse{}, fmt.Errorf("invalid start_at date")
-		}
-		start = parsed
-	}
-
-	// Snap start to the previous period boundary and end to the next one.
-	start = periodStart(start, frequency)
-	end = periodCeil(end, frequency)
 
 	// Use AVG when viewing at a coarser frequency than the habit's native one.
 	var data []HistoryPoint
@@ -164,8 +127,8 @@ func fillMissingPeriods(data []HistoryPoint, start, end time.Time, frequency str
 	}
 
 	var filled []HistoryPoint
-	ps := periodStart(start, frequency)
-	endPS := periodStart(end, frequency)
+	ps := history.PeriodStart(start, frequency)
+	endPS := history.PeriodStart(end, frequency)
 	for !ps.After(endPS) {
 		key := ps.Format("2006-01-02")
 		if p, ok := existing[key]; ok {
@@ -173,7 +136,7 @@ func fillMissingPeriods(data []HistoryPoint, start, end time.Time, frequency str
 		} else {
 			filled = append(filled, HistoryPoint{Date: key, Value: 0})
 		}
-		ps = nextPeriodStart(ps, frequency)
+		ps = history.NextPeriodStart(ps, frequency)
 	}
 	return filled
 }
@@ -198,7 +161,7 @@ func (s *Service) recalculateStreak(ctx context.Context, habitID int32) error {
 
 	now := time.Now().In(s.location)
 	today := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC)
-	currentPeriod := periodStart(today, habit.Frequency)
+	currentPeriod := history.PeriodStart(today, habit.Frequency)
 
 	// Walk backwards counting consecutive periods that meet the target
 	currentStreak := int32(0)
@@ -207,12 +170,12 @@ func (s *Service) recalculateStreak(ctx context.Context, habitID int32) error {
 		sum, hasPeriod := periodSums[period]
 		if hasPeriod && meetsTarget(sum, habit.TargetMin, habit.TargetMax) {
 			currentStreak++
-			period = previousPeriodStart(period, habit.Frequency)
+			period = history.PreviousPeriodStart(period, habit.Frequency)
 			continue
 		}
 		// Current period not yet met — skip it, don't break
 		if period.Equal(currentPeriod) {
-			period = previousPeriodStart(period, habit.Frequency)
+			period = history.PreviousPeriodStart(period, habit.Frequency)
 			continue
 		}
 		// Past period not met — streak is broken
@@ -259,7 +222,7 @@ func buildEffectivePeriodSums(logs []habitsdb.HabitLog, frequency string, record
 		if v, ok := loggedValues[d]; ok {
 			lastValue = v
 		}
-		ps := periodStart(d, frequency)
+		ps := history.PeriodStart(d, frequency)
 		effectiveSums[ps] += lastValue
 	}
 
@@ -285,7 +248,7 @@ func computeLongestStreak(periodSums map[time.Time]float32, targetMin, targetMax
 	longest := int32(1)
 	current := int32(1)
 	for i := 1; i < len(metPeriods); i++ {
-		expected := nextPeriodStart(metPeriods[i-1], frequency)
+		expected := history.NextPeriodStart(metPeriods[i-1], frequency)
 		if metPeriods[i].Equal(expected) {
 			current++
 		} else {

@@ -60,6 +60,10 @@ reset-logs:
 	make reset
 	make logs
 
+# down
+down:
+	docker compose down
+
 # --- TESTING ---
 
 include .env

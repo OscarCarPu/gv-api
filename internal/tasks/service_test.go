@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"gv-api/internal/history"
 	"gv-api/internal/tasks"
 	"gv-api/internal/tasks/mocks"
 
@@ -217,4 +218,78 @@ func TestService_GetActiveTree(t *testing.T) {
 		_, err := svc.GetActiveTree(context.Background())
 		assert.Error(t, err)
 	})
+}
+
+func TestService_GetTimeEntryHistory_InvalidFrequency(t *testing.T) {
+	repo := mocks.NewMockRepository(t)
+	svc := tasks.NewService(repo, time.UTC)
+
+	_, err := svc.GetTimeEntryHistory(context.Background(), "yearly", "", "")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "invalid frequency")
+}
+
+func TestService_GetTimeEntryHistory_InvalidStartAt(t *testing.T) {
+	repo := mocks.NewMockRepository(t)
+	svc := tasks.NewService(repo, time.UTC)
+
+	_, err := svc.GetTimeEntryHistory(context.Background(), "daily", "bad", "")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "invalid start_at")
+}
+
+func TestService_GetTimeEntryHistory_InvalidEndAt(t *testing.T) {
+	repo := mocks.NewMockRepository(t)
+	svc := tasks.NewService(repo, time.UTC)
+
+	_, err := svc.GetTimeEntryHistory(context.Background(), "daily", "", "bad")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "invalid end_at")
+}
+
+func TestService_GetTimeEntryHistory_DefaultDatesDaily(t *testing.T) {
+	repo := mocks.NewMockRepository(t)
+	loc := time.UTC
+
+	repo.EXPECT().
+		GetTimeEntryHistory(mock.Anything, "day", "UTC", mock.AnythingOfType("time.Time"), mock.AnythingOfType("time.Time")).
+		Return([]history.Point{
+			{Date: "2026-03-17", Value: 2.5},
+		}, nil)
+
+	svc := tasks.NewService(repo, loc)
+	resp, err := svc.GetTimeEntryHistory(context.Background(), "daily", "", "")
+	require.NoError(t, err)
+
+	assert.NotEmpty(t, resp.StartAt)
+	assert.NotEmpty(t, resp.EndAt)
+	// Should have filled data (at least 28 days for a daily default of 1 month)
+	assert.True(t, len(resp.Data) >= 28, "expected at least 28 data points, got %d", len(resp.Data))
+}
+
+func TestService_GetTimeEntryHistory_FillsMissingPeriods(t *testing.T) {
+	repo := mocks.NewMockRepository(t)
+	loc := time.UTC
+
+	// Repo returns sparse data: only two points in a 5-day range
+	repo.EXPECT().
+		GetTimeEntryHistory(mock.Anything, "day", "UTC", mock.AnythingOfType("time.Time"), mock.AnythingOfType("time.Time")).
+		Return([]history.Point{
+			{Date: "2026-03-16", Value: 1},
+			{Date: "2026-03-19", Value: 3},
+		}, nil)
+
+	svc := tasks.NewService(repo, loc)
+	resp, err := svc.GetTimeEntryHistory(context.Background(), "daily", "2026-03-16", "2026-03-20")
+	require.NoError(t, err)
+
+	// 2026-03-16 through 2026-03-20 = 5 daily periods
+	require.Len(t, resp.Data, 5)
+	assert.Equal(t, float32(1), resp.Data[0].Value)   // 03-16
+	assert.Equal(t, float32(0), resp.Data[1].Value)   // 03-17 filled
+	assert.Equal(t, float32(0), resp.Data[2].Value)   // 03-18 filled
+	assert.Equal(t, float32(3), resp.Data[3].Value)   // 03-19
+	assert.Equal(t, float32(0), resp.Data[4].Value)   // 03-20 filled
+	assert.Equal(t, "2026-03-16", resp.StartAt)
+	assert.Equal(t, "2026-03-20", resp.EndAt)
 }

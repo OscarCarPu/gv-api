@@ -486,3 +486,38 @@
     - **Content:** `task not found`
   - **Code:** `500 Internal Server Error`
     - **Content:** `Failed to get task time entries`
+
+## Get Time Entry History
+
+- **Method:** `GET`
+- **Endpoint:** `/tasks/time-entries/history`
+- **Description:** Returns aggregated time entry durations over a date range, bucketed by a chosen frequency. Values represent total hours worked (as decimal). Missing periods within the range are filled with zero values. Timezone-aware: uses the server's configured timezone to determine which calendar day each time entry belongs to.
+- **Query Parameters:**
+  - `frequency` (required): `daily`, `weekly`, or `monthly`.
+  - `start_at` (optional): Start date in `YYYY-MM-DD` format. Default depends on frequency: daily = 1 month ago, weekly = 12 weeks ago, monthly = 12 months ago.
+  - `end_at` (optional): End date in `YYYY-MM-DD` format. Defaults to today.
+- **Success Response:**
+  - **Code:** `200 OK`
+  - **Content:** A wrapper object containing the date range and history data. The `start_at` and `end_at` values are snapped to the period boundary (Monday for weekly, 1st of month for monthly).
+    ```json
+    {
+      "start_at": "2026-01-01",
+      "end_at": "2026-03-23",
+      "data": [
+        { "date": "2026-01-01", "value": 10.5 },
+        { "date": "2026-01-02", "value": 0 },
+        { "date": "2026-01-03", "value": 12.25 }
+      ]
+    }
+    ```
+  - **Fields:**
+    - `start_at`: Start of the date range, snapped to period boundary (`YYYY-MM-DD`).
+    - `end_at`: End of the date range, snapped to period boundary (`YYYY-MM-DD`).
+    - `data`: Array of history points, one per period. Missing periods are filled with 0.
+    - `data[].date`: The start date of the aggregation period (`YYYY-MM-DD`).
+    - `data[].value`: Total hours worked in the period (decimal float, e.g. 10.5 = 10h 30m).
+- **Error Responses:**
+  - **Code:** `400 Bad Request`
+    - **Content:** `frequency is required` or `frequency must be daily, weekly, or monthly`
+  - **Code:** `500 Internal Server Error`
+    - **Content:** `Failed to get time entry history`

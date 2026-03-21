@@ -30,6 +30,8 @@ gv-api/
       habitsdb/              # sqlc-generated code for habits queries
       tasksdb/               # sqlc-generated code for tasks queries
     response/response.go     # JSON/Error response helpers
+    history/
+      history.go             # Shared history types and period utilities
     auth/
       handler.go             # Login + 2FA HTTP handlers
       service.go             # JWT generation/validation, password check, TOTP
@@ -95,6 +97,8 @@ Environment variables loaded via `os.Getenv` with sensible defaults. No `.env` f
 | GET | `/habits?date=YYYY-MM-DD` | Get habits with logs for a date |
 | POST | `/habits` | Create a habit |
 | POST | `/habits/log` | Upsert a habit log entry |
+| GET | `/habits/{id}/history` | Aggregated habit history |
+| DELETE | `/habits/{id}` | Delete a habit |
 | GET | `/tasks/tree` | Active project/task tree |
 | GET | `/tasks/projects` | Root (unfinished, parentless) projects |
 | GET | `/tasks/projects/{id}/children` | Project with descendants, tasks, todos, time stats |
@@ -107,6 +111,10 @@ Environment variables loaded via `os.Getenv` with sensible defaults. No `.env` f
 | PATCH | `/tasks/todos/{id}` | Update a todo |
 | POST | `/tasks/time-entries` | Create time entry |
 | PATCH | `/tasks/time-entries/{id}` | Update a time entry |
+| DELETE | `/tasks/time-entries/{id}` | Delete a time entry |
+| GET | `/tasks/time-entries/history` | Aggregated time entry history |
+| GET | `/tasks/time-entries/summary` | Today + week totals |
+| GET | `/tasks/time-entries/active` | Currently running time entry |
 
 ## Database Schema
 

@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"strconv"
 
+	"gv-api/internal/history"
 	"gv-api/internal/response"
 
 	"github.com/go-chi/chi/v5"
@@ -35,6 +36,7 @@ type ServiceInterface interface {
 	DeleteTimeEntry(ctx context.Context, id int32) error
 	GetActiveTimeEntry(ctx context.Context) (TimeEntryResponse, error)
 	GetTimeEntrySummary(ctx context.Context) (TimeEntrySummaryResponse, error)
+	GetTimeEntryHistory(ctx context.Context, frequency, startAt, endAt string) (history.Response, error)
 }
 
 type Handler struct {
@@ -437,6 +439,30 @@ func (h *Handler) GetTimeEntrySummary(w http.ResponseWriter, r *http.Request) {
 	}
 
 	response.JSON(w, http.StatusOK, summary)
+}
+
+func (h *Handler) GetTimeEntryHistory(w http.ResponseWriter, r *http.Request) {
+	frequency := r.URL.Query().Get("frequency")
+	if frequency == "" {
+		response.Error(w, http.StatusBadRequest, "frequency is required")
+		return
+	}
+	valid := map[string]bool{"daily": true, "weekly": true, "monthly": true}
+	if !valid[frequency] {
+		response.Error(w, http.StatusBadRequest, "frequency must be daily, weekly, or monthly")
+		return
+	}
+
+	startAt := r.URL.Query().Get("start_at")
+	endAt := r.URL.Query().Get("end_at")
+
+	history, err := h.service.GetTimeEntryHistory(r.Context(), frequency, startAt, endAt)
+	if err != nil {
+		response.Error(w, http.StatusInternalServerError, "Failed to get time entry history")
+		return
+	}
+
+	response.JSON(w, http.StatusOK, history)
 }
 
 func (h *Handler) GetRootProjects(w http.ResponseWriter, r *http.Request) {

@@ -4,9 +4,11 @@ package mocks
 
 import (
 	context "context"
-	tasks "gv-api/internal/tasks"
+	history "gv-api/internal/history"
 
 	mock "github.com/stretchr/testify/mock"
+
+	tasks "gv-api/internal/tasks"
 
 	time "time"
 )
@@ -998,6 +1000,68 @@ func (_c *MockRepository_GetTasksByDueDate_Call) Return(_a0 []tasks.TaskByDueDat
 }
 
 func (_c *MockRepository_GetTasksByDueDate_Call) RunAndReturn(run func(context.Context) ([]tasks.TaskByDueDateResponse, error)) *MockRepository_GetTasksByDueDate_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// GetTimeEntryHistory provides a mock function with given fields: ctx, frequency, timezone, startAt, endAt
+func (_m *MockRepository) GetTimeEntryHistory(ctx context.Context, frequency string, timezone string, startAt time.Time, endAt time.Time) ([]history.Point, error) {
+	ret := _m.Called(ctx, frequency, timezone, startAt, endAt)
+
+	if len(ret) == 0 {
+		panic("no return value specified for GetTimeEntryHistory")
+	}
+
+	var r0 []history.Point
+	var r1 error
+	if rf, ok := ret.Get(0).(func(context.Context, string, string, time.Time, time.Time) ([]history.Point, error)); ok {
+		return rf(ctx, frequency, timezone, startAt, endAt)
+	}
+	if rf, ok := ret.Get(0).(func(context.Context, string, string, time.Time, time.Time) []history.Point); ok {
+		r0 = rf(ctx, frequency, timezone, startAt, endAt)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).([]history.Point)
+		}
+	}
+
+	if rf, ok := ret.Get(1).(func(context.Context, string, string, time.Time, time.Time) error); ok {
+		r1 = rf(ctx, frequency, timezone, startAt, endAt)
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
+}
+
+// MockRepository_GetTimeEntryHistory_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'GetTimeEntryHistory'
+type MockRepository_GetTimeEntryHistory_Call struct {
+	*mock.Call
+}
+
+// GetTimeEntryHistory is a helper method to define mock.On call
+//   - ctx context.Context
+//   - frequency string
+//   - timezone string
+//   - startAt time.Time
+//   - endAt time.Time
+func (_e *MockRepository_Expecter) GetTimeEntryHistory(ctx interface{}, frequency interface{}, timezone interface{}, startAt interface{}, endAt interface{}) *MockRepository_GetTimeEntryHistory_Call {
+	return &MockRepository_GetTimeEntryHistory_Call{Call: _e.mock.On("GetTimeEntryHistory", ctx, frequency, timezone, startAt, endAt)}
+}
+
+func (_c *MockRepository_GetTimeEntryHistory_Call) Run(run func(ctx context.Context, frequency string, timezone string, startAt time.Time, endAt time.Time)) *MockRepository_GetTimeEntryHistory_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].(context.Context), args[1].(string), args[2].(string), args[3].(time.Time), args[4].(time.Time))
+	})
+	return _c
+}
+
+func (_c *MockRepository_GetTimeEntryHistory_Call) Return(_a0 []history.Point, _a1 error) *MockRepository_GetTimeEntryHistory_Call {
+	_c.Call.Return(_a0, _a1)
+	return _c
+}
+
+func (_c *MockRepository_GetTimeEntryHistory_Call) RunAndReturn(run func(context.Context, string, string, time.Time, time.Time) ([]history.Point, error)) *MockRepository_GetTimeEntryHistory_Call {
 	_c.Call.Return(run)
 	return _c
 }

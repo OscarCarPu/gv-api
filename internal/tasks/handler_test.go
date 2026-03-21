@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"gv-api/internal/history"
 	"gv-api/internal/tasks"
 	"gv-api/internal/tasks/mocks"
 
@@ -1071,5 +1072,87 @@ func TestHandler_GetActiveTimeEntry(t *testing.T) {
 
 		assert.Equal(t, http.StatusInternalServerError, rec.Code)
 		assert.Contains(t, rec.Body.String(), "Failed to get active time entry")
+	})
+}
+
+func TestHandler_GetTimeEntryHistory(t *testing.T) {
+	t.Run("returns 400 when frequency is missing", func(t *testing.T) {
+		svc := mocks.NewMockServiceInterface(t)
+		handler := tasks.NewHandler(svc)
+
+		req := httptest.NewRequest(http.MethodGet, "/tasks/time-entries/history", nil)
+		rec := httptest.NewRecorder()
+		handler.GetTimeEntryHistory(rec, req)
+
+		assert.Equal(t, http.StatusBadRequest, rec.Code)
+		assert.Contains(t, rec.Body.String(), "frequency is required")
+	})
+
+	t.Run("returns 400 when frequency is invalid", func(t *testing.T) {
+		svc := mocks.NewMockServiceInterface(t)
+		handler := tasks.NewHandler(svc)
+
+		req := httptest.NewRequest(http.MethodGet, "/tasks/time-entries/history?frequency=yearly", nil)
+		rec := httptest.NewRecorder()
+		handler.GetTimeEntryHistory(rec, req)
+
+		assert.Equal(t, http.StatusBadRequest, rec.Code)
+		assert.Contains(t, rec.Body.String(), "frequency must be")
+	})
+
+	t.Run("returns 200 with history data", func(t *testing.T) {
+		svc := mocks.NewMockServiceInterface(t)
+		resp := history.Response{
+			StartAt: "2026-03-01",
+			EndAt:   "2026-03-19",
+			Data: []history.Point{
+				{Date: "2026-03-01", Value: 1.5},
+				{Date: "2026-03-02", Value: 2.0},
+			},
+		}
+		svc.EXPECT().GetTimeEntryHistory(mock.Anything, "daily", "2026-03-01", "2026-03-19").Return(resp, nil)
+		handler := tasks.NewHandler(svc)
+
+		req := httptest.NewRequest(http.MethodGet, "/tasks/time-entries/history?frequency=daily&start_at=2026-03-01&end_at=2026-03-19", nil)
+		rec := httptest.NewRecorder()
+		handler.GetTimeEntryHistory(rec, req)
+
+		assert.Equal(t, http.StatusOK, rec.Code)
+		var got history.Response
+		require.NoError(t, json.NewDecoder(rec.Body).Decode(&got))
+		assert.Equal(t, "2026-03-01", got.StartAt)
+		assert.Equal(t, "2026-03-19", got.EndAt)
+		require.Len(t, got.Data, 2)
+		assert.Equal(t, float32(1.5), got.Data[0].Value)
+	})
+
+	t.Run("returns 200 with defaults when no dates", func(t *testing.T) {
+		svc := mocks.NewMockServiceInterface(t)
+		resp := history.Response{
+			StartAt: "2026-01-05",
+			EndAt:   "2026-03-23",
+			Data:    []history.Point{},
+		}
+		svc.EXPECT().GetTimeEntryHistory(mock.Anything, "weekly", "", "").Return(resp, nil)
+		handler := tasks.NewHandler(svc)
+
+		req := httptest.NewRequest(http.MethodGet, "/tasks/time-entries/history?frequency=weekly", nil)
+		rec := httptest.NewRecorder()
+		handler.GetTimeEntryHistory(rec, req)
+
+		assert.Equal(t, http.StatusOK, rec.Code)
+	})
+
+	t.Run("returns 500 on service error", func(t *testing.T) {
+		svc := mocks.NewMockServiceInterface(t)
+		svc.EXPECT().GetTimeEntryHistory(mock.Anything, "daily", "", "").Return(history.Response{}, errors.New("db error"))
+		handler := tasks.NewHandler(svc)
+
+		req := httptest.NewRequest(http.MethodGet, "/tasks/time-entries/history?frequency=daily", nil)
+		rec := httptest.NewRecorder()
+		handler.GetTimeEntryHistory(rec, req)
+
+		assert.Equal(t, http.StatusInternalServerError, rec.Code)
+		assert.Contains(t, rec.Body.String(), "Failed to get time entry history")
 	})
 }
