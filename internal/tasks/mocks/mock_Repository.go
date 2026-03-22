@@ -1182,6 +1182,64 @@ func (_c *MockRepository_GetUnfinishedTasks_Call) RunAndReturn(run func(context.
 	return _c
 }
 
+// ListProjectsFast provides a mock function with given fields: ctx
+func (_m *MockRepository) ListProjectsFast(ctx context.Context) ([]tasks.ProjectFastResponse, error) {
+	ret := _m.Called(ctx)
+
+	if len(ret) == 0 {
+		panic("no return value specified for ListProjectsFast")
+	}
+
+	var r0 []tasks.ProjectFastResponse
+	var r1 error
+	if rf, ok := ret.Get(0).(func(context.Context) ([]tasks.ProjectFastResponse, error)); ok {
+		return rf(ctx)
+	}
+	if rf, ok := ret.Get(0).(func(context.Context) []tasks.ProjectFastResponse); ok {
+		r0 = rf(ctx)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).([]tasks.ProjectFastResponse)
+		}
+	}
+
+	if rf, ok := ret.Get(1).(func(context.Context) error); ok {
+		r1 = rf(ctx)
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
+}
+
+// MockRepository_ListProjectsFast_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'ListProjectsFast'
+type MockRepository_ListProjectsFast_Call struct {
+	*mock.Call
+}
+
+// ListProjectsFast is a helper method to define mock.On call
+//   - ctx context.Context
+func (_e *MockRepository_Expecter) ListProjectsFast(ctx interface{}) *MockRepository_ListProjectsFast_Call {
+	return &MockRepository_ListProjectsFast_Call{Call: _e.mock.On("ListProjectsFast", ctx)}
+}
+
+func (_c *MockRepository_ListProjectsFast_Call) Run(run func(ctx context.Context)) *MockRepository_ListProjectsFast_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].(context.Context))
+	})
+	return _c
+}
+
+func (_c *MockRepository_ListProjectsFast_Call) Return(_a0 []tasks.ProjectFastResponse, _a1 error) *MockRepository_ListProjectsFast_Call {
+	_c.Call.Return(_a0, _a1)
+	return _c
+}
+
+func (_c *MockRepository_ListProjectsFast_Call) RunAndReturn(run func(context.Context) ([]tasks.ProjectFastResponse, error)) *MockRepository_ListProjectsFast_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // UpdateProject provides a mock function with given fields: ctx, req
 func (_m *MockRepository) UpdateProject(ctx context.Context, req tasks.UpdateProjectRequest) (tasks.ProjectResponse, error) {
 	ret := _m.Called(ctx, req)

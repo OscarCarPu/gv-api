@@ -19,6 +19,11 @@ type ProjectResponse struct {
 	FinishedAt  *time.Time `json:"finished_at"`
 }
 
+type ProjectFastResponse struct {
+	ID   int32  `json:"id"`
+	Name string `json:"name"`
+}
+
 type CreateTaskRequest struct {
 	ProjectID   *int32     `json:"project_id"`
 	Name        string     `json:"name"`

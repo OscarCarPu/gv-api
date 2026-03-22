@@ -25,6 +25,7 @@ type Repository interface {
 	UpdateTask(ctx context.Context, req UpdateTaskRequest) (TaskResponse, error)
 	UpdateTodo(ctx context.Context, req UpdateTodoRequest) (TodoResponse, error)
 	UpdateTimeEntry(ctx context.Context, req UpdateTimeEntryRequest) (TimeEntryResponse, error)
+	ListProjectsFast(ctx context.Context) ([]ProjectFastResponse, error)
 	GetRootProjects(ctx context.Context) ([]ProjectResponse, error)
 	GetActiveProjects(ctx context.Context) ([]ActiveProject, error)
 	GetUnfinishedTasks(ctx context.Context) ([]UnfinishedTask, error)
@@ -692,6 +693,23 @@ func (r *PostgresRepository) GetTimeEntryHistory(ctx context.Context, frequency,
 		}
 	}
 	return results, nil
+}
+
+func (r *PostgresRepository) ListProjectsFast(ctx context.Context) ([]ProjectFastResponse, error) {
+	rows, err := r.q.ListProjectsFast(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	projects := make([]ProjectFastResponse, len(rows))
+	for i, row := range rows {
+		projects[i] = ProjectFastResponse{
+			ID:   row.ID,
+			Name: row.Name,
+		}
+	}
+
+	return projects, nil
 }
 
 func (r *PostgresRepository) GetRootProjects(ctx context.Context) ([]ProjectResponse, error) {

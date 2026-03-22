@@ -191,6 +191,10 @@ func (s *Service) GetTimeEntrySummary(ctx context.Context) (TimeEntrySummaryResp
 	return s.repo.GetTimeEntrySummary(ctx, todayStart, weekStart)
 }
 
+func (s *Service) ListProjectsFast(ctx context.Context) ([]ProjectFastResponse, error) {
+	return s.repo.ListProjectsFast(ctx)
+}
+
 func (s *Service) GetRootProjects(ctx context.Context) ([]ProjectResponse, error) {
 	return s.repo.GetRootProjects(ctx)
 }

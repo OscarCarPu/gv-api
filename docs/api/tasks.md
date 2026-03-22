@@ -1,3 +1,23 @@
+## List Projects (Fast)
+
+- **Method:** `GET`
+- **Endpoint:** `/tasks/projects/list-fast`
+- **Description:** Returns all active projects (where `finished_at` is null) as a flat list with only `id` and `name`.
+- **Success Response:**
+  - **Code:** `200 OK`
+  - **Content:**
+    ```json
+    [
+      {
+        "id": 1,
+        "name": "My Project"
+      }
+    ]
+    ```
+- **Error Responses:**
+  - **Code:** `500 Internal Server Error`
+    - **Content:** `Failed to list projects`
+
 ## Get Root Projects
 
 - **Method:** `GET`

@@ -737,6 +737,35 @@ func (q *Queries) GetUnfinishedTasks(ctx context.Context) ([]GetUnfinishedTasksR
 	return items, nil
 }
 
+const listProjectsFast = `-- name: ListProjectsFast :many
+SELECT id, name FROM projects WHERE finished_at IS NULL ORDER BY name
+`
+
+type ListProjectsFastRow struct {
+	ID   int32  `db:"id" json:"id"`
+	Name string `db:"name" json:"name"`
+}
+
+func (q *Queries) ListProjectsFast(ctx context.Context) ([]ListProjectsFastRow, error) {
+	rows, err := q.db.Query(ctx, listProjectsFast)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListProjectsFastRow{}
+	for rows.Next() {
+		var i ListProjectsFastRow
+		if err := rows.Scan(&i.ID, &i.Name); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const updateProject = `-- name: UpdateProject :one
 UPDATE projects SET
     name        = CASE WHEN $1::bool        THEN $2::text             ELSE name END,

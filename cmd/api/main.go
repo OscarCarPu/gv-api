@@ -78,6 +78,7 @@ func main() {
 		r.Post("/habits/log", habitHandler.UpsertLog)
 		r.Get("/tasks/tree", taskHandler.GetActiveTree)
 		r.Get("/tasks/projects", taskHandler.GetRootProjects)
+		r.Get("/tasks/projects/list-fast", taskHandler.ListProjectsFast)
 		r.Get("/tasks/projects/{id}", taskHandler.GetProject)
 		r.Get("/tasks/projects/{id}/children", taskHandler.GetProjectChildren)
 		r.Post("/tasks/projects", taskHandler.CreateProject)

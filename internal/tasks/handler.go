@@ -23,6 +23,7 @@ type ServiceInterface interface {
 	UpdateTask(ctx context.Context, req UpdateTaskRequest) (TaskResponse, error)
 	UpdateTodo(ctx context.Context, req UpdateTodoRequest) (TodoResponse, error)
 	UpdateTimeEntry(ctx context.Context, req UpdateTimeEntryRequest) (TimeEntryResponse, error)
+	ListProjectsFast(ctx context.Context) ([]ProjectFastResponse, error)
 	GetRootProjects(ctx context.Context) ([]ProjectResponse, error)
 	GetActiveTree(ctx context.Context) ([]ActiveTreeNode, error)
 	GetProject(ctx context.Context, id int32) (ProjectDetailResponse, error)
@@ -463,6 +464,16 @@ func (h *Handler) GetTimeEntryHistory(w http.ResponseWriter, r *http.Request) {
 	}
 
 	response.JSON(w, http.StatusOK, history)
+}
+
+func (h *Handler) ListProjectsFast(w http.ResponseWriter, r *http.Request) {
+	projects, err := h.service.ListProjectsFast(r.Context())
+	if err != nil {
+		response.Error(w, http.StatusInternalServerError, "Failed to list projects")
+		return
+	}
+
+	response.JSON(w, http.StatusOK, projects)
 }
 
 func (h *Handler) GetRootProjects(w http.ResponseWriter, r *http.Request) {

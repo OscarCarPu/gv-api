@@ -49,6 +49,9 @@ UPDATE projects SET
 WHERE id = @id
 RETURNING id, parent_id, name, description, due_at, started_at, finished_at;
 
+-- name: ListProjectsFast :many
+SELECT id, name FROM projects WHERE finished_at IS NULL ORDER BY name;
+
 -- name: GetRootProjects :many
 SELECT id, name, description, due_at, parent_id, started_at
 FROM projects

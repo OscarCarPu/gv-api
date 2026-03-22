@@ -4,6 +4,7 @@
 //
 //	GET    /tasks/tree                          - active tree
 //	GET    /tasks/projects                      - root projects
+//	GET    /tasks/projects/list-fast            - flat list of active projects (id, name)
 //	GET    /tasks/projects/{id}/children        - project children
 //	POST   /tasks/projects                      - create project
 //	PATCH  /tasks/projects/{id}                 - update project
