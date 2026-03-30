@@ -5,10 +5,11 @@ import (
 	"time"
 )
 
-func timePtr(t time.Time) *time.Time { return &t }
-func strPtr(s string) *string        { return &s }
-func int32Ptr(i int32) *int32        { return &i }
-func boolPtr(b bool) *bool           { return &b }
+func timePtr(t time.Time) *time.Time       { return &t }
+func strPtr(s string) *string              { return &s }
+func int32Ptr(i int32) *int32              { return &i }
+func boolPtr(b bool) *bool                 { return &b }
+func int32SlicePtr(s []int32) *[]int32     { return &s }
 
 func TestE2E_PlanProjectHierarchy(t *testing.T) {
 	if testing.Short() {
@@ -611,5 +612,308 @@ func TestE2E_GetTasksByDueDate(t *testing.T) {
 		if task.ID == finishedTask.ID {
 			t.Error("finished task should not appear in results")
 		}
+	}
+}
+
+func TestE2E_TaskDependencies_CRUD(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping e2e test in short mode")
+	}
+
+	truncateTables(t)
+	client := authenticate(t)
+
+	// Create three tasks
+	taskA := client.CreateTask(t, CreateTaskRequest{Name: "Task A"})
+	taskB := client.CreateTask(t, CreateTaskRequest{Name: "Task B"})
+	taskC := client.CreateTask(t, CreateTaskRequest{Name: "Task C"})
+
+	// Create task D depending on A and B
+	taskD := client.CreateTask(t, CreateTaskRequest{
+		Name:      "Task D",
+		DependsOn: []int32{taskA.ID, taskB.ID},
+	})
+
+	// Verify create response has depends_on
+	if len(taskD.DependsOn) != 2 {
+		t.Fatalf("CreateTask D: expected 2 depends_on, got %d", len(taskD.DependsOn))
+	}
+
+	// Verify via GetTask(D): depends_on has A and B with names
+	fullD := client.GetTask(t, taskD.ID)
+	if len(fullD.DependsOn) != 2 {
+		t.Fatalf("GetTask D: expected 2 depends_on, got %d", len(fullD.DependsOn))
+	}
+	depIDs := map[int32]string{}
+	for _, dep := range fullD.DependsOn {
+		depIDs[dep.ID] = dep.Name
+	}
+	if depIDs[taskA.ID] != "Task A" {
+		t.Errorf("GetTask D: expected dep on Task A, got %v", depIDs)
+	}
+	if depIDs[taskB.ID] != "Task B" {
+		t.Errorf("GetTask D: expected dep on Task B, got %v", depIDs)
+	}
+
+	// Verify reverse: GetTask(A) should show D in task_depends
+	fullA := client.GetTask(t, taskA.ID)
+	if len(fullA.TaskDepends) != 1 || fullA.TaskDepends[0].ID != taskD.ID {
+		t.Errorf("GetTask A: expected task_depends [D=%d], got %v", taskD.ID, fullA.TaskDepends)
+	}
+
+	// Update D: change deps to [C] only
+	updatedD := client.UpdateTask(t, taskD.ID, UpdateTaskRequest{
+		DependsOn: int32SlicePtr([]int32{taskC.ID}),
+	})
+	if len(updatedD.DependsOn) != 1 || updatedD.DependsOn[0].ID != taskC.ID {
+		t.Errorf("UpdateTask D to [C]: expected depends_on [C=%d], got %v", taskC.ID, updatedD.DependsOn)
+	}
+
+	// Verify A no longer has D in task_depends
+	fullA = client.GetTask(t, taskA.ID)
+	if len(fullA.TaskDepends) != 0 {
+		t.Errorf("GetTask A after update: expected empty task_depends, got %v", fullA.TaskDepends)
+	}
+
+	// Update D: clear all deps
+	updatedD = client.UpdateTask(t, taskD.ID, UpdateTaskRequest{
+		DependsOn: int32SlicePtr([]int32{}),
+	})
+	if len(updatedD.DependsOn) != 0 {
+		t.Errorf("UpdateTask D to []: expected empty depends_on, got %v", updatedD.DependsOn)
+	}
+
+	// Update D omitting depends_on: should stay empty
+	updatedD = client.UpdateTask(t, taskD.ID, UpdateTaskRequest{
+		Name: strPtr("Task D Renamed"),
+	})
+	if len(updatedD.DependsOn) != 0 {
+		t.Errorf("UpdateTask D omitting deps: expected empty depends_on, got %v", updatedD.DependsOn)
+	}
+	if updatedD.Name != "Task D Renamed" {
+		t.Errorf("UpdateTask D: expected name 'Task D Renamed', got %q", updatedD.Name)
+	}
+}
+
+func TestE2E_TaskDependencies_ActiveTreeVisibility(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping e2e test in short mode")
+	}
+
+	truncateTables(t)
+	client := authenticate(t)
+
+	now := time.Now().UTC().Truncate(time.Second)
+
+	// Create and start a project
+	proj := client.CreateProject(t, CreateProjectRequest{Name: "Dep Project"})
+	client.UpdateProject(t, proj.ID, UpdateProjectRequest{StartedAt: &now})
+
+	// Create chain: A → B → C (C depends on B, B depends on A)
+	taskA := client.CreateTask(t, CreateTaskRequest{Name: "Task A", ProjectID: &proj.ID})
+	taskB := client.CreateTask(t, CreateTaskRequest{
+		Name:      "Task B",
+		ProjectID: &proj.ID,
+		DependsOn: []int32{taskA.ID},
+	})
+	taskC := client.CreateTask(t, CreateTaskRequest{
+		Name:      "Task C",
+		ProjectID: &proj.ID,
+		DependsOn: []int32{taskB.ID},
+	})
+
+	// Start all three
+	client.UpdateTask(t, taskA.ID, UpdateTaskRequest{StartedAt: &now})
+	client.UpdateTask(t, taskB.ID, UpdateTaskRequest{StartedAt: &now})
+	client.UpdateTask(t, taskC.ID, UpdateTaskRequest{StartedAt: &now})
+
+	// Helper to find task IDs in a project's children within the active tree
+	findProjectChildren := func(tree []ActiveTreeNode, projID int32) []ActiveTreeNode {
+		for _, n := range tree {
+			if n.ID == projID && n.Type == "project" {
+				return n.Children
+			}
+		}
+		return nil
+	}
+	hasTask := func(children []ActiveTreeNode, taskID int32) bool {
+		for _, c := range children {
+			if c.ID == taskID && c.Type == "task" {
+				return true
+			}
+		}
+		return false
+	}
+
+	// --- Initial state ---
+	// A: no deps → visible
+	// B: depends on A (unfinished) → blocked, but A is not blocked → B not hidden → visible
+	// C: depends on B → B is blocked (A unfinished) → all of C's deps blocked → C hidden
+	tree := client.GetActiveTree(t)
+	children := findProjectChildren(tree, proj.ID)
+
+	if !hasTask(children, taskA.ID) {
+		t.Error("initial: Task A should be visible in active tree")
+	}
+	if !hasTask(children, taskB.ID) {
+		t.Error("initial: Task B should be visible (blocked but not hidden)")
+	}
+	if hasTask(children, taskC.ID) {
+		t.Error("initial: Task C should be hidden (all deps blocked)")
+	}
+
+	// --- Finish A ---
+	// B: A finished → B unblocked → visible
+	// C: B unblocked → not all deps blocked → C visible
+	client.UpdateTask(t, taskA.ID, UpdateTaskRequest{FinishedAt: &now})
+
+	tree = client.GetActiveTree(t)
+	children = findProjectChildren(tree, proj.ID)
+
+	if hasTask(children, taskA.ID) {
+		t.Error("after finishing A: Task A should not appear (finished)")
+	}
+	if !hasTask(children, taskB.ID) {
+		t.Error("after finishing A: Task B should be visible (unblocked)")
+	}
+	if !hasTask(children, taskC.ID) {
+		t.Error("after finishing A: Task C should now be visible")
+	}
+
+	// --- Finish B ---
+	// C: B finished → C unblocked → visible
+	client.UpdateTask(t, taskB.ID, UpdateTaskRequest{FinishedAt: &now})
+
+	tree = client.GetActiveTree(t)
+	children = findProjectChildren(tree, proj.ID)
+
+	if hasTask(children, taskB.ID) {
+		t.Error("after finishing B: Task B should not appear (finished)")
+	}
+	if !hasTask(children, taskC.ID) {
+		t.Error("after finishing B: Task C should still be visible")
+	}
+
+	// --- Finish C ---
+	client.UpdateTask(t, taskC.ID, UpdateTaskRequest{FinishedAt: &now})
+
+	tree = client.GetActiveTree(t)
+	children = findProjectChildren(tree, proj.ID)
+
+	for _, c := range children {
+		if c.Type == "task" {
+			t.Errorf("after finishing all: no tasks should remain, found %s (id=%d)", c.Name, c.ID)
+		}
+	}
+}
+
+func TestE2E_TaskDependencies_DueDateList(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping e2e test in short mode")
+	}
+
+	truncateTables(t)
+	client := authenticate(t)
+
+	now := time.Now().UTC().Truncate(time.Second)
+	dueDateA := time.Date(2026, 6, 15, 0, 0, 0, 0, time.UTC)
+	dueDateC := time.Date(2026, 9, 1, 0, 0, 0, 0, time.UTC)
+
+	// Task A: has due date June 15
+	taskA := client.CreateTask(t, CreateTaskRequest{Name: "Task A", DueAt: &dueDateA})
+
+	// Task B: no due date, depends on A → should inherit June 15
+	taskB := client.CreateTask(t, CreateTaskRequest{
+		Name:      "Task B",
+		DependsOn: []int32{taskA.ID},
+	})
+
+	// Task C: due Sept 1, depends on A → effective due = min(Sept 1, June 15) = June 15
+	taskC := client.CreateTask(t, CreateTaskRequest{
+		Name:      "Task C",
+		DueAt:     &dueDateC,
+		DependsOn: []int32{taskA.ID},
+	})
+
+	tasks := client.GetTasksByDueDate(t)
+
+	// All three should appear
+	taskMap := map[int32]*TaskByDueDateResponse{}
+	for i := range tasks {
+		taskMap[tasks[i].ID] = &tasks[i]
+	}
+
+	if _, ok := taskMap[taskA.ID]; !ok {
+		t.Fatal("Task A should appear in due-date list")
+	}
+	if _, ok := taskMap[taskB.ID]; !ok {
+		t.Fatal("Task B should appear in due-date list (inherited due from A)")
+	}
+	if _, ok := taskMap[taskC.ID]; !ok {
+		t.Fatal("Task C should appear in due-date list")
+	}
+
+	// B should have effective due date = June 15 (from A)
+	if taskMap[taskB.ID].DueAt == nil {
+		t.Fatal("Task B due_at should not be nil (inherited from dep A)")
+	}
+	if !taskMap[taskB.ID].DueAt.Equal(dueDateA) {
+		t.Errorf("Task B effective due: want %v, got %v", dueDateA, *taskMap[taskB.ID].DueAt)
+	}
+
+	// C should have effective due date = June 15 (min of own Sept 1 and dep A's June 15)
+	if taskMap[taskC.ID].DueAt == nil {
+		t.Fatal("Task C due_at should not be nil")
+	}
+	if !taskMap[taskC.ID].DueAt.Equal(dueDateA) {
+		t.Errorf("Task C effective due: want %v (from dep A), got %v", dueDateA, *taskMap[taskC.ID].DueAt)
+	}
+
+	// --- Hidden filtering with chain D → E → F ---
+	dueDateD := time.Date(2026, 7, 1, 0, 0, 0, 0, time.UTC)
+
+	taskD := client.CreateTask(t, CreateTaskRequest{Name: "Task D", DueAt: &dueDateD})
+	client.UpdateTask(t, taskD.ID, UpdateTaskRequest{StartedAt: &now})
+
+	taskE := client.CreateTask(t, CreateTaskRequest{
+		Name:      "Task E",
+		DependsOn: []int32{taskD.ID},
+	})
+	client.UpdateTask(t, taskE.ID, UpdateTaskRequest{StartedAt: &now})
+
+	taskF := client.CreateTask(t, CreateTaskRequest{
+		Name:      "Task F",
+		DependsOn: []int32{taskE.ID},
+	})
+	client.UpdateTask(t, taskF.ID, UpdateTaskRequest{StartedAt: &now})
+
+	// F should be hidden: E is blocked (D unfinished), all of F's deps are blocked
+	tasks = client.GetTasksByDueDate(t)
+	taskMap = map[int32]*TaskByDueDateResponse{}
+	for i := range tasks {
+		taskMap[tasks[i].ID] = &tasks[i]
+	}
+
+	if _, ok := taskMap[taskD.ID]; !ok {
+		t.Error("Task D should appear in due-date list")
+	}
+	if _, ok := taskMap[taskE.ID]; !ok {
+		t.Error("Task E should appear in due-date list (blocked but not hidden)")
+	}
+	if _, ok := taskMap[taskF.ID]; ok {
+		t.Error("Task F should be hidden from due-date list (all deps blocked)")
+	}
+
+	// Finish D → E unblocked → F should now appear
+	client.UpdateTask(t, taskD.ID, UpdateTaskRequest{FinishedAt: &now})
+
+	tasks = client.GetTasksByDueDate(t)
+	taskMap = map[int32]*TaskByDueDateResponse{}
+	for i := range tasks {
+		taskMap[tasks[i].ID] = &tasks[i]
+	}
+
+	if _, ok := taskMap[taskF.ID]; !ok {
+		t.Error("Task F should appear after finishing D (E no longer blocked)")
 	}
 }

@@ -1,6 +1,48 @@
 package tasks
 
-import "time"
+import (
+	"encoding/json"
+	"time"
+)
+
+type TaskDepRef struct {
+	ID    int32   `json:"id"`
+	Name  string  `json:"name"`
+	DueAt *string `json:"due_at"`
+}
+
+func (r TaskDepRef) ParseDueAt() *time.Time {
+	if r.DueAt == nil {
+		return nil
+	}
+	t, err := time.Parse("2006-01-02", *r.DueAt)
+	if err != nil {
+		return nil
+	}
+	return &t
+}
+
+func unmarshalDepRefs(data []byte) []TaskDepRef {
+	if len(data) == 0 {
+		return []TaskDepRef{}
+	}
+	var refs []TaskDepRef
+	if err := json.Unmarshal(data, &refs); err != nil {
+		return []TaskDepRef{}
+	}
+	if refs == nil {
+		return []TaskDepRef{}
+	}
+	return refs
+}
+
+func depRefIDs(refs []TaskDepRef) []int32 {
+	ids := make([]int32, len(refs))
+	for i, r := range refs {
+		ids[i] = r.ID
+	}
+	return ids
+}
 
 type CreateProjectRequest struct {
 	Name        string     `json:"name"`
@@ -29,16 +71,19 @@ type CreateTaskRequest struct {
 	Name        string     `json:"name"`
 	Description *string    `json:"description"`
 	DueAt       *time.Time `json:"due_at"`
+	DependsOn   []int32    `json:"depends_on"`
 }
 
 type TaskResponse struct {
-	ID          int32      `json:"id"`
-	ProjectID   *int32     `json:"project_id"`
-	Name        string     `json:"name"`
-	Description *string    `json:"description"`
-	DueAt       *time.Time `json:"due_at"`
-	StartedAt   *time.Time `json:"started_at"`
-	FinishedAt  *time.Time `json:"finished_at"`
+	ID          int32        `json:"id"`
+	ProjectID   *int32       `json:"project_id"`
+	Name        string       `json:"name"`
+	Description *string      `json:"description"`
+	DueAt       *time.Time   `json:"due_at"`
+	StartedAt   *time.Time   `json:"started_at"`
+	FinishedAt  *time.Time   `json:"finished_at"`
+	DependsOn   []TaskDepRef `json:"depends_on"`
+	TaskDepends []TaskDepRef `json:"task_depends"`
 }
 
 type CreateTodoRequest struct {
@@ -86,6 +131,7 @@ type UpdateTaskRequest struct {
 	ProjectID   *int32     `json:"project_id"`
 	StartedAt   *time.Time `json:"started_at"`
 	FinishedAt  *time.Time `json:"finished_at"`
+	DependsOn   *[]int32   `json:"depends_on"`
 }
 
 type UpdateTodoRequest struct {
@@ -109,14 +155,16 @@ type TaskTimeEntriesResponse struct {
 }
 
 type TaskDetailResponse struct {
-	ID          int32      `json:"id"`
-	ProjectID   *int32     `json:"project_id"`
-	Name        string     `json:"name"`
-	Description *string    `json:"description"`
-	DueAt       *time.Time `json:"due_at"`
-	StartedAt   *time.Time `json:"started_at"`
-	FinishedAt  *time.Time `json:"finished_at"`
-	TimeSpent   int64      `json:"time_spent"`
+	ID          int32        `json:"id"`
+	ProjectID   *int32       `json:"project_id"`
+	Name        string       `json:"name"`
+	Description *string      `json:"description"`
+	DueAt       *time.Time   `json:"due_at"`
+	StartedAt   *time.Time   `json:"started_at"`
+	FinishedAt  *time.Time   `json:"finished_at"`
+	TimeSpent   int64        `json:"time_spent"`
+	DependsOn   []TaskDepRef `json:"depends_on"`
+	TaskDepends []TaskDepRef `json:"task_depends"`
 }
 
 type TaskFullResponse struct {
@@ -128,19 +176,23 @@ type TaskFullResponse struct {
 	StartedAt   *time.Time     `json:"started_at"`
 	FinishedAt  *time.Time     `json:"finished_at"`
 	TimeSpent   int64          `json:"time_spent"`
+	DependsOn   []TaskDepRef   `json:"depends_on"`
+	TaskDepends []TaskDepRef   `json:"task_depends"`
 	Todos       []TodoResponse `json:"todos"`
 }
 
 type TaskByDueDateResponse struct {
-	ID           int32      `json:"id"`
-	Name         string     `json:"name"`
-	Description  *string    `json:"description"`
-	DueAt        *time.Time `json:"due_at"`
-	StartedAt    *time.Time `json:"started_at"`
-	TimeSpent    int64      `json:"time_spent"`
-	ProjectID    *int32     `json:"project_id"`
-	ProjectName  *string    `json:"project_name"`
-	ProjectDueAt *time.Time `json:"project_due_at"`
+	ID           int32        `json:"id"`
+	Name         string       `json:"name"`
+	Description  *string      `json:"description"`
+	DueAt        *time.Time   `json:"due_at"`
+	StartedAt    *time.Time   `json:"started_at"`
+	TimeSpent    int64        `json:"time_spent"`
+	ProjectID    *int32       `json:"project_id"`
+	ProjectName  *string      `json:"project_name"`
+	ProjectDueAt *time.Time   `json:"project_due_at"`
+	DependsOn    []TaskDepRef `json:"depends_on"`
+	TaskDepends  []TaskDepRef `json:"task_depends"`
 }
 
 type TimeEntrySummaryResponse struct {
@@ -163,6 +215,8 @@ type UnfinishedTask struct {
 	DueAt       *time.Time
 	Started     bool
 	StartedAt   *time.Time
+	DependsOn   []TaskDepRef
+	TaskDepends []TaskDepRef
 }
 
 type ActiveTreeNode struct {
@@ -172,6 +226,8 @@ type ActiveTreeNode struct {
 	Description *string          `json:"description,omitempty"`
 	DueAt       *time.Time       `json:"due_at,omitempty"`
 	StartedAt   *time.Time       `json:"started_at,omitempty"`
+	DependsOn   []TaskDepRef     `json:"depends_on"`
+	TaskDepends []TaskDepRef     `json:"task_depends"`
 	Children    []ActiveTreeNode `json:"children,omitempty"`
 }
 

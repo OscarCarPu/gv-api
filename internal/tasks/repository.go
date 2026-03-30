@@ -43,6 +43,8 @@ type Repository interface {
 	GetActiveTimeEntry(ctx context.Context) (TimeEntryResponse, error)
 	GetTimeEntrySummary(ctx context.Context, todayStart, weekStart time.Time) (TimeEntrySummaryResponse, error)
 	GetTimeEntryHistory(ctx context.Context, frequency, timezone string, startAt, endAt time.Time) ([]history.Point, error)
+	ReplaceTaskDependencies(ctx context.Context, taskID int32, dependsOn []int32) error
+	GetTaskDependencies(ctx context.Context, taskID int32) ([]TaskDepRef, []TaskDepRef, error)
 }
 
 type PostgresRepository struct {
@@ -356,6 +358,8 @@ func (r *PostgresRepository) GetUnfinishedTasks(ctx context.Context) ([]Unfinish
 			DueAt:       pgDateToPtr(row.DueAt),
 			Started:     row.StartedAt.Valid,
 			StartedAt:   pgTimestamptzToPtr(row.StartedAt),
+			DependsOn:   unmarshalDepRefs(row.DependsOn),
+			TaskDepends: unmarshalDepRefs(row.TaskDepends),
 		}
 	}
 	return tasks, nil
@@ -403,6 +407,8 @@ func (r *PostgresRepository) GetTask(ctx context.Context, id int32) (TaskFullRes
 		StartedAt:   pgTimestamptzToPtr(first.StartedAt),
 		FinishedAt:  pgTimestamptzToPtr(first.FinishedAt),
 		TimeSpent:   first.TimeSpent,
+		DependsOn:   unmarshalDepRefs(first.DependsOn),
+		TaskDepends: unmarshalDepRefs(first.TaskDepends),
 		Todos:       todos,
 	}, nil
 }
@@ -589,6 +595,8 @@ func (r *PostgresRepository) GetTaskTimeEntries(ctx context.Context, taskID int3
 			StartedAt:   pgTimestamptzToPtr(first.TaskStartedAt),
 			FinishedAt:  pgTimestamptzToPtr(first.TaskFinishedAt),
 			TimeSpent:   first.TimeSpent,
+			DependsOn:   unmarshalDepRefs(first.DependsOn),
+			TaskDepends: unmarshalDepRefs(first.TaskDepends),
 		},
 		TimeEntries: entries,
 	}, nil
@@ -612,6 +620,8 @@ func (r *PostgresRepository) GetTasksByDueDate(ctx context.Context) ([]TaskByDue
 			ProjectID:    row.ProjectID,
 			ProjectName:  row.ProjectName,
 			ProjectDueAt: pgDateToPtr(row.ProjectDueAt),
+			DependsOn:    unmarshalDepRefs(row.DependsOn),
+			TaskDepends:  unmarshalDepRefs(row.TaskDepends),
 		}
 	}
 	return tasks, nil
@@ -693,6 +703,21 @@ func (r *PostgresRepository) GetTimeEntryHistory(ctx context.Context, frequency,
 		}
 	}
 	return results, nil
+}
+
+func (r *PostgresRepository) ReplaceTaskDependencies(ctx context.Context, taskID int32, dependsOn []int32) error {
+	return r.q.ReplaceTaskDependencies(ctx, tasksdb.ReplaceTaskDependenciesParams{
+		TaskID:    taskID,
+		DependsOn: dependsOn,
+	})
+}
+
+func (r *PostgresRepository) GetTaskDependencies(ctx context.Context, taskID int32) ([]TaskDepRef, []TaskDepRef, error) {
+	row, err := r.q.GetTaskDependencies(ctx, taskID)
+	if err != nil {
+		return nil, nil, err
+	}
+	return unmarshalDepRefs(row.DependsOn), unmarshalDepRefs(row.TaskDepends), nil
 }
 
 func (r *PostgresRepository) ListProjectsFast(ctx context.Context) ([]ProjectFastResponse, error) {

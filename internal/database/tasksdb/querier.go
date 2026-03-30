@@ -24,6 +24,7 @@ type Querier interface {
 	GetProjectWithDescendants(ctx context.Context, id int32) ([]GetProjectWithDescendantsRow, error)
 	GetRootProjects(ctx context.Context) ([]GetRootProjectsRow, error)
 	GetTaskByID(ctx context.Context, id int32) ([]GetTaskByIDRow, error)
+	GetTaskDependencies(ctx context.Context, taskID int32) (GetTaskDependenciesRow, error)
 	GetTasksByDueDate(ctx context.Context) ([]GetTasksByDueDateRow, error)
 	GetTasksByProjectIDs(ctx context.Context, projectIds []int32) ([]GetTasksByProjectIDsRow, error)
 	GetTimeEntriesByTaskID(ctx context.Context, id int32) ([]GetTimeEntriesByTaskIDRow, error)
@@ -31,6 +32,7 @@ type Querier interface {
 	GetTimeEntrySummary(ctx context.Context, arg GetTimeEntrySummaryParams) (GetTimeEntrySummaryRow, error)
 	GetUnfinishedTasks(ctx context.Context) ([]GetUnfinishedTasksRow, error)
 	ListProjectsFast(ctx context.Context) ([]ListProjectsFastRow, error)
+	ReplaceTaskDependencies(ctx context.Context, arg ReplaceTaskDependenciesParams) error
 	UpdateProject(ctx context.Context, arg UpdateProjectParams) (Project, error)
 	UpdateTask(ctx context.Context, arg UpdateTaskParams) (Task, error)
 	UpdateTimeEntry(ctx context.Context, arg UpdateTimeEntryParams) (TimeEntry, error)

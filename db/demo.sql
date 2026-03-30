@@ -5,7 +5,7 @@
 -- CLEAN SLATE
 -- =============================================================================
 -- Delete in dependency order (children before parents)
-TRUNCATE time_entries, todos, tasks, projects, habit_logs, habits RESTART IDENTITY CASCADE;
+TRUNCATE time_entries, todos, task_dependencies, tasks, projects, habit_logs, habits RESTART IDENTITY CASCADE;
 
 -- =============================================================================
 -- HABITS
@@ -457,6 +457,27 @@ INSERT INTO todos (task_id, name, is_done) VALUES
     -- Fix server logs (task 18)
     (18, 'Check logrotate config', TRUE),
     (18, 'Test with high volume', FALSE);
+
+-- =============================================================================
+-- TASK DEPENDENCIES
+-- =============================================================================
+INSERT INTO task_dependencies (task_id, depends_on) VALUES
+    -- Data Pipeline (project 7): natural pipeline chain
+    (14, 13),   -- "Build transformation layer" depends on "Set up data ingestion"
+    (15, 14),   -- "Create reporting views" depends on "Build transformation layer"
+    (16, 15),   -- "Write pipeline tests" depends on "Create reporting views"
+    (16, 14),   -- "Write pipeline tests" also depends on "Build transformation layer"
+    (17, 16),   -- "Deploy pipeline to staging" depends on "Write pipeline tests"
+
+    -- API v2 (project 4): auth and rate limiting depend on schema design
+    (8, 7),     -- "Auth system" depends on "Design API schema"
+    (9, 7),     -- "Rate limiting" depends on "Design API schema"
+
+    -- Website Redesign (project 1)
+    (3, 1),     -- "Content migration" depends on "Create wireframes"
+
+    -- Mobile App (project 5)
+    (11, 10);   -- "Push notifications" depends on "Research frameworks"
 
 -- =============================================================================
 -- TIME ENTRIES (last 90 days)

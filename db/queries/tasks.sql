@@ -65,10 +65,12 @@ WHERE started_at IS NOT NULL AND finished_at IS NULL
 ORDER BY name;
 
 -- name: GetUnfinishedTasks :many
-SELECT id, project_id, name, description, due_at, started_at
-FROM tasks
-WHERE finished_at IS NULL
-ORDER BY name;
+SELECT t.id, t.project_id, t.name, t.description, t.due_at, t.started_at,
+    COALESCE((SELECT json_agg(json_build_object('id', t2.id, 'name', t2.name, 'due_at', t2.due_at) ORDER BY t2.name) FROM task_dependencies td JOIN tasks t2 ON t2.id = td.depends_on WHERE td.task_id = t.id), '[]')::json AS depends_on,
+    COALESCE((SELECT json_agg(json_build_object('id', t2.id, 'name', t2.name) ORDER BY t2.name) FROM task_dependencies td JOIN tasks t2 ON t2.id = td.task_id WHERE td.depends_on = t.id), '[]')::json AS task_depends
+FROM tasks t
+WHERE t.finished_at IS NULL
+ORDER BY t.name;
 
 -- name: GetProjectWithDescendants :many
 WITH RECURSIVE project_tree AS (
@@ -113,19 +115,22 @@ RETURNING id, task_id, name, is_done;
 SELECT
     t.id, t.name, t.description, t.due_at, t.started_at,
     p.id AS project_id, p.name AS project_name, p.due_at AS project_due_at,
-    COALESCE(SUM(EXTRACT(EPOCH FROM (te.finished_at - te.started_at)))::bigint, 0)::bigint AS time_spent
+    COALESCE(SUM(EXTRACT(EPOCH FROM (te.finished_at - te.started_at)))::bigint, 0)::bigint AS time_spent,
+    COALESCE((SELECT json_agg(json_build_object('id', t2.id, 'name', t2.name, 'due_at', t2.due_at) ORDER BY t2.name) FROM task_dependencies td JOIN tasks t2 ON t2.id = td.depends_on WHERE td.task_id = t.id), '[]')::json AS depends_on,
+    COALESCE((SELECT json_agg(json_build_object('id', t2.id, 'name', t2.name) ORDER BY t2.name) FROM task_dependencies td JOIN tasks t2 ON t2.id = td.task_id WHERE td.depends_on = t.id), '[]')::json AS task_depends
 FROM tasks t
 LEFT JOIN projects p ON p.id = t.project_id
 LEFT JOIN time_entries te ON te.task_id = t.id AND te.finished_at IS NOT NULL
 WHERE t.finished_at IS NULL
-  AND (t.due_at IS NOT NULL OR p.due_at IS NOT NULL)
 GROUP BY t.id, p.id
 ORDER BY t.due_at ASC NULLS LAST, p.due_at ASC NULLS LAST, t.name;
 
 -- name: GetTaskByID :many
 WITH task_info AS (
     SELECT t.id, t.project_id, t.name, t.description, t.due_at, t.started_at, t.finished_at,
-        COALESCE(SUM(EXTRACT(EPOCH FROM (te.finished_at - te.started_at)))::bigint, 0)::bigint AS time_spent
+        COALESCE(SUM(EXTRACT(EPOCH FROM (te.finished_at - te.started_at)))::bigint, 0)::bigint AS time_spent,
+        COALESCE((SELECT json_agg(json_build_object('id', t2.id, 'name', t2.name, 'due_at', t2.due_at) ORDER BY t2.name) FROM task_dependencies td JOIN tasks t2 ON t2.id = td.depends_on WHERE td.task_id = t.id), '[]')::json AS depends_on,
+        COALESCE((SELECT json_agg(json_build_object('id', t2.id, 'name', t2.name) ORDER BY t2.name) FROM task_dependencies td JOIN tasks t2 ON t2.id = td.task_id WHERE td.depends_on = t.id), '[]')::json AS task_depends
     FROM tasks t
     LEFT JOIN time_entries te ON te.task_id = t.id AND te.finished_at IS NOT NULL
     WHERE t.id = $1
@@ -133,6 +138,7 @@ WITH task_info AS (
 )
 SELECT
     ti.id, ti.project_id, ti.name, ti.description, ti.due_at, ti.started_at, ti.finished_at, ti.time_spent,
+    ti.depends_on, ti.task_depends,
     td.id AS todo_id, td.name AS todo_name, td.is_done AS todo_is_done
 FROM task_info ti
 LEFT JOIN todos td ON td.task_id = ti.id
@@ -213,7 +219,9 @@ ORDER BY date;
 -- name: GetTimeEntriesByTaskID :many
 WITH task_info AS (
     SELECT t.id, t.project_id, t.name, t.description, t.due_at, t.started_at, t.finished_at,
-        COALESCE(SUM(EXTRACT(EPOCH FROM (te.finished_at - te.started_at)))::bigint, 0)::bigint AS time_spent
+        COALESCE(SUM(EXTRACT(EPOCH FROM (te.finished_at - te.started_at)))::bigint, 0)::bigint AS time_spent,
+        COALESCE((SELECT json_agg(json_build_object('id', t2.id, 'name', t2.name, 'due_at', t2.due_at) ORDER BY t2.name) FROM task_dependencies td JOIN tasks t2 ON t2.id = td.depends_on WHERE td.task_id = t.id), '[]')::json AS depends_on,
+        COALESCE((SELECT json_agg(json_build_object('id', t2.id, 'name', t2.name) ORDER BY t2.name) FROM task_dependencies td JOIN tasks t2 ON t2.id = td.task_id WHERE td.depends_on = t.id), '[]')::json AS task_depends
     FROM tasks t
     LEFT JOIN time_entries te ON te.task_id = t.id AND te.finished_at IS NOT NULL
     WHERE t.id = $1
@@ -222,7 +230,21 @@ WITH task_info AS (
 SELECT
     ti.id AS task_id, ti.project_id, ti.name, ti.description, ti.due_at,
     ti.started_at AS task_started_at, ti.finished_at AS task_finished_at, ti.time_spent,
+    ti.depends_on, ti.task_depends,
     te.id AS time_entry_id, te.started_at AS entry_started_at, te.finished_at AS entry_finished_at, te.comment
 FROM task_info ti
 LEFT JOIN time_entries te ON te.task_id = ti.id
 ORDER BY te.started_at;
+
+-- name: ReplaceTaskDependencies :exec
+WITH deleted AS (
+    DELETE FROM task_dependencies WHERE task_id = $1
+)
+INSERT INTO task_dependencies (task_id, depends_on)
+SELECT $1, unnest(@depends_on::int[])
+WHERE array_length(@depends_on::int[], 1) IS NOT NULL;
+
+-- name: GetTaskDependencies :one
+SELECT
+    COALESCE((SELECT json_agg(json_build_object('id', t2.id, 'name', t2.name, 'due_at', t2.due_at) ORDER BY t2.name) FROM task_dependencies td JOIN tasks t2 ON t2.id = td.depends_on WHERE td.task_id = $1), '[]')::json AS depends_on,
+    COALESCE((SELECT json_agg(json_build_object('id', t2.id, 'name', t2.name) ORDER BY t2.name) FROM task_dependencies td JOIN tasks t2 ON t2.id = td.task_id WHERE td.depends_on = $1), '[]')::json AS task_depends;

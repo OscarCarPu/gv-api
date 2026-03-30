@@ -85,11 +85,12 @@ Only finished entries count toward time calculations.
 - Entries spanning a period boundary are split: the portion before midnight (or Monday, or 1st of month) counts toward the earlier period, the portion after counts toward the later one.
 
 **Task dependencies**
-- A task can depend on another task.
-- The effective due date of a task is the minimum of its own `due_at` and the effective `due_at` of all tasks it depends on.
-- A task that depends on others is considered "blocked", and cannot be started or finished until all dependencies are finished.
+- A task can depend on other tasks. Dependencies are managed via the `depends_on` field on create/update task (list of task IDs). Setting `depends_on` replaces all existing dependencies. Omitting it leaves them unchanged.
+- The effective due date of a task is the minimum of its own `due_at` and the effective `due_at` of all tasks it depends on (recursive). Finished dependencies contribute their `due_at` directly (carried in the `depends_on` JSON ref).
+- A task that has at least one unfinished dependency is considered "blocked".
 - A task is hidden from the active tree and due-date list if all of its dependencies are themselves blocked.
 - A task that inherits a due date from its dependencies is returned in the due-date list.
+- Dependency responses include `id` and `name` of the referenced task (not just the ID).
 
 ### Validations
 
@@ -113,11 +114,6 @@ Only finished entries count toward time calculations.
 **All update endpoints**
 - `id` (URL param) must parse as int.
 - Returns 404 if entity not found.
-
-**Create/Update task dependency**
-- `task_id` required.
-- `depends_on` required.
-- Returns 400 if adding the dependency would create a cycle.
 
 ### Side Effects
 

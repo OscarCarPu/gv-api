@@ -371,7 +371,9 @@ func (q *Queries) GetRootProjects(ctx context.Context) ([]GetRootProjectsRow, er
 const getTaskByID = `-- name: GetTaskByID :many
 WITH task_info AS (
     SELECT t.id, t.project_id, t.name, t.description, t.due_at, t.started_at, t.finished_at,
-        COALESCE(SUM(EXTRACT(EPOCH FROM (te.finished_at - te.started_at)))::bigint, 0)::bigint AS time_spent
+        COALESCE(SUM(EXTRACT(EPOCH FROM (te.finished_at - te.started_at)))::bigint, 0)::bigint AS time_spent,
+        COALESCE((SELECT json_agg(json_build_object('id', t2.id, 'name', t2.name, 'due_at', t2.due_at) ORDER BY t2.name) FROM task_dependencies td JOIN tasks t2 ON t2.id = td.depends_on WHERE td.task_id = t.id), '[]')::json AS depends_on,
+        COALESCE((SELECT json_agg(json_build_object('id', t2.id, 'name', t2.name) ORDER BY t2.name) FROM task_dependencies td JOIN tasks t2 ON t2.id = td.task_id WHERE td.depends_on = t.id), '[]')::json AS task_depends
     FROM tasks t
     LEFT JOIN time_entries te ON te.task_id = t.id AND te.finished_at IS NOT NULL
     WHERE t.id = $1
@@ -379,6 +381,7 @@ WITH task_info AS (
 )
 SELECT
     ti.id, ti.project_id, ti.name, ti.description, ti.due_at, ti.started_at, ti.finished_at, ti.time_spent,
+    ti.depends_on, ti.task_depends,
     td.id AS todo_id, td.name AS todo_name, td.is_done AS todo_is_done
 FROM task_info ti
 LEFT JOIN todos td ON td.task_id = ti.id
@@ -394,6 +397,8 @@ type GetTaskByIDRow struct {
 	StartedAt   pgtype.Timestamptz `db:"started_at" json:"started_at"`
 	FinishedAt  pgtype.Timestamptz `db:"finished_at" json:"finished_at"`
 	TimeSpent   int64              `db:"time_spent" json:"time_spent"`
+	DependsOn   []byte             `db:"depends_on" json:"depends_on"`
+	TaskDepends []byte             `db:"task_depends" json:"task_depends"`
 	TodoID      *int32             `db:"todo_id" json:"todo_id"`
 	TodoName    *string            `db:"todo_name" json:"todo_name"`
 	TodoIsDone  *bool              `db:"todo_is_done" json:"todo_is_done"`
@@ -417,6 +422,8 @@ func (q *Queries) GetTaskByID(ctx context.Context, id int32) ([]GetTaskByIDRow, 
 			&i.StartedAt,
 			&i.FinishedAt,
 			&i.TimeSpent,
+			&i.DependsOn,
+			&i.TaskDepends,
 			&i.TodoID,
 			&i.TodoName,
 			&i.TodoIsDone,
@@ -431,16 +438,35 @@ func (q *Queries) GetTaskByID(ctx context.Context, id int32) ([]GetTaskByIDRow, 
 	return items, nil
 }
 
+const getTaskDependencies = `-- name: GetTaskDependencies :one
+SELECT
+    COALESCE((SELECT json_agg(json_build_object('id', t2.id, 'name', t2.name, 'due_at', t2.due_at) ORDER BY t2.name) FROM task_dependencies td JOIN tasks t2 ON t2.id = td.depends_on WHERE td.task_id = $1), '[]')::json AS depends_on,
+    COALESCE((SELECT json_agg(json_build_object('id', t2.id, 'name', t2.name) ORDER BY t2.name) FROM task_dependencies td JOIN tasks t2 ON t2.id = td.task_id WHERE td.depends_on = $1), '[]')::json AS task_depends
+`
+
+type GetTaskDependenciesRow struct {
+	DependsOn   []byte `db:"depends_on" json:"depends_on"`
+	TaskDepends []byte `db:"task_depends" json:"task_depends"`
+}
+
+func (q *Queries) GetTaskDependencies(ctx context.Context, taskID int32) (GetTaskDependenciesRow, error) {
+	row := q.db.QueryRow(ctx, getTaskDependencies, taskID)
+	var i GetTaskDependenciesRow
+	err := row.Scan(&i.DependsOn, &i.TaskDepends)
+	return i, err
+}
+
 const getTasksByDueDate = `-- name: GetTasksByDueDate :many
 SELECT
     t.id, t.name, t.description, t.due_at, t.started_at,
     p.id AS project_id, p.name AS project_name, p.due_at AS project_due_at,
-    COALESCE(SUM(EXTRACT(EPOCH FROM (te.finished_at - te.started_at)))::bigint, 0)::bigint AS time_spent
+    COALESCE(SUM(EXTRACT(EPOCH FROM (te.finished_at - te.started_at)))::bigint, 0)::bigint AS time_spent,
+    COALESCE((SELECT json_agg(json_build_object('id', t2.id, 'name', t2.name, 'due_at', t2.due_at) ORDER BY t2.name) FROM task_dependencies td JOIN tasks t2 ON t2.id = td.depends_on WHERE td.task_id = t.id), '[]')::json AS depends_on,
+    COALESCE((SELECT json_agg(json_build_object('id', t2.id, 'name', t2.name) ORDER BY t2.name) FROM task_dependencies td JOIN tasks t2 ON t2.id = td.task_id WHERE td.depends_on = t.id), '[]')::json AS task_depends
 FROM tasks t
 LEFT JOIN projects p ON p.id = t.project_id
 LEFT JOIN time_entries te ON te.task_id = t.id AND te.finished_at IS NOT NULL
 WHERE t.finished_at IS NULL
-  AND (t.due_at IS NOT NULL OR p.due_at IS NOT NULL)
 GROUP BY t.id, p.id
 ORDER BY t.due_at ASC NULLS LAST, p.due_at ASC NULLS LAST, t.name
 `
@@ -455,6 +481,8 @@ type GetTasksByDueDateRow struct {
 	ProjectName  *string            `db:"project_name" json:"project_name"`
 	ProjectDueAt pgtype.Date        `db:"project_due_at" json:"project_due_at"`
 	TimeSpent    int64              `db:"time_spent" json:"time_spent"`
+	DependsOn    []byte             `db:"depends_on" json:"depends_on"`
+	TaskDepends  []byte             `db:"task_depends" json:"task_depends"`
 }
 
 func (q *Queries) GetTasksByDueDate(ctx context.Context) ([]GetTasksByDueDateRow, error) {
@@ -476,6 +504,8 @@ func (q *Queries) GetTasksByDueDate(ctx context.Context) ([]GetTasksByDueDateRow
 			&i.ProjectName,
 			&i.ProjectDueAt,
 			&i.TimeSpent,
+			&i.DependsOn,
+			&i.TaskDepends,
 		); err != nil {
 			return nil, err
 		}
@@ -555,7 +585,9 @@ func (q *Queries) GetTasksByProjectIDs(ctx context.Context, projectIds []int32) 
 const getTimeEntriesByTaskID = `-- name: GetTimeEntriesByTaskID :many
 WITH task_info AS (
     SELECT t.id, t.project_id, t.name, t.description, t.due_at, t.started_at, t.finished_at,
-        COALESCE(SUM(EXTRACT(EPOCH FROM (te.finished_at - te.started_at)))::bigint, 0)::bigint AS time_spent
+        COALESCE(SUM(EXTRACT(EPOCH FROM (te.finished_at - te.started_at)))::bigint, 0)::bigint AS time_spent,
+        COALESCE((SELECT json_agg(json_build_object('id', t2.id, 'name', t2.name, 'due_at', t2.due_at) ORDER BY t2.name) FROM task_dependencies td JOIN tasks t2 ON t2.id = td.depends_on WHERE td.task_id = t.id), '[]')::json AS depends_on,
+        COALESCE((SELECT json_agg(json_build_object('id', t2.id, 'name', t2.name) ORDER BY t2.name) FROM task_dependencies td JOIN tasks t2 ON t2.id = td.task_id WHERE td.depends_on = t.id), '[]')::json AS task_depends
     FROM tasks t
     LEFT JOIN time_entries te ON te.task_id = t.id AND te.finished_at IS NOT NULL
     WHERE t.id = $1
@@ -564,6 +596,7 @@ WITH task_info AS (
 SELECT
     ti.id AS task_id, ti.project_id, ti.name, ti.description, ti.due_at,
     ti.started_at AS task_started_at, ti.finished_at AS task_finished_at, ti.time_spent,
+    ti.depends_on, ti.task_depends,
     te.id AS time_entry_id, te.started_at AS entry_started_at, te.finished_at AS entry_finished_at, te.comment
 FROM task_info ti
 LEFT JOIN time_entries te ON te.task_id = ti.id
@@ -579,6 +612,8 @@ type GetTimeEntriesByTaskIDRow struct {
 	TaskStartedAt   pgtype.Timestamptz `db:"task_started_at" json:"task_started_at"`
 	TaskFinishedAt  pgtype.Timestamptz `db:"task_finished_at" json:"task_finished_at"`
 	TimeSpent       int64              `db:"time_spent" json:"time_spent"`
+	DependsOn       []byte             `db:"depends_on" json:"depends_on"`
+	TaskDepends     []byte             `db:"task_depends" json:"task_depends"`
 	TimeEntryID     *int32             `db:"time_entry_id" json:"time_entry_id"`
 	EntryStartedAt  pgtype.Timestamptz `db:"entry_started_at" json:"entry_started_at"`
 	EntryFinishedAt pgtype.Timestamptz `db:"entry_finished_at" json:"entry_finished_at"`
@@ -603,6 +638,8 @@ func (q *Queries) GetTimeEntriesByTaskID(ctx context.Context, id int32) ([]GetTi
 			&i.TaskStartedAt,
 			&i.TaskFinishedAt,
 			&i.TimeSpent,
+			&i.DependsOn,
+			&i.TaskDepends,
 			&i.TimeEntryID,
 			&i.EntryStartedAt,
 			&i.EntryFinishedAt,
@@ -710,10 +747,12 @@ func (q *Queries) GetTimeEntrySummary(ctx context.Context, arg GetTimeEntrySumma
 }
 
 const getUnfinishedTasks = `-- name: GetUnfinishedTasks :many
-SELECT id, project_id, name, description, due_at, started_at
-FROM tasks
-WHERE finished_at IS NULL
-ORDER BY name
+SELECT t.id, t.project_id, t.name, t.description, t.due_at, t.started_at,
+    COALESCE((SELECT json_agg(json_build_object('id', t2.id, 'name', t2.name, 'due_at', t2.due_at) ORDER BY t2.name) FROM task_dependencies td JOIN tasks t2 ON t2.id = td.depends_on WHERE td.task_id = t.id), '[]')::json AS depends_on,
+    COALESCE((SELECT json_agg(json_build_object('id', t2.id, 'name', t2.name) ORDER BY t2.name) FROM task_dependencies td JOIN tasks t2 ON t2.id = td.task_id WHERE td.depends_on = t.id), '[]')::json AS task_depends
+FROM tasks t
+WHERE t.finished_at IS NULL
+ORDER BY t.name
 `
 
 type GetUnfinishedTasksRow struct {
@@ -723,6 +762,8 @@ type GetUnfinishedTasksRow struct {
 	Description *string            `db:"description" json:"description"`
 	DueAt       pgtype.Date        `db:"due_at" json:"due_at"`
 	StartedAt   pgtype.Timestamptz `db:"started_at" json:"started_at"`
+	DependsOn   []byte             `db:"depends_on" json:"depends_on"`
+	TaskDepends []byte             `db:"task_depends" json:"task_depends"`
 }
 
 func (q *Queries) GetUnfinishedTasks(ctx context.Context) ([]GetUnfinishedTasksRow, error) {
@@ -741,6 +782,8 @@ func (q *Queries) GetUnfinishedTasks(ctx context.Context) ([]GetUnfinishedTasksR
 			&i.Description,
 			&i.DueAt,
 			&i.StartedAt,
+			&i.DependsOn,
+			&i.TaskDepends,
 		); err != nil {
 			return nil, err
 		}
@@ -779,6 +822,25 @@ func (q *Queries) ListProjectsFast(ctx context.Context) ([]ListProjectsFastRow, 
 		return nil, err
 	}
 	return items, nil
+}
+
+const replaceTaskDependencies = `-- name: ReplaceTaskDependencies :exec
+WITH deleted AS (
+    DELETE FROM task_dependencies WHERE task_id = $1
+)
+INSERT INTO task_dependencies (task_id, depends_on)
+SELECT $1, unnest($2::int[])
+WHERE array_length($2::int[], 1) IS NOT NULL
+`
+
+type ReplaceTaskDependenciesParams struct {
+	TaskID    int32   `db:"task_id" json:"task_id"`
+	DependsOn []int32 `db:"depends_on" json:"depends_on"`
+}
+
+func (q *Queries) ReplaceTaskDependencies(ctx context.Context, arg ReplaceTaskDependenciesParams) error {
+	_, err := q.db.Exec(ctx, replaceTaskDependencies, arg.TaskID, arg.DependsOn)
+	return err
 }
 
 const updateProject = `-- name: UpdateProject :one

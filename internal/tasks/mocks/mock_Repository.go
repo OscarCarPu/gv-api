@@ -889,6 +889,74 @@ func (_c *MockRepository_GetTask_Call) RunAndReturn(run func(context.Context, in
 	return _c
 }
 
+// GetTaskDependencies provides a mock function with given fields: ctx, taskID
+func (_m *MockRepository) GetTaskDependencies(ctx context.Context, taskID int32) ([]tasks.TaskDepRef, []tasks.TaskDepRef, error) {
+	ret := _m.Called(ctx, taskID)
+
+	if len(ret) == 0 {
+		panic("no return value specified for GetTaskDependencies")
+	}
+
+	var r0 []tasks.TaskDepRef
+	var r1 []tasks.TaskDepRef
+	var r2 error
+	if rf, ok := ret.Get(0).(func(context.Context, int32) ([]tasks.TaskDepRef, []tasks.TaskDepRef, error)); ok {
+		return rf(ctx, taskID)
+	}
+	if rf, ok := ret.Get(0).(func(context.Context, int32) []tasks.TaskDepRef); ok {
+		r0 = rf(ctx, taskID)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).([]tasks.TaskDepRef)
+		}
+	}
+
+	if rf, ok := ret.Get(1).(func(context.Context, int32) []tasks.TaskDepRef); ok {
+		r1 = rf(ctx, taskID)
+	} else {
+		if ret.Get(1) != nil {
+			r1 = ret.Get(1).([]tasks.TaskDepRef)
+		}
+	}
+
+	if rf, ok := ret.Get(2).(func(context.Context, int32) error); ok {
+		r2 = rf(ctx, taskID)
+	} else {
+		r2 = ret.Error(2)
+	}
+
+	return r0, r1, r2
+}
+
+// MockRepository_GetTaskDependencies_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'GetTaskDependencies'
+type MockRepository_GetTaskDependencies_Call struct {
+	*mock.Call
+}
+
+// GetTaskDependencies is a helper method to define mock.On call
+//   - ctx context.Context
+//   - taskID int32
+func (_e *MockRepository_Expecter) GetTaskDependencies(ctx interface{}, taskID interface{}) *MockRepository_GetTaskDependencies_Call {
+	return &MockRepository_GetTaskDependencies_Call{Call: _e.mock.On("GetTaskDependencies", ctx, taskID)}
+}
+
+func (_c *MockRepository_GetTaskDependencies_Call) Run(run func(ctx context.Context, taskID int32)) *MockRepository_GetTaskDependencies_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].(context.Context), args[1].(int32))
+	})
+	return _c
+}
+
+func (_c *MockRepository_GetTaskDependencies_Call) Return(_a0 []tasks.TaskDepRef, _a1 []tasks.TaskDepRef, _a2 error) *MockRepository_GetTaskDependencies_Call {
+	_c.Call.Return(_a0, _a1, _a2)
+	return _c
+}
+
+func (_c *MockRepository_GetTaskDependencies_Call) RunAndReturn(run func(context.Context, int32) ([]tasks.TaskDepRef, []tasks.TaskDepRef, error)) *MockRepository_GetTaskDependencies_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // GetTaskTimeEntries provides a mock function with given fields: ctx, taskID
 func (_m *MockRepository) GetTaskTimeEntries(ctx context.Context, taskID int32) (tasks.TaskTimeEntriesResponse, error) {
 	ret := _m.Called(ctx, taskID)
@@ -1236,6 +1304,54 @@ func (_c *MockRepository_ListProjectsFast_Call) Return(_a0 []tasks.ProjectFastRe
 }
 
 func (_c *MockRepository_ListProjectsFast_Call) RunAndReturn(run func(context.Context) ([]tasks.ProjectFastResponse, error)) *MockRepository_ListProjectsFast_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// ReplaceTaskDependencies provides a mock function with given fields: ctx, taskID, dependsOn
+func (_m *MockRepository) ReplaceTaskDependencies(ctx context.Context, taskID int32, dependsOn []int32) error {
+	ret := _m.Called(ctx, taskID, dependsOn)
+
+	if len(ret) == 0 {
+		panic("no return value specified for ReplaceTaskDependencies")
+	}
+
+	var r0 error
+	if rf, ok := ret.Get(0).(func(context.Context, int32, []int32) error); ok {
+		r0 = rf(ctx, taskID, dependsOn)
+	} else {
+		r0 = ret.Error(0)
+	}
+
+	return r0
+}
+
+// MockRepository_ReplaceTaskDependencies_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'ReplaceTaskDependencies'
+type MockRepository_ReplaceTaskDependencies_Call struct {
+	*mock.Call
+}
+
+// ReplaceTaskDependencies is a helper method to define mock.On call
+//   - ctx context.Context
+//   - taskID int32
+//   - dependsOn []int32
+func (_e *MockRepository_Expecter) ReplaceTaskDependencies(ctx interface{}, taskID interface{}, dependsOn interface{}) *MockRepository_ReplaceTaskDependencies_Call {
+	return &MockRepository_ReplaceTaskDependencies_Call{Call: _e.mock.On("ReplaceTaskDependencies", ctx, taskID, dependsOn)}
+}
+
+func (_c *MockRepository_ReplaceTaskDependencies_Call) Run(run func(ctx context.Context, taskID int32, dependsOn []int32)) *MockRepository_ReplaceTaskDependencies_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].(context.Context), args[1].(int32), args[2].([]int32))
+	})
+	return _c
+}
+
+func (_c *MockRepository_ReplaceTaskDependencies_Call) Return(_a0 error) *MockRepository_ReplaceTaskDependencies_Call {
+	_c.Call.Return(_a0)
+	return _c
+}
+
+func (_c *MockRepository_ReplaceTaskDependencies_Call) RunAndReturn(run func(context.Context, int32, []int32) error) *MockRepository_ReplaceTaskDependencies_Call {
 	_c.Call.Return(run)
 	return _c
 }

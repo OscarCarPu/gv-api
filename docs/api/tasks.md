@@ -158,12 +158,12 @@
       "due_at": "2025-06-01",
       "started_at": null,
       "finished_at": null,
-      "depends_on": [2, 3],
+      "depends_on": [{"id": 2, "name": "Other Task", "due_at": "2025-05-15"}, {"id": 3, "name": "Another Task", "due_at": null}],
       "task_depends": []
     }
     ```
-  - `depends_on`: List of task IDs this task depends on (this task is blocked by them).
-  - `task_depends`: List of task IDs that depend on this task (they are blocked by this task).
+  - `depends_on`: Tasks this task depends on (this task is blocked by them). Each entry contains `id`, `name`, and `due_at` (used for effective due date computation).
+  - `task_depends`: Tasks that depend on this task (they are blocked by this task). Each entry contains `id`, `name`, and `due_at` (always null).
 - **Error Responses:**
   - **Code:** `400 Bad Request`
     - **Content:** `Invalid Body` or `name is required`
@@ -174,7 +174,7 @@
 
 - **Method:** `PATCH`
 - **Endpoint:** `/tasks/tasks/{id}`
-- **Description:** Partially updates a task. Only provided fields are modified.
+- **Description:** Partially updates a task. Only provided fields are modified. Setting `depends_on` replaces all existing dependencies.
 - **Request Body:**
   ```json
   {
@@ -183,7 +183,8 @@
     "due_at": "2025-06-01",
     "project_id": 2,
     "started_at": "2025-02-15T08:00:00Z",
-    "finished_at": "2025-03-01T17:00:00Z"
+    "finished_at": "2025-03-01T17:00:00Z",
+    "depends_on": [3, 4]
   }
   ```
   - `name` (optional): New name.
@@ -192,6 +193,7 @@
   - `project_id` (optional): New parent project ID.
   - `started_at` (optional): Start timestamp.
   - `finished_at` (optional): Finish timestamp.
+  - `depends_on` (optional): List of task IDs this task depends on. Replaces all existing dependencies. Omitting the field leaves dependencies unchanged. Pass `[]` to clear all dependencies.
 - **Success Response:**
   - **Code:** `200 OK`
   - **Content:**
@@ -203,7 +205,9 @@
       "description": "Updated description.",
       "due_at": "2025-06-01",
       "started_at": "2025-02-15T08:00:00Z",
-      "finished_at": "2025-03-01T17:00:00Z"
+      "finished_at": "2025-03-01T17:00:00Z",
+      "depends_on": [{"id": 3, "name": "Dep A", "due_at": null}, {"id": 4, "name": "Dep B", "due_at": "2025-07-01"}],
+      "task_depends": [{"id": 7, "name": "Blocked Task", "due_at": null}]
     }
     ```
 - **Error Responses:**
@@ -354,7 +358,7 @@
 
 - **Method:** `GET`
 - **Endpoint:** `/tasks/tasks/by-due-date`
-- **Description:** Returns unfinished tasks that have a due date set (either on the task itself or on its parent project), ordered by task `due_at` first, then by project `due_at`. Includes time spent from completed time entries.
+- **Description:** Returns unfinished tasks that have a due date (own, project, or inherited from dependencies), ordered by effective `due_at` first, then by project `due_at`, then by name. Tasks hidden by blocked dependencies are excluded. A task's `due_at` in the response reflects its effective due date (minimum of own and dependencies'). Includes time spent from completed time entries.
 - **Success Response:**
   - **Code:** `200 OK`
   - **Content:**
@@ -370,8 +374,8 @@
         "project_id": 1,
         "project_name": "My Project",
         "project_due_at": "2025-12-31",
-        "depends_on": [2],
-        "task_depends": [4, 5]
+        "depends_on": [{"id": 2, "name": "Blocking Task", "due_at": null}],
+        "task_depends": [{"id": 4, "name": "Dep A", "due_at": null}, {"id": 5, "name": "Dep B", "due_at": null}]
       }
     ]
     ```
@@ -383,7 +387,7 @@
 
 - **Method:** `GET`
 - **Endpoint:** `/tasks/tree`
-- **Description:** Returns a nested JSON tree of active projects and tasks. Projects are included if `started_at IS NOT NULL` and `finished_at IS NULL`. Tasks are included if `finished_at IS NULL`. Orphan tasks (no `project_id`) appear at the root level. Ordered: first projects, then tasks with `started_at IS NOT NULL` then tasks with `started_at IS NULL`.
+- **Description:** Returns a nested JSON tree of active projects and tasks. Projects are included if `started_at IS NOT NULL` and `finished_at IS NULL`. Tasks are included if `finished_at IS NULL`. Orphan tasks (no `project_id`) appear at the root level. Ordered: first projects, then tasks with `started_at IS NOT NULL` then tasks with `started_at IS NULL`. Tasks hidden by blocked dependencies are excluded (a task is hidden if all of its dependencies are themselves blocked). Task `due_at` reflects the effective due date (minimum of own and dependencies').
 - **Success Response:**
   - **Code:** `200 OK`
   - **Content:**
@@ -404,7 +408,7 @@
             "id": 1,
             "type": "task",
             "name": "task_1",
-            "depends_on": [3],
+            "depends_on": [{"id": 3, "name": "Blocking Task", "due_at": "2025-06-01"}],
             "task_depends": []
           }
         ]
@@ -414,7 +418,7 @@
         "type": "task",
         "name": "orphan_task",
         "depends_on": [],
-        "task_depends": [1]
+        "task_depends": [{"id": 1, "name": "task_1", "due_at": null}]
       }
     ]
     ```
@@ -501,8 +505,8 @@
         "started_at": "2025-03-01T09:00:00Z",
         "finished_at": null,
         "time_spent": 5400,
-        "depends_on": [2],
-        "task_depends": [4]
+        "depends_on": [{"id": 2, "name": "Setup DB"}],
+        "task_depends": [{"id": 4, "name": "Write tests", "due_at": null}]
       },
       "time_entries": [
         {
@@ -556,37 +560,3 @@
   - **Code:** `500 Internal Server Error`
     - **Content:** `Failed to get time entry history`
 
-## Create/Update Task Dependency
-
-- **Method:** `PUT`
-- **Endpoint:** `/tasks/{task_id}/dependencies`
-- **Description:** Creates or updates a task dependency.
-- **Request Body:**
-    ```json
-    {
-      "depends_on": [1]
-    }
-    ```
-    - `depends_on` (required): List of task IDs this task depends on.
-- **Success Response:**
-  - **Code:** `204 No Content`
-- **Error Responses:**
-  - **Code:** `400 Bad Request`
-    - **Content:** `Invalid Body`, `task_id is required`, or `depends_on is required`
-  - **Code:** `404 Not Found`
-    - **Content:** `task not found`
-  - **Code:** `500 Internal Server Error`
-    - **Content:** `Failed to create/update task dependency`
-
-## Delete Task Dependency
-
-- **Method:** `DELETE`
-- **Endpoint:** `/tasks/{task_id}/dependencies/{depends_on}`
-- **Description:** Deletes a task dependency.
-- **Success Response:**
-  - **Code:** `204 No Content`
-- **Error Responses:**
-  - **Code:** `404 Not Found`
-    - **Content:** `task not found`
-  - **Code:** `500 Internal Server Error`
-    - **Content:** `Failed to delete task dependency`

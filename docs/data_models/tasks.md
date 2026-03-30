@@ -34,8 +34,8 @@
 
 | Column     | Type    | Constraints                               |
 |------------|---------|-------------------------------------------|
-| task_id    | INTEGER | NOT NULL, FK -> task.id ON DELETE CASCADE |
-| depends_on | INTEGER | NOT NULL, FK -> task.id ON DELETE CASCADE |
+| task_id    | INTEGER | NOT NULL, FK -> tasks.id ON DELETE CASCADE |
+| depends_on | INTEGER | NOT NULL, FK -> tasks.id ON DELETE CASCADE |
 
 **Primary Key:** (task_id, depends_on)
 **Checks:** (task_id != depends_on)
@@ -66,10 +66,11 @@
 ## Relationships
 
 ```
-projects (1) --< (many) projects     [self-referencing via parent_id]
-projects (1) --< (many) tasks        [via project_id, nullable]
-tasks    (1) --< (many) todos        [cascade delete]
-tasks    (1) --< (many) time_entries [cascade delete]
+projects (1) --< (many) projects           [self-referencing via parent_id]
+projects (1) --< (many) tasks              [via project_id, nullable]
+tasks    (1) --< (many) todos              [cascade delete]
+tasks    (1) --< (many) time_entries       [cascade delete]
+tasks    (many) >--< (many) tasks          [via task_dependencies, cascade delete]
 ```
 
 - Deleting a task cascades to its todos and time entries.

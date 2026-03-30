@@ -15,6 +15,150 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func TestService_CreateTask(t *testing.T) {
+	t.Run("creates task with dependencies", func(t *testing.T) {
+		repo := mocks.NewMockRepository(t)
+		repo.EXPECT().
+			CreateTask(mock.Anything, mock.Anything, "My Task", mock.Anything, mock.Anything).
+			Return(tasks.TaskResponse{ID: 10, Name: "My Task"}, nil)
+		repo.EXPECT().
+			ReplaceTaskDependencies(mock.Anything, int32(10), []int32{2, 3}).
+			Return(nil)
+		repo.EXPECT().
+			GetTaskDependencies(mock.Anything, int32(10)).
+			Return([]tasks.TaskDepRef{{ID: 2, Name: "A"}, {ID: 3, Name: "B"}}, []tasks.TaskDepRef{}, nil)
+
+		svc := tasks.NewService(repo, nil)
+		got, err := svc.CreateTask(context.Background(), tasks.CreateTaskRequest{
+			Name:      "My Task",
+			DependsOn: []int32{2, 3},
+		})
+		require.NoError(t, err)
+		assert.Equal(t, int32(10), got.ID)
+		require.Len(t, got.DependsOn, 2)
+		assert.Equal(t, int32(2), got.DependsOn[0].ID)
+		assert.Empty(t, got.TaskDepends)
+	})
+
+	t.Run("creates task without dependencies", func(t *testing.T) {
+		repo := mocks.NewMockRepository(t)
+		repo.EXPECT().
+			CreateTask(mock.Anything, mock.Anything, "Simple Task", mock.Anything, mock.Anything).
+			Return(tasks.TaskResponse{ID: 11, Name: "Simple Task"}, nil)
+		repo.EXPECT().
+			GetTaskDependencies(mock.Anything, int32(11)).
+			Return([]tasks.TaskDepRef{}, []tasks.TaskDepRef{}, nil)
+
+		svc := tasks.NewService(repo, nil)
+		got, err := svc.CreateTask(context.Background(), tasks.CreateTaskRequest{
+			Name: "Simple Task",
+		})
+		require.NoError(t, err)
+		assert.Equal(t, int32(11), got.ID)
+		assert.Empty(t, got.DependsOn)
+		assert.Empty(t, got.TaskDepends)
+	})
+
+	t.Run("propagates error from ReplaceTaskDependencies", func(t *testing.T) {
+		repo := mocks.NewMockRepository(t)
+		repo.EXPECT().CreateTask(mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
+			Return(tasks.TaskResponse{ID: 10}, nil)
+		repo.EXPECT().ReplaceTaskDependencies(mock.Anything, int32(10), []int32{99}).
+			Return(errors.New("fk violation"))
+
+		svc := tasks.NewService(repo, nil)
+		_, err := svc.CreateTask(context.Background(), tasks.CreateTaskRequest{
+			Name:      "T",
+			DependsOn: []int32{99},
+		})
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "fk violation")
+	})
+}
+
+func TestService_UpdateTask(t *testing.T) {
+	t.Run("updates task with new dependencies", func(t *testing.T) {
+		deps := []int32{5, 6}
+		repo := mocks.NewMockRepository(t)
+		repo.EXPECT().
+			UpdateTask(mock.Anything, mock.MatchedBy(func(req tasks.UpdateTaskRequest) bool {
+				return req.ID == 7
+			})).
+			Return(tasks.TaskResponse{ID: 7, Name: "T"}, nil)
+		repo.EXPECT().
+			ReplaceTaskDependencies(mock.Anything, int32(7), deps).
+			Return(nil)
+		repo.EXPECT().
+			GetTaskDependencies(mock.Anything, int32(7)).
+			Return([]tasks.TaskDepRef{{ID: 5, Name: "A"}, {ID: 6, Name: "B"}}, []tasks.TaskDepRef{{ID: 1, Name: "C"}}, nil)
+
+		svc := tasks.NewService(repo, nil)
+		got, err := svc.UpdateTask(context.Background(), tasks.UpdateTaskRequest{
+			ID:        7,
+			DependsOn: &deps,
+		})
+		require.NoError(t, err)
+		require.Len(t, got.DependsOn, 2)
+		assert.Equal(t, int32(5), got.DependsOn[0].ID)
+		require.Len(t, got.TaskDepends, 1)
+		assert.Equal(t, int32(1), got.TaskDepends[0].ID)
+	})
+
+	t.Run("clears dependencies with empty slice", func(t *testing.T) {
+		empty := []int32{}
+		repo := mocks.NewMockRepository(t)
+		repo.EXPECT().UpdateTask(mock.Anything, mock.Anything).
+			Return(tasks.TaskResponse{ID: 7, Name: "T"}, nil)
+		repo.EXPECT().ReplaceTaskDependencies(mock.Anything, int32(7), empty).
+			Return(nil)
+		repo.EXPECT().GetTaskDependencies(mock.Anything, int32(7)).
+			Return([]tasks.TaskDepRef{}, []tasks.TaskDepRef{}, nil)
+
+		svc := tasks.NewService(repo, nil)
+		got, err := svc.UpdateTask(context.Background(), tasks.UpdateTaskRequest{
+			ID:        7,
+			DependsOn: &empty,
+		})
+		require.NoError(t, err)
+		assert.Empty(t, got.DependsOn)
+	})
+
+	t.Run("omitted depends_on does not call ReplaceTaskDependencies", func(t *testing.T) {
+		name := "updated"
+		repo := mocks.NewMockRepository(t)
+		repo.EXPECT().UpdateTask(mock.Anything, mock.Anything).
+			Return(tasks.TaskResponse{ID: 7, Name: name}, nil)
+		repo.EXPECT().GetTaskDependencies(mock.Anything, int32(7)).
+			Return([]tasks.TaskDepRef{{ID: 2, Name: "A"}}, []tasks.TaskDepRef{}, nil)
+		// ReplaceTaskDependencies should NOT be called
+
+		svc := tasks.NewService(repo, nil)
+		got, err := svc.UpdateTask(context.Background(), tasks.UpdateTaskRequest{
+			ID:   7,
+			Name: &name,
+		})
+		require.NoError(t, err)
+		require.Len(t, got.DependsOn, 1)
+		assert.Equal(t, int32(2), got.DependsOn[0].ID)
+	})
+
+	t.Run("propagates error from ReplaceTaskDependencies", func(t *testing.T) {
+		deps := []int32{99}
+		repo := mocks.NewMockRepository(t)
+		repo.EXPECT().UpdateTask(mock.Anything, mock.Anything).
+			Return(tasks.TaskResponse{ID: 7}, nil)
+		repo.EXPECT().ReplaceTaskDependencies(mock.Anything, int32(7), deps).
+			Return(errors.New("fk violation"))
+
+		svc := tasks.NewService(repo, nil)
+		_, err := svc.UpdateTask(context.Background(), tasks.UpdateTaskRequest{
+			ID:        7,
+			DependsOn: &deps,
+		})
+		require.Error(t, err)
+	})
+}
+
 func TestService_UpdateProject(t *testing.T) {
 	now := time.Now()
 	name := "updated"
@@ -218,6 +362,99 @@ func TestService_GetActiveTree(t *testing.T) {
 		_, err := svc.GetActiveTree(context.Background())
 		assert.Error(t, err)
 	})
+
+	t.Run("dependency fields populated in tree nodes", func(t *testing.T) {
+		taskAID := int32(1)
+		taskBID := int32(2)
+
+		repo := mocks.NewMockRepository(t)
+		repo.EXPECT().GetActiveProjects(mock.Anything).Return([]tasks.ActiveProject{}, nil)
+		repo.EXPECT().GetUnfinishedTasks(mock.Anything).Return([]tasks.UnfinishedTask{
+			{ID: taskAID, Name: "Task A", TaskDepends: []tasks.TaskDepRef{{ID: taskBID, Name: "Task B"}}},
+			{ID: taskBID, Name: "Task B", DependsOn: []tasks.TaskDepRef{{ID: taskAID, Name: "Task A"}}},
+		}, nil)
+
+		svc := tasks.NewService(repo, nil)
+		got, err := svc.GetActiveTree(context.Background())
+		require.NoError(t, err)
+
+		require.Len(t, got, 2)
+
+		var nodeA, nodeB *tasks.ActiveTreeNode
+		for i := range got {
+			switch got[i].ID {
+			case taskAID:
+				nodeA = &got[i]
+			case taskBID:
+				nodeB = &got[i]
+			}
+		}
+
+		require.NotNil(t, nodeA)
+		require.NotNil(t, nodeB)
+		require.Len(t, nodeA.TaskDepends, 1)
+		assert.Equal(t, taskBID, nodeA.TaskDepends[0].ID)
+		assert.Empty(t, nodeA.DependsOn)
+		require.Len(t, nodeB.DependsOn, 1)
+		assert.Equal(t, taskAID, nodeB.DependsOn[0].ID)
+		assert.Empty(t, nodeB.TaskDepends)
+	})
+
+	t.Run("task hidden when all dependencies are blocked", func(t *testing.T) {
+		taskAID := int32(1)
+		taskBID := int32(2)
+		taskCID := int32(3)
+
+		repo := mocks.NewMockRepository(t)
+		repo.EXPECT().GetActiveProjects(mock.Anything).Return([]tasks.ActiveProject{}, nil)
+		repo.EXPECT().GetUnfinishedTasks(mock.Anything).Return([]tasks.UnfinishedTask{
+			{ID: taskAID, Name: "Task A"},
+			{ID: taskBID, Name: "Task B", DependsOn: []tasks.TaskDepRef{{ID: taskAID, Name: "Task A"}}},
+			{ID: taskCID, Name: "Task C", DependsOn: []tasks.TaskDepRef{{ID: taskBID, Name: "Task B"}}},
+		}, nil)
+
+		svc := tasks.NewService(repo, nil)
+		got, err := svc.GetActiveTree(context.Background())
+		require.NoError(t, err)
+
+		for _, node := range got {
+			assert.NotEqual(t, taskCID, node.ID, "Task C should be hidden from active tree")
+		}
+		ids := make([]int32, len(got))
+		for i, node := range got {
+			ids[i] = node.ID
+		}
+		assert.Contains(t, ids, taskAID)
+		assert.Contains(t, ids, taskBID)
+	})
+
+	t.Run("effective due date from dependency", func(t *testing.T) {
+		taskAID := int32(1)
+		taskBID := int32(2)
+		earlyDue := time.Date(2026, 6, 15, 0, 0, 0, 0, time.UTC)
+		lateDue := time.Date(2026, 12, 31, 0, 0, 0, 0, time.UTC)
+
+		repo := mocks.NewMockRepository(t)
+		repo.EXPECT().GetActiveProjects(mock.Anything).Return([]tasks.ActiveProject{}, nil)
+		repo.EXPECT().GetUnfinishedTasks(mock.Anything).Return([]tasks.UnfinishedTask{
+			{ID: taskAID, Name: "Task A", DueAt: &earlyDue},
+			{ID: taskBID, Name: "Task B", DueAt: &lateDue, DependsOn: []tasks.TaskDepRef{{ID: taskAID, Name: "Task A"}}},
+		}, nil)
+
+		svc := tasks.NewService(repo, nil)
+		got, err := svc.GetActiveTree(context.Background())
+		require.NoError(t, err)
+
+		var nodeB *tasks.ActiveTreeNode
+		for i := range got {
+			if got[i].ID == taskBID {
+				nodeB = &got[i]
+			}
+		}
+		require.NotNil(t, nodeB)
+		require.NotNil(t, nodeB.DueAt)
+		assert.Equal(t, earlyDue, *nodeB.DueAt, "effective due date should be from earliest dependency")
+	})
 }
 
 func TestService_GetTimeEntryHistory_InvalidFrequency(t *testing.T) {
@@ -285,11 +522,11 @@ func TestService_GetTimeEntryHistory_FillsMissingPeriods(t *testing.T) {
 
 	// 2026-03-16 through 2026-03-20 = 5 daily periods
 	require.Len(t, resp.Data, 5)
-	assert.Equal(t, float32(1), resp.Data[0].Value)   // 03-16
-	assert.Equal(t, float32(0), resp.Data[1].Value)   // 03-17 filled
-	assert.Equal(t, float32(0), resp.Data[2].Value)   // 03-18 filled
-	assert.Equal(t, float32(3), resp.Data[3].Value)   // 03-19
-	assert.Equal(t, float32(0), resp.Data[4].Value)   // 03-20 filled
+	assert.Equal(t, float32(1), resp.Data[0].Value) // 03-16
+	assert.Equal(t, float32(0), resp.Data[1].Value) // 03-17 filled
+	assert.Equal(t, float32(0), resp.Data[2].Value) // 03-18 filled
+	assert.Equal(t, float32(3), resp.Data[3].Value) // 03-19
+	assert.Equal(t, float32(0), resp.Data[4].Value) // 03-20 filled
 	assert.Equal(t, "2026-03-16", resp.StartAt)
 	assert.Equal(t, "2026-03-20", resp.EndAt)
 }
