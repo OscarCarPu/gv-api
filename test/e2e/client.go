@@ -216,6 +216,17 @@ type ActiveTreeNode struct {
 	Children    []ActiveTreeNode `json:"children,omitempty"`
 }
 
+type HistoryPoint struct {
+	Date  string  `json:"date"`
+	Value float32 `json:"value"`
+}
+
+type HistoryResponse struct {
+	StartAt string         `json:"start_at"`
+	EndAt   string         `json:"end_at"`
+	Data    []HistoryPoint `json:"data"`
+}
+
 // APIClient is a test driver that wraps HTTP calls to the API.
 type APIClient struct {
 	baseURL string
@@ -553,6 +564,21 @@ func (c *APIClient) GetTask(t *testing.T, id int32) TaskFullResponse {
 	var out TaskFullResponse
 	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
 		t.Fatalf("GetTask: decode: %v", err)
+	}
+	return out
+}
+
+func (c *APIClient) GetTimeEntryHistory(t *testing.T, frequency, startAt, endAt string) HistoryResponse {
+	t.Helper()
+	path := fmt.Sprintf("/tasks/time-entries/history?frequency=%s&start_at=%s&end_at=%s", frequency, startAt, endAt)
+	resp := c.do(t, http.MethodGet, path, nil)
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("GetTimeEntryHistory: got status %d, want 200", resp.StatusCode)
+	}
+	var out HistoryResponse
+	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+		t.Fatalf("GetTimeEntryHistory: decode: %v", err)
 	}
 	return out
 }

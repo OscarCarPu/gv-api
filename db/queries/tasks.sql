@@ -185,14 +185,29 @@ WHERE finished_at IS NOT NULL
   AND finished_at >= @week_start::timestamptz;
 
 -- name: GetTimeEntryHistory :many
+WITH entry_periods AS (
+    SELECT
+        te.started_at,
+        te.finished_at,
+        gs.period_start
+    FROM time_entries te,
+    LATERAL generate_series(
+        date_trunc(@frequency::text, te.started_at AT TIME ZONE @timezone::text),
+        date_trunc(@frequency::text, te.finished_at AT TIME ZONE @timezone::text),
+        ('1 ' || @frequency::text)::interval
+    ) AS gs(period_start)
+    WHERE te.finished_at IS NOT NULL
+      AND (te.started_at AT TIME ZONE @timezone::text)::date >= @start_at::date
+      AND (te.started_at AT TIME ZONE @timezone::text)::date <= @end_at::date
+)
 SELECT
-    date_trunc(@frequency::text, started_at AT TIME ZONE @timezone::text)::date AS date,
-    (SUM(EXTRACT(EPOCH FROM (finished_at - started_at))) / 3600)::REAL AS value
-FROM time_entries
-WHERE finished_at IS NOT NULL
-  AND (started_at AT TIME ZONE @timezone::text)::date >= @start_at::date
-  AND (started_at AT TIME ZONE @timezone::text)::date <= @end_at::date
-GROUP BY date_trunc(@frequency::text, started_at AT TIME ZONE @timezone::text)
+    ep.period_start::date AS date,
+    (SUM(EXTRACT(EPOCH FROM (
+        LEAST(ep.finished_at, (ep.period_start + ('1 ' || @frequency::text)::interval) AT TIME ZONE @timezone::text)
+        - GREATEST(ep.started_at, ep.period_start AT TIME ZONE @timezone::text)
+    ))) / 3600)::REAL AS value
+FROM entry_periods ep
+GROUP BY ep.period_start
 ORDER BY date;
 
 -- name: GetTimeEntriesByTaskID :many

@@ -454,6 +454,56 @@ func TestE2E_ReorganizeWork(t *testing.T) {
 	}
 }
 
+func TestE2E_TimeEntryHistory_SplitsEntriesAtWeekBoundary(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping e2e test in short mode")
+	}
+
+	truncateTables(t)
+	client := authenticate(t)
+
+	// Server is configured with Europe/Madrid (UTC+1 in February).
+	// Create a time entry that crosses the weekly boundary (Sunday → Monday)
+	// in Madrid time.
+	//
+	// Sunday 2026-02-22 23:00 Madrid = 22:00 UTC
+	// Monday 2026-02-23 02:00 Madrid = 01:00 UTC
+	// Total: 3 hours
+	//
+	// Expected split (Madrid weeks are Mon–Sun):
+	//   Week of 2026-02-16: 1 hour  (Sun 23:00 → Mon 00:00 Madrid)
+	//   Week of 2026-02-23: 2 hours (Mon 00:00 → Mon 02:00 Madrid)
+
+	task := client.CreateTask(t, CreateTaskRequest{Name: "Cross-week task"})
+
+	entryStart := time.Date(2026, 2, 22, 22, 0, 0, 0, time.UTC) // Sun 23:00 Madrid
+	entryEnd := time.Date(2026, 2, 23, 1, 0, 0, 0, time.UTC)    // Mon 02:00 Madrid
+	client.CreateTimeEntry(t, CreateTimeEntryRequest{
+		TaskID:     task.ID,
+		StartedAt:  entryStart,
+		FinishedAt: &entryEnd,
+	})
+
+	history := client.GetTimeEntryHistory(t, "weekly", "2026-02-16", "2026-03-01")
+
+	// Build a map of week start → hours for easy lookup
+	weekHours := make(map[string]float32)
+	for _, p := range history.Data {
+		weekHours[p.Date] = p.Value
+	}
+
+	week1Hours := weekHours["2026-02-16"] // week containing Sunday Feb 22
+	week2Hours := weekHours["2026-02-23"] // week starting Monday Feb 23
+
+	// The entry should be split: 1h to week 1, 2h to week 2
+	if week1Hours < 0.9 || week1Hours > 1.1 {
+		t.Errorf("week of 2026-02-16: want ~1.0h, got %.2fh", week1Hours)
+	}
+	if week2Hours < 1.9 || week2Hours > 2.1 {
+		t.Errorf("week of 2026-02-23: want ~2.0h, got %.2fh", week2Hours)
+	}
+}
+
 func TestE2E_GetTasksByDueDate(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping e2e test in short mode")

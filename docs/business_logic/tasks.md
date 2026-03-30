@@ -1,90 +1,123 @@
-# Task Management - User Flows
+# Tasks
 
-## 1. Planning a Project Hierarchy
+### Description
 
-A user organizes work into projects, sub-projects, and tasks.
+Domain for managing projects, tasks, todos, and time tracking. Projects form a hierarchy (self-referencing parent/child). Tasks belong to a project or exist as orphans. Todos are lightweight checklist items under a task. Time entries track work duration per task and roll up through the project hierarchy.
 
-- **Root projects** have no `parent_id`.
-- **Sub-projects** reference a `parent_id` pointing to another project.
-- **Tasks** reference a `project_id` to belong to a project, or have `project_id = null` (orphan tasks).
+### States / Lifecycle
 
-`GetRootProjects` returns only root-level, unfinished projects (`WHERE parent_id IS NULL AND finished_at IS NULL`).
-`GetProjectChildren` returns a project's direct sub-projects and tasks (with their todos).
+**Project**
+```
+created (started_at=NULL, finished_at=NULL)
+  → started (started_at=timestamp, finished_at=NULL)
+    → finished (finished_at=timestamp)
+```
 
-## 2. Working on a Task with Time Tracking
+**Task**
+```
+created (started_at=NULL, finished_at=NULL)
+  → started (started_at=timestamp, finished_at=NULL)
+    → finished (finished_at=timestamp)
+```
 
-A user starts working on a project and its tasks, then logs time.
+**Todo**
+```
+created (is_done=false) → done (is_done=true)
+```
+Togglable — can go back to false.
 
-1. Create a project and start it via `PATCH started_at`.
-2. Create a task under the project and start it via `PATCH started_at`.
-3. Create time entries against the task with `started_at` and optionally `finished_at`.
-4. Update open time entries with `finished_at` when done.
+**Time Entry**
+```
+open (finished_at=NULL) → finished (finished_at=timestamp)
+```
+Only finished entries count toward time calculations.
 
-**Time calculation:** `time_spent = SUM(finished_at - started_at)` for finished entries only. Open entries (no `finished_at`) are excluded from the sum.
+### Business Rules
 
-Finish a task by setting `finished_at` via PATCH. Finished tasks no longer appear in the active tree.
+**Project Hierarchy**
+- Root projects have `parent_id = NULL`.
+- Sub-projects reference a parent project via `parent_id`.
+- No depth limit enforced. No cycle prevention.
 
-## 3. Managing Subtasks (Todos)
+**Orphan Tasks**
+- Tasks with `project_id = NULL` are orphans — not assigned to any project.
+- Orphans appear at the root level in the active tree.
+- Can be assigned to a project later via PATCH.
 
-Todos are lightweight checklist items under a task.
+**Active Tree**
+- Shows the user's current work: active projects + unfinished tasks.
+- Active projects: `started_at IS NOT NULL AND finished_at IS NULL`.
+- Unfinished tasks: `finished_at IS NULL`.
+- Ordering: sub-projects prepended before tasks within a project. Started tasks before unstarted. Root level: projects → orphan started → orphan unstarted.
 
-1. Create todos under a task (`POST /tasks/todos`).
-2. Toggle `is_done` via `PATCH` on the todo.
-3. Todos are visible in the `GetProjectChildren` response nested under their parent task.
+**Time Tracking**
+- Time entries are created against a task with `started_at` and optionally `finished_at`.
+- `time_spent = SUM(finished_at - started_at)` for finished entries only. Open entries excluded.
+- A task's `time_spent` is computed from its time entries.
+- A project's `time_spent` = its direct tasks' time + all descendant sub-projects' time (recursive, bottom-up accumulation).
 
-Todos have no time tracking of their own; they serve as a breakdown of work within a task.
+**Time Entry Summary**
+- Returns total seconds for two rolling windows: today and current week (Monday-based).
+- Entries that span a boundary are clamped: `finished_at - GREATEST(started_at, boundary_start)`. An entry started yesterday but finished today only counts today's portion.
 
-## 4. Active Tree View (Dashboard)
+**Finish Cascade**
+- When a project is finished (via PATCH `finished_at`):
+  1. All descendant projects get `finished_at = NOW()`.
+  2. All tasks under the project and its descendants get `finished_at = NOW()`.
+- Application-layer logic, not database cascades.
+- Only affects unfinished items (`finished_at IS NULL`).
 
-The active tree shows the user's current work at a glance.
+**Partial Updates (PATCH)**
+- All update endpoints use PATCH semantics: only provided fields are modified.
+- Implemented via SQL `CASE WHEN @set_field THEN @value ELSE field END`.
+- Omitted fields are untouched.
 
-- **Active projects**: started but not finished (`started_at IS NOT NULL AND finished_at IS NULL`).
-- **Unfinished tasks**: tasks without `finished_at`.
-- Finished tasks and finished projects are excluded.
+**Todos**
+- Checklist items under a task. No time tracking.
+- Ordered by completion status (incomplete first), then by ID.
+- Cascade deleted when their parent task is deleted.
 
-**Ordering rules:**
-- Sub-projects are prepended before tasks within their parent project.
-- Started tasks appear before unstarted tasks.
-- Root level: projects first, then orphan started tasks, then orphan unstarted tasks.
+**History**
+- Aggregates finished time entries into periodic buckets (daily/weekly/monthly).
+- Values are in decimal hours (seconds / 3600).
+- Missing periods within the range are zero-filled.
+- Timezone-aware: uses the server's configured timezone (Europe/Madrid) for period boundaries.
+- Entries spanning a period boundary are split: the portion before midnight (or Monday, or 1st of month) counts toward the earlier period, the portion after counts toward the later one.
 
-**Nesting:** Sub-projects nest under their parent project. Tasks without a project (or whose project is not active) appear at the root level as orphans.
+### Validations
 
-## 5. Time Accumulation Across Hierarchy
+**Create project**
+- `name` required.
 
-Time rolls up recursively from tasks through the project hierarchy.
+**Create task**
+- `name` required.
 
-- Each task's `time_spent` = sum of its finished time entries.
-- A project's `time_spent` = sum of its direct tasks' `time_spent` + sum of all descendant sub-projects' `time_spent`.
-- Accumulation is bottom-up: leaf projects first, then their parents.
-- Open time entries (no `finished_at`) are excluded at every level.
+**Create todo**
+- `task_id` required.
+- `name` required.
 
-This is computed in `GetProjectChildren` which uses a recursive descendant query.
+**Create time entry**
+- `task_id` required.
+- `started_at` required.
 
-## 6. Reorganizing Work
+**Time entry history**
+- `frequency` required, must be `daily`, `weekly`, or `monthly`.
 
-Users can move tasks between projects and make partial updates.
+**All update endpoints**
+- `id` (URL param) must parse as int.
+- Returns 404 if entity not found.
 
-- Move a task to a different project via `PATCH project_id`.
-- Partial updates only modify the fields sent in the request; other fields remain unchanged.
-- Orphan tasks (no `project_id`) can be assigned to a project later.
-- When a task moves, its time entries move with it, affecting `time_spent` on both source and destination projects.
+### Side Effects
 
-## 7. Time Entry History
+- **On project finish** → cascade finishes all descendant projects and their tasks.
+- **On task delete** → cascade deletes todos and time entries (FK ON DELETE CASCADE).
+- **On task move** (PATCH `project_id`) → time entries move with the task, affecting `time_spent` on both source and destination projects.
 
-The history endpoint aggregates finished time entries into periodic buckets (daily, weekly, monthly).
+### Decisions / Why
 
-**Aggregation logic:**
-- Groups time entries by `date_trunc(frequency, started_at AT TIME ZONE tz)` — the started_at timestamp is converted to the server's configured timezone before truncating.
-- Sums `finished_at - started_at` duration for each period and converts to hours (decimal).
-- Only finished entries (`finished_at IS NOT NULL`) are included.
-
-**Date range defaults:**
-- Daily: last 30 days
-- Weekly: last 12 weeks
-- Monthly: last 12 months
-
-Start and end dates are snapped to period boundaries (Monday for weekly, 1st of month for monthly).
-
-**Zero-filling:** All periods within the range are included in the response. Periods with no tracked time have `value: 0`.
-
-**Shared logic:** Period boundary calculations (PeriodStart, PeriodCeil, NextPeriodStart, FillMissingPeriods, ParseDateRange) live in `internal/history/` and are shared with the habits domain.
+- **Finish cascade at application layer, not DB**: deletion does NOT cascade to child projects or tasks. Only finishing does. This is intentional — deleting a project shouldn't silently destroy all nested work. Finishing is the safe "archive" operation.
+- **Time accumulation computed at query time, not stored**: avoids stale denormalized totals. The recursive CTE + bottom-up accumulation in GetProjectChildren is fast enough since project trees are small.
+- **Time entry summary clamps with GREATEST**: an entry started at 23:00 yesterday and finished at 02:00 today should count 2 hours for today, not 3. GREATEST(started_at, today_start) handles this.
+- **No constraint on multiple active time entries**: the system doesn't prevent timing two tasks simultaneously. The active entry endpoint returns a single row, but the DB allows multiple open entries.
+- **Orphan tasks in active tree**: tasks without a project still appear so nothing gets lost. They sit at the root level as a visual cue to organize them.
+- **History splits entries at period boundaries**: an entry from Sunday 23:00 to Monday 02:00 (Madrid) counts 1h toward the Sunday's week and 2h toward Monday's week. Without this, the entire 3h would land on the week of `started_at`, misrepresenting which week the work actually happened in. Uses `generate_series` + `GREATEST`/`LEAST` to clip each entry to its period segments.

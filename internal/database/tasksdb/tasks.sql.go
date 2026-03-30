@@ -619,20 +619,35 @@ func (q *Queries) GetTimeEntriesByTaskID(ctx context.Context, id int32) ([]GetTi
 }
 
 const getTimeEntryHistory = `-- name: GetTimeEntryHistory :many
+WITH entry_periods AS (
+    SELECT
+        te.started_at,
+        te.finished_at,
+        gs.period_start
+    FROM time_entries te,
+    LATERAL generate_series(
+        date_trunc($2::text, te.started_at AT TIME ZONE $1::text),
+        date_trunc($2::text, te.finished_at AT TIME ZONE $1::text),
+        ('1 ' || $2::text)::interval
+    ) AS gs(period_start)
+    WHERE te.finished_at IS NOT NULL
+      AND (te.started_at AT TIME ZONE $1::text)::date >= $3::date
+      AND (te.started_at AT TIME ZONE $1::text)::date <= $4::date
+)
 SELECT
-    date_trunc($1::text, started_at AT TIME ZONE $2::text)::date AS date,
-    (SUM(EXTRACT(EPOCH FROM (finished_at - started_at))) / 3600)::REAL AS value
-FROM time_entries
-WHERE finished_at IS NOT NULL
-  AND (started_at AT TIME ZONE $2::text)::date >= $3::date
-  AND (started_at AT TIME ZONE $2::text)::date <= $4::date
-GROUP BY date_trunc($1::text, started_at AT TIME ZONE $2::text)
+    ep.period_start::date AS date,
+    (SUM(EXTRACT(EPOCH FROM (
+        LEAST(ep.finished_at, (ep.period_start + ('1 ' || $2::text)::interval) AT TIME ZONE $1::text)
+        - GREATEST(ep.started_at, ep.period_start AT TIME ZONE $1::text)
+    ))) / 3600)::REAL AS value
+FROM entry_periods ep
+GROUP BY ep.period_start
 ORDER BY date
 `
 
 type GetTimeEntryHistoryParams struct {
-	Frequency string    `db:"frequency" json:"frequency"`
 	Timezone  string    `db:"timezone" json:"timezone"`
+	Frequency string    `db:"frequency" json:"frequency"`
 	StartAt   time.Time `db:"start_at" json:"start_at"`
 	EndAt     time.Time `db:"end_at" json:"end_at"`
 }
@@ -644,8 +659,8 @@ type GetTimeEntryHistoryRow struct {
 
 func (q *Queries) GetTimeEntryHistory(ctx context.Context, arg GetTimeEntryHistoryParams) ([]GetTimeEntryHistoryRow, error) {
 	rows, err := q.db.Query(ctx, getTimeEntryHistory,
-		arg.Frequency,
 		arg.Timezone,
+		arg.Frequency,
 		arg.StartAt,
 		arg.EndAt,
 	)

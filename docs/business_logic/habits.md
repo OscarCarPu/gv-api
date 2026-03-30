@@ -1,69 +1,84 @@
-# Habits - Business Logic
+# Habits
 
-## 1. Frequency & Targets
+### Description
 
-Each habit has a **frequency** (`daily`, `weekly`, or `monthly`) that determines how progress is measured. Defaults to `daily` if not specified.
+Domain for tracking recurring personal metrics. A habit represents something the user wants to measure over time (exercise sessions, weight, calories, etc.). Each habit has a frequency that defines how progress is grouped into periods, and optional numeric targets that define when a period is considered "met". The system tracks streaks of consecutive successful periods.
 
-A habit may optionally have **target_min** and/or **target_max** — numeric bounds that define when a period is considered "met":
+### States / Lifecycle
 
-- **target_min only**: period sum must be >= target_min (e.g. "at least 3 sessions per week")
-- **target_max only**: period sum must be <= target_max (e.g. "no more than 2000 calories")
-- **Both set**: period sum must be within [target_min, target_max] (e.g. "weight between 60-80kg")
-- **Neither set**: no streak tracking
+A habit itself has no state machine — it exists from creation until deletion. The interesting lifecycle is at the **log + streak** level:
 
-## 2. Recording Required
+```
+Habit created (streak = 0)
+  → Logs recorded (upsert per date)
+    → Streak recalculated on every log
+      → Habit deleted (cascade deletes all logs)
+```
 
-The `recording_required` boolean (default `true`) controls how missing days affect streak calculation:
+### Business Rules
 
-- **true**: a missing day (no log entry) breaks the streak (standard behavior)
-- **false**: a missing day carries forward the last recorded value. This is useful for metrics like weight where the value persists even when not recorded.
+**Frequency & Periods**
+- Each habit has a frequency: `daily`, `weekly`, or `monthly` (default: `daily`).
+- Periods are calendar-based: daily = single day, weekly = Monday–Sunday (ISO 8601), monthly = 1st–last day of month.
+- The **period value** is the sum of all log entries within the current period.
 
-Carry-forward only affects Go streak calculation, NOT the SQL `period_value`.
+**Targets**
+- A habit may have `target_min` and/or `target_max` — numeric bounds on the period sum.
+- `target_min` only → period sum must be >= target_min.
+- `target_max` only → period sum must be <= target_max.
+- Both set → period sum must be within [target_min, target_max].
+- Neither set → no streak tracking, streaks stay at 0.
 
-### Carry-forward examples (daily, target_min=1):
-- `0, 1, null, null` → effective: `0, 1, 1, 1` → streak = 3
-- `1, 1, 0, null, null` → effective: `1, 1, 0, 0, 0` → streak = 0
+**Logging**
+- One log per habit per day (unique constraint on habit_id + log_date).
+- Upsert behavior: logging the same date replaces the previous value.
+- Logs can be backdated or edited — streak recalculation handles this correctly.
 
-## 3. Period Boundaries
+**Streak Calculation**
+- A streak counts consecutive periods where the period sum met the target criteria.
+- **Current streak**: walk backwards from the current period.
+  - Past period meets target → count it, continue backwards.
+  - Past period doesn't meet target → streak broken, stop.
+  - Current (in-progress) period: if target already met, count it. If not yet met, skip it without breaking the streak.
+- **Longest streak**: scan all historical periods, find the longest consecutive run meeting target.
+- Full recalculation from all logs on every upsert — no incremental updates.
 
-Periods are calendar-based:
+**Carry-forward (recording_required = false)**
+- When `recording_required = true` (default): a missing day means no value — breaks the streak.
+- When `recording_required = false`: a missing day carries forward the last recorded value. Useful for metrics like weight that persist between measurements.
+- Carry-forward walks every day from the earliest log to today, using the last recorded value for unrecorded days, then groups by period and sums.
+- Carry-forward only affects streak calculation, NOT the SQL-computed `period_value`.
 
-- **Daily**: a single calendar day.
-- **Weekly**: Monday through Sunday (ISO 8601 week).
-- **Monthly**: 1st through the last day of the calendar month.
+**History Aggregation**
+- The history endpoint aggregates logs into periodic buckets with a configurable frequency.
+- If the view frequency is coarser than the habit's native frequency (e.g. daily habit viewed weekly): uses **AVG** to prevent inflated numbers.
+- Otherwise: uses **SUM**.
+- When `recording_required = true`: missing periods are zero-filled. When `false`: missing periods are omitted.
 
-## 4. Period Value
+### Validations
 
-The **period value** is the sum of all log entries for a habit within its current period. For example, if a weekly habit has logs on Monday (2), Wednesday (3), and Friday (1), the period value is 6.
+**Create habit**
+- `name` required (non-empty).
+- `frequency` if provided must be `daily`, `weekly`, or `monthly`.
+- `target_min` if provided must be >= 0.
+- `target_max` if provided must be >= 0.
+- If both targets provided: `target_min` must be <= `target_max`.
 
-The daily endpoint returns each habit's period value alongside the individual day's log value.
+**Log upsert**
+- `date` must be a valid `YYYY-MM-DD` string.
 
-## 5. Streak Logic
+**History**
+- `frequency` if provided must be `daily`, `weekly`, or `monthly`. Defaults to the habit's native frequency.
+- `start_at` / `end_at` if provided must be valid `YYYY-MM-DD`. Defaults: daily = 1 month back, weekly = 12 weeks back, monthly = 1 year back.
 
-A **streak** counts consecutive completed periods — periods where the sum of log values met the target criteria.
+### Side Effects
 
-**Current streak** is calculated by walking backwards from the current period:
-- If a past period meets the target → count it and continue to the previous period.
-- If a past period doesn't meet the target → the streak is broken, stop.
-- The **current (in-progress) period** is special: if the target is already met, it counts toward the streak. If not yet met, it is skipped without breaking the streak.
+- **On log upsert** → full streak recalculation (current_streak + longest_streak updated on the habit row).
+- **On habit delete** → cascade deletes all habit_logs (FK ON DELETE CASCADE).
 
-**Longest streak** is recalculated from all periods on every log upsert.
+### Decisions / Why
 
-## 6. Streak Recalculation
-
-Streaks are recalculated on every log upsert (create or update). The process:
-
-1. Fetch the habit's frequency, targets, and recording_required flag.
-2. If no targets are set (both target_min and target_max are null), skip (no streak tracking).
-3. Fetch all logs for the habit.
-4. Build effective period sums:
-   - If recording_required=true: group logs by period and sum.
-   - If recording_required=false: walk every day from earliest log to today, carrying forward the last recorded value, then group by period and sum.
-5. Walk backwards from the current period counting consecutive hits.
-6. Update `current_streak` and `longest_streak` on the habit.
-
-This full recalculation ensures correctness even when logs are backdated or edited.
-
-## 7. No-Target Habits
-
-Habits without targets (both `target_min` and `target_max` are null) always have `current_streak = 0` and `longest_streak = 0`. Streak recalculation is skipped entirely for these habits.
+- **Full recalculation on every log instead of incremental**: logs can be backdated or edited, so incremental updates would drift. The full scan is cheap (one habit's logs fit in memory).
+- **AVG for coarser history views**: a daily habit viewed monthly would show ~30x inflated values with SUM. AVG normalizes this to a representative daily value for the period.
+- **Carry-forward only in Go, not SQL**: the `period_value` in the daily endpoint is always the raw sum from SQL. Carry-forward is a streak-only concept — mixing it into the period value would confuse the UI (showing values on days the user didn't actually log).
+- **recording_required defaults to true**: most habits expect active daily logging. The `false` mode is opt-in for passive metrics.
