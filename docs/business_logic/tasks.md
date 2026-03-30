@@ -84,6 +84,13 @@ Only finished entries count toward time calculations.
 - Timezone-aware: uses the server's configured timezone (Europe/Madrid) for period boundaries.
 - Entries spanning a period boundary are split: the portion before midnight (or Monday, or 1st of month) counts toward the earlier period, the portion after counts toward the later one.
 
+**Task dependencies**
+- A task can depend on another task.
+- The effective due date of a task is the minimum of its own `due_at` and the effective `due_at` of all tasks it depends on.
+- A task that depends on others is considered "blocked", and cannot be started or finished until all dependencies are finished.
+- A task is hidden from the active tree and due-date list if all of its dependencies are themselves blocked.
+- A task that inherits a due date from its dependencies is returned in the due-date list.
+
 ### Validations
 
 **Create project**
@@ -106,6 +113,11 @@ Only finished entries count toward time calculations.
 **All update endpoints**
 - `id` (URL param) must parse as int.
 - Returns 404 if entity not found.
+
+**Create/Update task dependency**
+- `task_id` required.
+- `depends_on` required.
+- Returns 400 if adding the dependency would create a cycle.
 
 ### Side Effects
 

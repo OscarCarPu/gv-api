@@ -30,6 +30,16 @@
 
 **Indexes:** idx_tasks_project_id, idx_tasks_unfinished (WHERE finished_at IS NULL), idx_tasks_due_at (WHERE due_at IS NOT NULL)
 
+### task_dependencies
+
+| Column     | Type    | Constraints                               |
+|------------|---------|-------------------------------------------|
+| task_id    | INTEGER | NOT NULL, FK -> task.id ON DELETE CASCADE |
+| depends_on | INTEGER | NOT NULL, FK -> task.id ON DELETE CASCADE |
+
+**Primary Key:** (task_id, depends_on)
+**Checks:** (task_id != depends_on)
+
 ### todos
 
 | Column  | Type    | Constraints                                 |

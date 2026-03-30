@@ -137,13 +137,15 @@
     "project_id": 1,
     "name": "My Task",
     "description": "Task description.",
-    "due_at": "2025-06-01"
+    "due_at": "2025-06-01",
+    "depends_on": [2, 3]
   }
   ```
   - `name` (required): The name of the task.
   - `project_id` (optional): The ID of the parent project.
   - `description` (optional): A description of the task.
   - `due_at` (optional): The due date of the task in `YYYY-MM-DD` format.
+  - `depends_on` (optional): List of task IDs this task depends on.
 - **Success Response:**
   - **Code:** `201 Created`
   - **Content:**
@@ -155,9 +157,13 @@
       "description": "Task description.",
       "due_at": "2025-06-01",
       "started_at": null,
-      "finished_at": null
+      "finished_at": null,
+      "depends_on": [2, 3],
+      "task_depends": []
     }
     ```
+  - `depends_on`: List of task IDs this task depends on (this task is blocked by them).
+  - `task_depends`: List of task IDs that depend on this task (they are blocked by this task).
 - **Error Responses:**
   - **Code:** `400 Bad Request`
     - **Content:** `Invalid Body` or `name is required`
@@ -363,7 +369,9 @@
         "time_spent": 5400,
         "project_id": 1,
         "project_name": "My Project",
-        "project_due_at": "2025-12-31"
+        "project_due_at": "2025-12-31",
+        "depends_on": [2],
+        "task_depends": [4, 5]
       }
     ]
     ```
@@ -395,14 +403,18 @@
           {
             "id": 1,
             "type": "task",
-            "name": "task_1"
+            "name": "task_1",
+            "depends_on": [3],
+            "task_depends": []
           }
         ]
       },
       {
         "id": 5,
         "type": "task",
-        "name": "orphan_task"
+        "name": "orphan_task",
+        "depends_on": [],
+        "task_depends": [1]
       }
     ]
     ```
@@ -488,7 +500,9 @@
         "due_at": "2025-04-01T00:00:00Z",
         "started_at": "2025-03-01T09:00:00Z",
         "finished_at": null,
-        "time_spent": 5400
+        "time_spent": 5400,
+        "depends_on": [2],
+        "task_depends": [4]
       },
       "time_entries": [
         {
@@ -541,3 +555,38 @@
     - **Content:** `frequency is required` or `frequency must be daily, weekly, or monthly`
   - **Code:** `500 Internal Server Error`
     - **Content:** `Failed to get time entry history`
+
+## Create/Update Task Dependency
+
+- **Method:** `PUT`
+- **Endpoint:** `/tasks/{task_id}/dependencies`
+- **Description:** Creates or updates a task dependency.
+- **Request Body:**
+    ```json
+    {
+      "depends_on": [1]
+    }
+    ```
+    - `depends_on` (required): List of task IDs this task depends on.
+- **Success Response:**
+  - **Code:** `204 No Content`
+- **Error Responses:**
+  - **Code:** `400 Bad Request`
+    - **Content:** `Invalid Body`, `task_id is required`, or `depends_on is required`
+  - **Code:** `404 Not Found`
+    - **Content:** `task not found`
+  - **Code:** `500 Internal Server Error`
+    - **Content:** `Failed to create/update task dependency`
+
+## Delete Task Dependency
+
+- **Method:** `DELETE`
+- **Endpoint:** `/tasks/{task_id}/dependencies/{depends_on}`
+- **Description:** Deletes a task dependency.
+- **Success Response:**
+  - **Code:** `204 No Content`
+- **Error Responses:**
+  - **Code:** `404 Not Found`
+    - **Content:** `task not found`
+  - **Code:** `500 Internal Server Error`
+    - **Content:** `Failed to delete task dependency`

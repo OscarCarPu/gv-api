@@ -48,6 +48,11 @@ type Task struct {
 	FinishedAt  pgtype.Timestamptz `db:"finished_at" json:"finished_at"`
 }
 
+type TaskDependency struct {
+	TaskID    int32 `db:"task_id" json:"task_id"`
+	DependsOn int32 `db:"depends_on" json:"depends_on"`
+}
+
 type TimeEntry struct {
 	ID         int32              `db:"id" json:"id"`
 	TaskID     int32              `db:"task_id" json:"task_id"`
