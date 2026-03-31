@@ -18,6 +18,26 @@
   - **Code:** `500 Internal Server Error`
     - **Content:** `Failed to list projects`
 
+## List Tasks (Fast)
+
+- **Method:** `GET`
+- **Endpoint:** `/tasks/tasks/list-fast`
+- **Description:** Returns all unfinished tasks (where `finished_at` is null) as a flat list with only `id` and `name`.
+- **Success Response:**
+  - **Code:** `200 OK`
+  - **Content:**
+    ```json
+    [
+      {
+        "id": 1,
+        "name": "My Task"
+      }
+    ]
+    ```
+- **Error Responses:**
+  - **Code:** `500 Internal Server Error`
+    - **Content:** `Failed to list tasks`
+
 ## Get Root Projects
 
 - **Method:** `GET`

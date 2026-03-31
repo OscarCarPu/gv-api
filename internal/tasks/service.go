@@ -445,6 +445,10 @@ func (s *Service) ListProjectsFast(ctx context.Context) ([]ProjectFastResponse, 
 	return s.repo.ListProjectsFast(ctx)
 }
 
+func (s *Service) ListTasksFast(ctx context.Context) ([]TaskFastResponse, error) {
+	return s.repo.ListTasksFast(ctx)
+}
+
 func (s *Service) GetRootProjects(ctx context.Context) ([]ProjectResponse, error) {
 	return s.repo.GetRootProjects(ctx)
 }

@@ -26,6 +26,7 @@ type Repository interface {
 	UpdateTodo(ctx context.Context, req UpdateTodoRequest) (TodoResponse, error)
 	UpdateTimeEntry(ctx context.Context, req UpdateTimeEntryRequest) (TimeEntryResponse, error)
 	ListProjectsFast(ctx context.Context) ([]ProjectFastResponse, error)
+	ListTasksFast(ctx context.Context) ([]TaskFastResponse, error)
 	GetRootProjects(ctx context.Context) ([]ProjectResponse, error)
 	GetActiveProjects(ctx context.Context) ([]ActiveProject, error)
 	GetUnfinishedTasks(ctx context.Context) ([]UnfinishedTask, error)
@@ -718,6 +719,23 @@ func (r *PostgresRepository) GetTaskDependencies(ctx context.Context, taskID int
 		return nil, nil, err
 	}
 	return unmarshalDepRefs(row.DependsOn), unmarshalDepRefs(row.TaskDepends), nil
+}
+
+func (r *PostgresRepository) ListTasksFast(ctx context.Context) ([]TaskFastResponse, error) {
+	rows, err := r.q.ListTasksFast(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	tasks := make([]TaskFastResponse, len(rows))
+	for i, row := range rows {
+		tasks[i] = TaskFastResponse{
+			ID:   row.ID,
+			Name: row.Name,
+		}
+	}
+
+	return tasks, nil
 }
 
 func (r *PostgresRepository) ListProjectsFast(ctx context.Context) ([]ProjectFastResponse, error) {

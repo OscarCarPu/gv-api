@@ -32,6 +32,7 @@ type Querier interface {
 	GetTimeEntrySummary(ctx context.Context, arg GetTimeEntrySummaryParams) (GetTimeEntrySummaryRow, error)
 	GetUnfinishedTasks(ctx context.Context) ([]GetUnfinishedTasksRow, error)
 	ListProjectsFast(ctx context.Context) ([]ListProjectsFastRow, error)
+	ListTasksFast(ctx context.Context) ([]ListTasksFastRow, error)
 	ReplaceTaskDependencies(ctx context.Context, arg ReplaceTaskDependenciesParams) error
 	UpdateProject(ctx context.Context, arg UpdateProjectParams) (Project, error)
 	UpdateTask(ctx context.Context, arg UpdateTaskParams) (Task, error)

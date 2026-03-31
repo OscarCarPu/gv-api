@@ -824,6 +824,35 @@ func (q *Queries) ListProjectsFast(ctx context.Context) ([]ListProjectsFastRow, 
 	return items, nil
 }
 
+const listTasksFast = `-- name: ListTasksFast :many
+SELECT id, name FROM tasks WHERE finished_at IS NULL ORDER BY name
+`
+
+type ListTasksFastRow struct {
+	ID   int32  `db:"id" json:"id"`
+	Name string `db:"name" json:"name"`
+}
+
+func (q *Queries) ListTasksFast(ctx context.Context) ([]ListTasksFastRow, error) {
+	rows, err := q.db.Query(ctx, listTasksFast)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListTasksFastRow{}
+	for rows.Next() {
+		var i ListTasksFastRow
+		if err := rows.Scan(&i.ID, &i.Name); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const replaceTaskDependencies = `-- name: ReplaceTaskDependencies :exec
 WITH deleted AS (
     DELETE FROM task_dependencies WHERE task_id = $1
