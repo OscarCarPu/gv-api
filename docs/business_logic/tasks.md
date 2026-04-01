@@ -86,7 +86,8 @@ Only finished entries count toward time calculations.
 
 **Task dependencies**
 - A task can depend on other tasks. Dependencies are managed via the `depends_on` field on create/update task (list of task IDs). Setting `depends_on` replaces all existing dependencies. Omitting it leaves them unchanged.
-- The effective due date of a task is the minimum of its own `due_at` and the effective `due_at` of all tasks it depends on (recursive). Finished dependencies contribute their `due_at` directly (carried in the `depends_on` JSON ref).
+- Finished tasks cannot be added as dependencies (silently ignored during create/update).
+- The effective due date of a task is the minimum of its own `due_at` and the effective `due_at` of all unfinished tasks it depends on (recursive).
 - A task that has at least one unfinished dependency is considered "blocked". All task responses include a `blocked` boolean.
 - A task is hidden from the active tree and due-date list if all of its dependencies are themselves blocked.
 - A task that inherits a due date from its dependencies is returned in the due-date list.

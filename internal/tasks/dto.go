@@ -11,17 +11,6 @@ type TaskDepRef struct {
 	DueAt *string `json:"due_at"`
 }
 
-func (r TaskDepRef) ParseDueAt() *time.Time {
-	if r.DueAt == nil {
-		return nil
-	}
-	t, err := time.Parse("2006-01-02", *r.DueAt)
-	if err != nil {
-		return nil
-	}
-	return &t
-}
-
 func unmarshalDepRefs(data []byte) []TaskDepRef {
 	if len(data) == 0 {
 		return []TaskDepRef{}

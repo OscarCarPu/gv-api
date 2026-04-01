@@ -263,13 +263,7 @@ func effectiveDueDate(taskID int32, tasksByID map[int32]UnfinishedTask, memo map
 
 	best := t.DueAt
 	for _, dep := range t.DependsOn {
-		var depDue *time.Time
-		if _, inMap := tasksByID[dep.ID]; inMap {
-			depDue = effectiveDueDate(dep.ID, tasksByID, memo, visited)
-		} else {
-			// Dep is finished — use its due_at from the ref
-			depDue = dep.ParseDueAt()
-		}
+		depDue := effectiveDueDate(dep.ID, tasksByID, memo, visited)
 		if depDue != nil && (best == nil || depDue.Before(*best)) {
 			best = depDue
 		}
@@ -331,13 +325,7 @@ func (s *Service) GetTasksByDueDate(ctx context.Context) ([]TaskByDueDateRespons
 		}
 		best := d.DueAt
 		for _, dep := range d.DependsOn {
-			var depDueAt *time.Time
-			if _, inMap := depsByID[dep.ID]; inMap {
-				depDueAt = effDue(dep.ID, visited)
-			} else {
-				// Dep is finished — use its due_at from the ref
-				depDueAt = dep.ParseDueAt()
-			}
+			depDueAt := effDue(dep.ID, visited)
 			if depDueAt != nil && (best == nil || depDueAt.Before(*best)) {
 				best = depDueAt
 			}
