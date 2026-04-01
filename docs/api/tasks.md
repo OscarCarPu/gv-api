@@ -456,7 +456,7 @@
 
 - **Method:** `GET`
 - **Endpoint:** `/tasks/projects/{id}/children`
-- **Description:** Returns sub-projects and tasks belonging to the given project. Results are ordered: sub-projects first, then unfinished tasks, then finished tasks. Tasks include their `todos` array and `time_spent` (total seconds from time entries). Sub-projects include `time_spent` (recursive sum across all nested tasks).
+- **Description:** Returns sub-projects and tasks belonging to the given project. Results are ordered: sub-projects first, then started tasks, then unstarted tasks, then finished tasks. Ties within each group are broken by `due_at` ascending (nulls last), then name. Tasks include their `todos` array and `time_spent` (total seconds from time entries). Sub-projects include `time_spent` (recursive sum across all nested tasks).
 - **Success Response:**
   - **Code:** `200 OK`
   - **Content:**

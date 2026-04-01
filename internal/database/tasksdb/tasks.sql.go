@@ -282,7 +282,7 @@ WITH RECURSIVE project_tree AS (
 )
 SELECT id, parent_id, name, description, due_at, started_at, finished_at, depth
 FROM project_tree
-ORDER BY depth, name
+ORDER BY depth, due_at ASC NULLS LAST, name
 `
 
 type GetProjectWithDescendantsRow struct {
@@ -541,7 +541,15 @@ SELECT
     td.id AS todo_id, td.name AS todo_name, td.is_done AS todo_is_done
 FROM task_times tt
 LEFT JOIN todos td ON td.task_id = tt.id
-ORDER BY tt.finished_at NULLS FIRST, tt.name, td.is_done ASC NULLS LAST, todo_id
+ORDER BY
+    CASE
+        WHEN tt.finished_at IS NOT NULL THEN 2
+        WHEN tt.started_at IS NOT NULL THEN 0
+        ELSE 1
+    END,
+    tt.due_at ASC NULLS LAST,
+    tt.name,
+    td.is_done ASC NULLS LAST, todo_id
 `
 
 type GetTasksByProjectIDsRow struct {

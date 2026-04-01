@@ -93,6 +93,7 @@ Only finished entries count toward time calculations.
 - Dependency responses include `id` and `name` of the referenced task (not just the ID).
 - The reverse relationship (tasks that depend on this task) is returned as `blocks` in all task responses.
 - Project children (GET /projects/{id}/children) include `depends_on`, `blocks`, and `blocked` for task-type children (omitted for sub-project children).
+- Project children are ordered: sub-projects first, then started tasks, then unstarted tasks, then finished tasks. Ties within each group are broken by `due_at` ascending (nulls last), then name.
 
 ### Validations
 
