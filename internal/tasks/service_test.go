@@ -434,32 +434,39 @@ func TestService_GetActiveTree(t *testing.T) {
 		assert.Contains(t, ids, taskBID)
 	})
 
-	t.Run("effective due date from dependency", func(t *testing.T) {
+	t.Run("effective due date propagates backward through blocks", func(t *testing.T) {
 		taskAID := int32(1)
 		taskBID := int32(2)
-		earlyDue := time.Date(2026, 6, 15, 0, 0, 0, 0, time.UTC)
 		lateDue := time.Date(2026, 12, 31, 0, 0, 0, 0, time.UTC)
+		earlyDue := time.Date(2026, 6, 15, 0, 0, 0, 0, time.UTC)
 
 		repo := mocks.NewMockRepository(t)
 		repo.EXPECT().GetActiveProjects(mock.Anything).Return([]tasks.ActiveProject{}, nil)
 		repo.EXPECT().GetUnfinishedTasks(mock.Anything).Return([]tasks.UnfinishedTask{
-			{ID: taskAID, Name: "Task A", DueAt: &earlyDue},
-			{ID: taskBID, Name: "Task B", DueAt: &lateDue, DependsOn: []tasks.TaskDepRef{{ID: taskAID, Name: "Task A"}}},
+			{ID: taskAID, Name: "Task A", DueAt: &lateDue, Blocks: []tasks.TaskDepRef{{ID: taskBID, Name: "Task B"}}},
+			{ID: taskBID, Name: "Task B", DueAt: &earlyDue, DependsOn: []tasks.TaskDepRef{{ID: taskAID, Name: "Task A"}}},
 		}, nil)
 
 		svc := tasks.NewService(repo, nil)
 		got, err := svc.GetActiveTree(context.Background())
 		require.NoError(t, err)
 
-		var nodeB *tasks.ActiveTreeNode
+		var nodeA, nodeB *tasks.ActiveTreeNode
 		for i := range got {
-			if got[i].ID == taskBID {
+			switch got[i].ID {
+			case taskAID:
+				nodeA = &got[i]
+			case taskBID:
 				nodeB = &got[i]
 			}
 		}
+		require.NotNil(t, nodeA)
+		require.NotNil(t, nodeA.DueAt)
+		assert.Equal(t, earlyDue, *nodeA.DueAt, "A should inherit B's earlier due date since A blocks B")
+
 		require.NotNil(t, nodeB)
 		require.NotNil(t, nodeB.DueAt)
-		assert.Equal(t, earlyDue, *nodeB.DueAt, "effective due date should be from earliest dependency")
+		assert.Equal(t, earlyDue, *nodeB.DueAt, "B keeps its own due date")
 	})
 }
 

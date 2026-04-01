@@ -245,7 +245,8 @@ func isHidden(t UnfinishedTask, tasksByID map[int32]UnfinishedTask, unfinishedID
 	return true
 }
 
-// effectiveDueDate computes min(own due_at, effective due_at of each dependency).
+// effectiveDueDate computes min(own due_at, effective due_at of each task this one blocks).
+// If a task that depends on me has an earlier effective deadline, I inherit it.
 // Uses memoization to avoid recomputation. visited prevents infinite loops.
 func effectiveDueDate(taskID int32, tasksByID map[int32]UnfinishedTask, memo map[int32]*time.Time, visited map[int32]bool) *time.Time {
 	if result, ok := memo[taskID]; ok {
@@ -262,10 +263,10 @@ func effectiveDueDate(taskID int32, tasksByID map[int32]UnfinishedTask, memo map
 	}
 
 	best := t.DueAt
-	for _, dep := range t.DependsOn {
-		depDue := effectiveDueDate(dep.ID, tasksByID, memo, visited)
-		if depDue != nil && (best == nil || depDue.Before(*best)) {
-			best = depDue
+	for _, blocked := range t.Blocks {
+		blockedDue := effectiveDueDate(blocked.ID, tasksByID, memo, visited)
+		if blockedDue != nil && (best == nil || blockedDue.Before(*best)) {
+			best = blockedDue
 		}
 	}
 
@@ -298,16 +299,18 @@ func (s *Service) GetTasksByDueDate(ctx context.Context) ([]TaskByDueDateRespons
 	// Build lookup structures for dependency logic
 	type taskDep struct {
 		DependsOn []TaskDepRef
+		Blocks    []TaskDepRef
 		DueAt     *time.Time
 	}
 	unfinishedIDs := make(map[int32]bool, len(rows))
 	depsByID := make(map[int32]taskDep, len(rows))
 	for _, r := range rows {
 		unfinishedIDs[r.ID] = true
-		depsByID[r.ID] = taskDep{DependsOn: r.DependsOn, DueAt: r.DueAt}
+		depsByID[r.ID] = taskDep{DependsOn: r.DependsOn, Blocks: r.Blocks, DueAt: r.DueAt}
 	}
 
-	// Compute effective due dates (memoized)
+	// Compute effective due dates (memoized).
+	// Propagates backward: effective = min(own due_at, effective of each task this one blocks).
 	memo := make(map[int32]*time.Time)
 	var effDue func(id int32, visited map[int32]bool) *time.Time
 	effDue = func(id int32, visited map[int32]bool) *time.Time {
@@ -324,10 +327,10 @@ func (s *Service) GetTasksByDueDate(ctx context.Context) ([]TaskByDueDateRespons
 			return nil
 		}
 		best := d.DueAt
-		for _, dep := range d.DependsOn {
-			depDueAt := effDue(dep.ID, visited)
-			if depDueAt != nil && (best == nil || depDueAt.Before(*best)) {
-				best = depDueAt
+		for _, blocked := range d.Blocks {
+			blockedDue := effDue(blocked.ID, visited)
+			if blockedDue != nil && (best == nil || blockedDue.Before(*best)) {
+				best = blockedDue
 			}
 		}
 		memo[id] = best
