@@ -634,15 +634,24 @@ func TestE2E_TaskDependencies_CRUD(t *testing.T) {
 		DependsOn: []int32{taskA.ID, taskB.ID},
 	})
 
-	// Verify create response has depends_on
+	// Verify create response has depends_on and blocked
 	if len(taskD.DependsOn) != 2 {
 		t.Fatalf("CreateTask D: expected 2 depends_on, got %d", len(taskD.DependsOn))
 	}
+	if !taskD.Blocked {
+		t.Error("CreateTask D: expected blocked=true (A and B are unfinished)")
+	}
+	if taskA.Blocked {
+		t.Error("CreateTask A: expected blocked=false (no deps)")
+	}
 
-	// Verify via GetTask(D): depends_on has A and B with names
+	// Verify via GetTask(D): depends_on has A and B with names, and blocked
 	fullD := client.GetTask(t, taskD.ID)
 	if len(fullD.DependsOn) != 2 {
 		t.Fatalf("GetTask D: expected 2 depends_on, got %d", len(fullD.DependsOn))
+	}
+	if !fullD.Blocked {
+		t.Error("GetTask D: expected blocked=true")
 	}
 	depIDs := map[int32]string{}
 	for _, dep := range fullD.DependsOn {
@@ -655,10 +664,10 @@ func TestE2E_TaskDependencies_CRUD(t *testing.T) {
 		t.Errorf("GetTask D: expected dep on Task B, got %v", depIDs)
 	}
 
-	// Verify reverse: GetTask(A) should show D in task_depends
+	// Verify reverse: GetTask(A) should show D in blocks
 	fullA := client.GetTask(t, taskA.ID)
-	if len(fullA.TaskDepends) != 1 || fullA.TaskDepends[0].ID != taskD.ID {
-		t.Errorf("GetTask A: expected task_depends [D=%d], got %v", taskD.ID, fullA.TaskDepends)
+	if len(fullA.Blocks) != 1 || fullA.Blocks[0].ID != taskD.ID {
+		t.Errorf("GetTask A: expected blocks [D=%d], got %v", taskD.ID, fullA.Blocks)
 	}
 
 	// Update D: change deps to [C] only
@@ -669,10 +678,10 @@ func TestE2E_TaskDependencies_CRUD(t *testing.T) {
 		t.Errorf("UpdateTask D to [C]: expected depends_on [C=%d], got %v", taskC.ID, updatedD.DependsOn)
 	}
 
-	// Verify A no longer has D in task_depends
+	// Verify A no longer has D in blocks
 	fullA = client.GetTask(t, taskA.ID)
-	if len(fullA.TaskDepends) != 0 {
-		t.Errorf("GetTask A after update: expected empty task_depends, got %v", fullA.TaskDepends)
+	if len(fullA.Blocks) != 0 {
+		t.Errorf("GetTask A after update: expected empty blocks, got %v", fullA.Blocks)
 	}
 
 	// Update D: clear all deps
@@ -681,6 +690,9 @@ func TestE2E_TaskDependencies_CRUD(t *testing.T) {
 	})
 	if len(updatedD.DependsOn) != 0 {
 		t.Errorf("UpdateTask D to []: expected empty depends_on, got %v", updatedD.DependsOn)
+	}
+	if updatedD.Blocked {
+		t.Error("UpdateTask D after clearing deps: expected blocked=false")
 	}
 
 	// Update D omitting depends_on: should stay empty
@@ -744,6 +756,14 @@ func TestE2E_TaskDependencies_ActiveTreeVisibility(t *testing.T) {
 		}
 		return false
 	}
+	findTask := func(children []ActiveTreeNode, taskID int32) *ActiveTreeNode {
+		for i := range children {
+			if children[i].ID == taskID && children[i].Type == "task" {
+				return &children[i]
+			}
+		}
+		return nil
+	}
 
 	// --- Initial state ---
 	// A: no deps → visible
@@ -762,6 +782,14 @@ func TestE2E_TaskDependencies_ActiveTreeVisibility(t *testing.T) {
 		t.Error("initial: Task C should be hidden (all deps blocked)")
 	}
 
+	// Verify blocked status on tree nodes
+	if nodeA := findTask(children, taskA.ID); nodeA != nil && nodeA.Blocked {
+		t.Error("initial: Task A should not be blocked (no deps)")
+	}
+	if nodeB := findTask(children, taskB.ID); nodeB != nil && !nodeB.Blocked {
+		t.Error("initial: Task B should be blocked (A is unfinished)")
+	}
+
 	// --- Finish A ---
 	// B: A finished → B unblocked → visible
 	// C: B unblocked → not all deps blocked → C visible
@@ -778,6 +806,12 @@ func TestE2E_TaskDependencies_ActiveTreeVisibility(t *testing.T) {
 	}
 	if !hasTask(children, taskC.ID) {
 		t.Error("after finishing A: Task C should now be visible")
+	}
+	if nodeB := findTask(children, taskB.ID); nodeB != nil && nodeB.Blocked {
+		t.Error("after finishing A: Task B should not be blocked")
+	}
+	if nodeC := findTask(children, taskC.ID); nodeC != nil && !nodeC.Blocked {
+		t.Error("after finishing A: Task C should be blocked (B still unfinished)")
 	}
 
 	// --- Finish B ---

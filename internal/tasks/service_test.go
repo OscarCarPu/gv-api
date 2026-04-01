@@ -26,7 +26,7 @@ func TestService_CreateTask(t *testing.T) {
 			Return(nil)
 		repo.EXPECT().
 			GetTaskDependencies(mock.Anything, int32(10)).
-			Return([]tasks.TaskDepRef{{ID: 2, Name: "A"}, {ID: 3, Name: "B"}}, []tasks.TaskDepRef{}, nil)
+			Return([]tasks.TaskDepRef{{ID: 2, Name: "A"}, {ID: 3, Name: "B"}}, []tasks.TaskDepRef{}, true, nil)
 
 		svc := tasks.NewService(repo, nil)
 		got, err := svc.CreateTask(context.Background(), tasks.CreateTaskRequest{
@@ -37,7 +37,8 @@ func TestService_CreateTask(t *testing.T) {
 		assert.Equal(t, int32(10), got.ID)
 		require.Len(t, got.DependsOn, 2)
 		assert.Equal(t, int32(2), got.DependsOn[0].ID)
-		assert.Empty(t, got.TaskDepends)
+		assert.Empty(t, got.Blocks)
+		assert.True(t, got.Blocked)
 	})
 
 	t.Run("creates task without dependencies", func(t *testing.T) {
@@ -47,7 +48,7 @@ func TestService_CreateTask(t *testing.T) {
 			Return(tasks.TaskResponse{ID: 11, Name: "Simple Task"}, nil)
 		repo.EXPECT().
 			GetTaskDependencies(mock.Anything, int32(11)).
-			Return([]tasks.TaskDepRef{}, []tasks.TaskDepRef{}, nil)
+			Return([]tasks.TaskDepRef{}, []tasks.TaskDepRef{}, false, nil)
 
 		svc := tasks.NewService(repo, nil)
 		got, err := svc.CreateTask(context.Background(), tasks.CreateTaskRequest{
@@ -56,7 +57,8 @@ func TestService_CreateTask(t *testing.T) {
 		require.NoError(t, err)
 		assert.Equal(t, int32(11), got.ID)
 		assert.Empty(t, got.DependsOn)
-		assert.Empty(t, got.TaskDepends)
+		assert.Empty(t, got.Blocks)
+		assert.False(t, got.Blocked)
 	})
 
 	t.Run("propagates error from ReplaceTaskDependencies", func(t *testing.T) {
@@ -90,7 +92,7 @@ func TestService_UpdateTask(t *testing.T) {
 			Return(nil)
 		repo.EXPECT().
 			GetTaskDependencies(mock.Anything, int32(7)).
-			Return([]tasks.TaskDepRef{{ID: 5, Name: "A"}, {ID: 6, Name: "B"}}, []tasks.TaskDepRef{{ID: 1, Name: "C"}}, nil)
+			Return([]tasks.TaskDepRef{{ID: 5, Name: "A"}, {ID: 6, Name: "B"}}, []tasks.TaskDepRef{{ID: 1, Name: "C"}}, true, nil)
 
 		svc := tasks.NewService(repo, nil)
 		got, err := svc.UpdateTask(context.Background(), tasks.UpdateTaskRequest{
@@ -100,8 +102,9 @@ func TestService_UpdateTask(t *testing.T) {
 		require.NoError(t, err)
 		require.Len(t, got.DependsOn, 2)
 		assert.Equal(t, int32(5), got.DependsOn[0].ID)
-		require.Len(t, got.TaskDepends, 1)
-		assert.Equal(t, int32(1), got.TaskDepends[0].ID)
+		require.Len(t, got.Blocks, 1)
+		assert.Equal(t, int32(1), got.Blocks[0].ID)
+		assert.True(t, got.Blocked)
 	})
 
 	t.Run("clears dependencies with empty slice", func(t *testing.T) {
@@ -112,7 +115,7 @@ func TestService_UpdateTask(t *testing.T) {
 		repo.EXPECT().ReplaceTaskDependencies(mock.Anything, int32(7), empty).
 			Return(nil)
 		repo.EXPECT().GetTaskDependencies(mock.Anything, int32(7)).
-			Return([]tasks.TaskDepRef{}, []tasks.TaskDepRef{}, nil)
+			Return([]tasks.TaskDepRef{}, []tasks.TaskDepRef{}, false, nil)
 
 		svc := tasks.NewService(repo, nil)
 		got, err := svc.UpdateTask(context.Background(), tasks.UpdateTaskRequest{
@@ -121,6 +124,7 @@ func TestService_UpdateTask(t *testing.T) {
 		})
 		require.NoError(t, err)
 		assert.Empty(t, got.DependsOn)
+		assert.False(t, got.Blocked)
 	})
 
 	t.Run("omitted depends_on does not call ReplaceTaskDependencies", func(t *testing.T) {
@@ -129,7 +133,7 @@ func TestService_UpdateTask(t *testing.T) {
 		repo.EXPECT().UpdateTask(mock.Anything, mock.Anything).
 			Return(tasks.TaskResponse{ID: 7, Name: name}, nil)
 		repo.EXPECT().GetTaskDependencies(mock.Anything, int32(7)).
-			Return([]tasks.TaskDepRef{{ID: 2, Name: "A"}}, []tasks.TaskDepRef{}, nil)
+			Return([]tasks.TaskDepRef{{ID: 2, Name: "A"}}, []tasks.TaskDepRef{}, true, nil)
 		// ReplaceTaskDependencies should NOT be called
 
 		svc := tasks.NewService(repo, nil)
@@ -370,7 +374,7 @@ func TestService_GetActiveTree(t *testing.T) {
 		repo := mocks.NewMockRepository(t)
 		repo.EXPECT().GetActiveProjects(mock.Anything).Return([]tasks.ActiveProject{}, nil)
 		repo.EXPECT().GetUnfinishedTasks(mock.Anything).Return([]tasks.UnfinishedTask{
-			{ID: taskAID, Name: "Task A", TaskDepends: []tasks.TaskDepRef{{ID: taskBID, Name: "Task B"}}},
+			{ID: taskAID, Name: "Task A", Blocks: []tasks.TaskDepRef{{ID: taskBID, Name: "Task B"}}},
 			{ID: taskBID, Name: "Task B", DependsOn: []tasks.TaskDepRef{{ID: taskAID, Name: "Task A"}}},
 		}, nil)
 
@@ -392,12 +396,14 @@ func TestService_GetActiveTree(t *testing.T) {
 
 		require.NotNil(t, nodeA)
 		require.NotNil(t, nodeB)
-		require.Len(t, nodeA.TaskDepends, 1)
-		assert.Equal(t, taskBID, nodeA.TaskDepends[0].ID)
+		require.Len(t, nodeA.Blocks, 1)
+		assert.Equal(t, taskBID, nodeA.Blocks[0].ID)
 		assert.Empty(t, nodeA.DependsOn)
+		assert.False(t, nodeA.Blocked, "Task A has no deps, should not be blocked")
 		require.Len(t, nodeB.DependsOn, 1)
 		assert.Equal(t, taskAID, nodeB.DependsOn[0].ID)
-		assert.Empty(t, nodeB.TaskDepends)
+		assert.Empty(t, nodeB.Blocks)
+		assert.True(t, nodeB.Blocked, "Task B depends on unfinished A, should be blocked")
 	})
 
 	t.Run("task hidden when all dependencies are blocked", func(t *testing.T) {

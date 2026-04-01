@@ -179,11 +179,13 @@
       "started_at": null,
       "finished_at": null,
       "depends_on": [{"id": 2, "name": "Other Task", "due_at": "2025-05-15"}, {"id": 3, "name": "Another Task", "due_at": null}],
-      "task_depends": []
+      "blocks": [],
+      "blocked": true
     }
     ```
   - `depends_on`: Tasks this task depends on (this task is blocked by them). Each entry contains `id`, `name`, and `due_at` (used for effective due date computation).
-  - `task_depends`: Tasks that depend on this task (they are blocked by this task). Each entry contains `id`, `name`, and `due_at` (always null).
+  - `blocks`: Tasks that depend on this task (they are blocked by this task). Each entry contains `id`, `name`, and `due_at`.
+  - `blocked`: `true` if the task has at least one unfinished dependency, `false` otherwise.
 - **Error Responses:**
   - **Code:** `400 Bad Request`
     - **Content:** `Invalid Body` or `name is required`
@@ -227,7 +229,8 @@
       "started_at": "2025-02-15T08:00:00Z",
       "finished_at": "2025-03-01T17:00:00Z",
       "depends_on": [{"id": 3, "name": "Dep A", "due_at": null}, {"id": 4, "name": "Dep B", "due_at": "2025-07-01"}],
-      "task_depends": [{"id": 7, "name": "Blocked Task", "due_at": null}]
+      "blocks": [{"id": 7, "name": "Blocked Task", "due_at": null}],
+      "blocked": true
     }
     ```
 - **Error Responses:**
@@ -395,7 +398,8 @@
         "project_name": "My Project",
         "project_due_at": "2025-12-31",
         "depends_on": [{"id": 2, "name": "Blocking Task", "due_at": null}],
-        "task_depends": [{"id": 4, "name": "Dep A", "due_at": null}, {"id": 5, "name": "Dep B", "due_at": null}]
+        "blocks": [{"id": 4, "name": "Dep A", "due_at": null}, {"id": 5, "name": "Dep B", "due_at": null}],
+        "blocked": true
       }
     ]
     ```
@@ -429,7 +433,8 @@
             "type": "task",
             "name": "task_1",
             "depends_on": [{"id": 3, "name": "Blocking Task", "due_at": "2025-06-01"}],
-            "task_depends": []
+            "blocks": [],
+            "blocked": true
           }
         ]
       },
@@ -438,7 +443,8 @@
         "type": "task",
         "name": "orphan_task",
         "depends_on": [],
-        "task_depends": [{"id": 1, "name": "task_1", "due_at": null}]
+        "blocks": [{"id": 1, "name": "task_1", "due_at": null}],
+        "blocked": false
       }
     ]
     ```
@@ -488,6 +494,9 @@
           "started_at": "2025-02-15T08:00:00Z",
           "finished_at": null,
           "time_spent": 5400,
+          "depends_on": [{"id": 3, "name": "Setup DB", "due_at": null}],
+          "blocks": [],
+          "blocked": true,
           "todos": [
             {
               "id": 1,
@@ -526,7 +535,8 @@
         "finished_at": null,
         "time_spent": 5400,
         "depends_on": [{"id": 2, "name": "Setup DB"}],
-        "task_depends": [{"id": 4, "name": "Write tests", "due_at": null}]
+        "blocks": [{"id": 4, "name": "Write tests", "due_at": null}],
+        "blocked": true
       },
       "time_entries": [
         {

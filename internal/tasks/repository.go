@@ -45,7 +45,7 @@ type Repository interface {
 	GetTimeEntrySummary(ctx context.Context, todayStart, weekStart time.Time) (TimeEntrySummaryResponse, error)
 	GetTimeEntryHistory(ctx context.Context, frequency, timezone string, startAt, endAt time.Time) ([]history.Point, error)
 	ReplaceTaskDependencies(ctx context.Context, taskID int32, dependsOn []int32) error
-	GetTaskDependencies(ctx context.Context, taskID int32) ([]TaskDepRef, []TaskDepRef, error)
+	GetTaskDependencies(ctx context.Context, taskID int32) ([]TaskDepRef, []TaskDepRef, bool, error)
 }
 
 type PostgresRepository struct {
@@ -360,7 +360,7 @@ func (r *PostgresRepository) GetUnfinishedTasks(ctx context.Context) ([]Unfinish
 			Started:     row.StartedAt.Valid,
 			StartedAt:   pgTimestamptzToPtr(row.StartedAt),
 			DependsOn:   unmarshalDepRefs(row.DependsOn),
-			TaskDepends: unmarshalDepRefs(row.TaskDepends),
+			Blocks: unmarshalDepRefs(row.Blocks),
 		}
 	}
 	return tasks, nil
@@ -408,9 +408,10 @@ func (r *PostgresRepository) GetTask(ctx context.Context, id int32) (TaskFullRes
 		StartedAt:   pgTimestamptzToPtr(first.StartedAt),
 		FinishedAt:  pgTimestamptzToPtr(first.FinishedAt),
 		TimeSpent:   first.TimeSpent,
-		DependsOn:   unmarshalDepRefs(first.DependsOn),
-		TaskDepends: unmarshalDepRefs(first.TaskDepends),
-		Todos:       todos,
+		DependsOn: unmarshalDepRefs(first.DependsOn),
+		Blocks:    unmarshalDepRefs(first.Blocks),
+		Blocked:   first.Blocked,
+		Todos:     todos,
 	}, nil
 }
 
@@ -468,6 +469,7 @@ func (r *PostgresRepository) GetProjectChildren(ctx context.Context, projectID i
 			projectTaskTime[*tw.row.ProjectID] += tw.row.TimeSpent
 		}
 
+		blocked := tw.row.Blocked
 		node := ProjectChildNode{
 			ID:          tw.row.ID,
 			Type:        "task",
@@ -478,6 +480,9 @@ func (r *PostgresRepository) GetProjectChildren(ctx context.Context, projectID i
 			FinishedAt:  pgTimestamptzToPtr(tw.row.FinishedAt),
 			TimeSpent:   tw.row.TimeSpent,
 			ProjectID:   tw.row.ProjectID,
+			DependsOn:   unmarshalDepRefs(tw.row.DependsOn),
+			Blocks:      unmarshalDepRefs(tw.row.Blocks),
+			Blocked:     &blocked,
 			Todos:       tw.todos,
 		}
 		if tw.row.ProjectID != nil {
@@ -596,8 +601,9 @@ func (r *PostgresRepository) GetTaskTimeEntries(ctx context.Context, taskID int3
 			StartedAt:   pgTimestamptzToPtr(first.TaskStartedAt),
 			FinishedAt:  pgTimestamptzToPtr(first.TaskFinishedAt),
 			TimeSpent:   first.TimeSpent,
-			DependsOn:   unmarshalDepRefs(first.DependsOn),
-			TaskDepends: unmarshalDepRefs(first.TaskDepends),
+			DependsOn: unmarshalDepRefs(first.DependsOn),
+			Blocks:    unmarshalDepRefs(first.Blocks),
+			Blocked:   first.Blocked,
 		},
 		TimeEntries: entries,
 	}, nil
@@ -622,7 +628,7 @@ func (r *PostgresRepository) GetTasksByDueDate(ctx context.Context) ([]TaskByDue
 			ProjectName:  row.ProjectName,
 			ProjectDueAt: pgDateToPtr(row.ProjectDueAt),
 			DependsOn:    unmarshalDepRefs(row.DependsOn),
-			TaskDepends:  unmarshalDepRefs(row.TaskDepends),
+			Blocks:  unmarshalDepRefs(row.Blocks),
 		}
 	}
 	return tasks, nil
@@ -713,12 +719,12 @@ func (r *PostgresRepository) ReplaceTaskDependencies(ctx context.Context, taskID
 	})
 }
 
-func (r *PostgresRepository) GetTaskDependencies(ctx context.Context, taskID int32) ([]TaskDepRef, []TaskDepRef, error) {
+func (r *PostgresRepository) GetTaskDependencies(ctx context.Context, taskID int32) ([]TaskDepRef, []TaskDepRef, bool, error) {
 	row, err := r.q.GetTaskDependencies(ctx, taskID)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, false, err
 	}
-	return unmarshalDepRefs(row.DependsOn), unmarshalDepRefs(row.TaskDepends), nil
+	return unmarshalDepRefs(row.DependsOn), unmarshalDepRefs(row.Blocks), row.Blocked, nil
 }
 
 func (r *PostgresRepository) ListTasksFast(ctx context.Context) ([]TaskFastResponse, error) {

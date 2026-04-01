@@ -125,7 +125,7 @@ func TestHandler_CreateTask(t *testing.T) {
 		})).Return(tasks.TaskResponse{
 			ID: 1, Name: "My Task",
 			DependsOn:   []tasks.TaskDepRef{{ID: 2, Name: "Dep A"}, {ID: 3, Name: "Dep B"}},
-			TaskDepends: []tasks.TaskDepRef{},
+			Blocks: []tasks.TaskDepRef{},
 		}, nil)
 		handler := tasks.NewHandler(svc)
 
@@ -139,7 +139,7 @@ func TestHandler_CreateTask(t *testing.T) {
 		require.Len(t, got.DependsOn, 2)
 		assert.Equal(t, int32(2), got.DependsOn[0].ID)
 		assert.Equal(t, int32(3), got.DependsOn[1].ID)
-		assert.Empty(t, got.TaskDepends)
+		assert.Empty(t, got.Blocks)
 	})
 
 	t.Run("returns 500 when service fails", func(t *testing.T) {
@@ -393,7 +393,7 @@ func TestHandler_UpdateTask(t *testing.T) {
 		})).Return(tasks.TaskResponse{
 			ID: 7, Name: "test task",
 			DependsOn:   []tasks.TaskDepRef{{ID: 2, Name: "A"}, {ID: 3, Name: "B"}},
-			TaskDepends: []tasks.TaskDepRef{{ID: 5, Name: "C"}},
+			Blocks: []tasks.TaskDepRef{{ID: 5, Name: "C"}},
 		}, nil)
 		handler := tasks.NewHandler(svc)
 
@@ -407,8 +407,8 @@ func TestHandler_UpdateTask(t *testing.T) {
 		require.NoError(t, json.NewDecoder(rec.Body).Decode(&got))
 		require.Len(t, got.DependsOn, 2)
 		assert.Equal(t, int32(2), got.DependsOn[0].ID)
-		require.Len(t, got.TaskDepends, 1)
-		assert.Equal(t, int32(5), got.TaskDepends[0].ID)
+		require.Len(t, got.Blocks, 1)
+		assert.Equal(t, int32(5), got.Blocks[0].ID)
 		_ = deps
 	})
 
@@ -418,7 +418,7 @@ func TestHandler_UpdateTask(t *testing.T) {
 			return req.ID == 7 && req.DependsOn != nil && len(*req.DependsOn) == 0
 		})).Return(tasks.TaskResponse{
 			ID: 7, Name: "test task",
-			DependsOn: []tasks.TaskDepRef{}, TaskDepends: []tasks.TaskDepRef{},
+			DependsOn: []tasks.TaskDepRef{}, Blocks: []tasks.TaskDepRef{},
 		}, nil)
 		handler := tasks.NewHandler(svc)
 
@@ -439,7 +439,7 @@ func TestHandler_UpdateTask(t *testing.T) {
 			return req.ID == 7 && req.DependsOn == nil
 		})).Return(tasks.TaskResponse{
 			ID: 7, Name: "updated name",
-			DependsOn: []tasks.TaskDepRef{{ID: 2, Name: "A"}}, TaskDepends: []tasks.TaskDepRef{},
+			DependsOn: []tasks.TaskDepRef{{ID: 2, Name: "A"}}, Blocks: []tasks.TaskDepRef{},
 		}, nil)
 		handler := tasks.NewHandler(svc)
 
@@ -690,12 +690,12 @@ func TestHandler_GetActiveTree(t *testing.T) {
 		assert.Contains(t, rec.Body.String(), "Failed to get active tree")
 	})
 
-	t.Run("includes depends_on and task_depends in response", func(t *testing.T) {
+	t.Run("includes depends_on and blocks in response", func(t *testing.T) {
 		svc := mocks.NewMockServiceInterface(t)
 		svc.EXPECT().GetActiveTree(mock.Anything).Return([]tasks.ActiveTreeNode{
 			{ID: 1, Type: "task", Name: "Task A",
 				DependsOn:   []tasks.TaskDepRef{{ID: 3, Name: "X"}},
-				TaskDepends: []tasks.TaskDepRef{{ID: 5, Name: "Y"}}},
+				Blocks: []tasks.TaskDepRef{{ID: 5, Name: "Y"}}},
 		}, nil)
 		handler := tasks.NewHandler(svc)
 
@@ -709,8 +709,8 @@ func TestHandler_GetActiveTree(t *testing.T) {
 		require.Len(t, got, 1)
 		require.Len(t, got[0].DependsOn, 1)
 		assert.Equal(t, int32(3), got[0].DependsOn[0].ID)
-		require.Len(t, got[0].TaskDepends, 1)
-		assert.Equal(t, int32(5), got[0].TaskDepends[0].ID)
+		require.Len(t, got[0].Blocks, 1)
+		assert.Equal(t, int32(5), got[0].Blocks[0].ID)
 	})
 }
 
@@ -942,13 +942,13 @@ func TestHandler_GetTaskTimeEntries(t *testing.T) {
 		assert.Contains(t, rec.Body.String(), "Failed to get task time entries")
 	})
 
-	t.Run("includes depends_on and task_depends in task detail", func(t *testing.T) {
+	t.Run("includes depends_on and blocks in task detail", func(t *testing.T) {
 		svc := mocks.NewMockServiceInterface(t)
 		svc.EXPECT().GetTaskTimeEntries(mock.Anything, int32(7)).Return(tasks.TaskTimeEntriesResponse{
 			Task: tasks.TaskDetailResponse{
 				ID: 7, Name: "My Task", TimeSpent: 3600,
 				DependsOn:   []tasks.TaskDepRef{{ID: 2, Name: "A"}},
-				TaskDepends: []tasks.TaskDepRef{{ID: 4, Name: "B"}},
+				Blocks: []tasks.TaskDepRef{{ID: 4, Name: "B"}},
 			},
 			TimeEntries: []tasks.TimeEntryResponse{},
 		}, nil)
@@ -964,8 +964,8 @@ func TestHandler_GetTaskTimeEntries(t *testing.T) {
 		require.NoError(t, json.NewDecoder(rec.Body).Decode(&got))
 		require.Len(t, got.Task.DependsOn, 1)
 		assert.Equal(t, int32(2), got.Task.DependsOn[0].ID)
-		require.Len(t, got.Task.TaskDepends, 1)
-		assert.Equal(t, int32(4), got.Task.TaskDepends[0].ID)
+		require.Len(t, got.Task.Blocks, 1)
+		assert.Equal(t, int32(4), got.Task.Blocks[0].ID)
 	})
 }
 
@@ -1022,12 +1022,12 @@ func TestHandler_GetTasksByDueDate(t *testing.T) {
 		assert.Contains(t, rec.Body.String(), "Failed to get tasks by due date")
 	})
 
-	t.Run("includes depends_on and task_depends in response", func(t *testing.T) {
+	t.Run("includes depends_on and blocks in response", func(t *testing.T) {
 		svc := mocks.NewMockServiceInterface(t)
 		svc.EXPECT().GetTasksByDueDate(mock.Anything).Return([]tasks.TaskByDueDateResponse{
 			{ID: 1, Name: "Task A",
 				DependsOn:   []tasks.TaskDepRef{{ID: 2, Name: "X"}},
-				TaskDepends: []tasks.TaskDepRef{{ID: 3, Name: "Y"}, {ID: 4, Name: "Z"}}},
+				Blocks: []tasks.TaskDepRef{{ID: 3, Name: "Y"}, {ID: 4, Name: "Z"}}},
 		}, nil)
 		handler := tasks.NewHandler(svc)
 
@@ -1041,7 +1041,7 @@ func TestHandler_GetTasksByDueDate(t *testing.T) {
 		require.Len(t, got, 1)
 		require.Len(t, got[0].DependsOn, 1)
 		assert.Equal(t, int32(2), got[0].DependsOn[0].ID)
-		require.Len(t, got[0].TaskDepends, 2)
+		require.Len(t, got[0].Blocks, 2)
 	})
 }
 

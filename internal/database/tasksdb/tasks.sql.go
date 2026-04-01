@@ -373,7 +373,8 @@ WITH task_info AS (
     SELECT t.id, t.project_id, t.name, t.description, t.due_at, t.started_at, t.finished_at,
         COALESCE(SUM(EXTRACT(EPOCH FROM (te.finished_at - te.started_at)))::bigint, 0)::bigint AS time_spent,
         COALESCE((SELECT json_agg(json_build_object('id', t2.id, 'name', t2.name, 'due_at', t2.due_at) ORDER BY t2.name) FROM task_dependencies td JOIN tasks t2 ON t2.id = td.depends_on WHERE td.task_id = t.id), '[]')::json AS depends_on,
-        COALESCE((SELECT json_agg(json_build_object('id', t2.id, 'name', t2.name) ORDER BY t2.name) FROM task_dependencies td JOIN tasks t2 ON t2.id = td.task_id WHERE td.depends_on = t.id), '[]')::json AS task_depends
+        COALESCE((SELECT json_agg(json_build_object('id', t2.id, 'name', t2.name) ORDER BY t2.name) FROM task_dependencies td JOIN tasks t2 ON t2.id = td.task_id WHERE td.depends_on = t.id), '[]')::json AS blocks,
+        EXISTS(SELECT 1 FROM task_dependencies td3 JOIN tasks t3 ON t3.id = td3.depends_on WHERE td3.task_id = t.id AND t3.finished_at IS NULL) AS blocked
     FROM tasks t
     LEFT JOIN time_entries te ON te.task_id = t.id AND te.finished_at IS NOT NULL
     WHERE t.id = $1
@@ -381,7 +382,7 @@ WITH task_info AS (
 )
 SELECT
     ti.id, ti.project_id, ti.name, ti.description, ti.due_at, ti.started_at, ti.finished_at, ti.time_spent,
-    ti.depends_on, ti.task_depends,
+    ti.depends_on, ti.blocks, ti.blocked,
     td.id AS todo_id, td.name AS todo_name, td.is_done AS todo_is_done
 FROM task_info ti
 LEFT JOIN todos td ON td.task_id = ti.id
@@ -398,7 +399,8 @@ type GetTaskByIDRow struct {
 	FinishedAt  pgtype.Timestamptz `db:"finished_at" json:"finished_at"`
 	TimeSpent   int64              `db:"time_spent" json:"time_spent"`
 	DependsOn   []byte             `db:"depends_on" json:"depends_on"`
-	TaskDepends []byte             `db:"task_depends" json:"task_depends"`
+	Blocks      []byte             `db:"blocks" json:"blocks"`
+	Blocked     bool               `db:"blocked" json:"blocked"`
 	TodoID      *int32             `db:"todo_id" json:"todo_id"`
 	TodoName    *string            `db:"todo_name" json:"todo_name"`
 	TodoIsDone  *bool              `db:"todo_is_done" json:"todo_is_done"`
@@ -423,7 +425,8 @@ func (q *Queries) GetTaskByID(ctx context.Context, id int32) ([]GetTaskByIDRow, 
 			&i.FinishedAt,
 			&i.TimeSpent,
 			&i.DependsOn,
-			&i.TaskDepends,
+			&i.Blocks,
+			&i.Blocked,
 			&i.TodoID,
 			&i.TodoName,
 			&i.TodoIsDone,
@@ -441,18 +444,20 @@ func (q *Queries) GetTaskByID(ctx context.Context, id int32) ([]GetTaskByIDRow, 
 const getTaskDependencies = `-- name: GetTaskDependencies :one
 SELECT
     COALESCE((SELECT json_agg(json_build_object('id', t2.id, 'name', t2.name, 'due_at', t2.due_at) ORDER BY t2.name) FROM task_dependencies td JOIN tasks t2 ON t2.id = td.depends_on WHERE td.task_id = $1), '[]')::json AS depends_on,
-    COALESCE((SELECT json_agg(json_build_object('id', t2.id, 'name', t2.name) ORDER BY t2.name) FROM task_dependencies td JOIN tasks t2 ON t2.id = td.task_id WHERE td.depends_on = $1), '[]')::json AS task_depends
+    COALESCE((SELECT json_agg(json_build_object('id', t2.id, 'name', t2.name) ORDER BY t2.name) FROM task_dependencies td JOIN tasks t2 ON t2.id = td.task_id WHERE td.depends_on = $1), '[]')::json AS blocks,
+    EXISTS(SELECT 1 FROM task_dependencies td3 JOIN tasks t3 ON t3.id = td3.depends_on WHERE td3.task_id = $1 AND t3.finished_at IS NULL) AS blocked
 `
 
 type GetTaskDependenciesRow struct {
-	DependsOn   []byte `db:"depends_on" json:"depends_on"`
-	TaskDepends []byte `db:"task_depends" json:"task_depends"`
+	DependsOn []byte `db:"depends_on" json:"depends_on"`
+	Blocks    []byte `db:"blocks" json:"blocks"`
+	Blocked   bool   `db:"blocked" json:"blocked"`
 }
 
 func (q *Queries) GetTaskDependencies(ctx context.Context, taskID int32) (GetTaskDependenciesRow, error) {
 	row := q.db.QueryRow(ctx, getTaskDependencies, taskID)
 	var i GetTaskDependenciesRow
-	err := row.Scan(&i.DependsOn, &i.TaskDepends)
+	err := row.Scan(&i.DependsOn, &i.Blocks, &i.Blocked)
 	return i, err
 }
 
@@ -462,7 +467,7 @@ SELECT
     p.id AS project_id, p.name AS project_name, p.due_at AS project_due_at,
     COALESCE(SUM(EXTRACT(EPOCH FROM (te.finished_at - te.started_at)))::bigint, 0)::bigint AS time_spent,
     COALESCE((SELECT json_agg(json_build_object('id', t2.id, 'name', t2.name, 'due_at', t2.due_at) ORDER BY t2.name) FROM task_dependencies td JOIN tasks t2 ON t2.id = td.depends_on WHERE td.task_id = t.id), '[]')::json AS depends_on,
-    COALESCE((SELECT json_agg(json_build_object('id', t2.id, 'name', t2.name) ORDER BY t2.name) FROM task_dependencies td JOIN tasks t2 ON t2.id = td.task_id WHERE td.depends_on = t.id), '[]')::json AS task_depends
+    COALESCE((SELECT json_agg(json_build_object('id', t2.id, 'name', t2.name) ORDER BY t2.name) FROM task_dependencies td JOIN tasks t2 ON t2.id = td.task_id WHERE td.depends_on = t.id), '[]')::json AS blocks
 FROM tasks t
 LEFT JOIN projects p ON p.id = t.project_id
 LEFT JOIN time_entries te ON te.task_id = t.id AND te.finished_at IS NOT NULL
@@ -482,7 +487,7 @@ type GetTasksByDueDateRow struct {
 	ProjectDueAt pgtype.Date        `db:"project_due_at" json:"project_due_at"`
 	TimeSpent    int64              `db:"time_spent" json:"time_spent"`
 	DependsOn    []byte             `db:"depends_on" json:"depends_on"`
-	TaskDepends  []byte             `db:"task_depends" json:"task_depends"`
+	Blocks       []byte             `db:"blocks" json:"blocks"`
 }
 
 func (q *Queries) GetTasksByDueDate(ctx context.Context) ([]GetTasksByDueDateRow, error) {
@@ -505,7 +510,7 @@ func (q *Queries) GetTasksByDueDate(ctx context.Context) ([]GetTasksByDueDateRow
 			&i.ProjectDueAt,
 			&i.TimeSpent,
 			&i.DependsOn,
-			&i.TaskDepends,
+			&i.Blocks,
 		); err != nil {
 			return nil, err
 		}
@@ -521,7 +526,10 @@ const getTasksByProjectIDs = `-- name: GetTasksByProjectIDs :many
 WITH task_times AS (
     SELECT
         t.id, t.project_id, t.name, t.description, t.due_at, t.started_at, t.finished_at,
-        COALESCE(SUM(EXTRACT(EPOCH FROM (te.finished_at - te.started_at)))::bigint, 0)::bigint AS time_spent
+        COALESCE(SUM(EXTRACT(EPOCH FROM (te.finished_at - te.started_at)))::bigint, 0)::bigint AS time_spent,
+        COALESCE((SELECT json_agg(json_build_object('id', t2.id, 'name', t2.name, 'due_at', t2.due_at) ORDER BY t2.name) FROM task_dependencies td2 JOIN tasks t2 ON t2.id = td2.depends_on WHERE td2.task_id = t.id), '[]')::json AS depends_on,
+        COALESCE((SELECT json_agg(json_build_object('id', t2.id, 'name', t2.name) ORDER BY t2.name) FROM task_dependencies td2 JOIN tasks t2 ON t2.id = td2.task_id WHERE td2.depends_on = t.id), '[]')::json AS blocks,
+        EXISTS(SELECT 1 FROM task_dependencies td3 JOIN tasks t3 ON t3.id = td3.depends_on WHERE td3.task_id = t.id AND t3.finished_at IS NULL) AS blocked
     FROM tasks t
     LEFT JOIN time_entries te ON te.task_id = t.id AND te.finished_at IS NOT NULL
     WHERE t.project_id = ANY($1::int[])
@@ -529,7 +537,7 @@ WITH task_times AS (
 )
 SELECT
     tt.id, tt.project_id, tt.name, tt.description, tt.due_at, tt.started_at, tt.finished_at,
-    tt.time_spent,
+    tt.time_spent, tt.depends_on, tt.blocks, tt.blocked,
     td.id AS todo_id, td.name AS todo_name, td.is_done AS todo_is_done
 FROM task_times tt
 LEFT JOIN todos td ON td.task_id = tt.id
@@ -545,6 +553,9 @@ type GetTasksByProjectIDsRow struct {
 	StartedAt   pgtype.Timestamptz `db:"started_at" json:"started_at"`
 	FinishedAt  pgtype.Timestamptz `db:"finished_at" json:"finished_at"`
 	TimeSpent   int64              `db:"time_spent" json:"time_spent"`
+	DependsOn   []byte             `db:"depends_on" json:"depends_on"`
+	Blocks      []byte             `db:"blocks" json:"blocks"`
+	Blocked     bool               `db:"blocked" json:"blocked"`
 	TodoID      *int32             `db:"todo_id" json:"todo_id"`
 	TodoName    *string            `db:"todo_name" json:"todo_name"`
 	TodoIsDone  *bool              `db:"todo_is_done" json:"todo_is_done"`
@@ -568,6 +579,9 @@ func (q *Queries) GetTasksByProjectIDs(ctx context.Context, projectIds []int32) 
 			&i.StartedAt,
 			&i.FinishedAt,
 			&i.TimeSpent,
+			&i.DependsOn,
+			&i.Blocks,
+			&i.Blocked,
 			&i.TodoID,
 			&i.TodoName,
 			&i.TodoIsDone,
@@ -587,7 +601,8 @@ WITH task_info AS (
     SELECT t.id, t.project_id, t.name, t.description, t.due_at, t.started_at, t.finished_at,
         COALESCE(SUM(EXTRACT(EPOCH FROM (te.finished_at - te.started_at)))::bigint, 0)::bigint AS time_spent,
         COALESCE((SELECT json_agg(json_build_object('id', t2.id, 'name', t2.name, 'due_at', t2.due_at) ORDER BY t2.name) FROM task_dependencies td JOIN tasks t2 ON t2.id = td.depends_on WHERE td.task_id = t.id), '[]')::json AS depends_on,
-        COALESCE((SELECT json_agg(json_build_object('id', t2.id, 'name', t2.name) ORDER BY t2.name) FROM task_dependencies td JOIN tasks t2 ON t2.id = td.task_id WHERE td.depends_on = t.id), '[]')::json AS task_depends
+        COALESCE((SELECT json_agg(json_build_object('id', t2.id, 'name', t2.name) ORDER BY t2.name) FROM task_dependencies td JOIN tasks t2 ON t2.id = td.task_id WHERE td.depends_on = t.id), '[]')::json AS blocks,
+        EXISTS(SELECT 1 FROM task_dependencies td3 JOIN tasks t3 ON t3.id = td3.depends_on WHERE td3.task_id = t.id AND t3.finished_at IS NULL) AS blocked
     FROM tasks t
     LEFT JOIN time_entries te ON te.task_id = t.id AND te.finished_at IS NOT NULL
     WHERE t.id = $1
@@ -596,7 +611,7 @@ WITH task_info AS (
 SELECT
     ti.id AS task_id, ti.project_id, ti.name, ti.description, ti.due_at,
     ti.started_at AS task_started_at, ti.finished_at AS task_finished_at, ti.time_spent,
-    ti.depends_on, ti.task_depends,
+    ti.depends_on, ti.blocks, ti.blocked,
     te.id AS time_entry_id, te.started_at AS entry_started_at, te.finished_at AS entry_finished_at, te.comment
 FROM task_info ti
 LEFT JOIN time_entries te ON te.task_id = ti.id
@@ -613,7 +628,8 @@ type GetTimeEntriesByTaskIDRow struct {
 	TaskFinishedAt  pgtype.Timestamptz `db:"task_finished_at" json:"task_finished_at"`
 	TimeSpent       int64              `db:"time_spent" json:"time_spent"`
 	DependsOn       []byte             `db:"depends_on" json:"depends_on"`
-	TaskDepends     []byte             `db:"task_depends" json:"task_depends"`
+	Blocks          []byte             `db:"blocks" json:"blocks"`
+	Blocked         bool               `db:"blocked" json:"blocked"`
 	TimeEntryID     *int32             `db:"time_entry_id" json:"time_entry_id"`
 	EntryStartedAt  pgtype.Timestamptz `db:"entry_started_at" json:"entry_started_at"`
 	EntryFinishedAt pgtype.Timestamptz `db:"entry_finished_at" json:"entry_finished_at"`
@@ -639,7 +655,8 @@ func (q *Queries) GetTimeEntriesByTaskID(ctx context.Context, id int32) ([]GetTi
 			&i.TaskFinishedAt,
 			&i.TimeSpent,
 			&i.DependsOn,
-			&i.TaskDepends,
+			&i.Blocks,
+			&i.Blocked,
 			&i.TimeEntryID,
 			&i.EntryStartedAt,
 			&i.EntryFinishedAt,
@@ -749,7 +766,7 @@ func (q *Queries) GetTimeEntrySummary(ctx context.Context, arg GetTimeEntrySumma
 const getUnfinishedTasks = `-- name: GetUnfinishedTasks :many
 SELECT t.id, t.project_id, t.name, t.description, t.due_at, t.started_at,
     COALESCE((SELECT json_agg(json_build_object('id', t2.id, 'name', t2.name, 'due_at', t2.due_at) ORDER BY t2.name) FROM task_dependencies td JOIN tasks t2 ON t2.id = td.depends_on WHERE td.task_id = t.id), '[]')::json AS depends_on,
-    COALESCE((SELECT json_agg(json_build_object('id', t2.id, 'name', t2.name) ORDER BY t2.name) FROM task_dependencies td JOIN tasks t2 ON t2.id = td.task_id WHERE td.depends_on = t.id), '[]')::json AS task_depends
+    COALESCE((SELECT json_agg(json_build_object('id', t2.id, 'name', t2.name) ORDER BY t2.name) FROM task_dependencies td JOIN tasks t2 ON t2.id = td.task_id WHERE td.depends_on = t.id), '[]')::json AS blocks
 FROM tasks t
 WHERE t.finished_at IS NULL
 ORDER BY t.name
@@ -763,7 +780,7 @@ type GetUnfinishedTasksRow struct {
 	DueAt       pgtype.Date        `db:"due_at" json:"due_at"`
 	StartedAt   pgtype.Timestamptz `db:"started_at" json:"started_at"`
 	DependsOn   []byte             `db:"depends_on" json:"depends_on"`
-	TaskDepends []byte             `db:"task_depends" json:"task_depends"`
+	Blocks      []byte             `db:"blocks" json:"blocks"`
 }
 
 func (q *Queries) GetUnfinishedTasks(ctx context.Context) ([]GetUnfinishedTasksRow, error) {
@@ -783,7 +800,7 @@ func (q *Queries) GetUnfinishedTasks(ctx context.Context) ([]GetUnfinishedTasksR
 			&i.DueAt,
 			&i.StartedAt,
 			&i.DependsOn,
-			&i.TaskDepends,
+			&i.Blocks,
 		); err != nil {
 			return nil, err
 		}

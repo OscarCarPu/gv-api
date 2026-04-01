@@ -36,12 +36,13 @@ func (s *Service) CreateTask(ctx context.Context, req CreateTaskRequest) (TaskRe
 		}
 	}
 
-	dependsOn, taskDepends, err := s.repo.GetTaskDependencies(ctx, resp.ID)
+	dependsOn, blocks, blocked, err := s.repo.GetTaskDependencies(ctx, resp.ID)
 	if err != nil {
 		return resp, err
 	}
 	resp.DependsOn = dependsOn
-	resp.TaskDepends = taskDepends
+	resp.Blocks = blocks
+	resp.Blocked = blocked
 
 	return resp, nil
 }
@@ -84,12 +85,13 @@ func (s *Service) UpdateTask(ctx context.Context, req UpdateTaskRequest) (TaskRe
 		}
 	}
 
-	dependsOn, taskDepends, err := s.repo.GetTaskDependencies(ctx, resp.ID)
+	dependsOn, blocks, blocked, err := s.repo.GetTaskDependencies(ctx, resp.ID)
 	if err != nil {
 		return resp, err
 	}
 	resp.DependsOn = dependsOn
-	resp.TaskDepends = taskDepends
+	resp.Blocks = blocks
+	resp.Blocked = blocked
 
 	return resp, nil
 }
@@ -159,7 +161,8 @@ func (s *Service) GetActiveTree(ctx context.Context) ([]ActiveTreeNode, error) {
 			DueAt:       effectiveDueDate(t.ID, tasksByID, memo, make(map[int32]bool)),
 			StartedAt:   t.StartedAt,
 			DependsOn:   t.DependsOn,
-			TaskDepends: t.TaskDepends,
+			Blocks:      t.Blocks,
+			Blocked:     isBlocked(t, unfinishedIDs),
 		}
 
 		if t.ProjectID != nil {
@@ -385,6 +388,7 @@ func (s *Service) GetTasksByDueDate(ctx context.Context) ([]TaskByDueDateRespons
 			r.DueAt = eDue
 		}
 
+		r.Blocked = isBlockedDue(r.DependsOn)
 		result = append(result, r)
 	}
 

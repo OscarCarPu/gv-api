@@ -87,8 +87,9 @@ type TaskResponse struct {
 	DueAt       *time.Time   `json:"due_at"`
 	StartedAt   *time.Time   `json:"started_at"`
 	FinishedAt  *time.Time   `json:"finished_at"`
-	DependsOn   []TaskDepRef `json:"depends_on"`
-	TaskDepends []TaskDepRef `json:"task_depends"`
+	DependsOn []TaskDepRef `json:"depends_on"`
+	Blocks    []TaskDepRef `json:"blocks"`
+	Blocked   bool         `json:"blocked"`
 }
 
 type CreateTodoRequest struct {
@@ -168,8 +169,9 @@ type TaskDetailResponse struct {
 	StartedAt   *time.Time   `json:"started_at"`
 	FinishedAt  *time.Time   `json:"finished_at"`
 	TimeSpent   int64        `json:"time_spent"`
-	DependsOn   []TaskDepRef `json:"depends_on"`
-	TaskDepends []TaskDepRef `json:"task_depends"`
+	DependsOn []TaskDepRef `json:"depends_on"`
+	Blocks    []TaskDepRef `json:"blocks"`
+	Blocked   bool         `json:"blocked"`
 }
 
 type TaskFullResponse struct {
@@ -181,9 +183,10 @@ type TaskFullResponse struct {
 	StartedAt   *time.Time     `json:"started_at"`
 	FinishedAt  *time.Time     `json:"finished_at"`
 	TimeSpent   int64          `json:"time_spent"`
-	DependsOn   []TaskDepRef   `json:"depends_on"`
-	TaskDepends []TaskDepRef   `json:"task_depends"`
-	Todos       []TodoResponse `json:"todos"`
+	DependsOn []TaskDepRef   `json:"depends_on"`
+	Blocks    []TaskDepRef   `json:"blocks"`
+	Blocked   bool           `json:"blocked"`
+	Todos     []TodoResponse `json:"todos"`
 }
 
 type TaskByDueDateResponse struct {
@@ -196,8 +199,9 @@ type TaskByDueDateResponse struct {
 	ProjectID    *int32       `json:"project_id"`
 	ProjectName  *string      `json:"project_name"`
 	ProjectDueAt *time.Time   `json:"project_due_at"`
-	DependsOn    []TaskDepRef `json:"depends_on"`
-	TaskDepends  []TaskDepRef `json:"task_depends"`
+	DependsOn []TaskDepRef `json:"depends_on"`
+	Blocks    []TaskDepRef `json:"blocks"`
+	Blocked   bool         `json:"blocked"`
 }
 
 type TimeEntrySummaryResponse struct {
@@ -221,7 +225,7 @@ type UnfinishedTask struct {
 	Started     bool
 	StartedAt   *time.Time
 	DependsOn   []TaskDepRef
-	TaskDepends []TaskDepRef
+	Blocks      []TaskDepRef
 }
 
 type ActiveTreeNode struct {
@@ -231,9 +235,10 @@ type ActiveTreeNode struct {
 	Description *string          `json:"description,omitempty"`
 	DueAt       *time.Time       `json:"due_at,omitempty"`
 	StartedAt   *time.Time       `json:"started_at,omitempty"`
-	DependsOn   []TaskDepRef     `json:"depends_on"`
-	TaskDepends []TaskDepRef     `json:"task_depends"`
-	Children    []ActiveTreeNode `json:"children,omitempty"`
+	DependsOn []TaskDepRef     `json:"depends_on"`
+	Blocks    []TaskDepRef     `json:"blocks"`
+	Blocked   bool             `json:"blocked"`
+	Children  []ActiveTreeNode `json:"children,omitempty"`
 }
 
 type ProjectChildrenResponse struct {
@@ -267,5 +272,8 @@ type ProjectChildNode struct {
 
 	// Task-only
 	ProjectID *int32         `json:"project_id,omitempty"`
+	DependsOn []TaskDepRef   `json:"depends_on,omitempty"`
+	Blocks    []TaskDepRef   `json:"blocks,omitempty"`
+	Blocked   *bool          `json:"blocked,omitempty"`
 	Todos     []TodoResponse `json:"todos,omitempty"`
 }

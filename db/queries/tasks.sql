@@ -70,7 +70,7 @@ ORDER BY name;
 -- name: GetUnfinishedTasks :many
 SELECT t.id, t.project_id, t.name, t.description, t.due_at, t.started_at,
     COALESCE((SELECT json_agg(json_build_object('id', t2.id, 'name', t2.name, 'due_at', t2.due_at) ORDER BY t2.name) FROM task_dependencies td JOIN tasks t2 ON t2.id = td.depends_on WHERE td.task_id = t.id), '[]')::json AS depends_on,
-    COALESCE((SELECT json_agg(json_build_object('id', t2.id, 'name', t2.name) ORDER BY t2.name) FROM task_dependencies td JOIN tasks t2 ON t2.id = td.task_id WHERE td.depends_on = t.id), '[]')::json AS task_depends
+    COALESCE((SELECT json_agg(json_build_object('id', t2.id, 'name', t2.name) ORDER BY t2.name) FROM task_dependencies td JOIN tasks t2 ON t2.id = td.task_id WHERE td.depends_on = t.id), '[]')::json AS blocks
 FROM tasks t
 WHERE t.finished_at IS NULL
 ORDER BY t.name;
@@ -92,7 +92,10 @@ ORDER BY depth, name;
 WITH task_times AS (
     SELECT
         t.id, t.project_id, t.name, t.description, t.due_at, t.started_at, t.finished_at,
-        COALESCE(SUM(EXTRACT(EPOCH FROM (te.finished_at - te.started_at)))::bigint, 0)::bigint AS time_spent
+        COALESCE(SUM(EXTRACT(EPOCH FROM (te.finished_at - te.started_at)))::bigint, 0)::bigint AS time_spent,
+        COALESCE((SELECT json_agg(json_build_object('id', t2.id, 'name', t2.name, 'due_at', t2.due_at) ORDER BY t2.name) FROM task_dependencies td2 JOIN tasks t2 ON t2.id = td2.depends_on WHERE td2.task_id = t.id), '[]')::json AS depends_on,
+        COALESCE((SELECT json_agg(json_build_object('id', t2.id, 'name', t2.name) ORDER BY t2.name) FROM task_dependencies td2 JOIN tasks t2 ON t2.id = td2.task_id WHERE td2.depends_on = t.id), '[]')::json AS blocks,
+        EXISTS(SELECT 1 FROM task_dependencies td3 JOIN tasks t3 ON t3.id = td3.depends_on WHERE td3.task_id = t.id AND t3.finished_at IS NULL) AS blocked
     FROM tasks t
     LEFT JOIN time_entries te ON te.task_id = t.id AND te.finished_at IS NOT NULL
     WHERE t.project_id = ANY(@project_ids::int[])
@@ -100,7 +103,7 @@ WITH task_times AS (
 )
 SELECT
     tt.id, tt.project_id, tt.name, tt.description, tt.due_at, tt.started_at, tt.finished_at,
-    tt.time_spent,
+    tt.time_spent, tt.depends_on, tt.blocks, tt.blocked,
     td.id AS todo_id, td.name AS todo_name, td.is_done AS todo_is_done
 FROM task_times tt
 LEFT JOIN todos td ON td.task_id = tt.id
@@ -120,7 +123,7 @@ SELECT
     p.id AS project_id, p.name AS project_name, p.due_at AS project_due_at,
     COALESCE(SUM(EXTRACT(EPOCH FROM (te.finished_at - te.started_at)))::bigint, 0)::bigint AS time_spent,
     COALESCE((SELECT json_agg(json_build_object('id', t2.id, 'name', t2.name, 'due_at', t2.due_at) ORDER BY t2.name) FROM task_dependencies td JOIN tasks t2 ON t2.id = td.depends_on WHERE td.task_id = t.id), '[]')::json AS depends_on,
-    COALESCE((SELECT json_agg(json_build_object('id', t2.id, 'name', t2.name) ORDER BY t2.name) FROM task_dependencies td JOIN tasks t2 ON t2.id = td.task_id WHERE td.depends_on = t.id), '[]')::json AS task_depends
+    COALESCE((SELECT json_agg(json_build_object('id', t2.id, 'name', t2.name) ORDER BY t2.name) FROM task_dependencies td JOIN tasks t2 ON t2.id = td.task_id WHERE td.depends_on = t.id), '[]')::json AS blocks
 FROM tasks t
 LEFT JOIN projects p ON p.id = t.project_id
 LEFT JOIN time_entries te ON te.task_id = t.id AND te.finished_at IS NOT NULL
@@ -133,7 +136,8 @@ WITH task_info AS (
     SELECT t.id, t.project_id, t.name, t.description, t.due_at, t.started_at, t.finished_at,
         COALESCE(SUM(EXTRACT(EPOCH FROM (te.finished_at - te.started_at)))::bigint, 0)::bigint AS time_spent,
         COALESCE((SELECT json_agg(json_build_object('id', t2.id, 'name', t2.name, 'due_at', t2.due_at) ORDER BY t2.name) FROM task_dependencies td JOIN tasks t2 ON t2.id = td.depends_on WHERE td.task_id = t.id), '[]')::json AS depends_on,
-        COALESCE((SELECT json_agg(json_build_object('id', t2.id, 'name', t2.name) ORDER BY t2.name) FROM task_dependencies td JOIN tasks t2 ON t2.id = td.task_id WHERE td.depends_on = t.id), '[]')::json AS task_depends
+        COALESCE((SELECT json_agg(json_build_object('id', t2.id, 'name', t2.name) ORDER BY t2.name) FROM task_dependencies td JOIN tasks t2 ON t2.id = td.task_id WHERE td.depends_on = t.id), '[]')::json AS blocks,
+        EXISTS(SELECT 1 FROM task_dependencies td3 JOIN tasks t3 ON t3.id = td3.depends_on WHERE td3.task_id = t.id AND t3.finished_at IS NULL) AS blocked
     FROM tasks t
     LEFT JOIN time_entries te ON te.task_id = t.id AND te.finished_at IS NOT NULL
     WHERE t.id = $1
@@ -141,7 +145,7 @@ WITH task_info AS (
 )
 SELECT
     ti.id, ti.project_id, ti.name, ti.description, ti.due_at, ti.started_at, ti.finished_at, ti.time_spent,
-    ti.depends_on, ti.task_depends,
+    ti.depends_on, ti.blocks, ti.blocked,
     td.id AS todo_id, td.name AS todo_name, td.is_done AS todo_is_done
 FROM task_info ti
 LEFT JOIN todos td ON td.task_id = ti.id
@@ -224,7 +228,8 @@ WITH task_info AS (
     SELECT t.id, t.project_id, t.name, t.description, t.due_at, t.started_at, t.finished_at,
         COALESCE(SUM(EXTRACT(EPOCH FROM (te.finished_at - te.started_at)))::bigint, 0)::bigint AS time_spent,
         COALESCE((SELECT json_agg(json_build_object('id', t2.id, 'name', t2.name, 'due_at', t2.due_at) ORDER BY t2.name) FROM task_dependencies td JOIN tasks t2 ON t2.id = td.depends_on WHERE td.task_id = t.id), '[]')::json AS depends_on,
-        COALESCE((SELECT json_agg(json_build_object('id', t2.id, 'name', t2.name) ORDER BY t2.name) FROM task_dependencies td JOIN tasks t2 ON t2.id = td.task_id WHERE td.depends_on = t.id), '[]')::json AS task_depends
+        COALESCE((SELECT json_agg(json_build_object('id', t2.id, 'name', t2.name) ORDER BY t2.name) FROM task_dependencies td JOIN tasks t2 ON t2.id = td.task_id WHERE td.depends_on = t.id), '[]')::json AS blocks,
+        EXISTS(SELECT 1 FROM task_dependencies td3 JOIN tasks t3 ON t3.id = td3.depends_on WHERE td3.task_id = t.id AND t3.finished_at IS NULL) AS blocked
     FROM tasks t
     LEFT JOIN time_entries te ON te.task_id = t.id AND te.finished_at IS NOT NULL
     WHERE t.id = $1
@@ -233,7 +238,7 @@ WITH task_info AS (
 SELECT
     ti.id AS task_id, ti.project_id, ti.name, ti.description, ti.due_at,
     ti.started_at AS task_started_at, ti.finished_at AS task_finished_at, ti.time_spent,
-    ti.depends_on, ti.task_depends,
+    ti.depends_on, ti.blocks, ti.blocked,
     te.id AS time_entry_id, te.started_at AS entry_started_at, te.finished_at AS entry_finished_at, te.comment
 FROM task_info ti
 LEFT JOIN time_entries te ON te.task_id = ti.id
@@ -250,4 +255,5 @@ WHERE array_length(@depends_on::int[], 1) IS NOT NULL;
 -- name: GetTaskDependencies :one
 SELECT
     COALESCE((SELECT json_agg(json_build_object('id', t2.id, 'name', t2.name, 'due_at', t2.due_at) ORDER BY t2.name) FROM task_dependencies td JOIN tasks t2 ON t2.id = td.depends_on WHERE td.task_id = $1), '[]')::json AS depends_on,
-    COALESCE((SELECT json_agg(json_build_object('id', t2.id, 'name', t2.name) ORDER BY t2.name) FROM task_dependencies td JOIN tasks t2 ON t2.id = td.task_id WHERE td.depends_on = $1), '[]')::json AS task_depends;
+    COALESCE((SELECT json_agg(json_build_object('id', t2.id, 'name', t2.name) ORDER BY t2.name) FROM task_dependencies td JOIN tasks t2 ON t2.id = td.task_id WHERE td.depends_on = $1), '[]')::json AS blocks,
+    EXISTS(SELECT 1 FROM task_dependencies td3 JOIN tasks t3 ON t3.id = td3.depends_on WHERE td3.task_id = $1 AND t3.finished_at IS NULL) AS blocked;

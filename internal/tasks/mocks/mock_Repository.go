@@ -890,7 +890,7 @@ func (_c *MockRepository_GetTask_Call) RunAndReturn(run func(context.Context, in
 }
 
 // GetTaskDependencies provides a mock function with given fields: ctx, taskID
-func (_m *MockRepository) GetTaskDependencies(ctx context.Context, taskID int32) ([]tasks.TaskDepRef, []tasks.TaskDepRef, error) {
+func (_m *MockRepository) GetTaskDependencies(ctx context.Context, taskID int32) ([]tasks.TaskDepRef, []tasks.TaskDepRef, bool, error) {
 	ret := _m.Called(ctx, taskID)
 
 	if len(ret) == 0 {
@@ -899,8 +899,9 @@ func (_m *MockRepository) GetTaskDependencies(ctx context.Context, taskID int32)
 
 	var r0 []tasks.TaskDepRef
 	var r1 []tasks.TaskDepRef
-	var r2 error
-	if rf, ok := ret.Get(0).(func(context.Context, int32) ([]tasks.TaskDepRef, []tasks.TaskDepRef, error)); ok {
+	var r2 bool
+	var r3 error
+	if rf, ok := ret.Get(0).(func(context.Context, int32) ([]tasks.TaskDepRef, []tasks.TaskDepRef, bool, error)); ok {
 		return rf(ctx, taskID)
 	}
 	if rf, ok := ret.Get(0).(func(context.Context, int32) []tasks.TaskDepRef); ok {
@@ -919,13 +920,19 @@ func (_m *MockRepository) GetTaskDependencies(ctx context.Context, taskID int32)
 		}
 	}
 
-	if rf, ok := ret.Get(2).(func(context.Context, int32) error); ok {
+	if rf, ok := ret.Get(2).(func(context.Context, int32) bool); ok {
 		r2 = rf(ctx, taskID)
 	} else {
-		r2 = ret.Error(2)
+		r2 = ret.Get(2).(bool)
 	}
 
-	return r0, r1, r2
+	if rf, ok := ret.Get(3).(func(context.Context, int32) error); ok {
+		r3 = rf(ctx, taskID)
+	} else {
+		r3 = ret.Error(3)
+	}
+
+	return r0, r1, r2, r3
 }
 
 // MockRepository_GetTaskDependencies_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'GetTaskDependencies'
@@ -947,12 +954,12 @@ func (_c *MockRepository_GetTaskDependencies_Call) Run(run func(ctx context.Cont
 	return _c
 }
 
-func (_c *MockRepository_GetTaskDependencies_Call) Return(_a0 []tasks.TaskDepRef, _a1 []tasks.TaskDepRef, _a2 error) *MockRepository_GetTaskDependencies_Call {
-	_c.Call.Return(_a0, _a1, _a2)
+func (_c *MockRepository_GetTaskDependencies_Call) Return(_a0 []tasks.TaskDepRef, _a1 []tasks.TaskDepRef, _a2 bool, _a3 error) *MockRepository_GetTaskDependencies_Call {
+	_c.Call.Return(_a0, _a1, _a2, _a3)
 	return _c
 }
 
-func (_c *MockRepository_GetTaskDependencies_Call) RunAndReturn(run func(context.Context, int32) ([]tasks.TaskDepRef, []tasks.TaskDepRef, error)) *MockRepository_GetTaskDependencies_Call {
+func (_c *MockRepository_GetTaskDependencies_Call) RunAndReturn(run func(context.Context, int32) ([]tasks.TaskDepRef, []tasks.TaskDepRef, bool, error)) *MockRepository_GetTaskDependencies_Call {
 	_c.Call.Return(run)
 	return _c
 }
