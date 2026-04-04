@@ -229,6 +229,19 @@ func TestHandler_CreateHabit(t *testing.T) {
 		assert.Contains(t, rec.Body.String(), "name is required")
 	})
 
+	t.Run("returns 400 when name exceeds 40 characters", func(t *testing.T) {
+		svc := mocks.NewMockServiceInterface(t)
+		handler := habits.NewHandler(svc)
+
+		req := httptest.NewRequest(http.MethodPost, "/habits", strings.NewReader(`{"name": "aaaaaaaaaabbbbbbbbbbccccccccccddddddddddx"}`))
+		rec := httptest.NewRecorder()
+
+		handler.CreateHabit(rec, req)
+
+		assert.Equal(t, http.StatusBadRequest, rec.Code)
+		assert.Contains(t, rec.Body.String(), "name must be at most 40 characters")
+	})
+
 	t.Run("returns 500 when service fails", func(t *testing.T) {
 		svc := mocks.NewMockServiceInterface(t)
 		svc.EXPECT().CreateHabit(mock.Anything, mock.Anything).Return(habits.CreateHabitResponse{}, errors.New("db error"))

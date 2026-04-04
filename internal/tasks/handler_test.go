@@ -67,6 +67,16 @@ func TestHandler_CreateProject(t *testing.T) {
 		assert.Contains(t, rec.Body.String(), "name is required")
 	})
 
+	t.Run("returns 400 when name exceeds 40 characters", func(t *testing.T) {
+		svc := mocks.NewMockServiceInterface(t)
+		handler := tasks.NewHandler(svc)
+		req := httptest.NewRequest(http.MethodPost, "/tasks/projects", strings.NewReader(`{"name": "aaaaaaaaaabbbbbbbbbbccccccccccddddddddddx"}`))
+		rec := httptest.NewRecorder()
+		handler.CreateProject(rec, req)
+		assert.Equal(t, http.StatusBadRequest, rec.Code)
+		assert.Contains(t, rec.Body.String(), "name must be at most 40 characters")
+	})
+
 	t.Run("returns 500 when service fails", func(t *testing.T) {
 		svc := mocks.NewMockServiceInterface(t)
 		svc.EXPECT().CreateProject(mock.Anything, mock.Anything).Return(tasks.ProjectResponse{}, errors.New("db error"))
@@ -142,6 +152,16 @@ func TestHandler_CreateTask(t *testing.T) {
 		assert.Empty(t, got.Blocks)
 	})
 
+	t.Run("returns 400 when name exceeds 40 characters", func(t *testing.T) {
+		svc := mocks.NewMockServiceInterface(t)
+		handler := tasks.NewHandler(svc)
+		req := httptest.NewRequest(http.MethodPost, "/tasks/tasks", strings.NewReader(`{"name": "aaaaaaaaaabbbbbbbbbbccccccccccddddddddddx"}`))
+		rec := httptest.NewRecorder()
+		handler.CreateTask(rec, req)
+		assert.Equal(t, http.StatusBadRequest, rec.Code)
+		assert.Contains(t, rec.Body.String(), "name must be at most 40 characters")
+	})
+
 	t.Run("returns 500 when service fails", func(t *testing.T) {
 		svc := mocks.NewMockServiceInterface(t)
 		svc.EXPECT().CreateTask(mock.Anything, mock.Anything).Return(tasks.TaskResponse{}, errors.New("db error"))
@@ -200,6 +220,16 @@ func TestHandler_CreateTodo(t *testing.T) {
 		handler.CreateTodo(rec, req)
 		assert.Equal(t, http.StatusBadRequest, rec.Code)
 		assert.Contains(t, rec.Body.String(), "name is required")
+	})
+
+	t.Run("returns 400 when name exceeds 40 characters", func(t *testing.T) {
+		svc := mocks.NewMockServiceInterface(t)
+		handler := tasks.NewHandler(svc)
+		req := httptest.NewRequest(http.MethodPost, "/tasks/todos", strings.NewReader(`{"task_id": 5, "name": "aaaaaaaaaabbbbbbbbbbccccccccccddddddddddx"}`))
+		rec := httptest.NewRecorder()
+		handler.CreateTodo(rec, req)
+		assert.Equal(t, http.StatusBadRequest, rec.Code)
+		assert.Contains(t, rec.Body.String(), "name must be at most 40 characters")
 	})
 
 	t.Run("returns 500 when service fails", func(t *testing.T) {
@@ -328,6 +358,17 @@ func TestHandler_UpdateProject(t *testing.T) {
 		handler.UpdateProject(rec, req)
 		assert.Equal(t, http.StatusNotFound, rec.Code)
 		assert.Contains(t, rec.Body.String(), "project not found")
+	})
+
+	t.Run("returns 400 when name exceeds 40 characters", func(t *testing.T) {
+		svc := mocks.NewMockServiceInterface(t)
+		handler := tasks.NewHandler(svc)
+		req := httptest.NewRequest(http.MethodPatch, "/tasks/projects/1", strings.NewReader(`{"name": "aaaaaaaaaabbbbbbbbbbccccccccccddddddddddx"}`))
+		req = withIDParam(req, "1")
+		rec := httptest.NewRecorder()
+		handler.UpdateProject(rec, req)
+		assert.Equal(t, http.StatusBadRequest, rec.Code)
+		assert.Contains(t, rec.Body.String(), "name must be at most 40 characters")
 	})
 
 	t.Run("returns 500 when service fails", func(t *testing.T) {
@@ -485,6 +526,17 @@ func TestHandler_UpdateTask(t *testing.T) {
 		assert.Equal(t, http.StatusOK, rec.Code)
 	})
 
+	t.Run("returns 400 when name exceeds 40 characters", func(t *testing.T) {
+		svc := mocks.NewMockServiceInterface(t)
+		handler := tasks.NewHandler(svc)
+		req := httptest.NewRequest(http.MethodPatch, "/tasks/tasks/1", strings.NewReader(`{"name": "aaaaaaaaaabbbbbbbbbbccccccccccddddddddddx"}`))
+		req = withIDParam(req, "1")
+		rec := httptest.NewRecorder()
+		handler.UpdateTask(rec, req)
+		assert.Equal(t, http.StatusBadRequest, rec.Code)
+		assert.Contains(t, rec.Body.String(), "name must be at most 40 characters")
+	})
+
 	t.Run("returns 500 when service fails", func(t *testing.T) {
 		svc := mocks.NewMockServiceInterface(t)
 		svc.EXPECT().UpdateTask(mock.Anything, mock.Anything).Return(tasks.TaskResponse{}, errors.New("db error"))
@@ -539,6 +591,17 @@ func TestHandler_UpdateTodo(t *testing.T) {
 		handler.UpdateTodo(rec, req)
 		assert.Equal(t, http.StatusNotFound, rec.Code)
 		assert.Contains(t, rec.Body.String(), "todo not found")
+	})
+
+	t.Run("returns 400 when name exceeds 40 characters", func(t *testing.T) {
+		svc := mocks.NewMockServiceInterface(t)
+		handler := tasks.NewHandler(svc)
+		req := httptest.NewRequest(http.MethodPatch, "/tasks/todos/1", strings.NewReader(`{"name": "aaaaaaaaaabbbbbbbbbbccccccccccddddddddddx"}`))
+		req = withIDParam(req, "1")
+		rec := httptest.NewRecorder()
+		handler.UpdateTodo(rec, req)
+		assert.Equal(t, http.StatusBadRequest, rec.Code)
+		assert.Contains(t, rec.Body.String(), "name must be at most 40 characters")
 	})
 
 	t.Run("returns 500 when service fails", func(t *testing.T) {

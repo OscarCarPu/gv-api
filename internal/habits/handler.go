@@ -117,6 +117,11 @@ func (h *Handler) CreateHabit(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if len(req.Name) > 40 {
+		response.Error(w, http.StatusBadRequest, "name must be at most 40 characters")
+		return
+	}
+
 	if req.Frequency != nil {
 		valid := map[string]bool{"daily": true, "weekly": true, "monthly": true}
 		if !valid[*req.Frequency] {

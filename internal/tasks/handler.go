@@ -70,6 +70,11 @@ func (h *Handler) CreateProject(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if len(req.Name) > 40 {
+		response.Error(w, http.StatusBadRequest, "name must be at most 40 characters")
+		return
+	}
+
 	project, err := h.service.CreateProject(r.Context(), req)
 	if err != nil {
 		response.Error(w, http.StatusInternalServerError, "Failed to create project")
@@ -88,6 +93,11 @@ func (h *Handler) CreateTask(w http.ResponseWriter, r *http.Request) {
 
 	if req.Name == "" {
 		response.Error(w, http.StatusBadRequest, "name is required")
+		return
+	}
+
+	if len(req.Name) > 40 {
+		response.Error(w, http.StatusBadRequest, "name must be at most 40 characters")
 		return
 	}
 
@@ -114,6 +124,11 @@ func (h *Handler) CreateTodo(w http.ResponseWriter, r *http.Request) {
 
 	if req.Name == "" {
 		response.Error(w, http.StatusBadRequest, "name is required")
+		return
+	}
+
+	if len(req.Name) > 40 {
+		response.Error(w, http.StatusBadRequest, "name must be at most 40 characters")
 		return
 	}
 
@@ -166,6 +181,11 @@ func (h *Handler) UpdateProject(w http.ResponseWriter, r *http.Request) {
 	}
 	req.ID = id
 
+	if req.Name != nil && len(*req.Name) > 40 {
+		response.Error(w, http.StatusBadRequest, "name must be at most 40 characters")
+		return
+	}
+
 	project, err := h.service.UpdateProject(r.Context(), req)
 	if err != nil {
 		if errors.Is(err, ErrNotFound) {
@@ -193,6 +213,11 @@ func (h *Handler) UpdateTask(w http.ResponseWriter, r *http.Request) {
 	}
 	req.ID = id
 
+	if req.Name != nil && len(*req.Name) > 40 {
+		response.Error(w, http.StatusBadRequest, "name must be at most 40 characters")
+		return
+	}
+
 	task, err := h.service.UpdateTask(r.Context(), req)
 	if err != nil {
 		if errors.Is(err, ErrNotFound) {
@@ -219,6 +244,11 @@ func (h *Handler) UpdateTodo(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	req.ID = id
+
+	if req.Name != nil && len(*req.Name) > 40 {
+		response.Error(w, http.StatusBadRequest, "name must be at most 40 characters")
+		return
+	}
 
 	todo, err := h.service.UpdateTodo(r.Context(), req)
 	if err != nil {
