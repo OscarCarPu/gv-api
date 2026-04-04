@@ -865,12 +865,31 @@ func (q *Queries) ListProjectsFast(ctx context.Context) ([]ListProjectsFastRow, 
 }
 
 const listTasksFast = `-- name: ListTasksFast :many
-SELECT id, name FROM tasks WHERE finished_at IS NULL ORDER BY name
+WITH RECURSIVE project_tree AS (
+    SELECT id, name, ARRAY[name::text] AS sort_path
+    FROM projects
+    WHERE parent_id IS NULL AND finished_at IS NULL
+    UNION ALL
+    SELECT c.id, c.name, pt.sort_path || c.name::text
+    FROM projects c
+    JOIN project_tree pt ON c.parent_id = pt.id
+    WHERE c.finished_at IS NULL
+)
+SELECT t.id, t.name, t.project_id, pt.name AS project_name
+FROM tasks t
+LEFT JOIN project_tree pt ON t.project_id = pt.id
+WHERE t.finished_at IS NULL
+ORDER BY
+    CASE WHEN t.project_id IS NULL THEN 1 ELSE 0 END,
+    pt.sort_path,
+    t.name
 `
 
 type ListTasksFastRow struct {
-	ID   int32  `db:"id" json:"id"`
-	Name string `db:"name" json:"name"`
+	ID          int32   `db:"id" json:"id"`
+	Name        string  `db:"name" json:"name"`
+	ProjectID   *int32  `db:"project_id" json:"project_id"`
+	ProjectName *string `db:"project_name" json:"project_name"`
 }
 
 func (q *Queries) ListTasksFast(ctx context.Context) ([]ListTasksFastRow, error) {
@@ -882,7 +901,12 @@ func (q *Queries) ListTasksFast(ctx context.Context) ([]ListTasksFastRow, error)
 	items := []ListTasksFastRow{}
 	for rows.Next() {
 		var i ListTasksFastRow
-		if err := rows.Scan(&i.ID, &i.Name); err != nil {
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.ProjectID,
+			&i.ProjectName,
+		); err != nil {
 			return nil, err
 		}
 		items = append(items, i)

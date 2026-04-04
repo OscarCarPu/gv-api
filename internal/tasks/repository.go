@@ -746,8 +746,10 @@ func (r *PostgresRepository) ListTasksFast(ctx context.Context) ([]TaskFastRespo
 	tasks := make([]TaskFastResponse, len(rows))
 	for i, row := range rows {
 		tasks[i] = TaskFastResponse{
-			ID:   row.ID,
-			Name: row.Name,
+			ID:          row.ID,
+			Name:        row.Name,
+			ProjectID:   row.ProjectID,
+			ProjectName: row.ProjectName,
 		}
 	}
 

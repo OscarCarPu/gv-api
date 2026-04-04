@@ -22,7 +22,7 @@
 
 - **Method:** `GET`
 - **Endpoint:** `/tasks/tasks/list-fast`
-- **Description:** Returns all unfinished tasks (where `finished_at` is null) as a flat list with only `id` and `name`.
+- **Description:** Returns all unfinished tasks (where `finished_at` is null) with `id`, `name`, `project_id`, and `project_name`. Tasks are ordered by project tree (DFS pre-order): for a tree A → B → C, A → D, E the order is A, B, C, D, E. Tasks without project appear at the end. Within each project group, tasks are sorted by name.
 - **Success Response:**
   - **Code:** `200 OK`
   - **Content:**
@@ -30,7 +30,15 @@
     [
       {
         "id": 1,
-        "name": "My Task"
+        "name": "My Task",
+        "project_id": 5,
+        "project_name": "My Project"
+      },
+      {
+        "id": 2,
+        "name": "Orphan Task",
+        "project_id": null,
+        "project_name": null
       }
     ]
     ```

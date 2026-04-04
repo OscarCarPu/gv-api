@@ -56,8 +56,10 @@ type ProjectFastResponse struct {
 }
 
 type TaskFastResponse struct {
-	ID   int32  `json:"id"`
-	Name string `json:"name"`
+	ID          int32   `json:"id"`
+	Name        string  `json:"name"`
+	ProjectID   *int32  `json:"project_id"`
+	ProjectName *string `json:"project_name"`
 }
 
 type CreateTaskRequest struct {
