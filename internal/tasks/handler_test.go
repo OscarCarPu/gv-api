@@ -455,6 +455,36 @@ func TestHandler_UpdateTask(t *testing.T) {
 		assert.Equal(t, int32(2), got.DependsOn[0].ID)
 	})
 
+	t.Run("explicit null due_at marks field as set with nil value", func(t *testing.T) {
+		svc := mocks.NewMockServiceInterface(t)
+		svc.EXPECT().UpdateTask(mock.Anything, mock.MatchedBy(func(req tasks.UpdateTaskRequest) bool {
+			return req.ID == 7 && req.DueAt.Set && req.DueAt.Value == nil
+		})).Return(tasks.TaskResponse{ID: 7, Name: "test task"}, nil)
+		handler := tasks.NewHandler(svc)
+
+		req := httptest.NewRequest(http.MethodPatch, "/tasks/tasks/7", strings.NewReader(`{"due_at": null}`))
+		req = withIDParam(req, "7")
+		rec := httptest.NewRecorder()
+		handler.UpdateTask(rec, req)
+
+		assert.Equal(t, http.StatusOK, rec.Code)
+	})
+
+	t.Run("omitted due_at leaves field unset", func(t *testing.T) {
+		svc := mocks.NewMockServiceInterface(t)
+		svc.EXPECT().UpdateTask(mock.Anything, mock.MatchedBy(func(req tasks.UpdateTaskRequest) bool {
+			return req.ID == 7 && !req.DueAt.Set
+		})).Return(tasks.TaskResponse{ID: 7, Name: "test task"}, nil)
+		handler := tasks.NewHandler(svc)
+
+		req := httptest.NewRequest(http.MethodPatch, "/tasks/tasks/7", strings.NewReader(`{"name": "test task"}`))
+		req = withIDParam(req, "7")
+		rec := httptest.NewRecorder()
+		handler.UpdateTask(rec, req)
+
+		assert.Equal(t, http.StatusOK, rec.Code)
+	})
+
 	t.Run("returns 500 when service fails", func(t *testing.T) {
 		svc := mocks.NewMockServiceInterface(t)
 		svc.EXPECT().UpdateTask(mock.Anything, mock.Anything).Return(tasks.TaskResponse{}, errors.New("db error"))

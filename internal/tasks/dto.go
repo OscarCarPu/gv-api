@@ -118,15 +118,36 @@ type UpdateProjectRequest struct {
 	FinishedAt  *time.Time `json:"finished_at"`
 }
 
+// NullableTime distinguishes between an absent JSON field and an explicit null.
+// Set is true when the field was present in the JSON payload (even if null).
+type NullableTime struct {
+	Value *time.Time
+	Set   bool
+}
+
+func (n *NullableTime) UnmarshalJSON(data []byte) error {
+	n.Set = true
+	if string(data) == "null" {
+		n.Value = nil
+		return nil
+	}
+	var t time.Time
+	if err := json.Unmarshal(data, &t); err != nil {
+		return err
+	}
+	n.Value = &t
+	return nil
+}
+
 type UpdateTaskRequest struct {
-	ID          int32      `json:"-"`
-	Name        *string    `json:"name"`
-	Description *string    `json:"description"`
-	DueAt       *time.Time `json:"due_at"`
-	ProjectID   *int32     `json:"project_id"`
-	StartedAt   *time.Time `json:"started_at"`
-	FinishedAt  *time.Time `json:"finished_at"`
-	DependsOn   *[]int32   `json:"depends_on"`
+	ID          int32        `json:"-"`
+	Name        *string      `json:"name"`
+	Description *string      `json:"description"`
+	DueAt       NullableTime `json:"due_at"`
+	ProjectID   *int32       `json:"project_id"`
+	StartedAt   *time.Time   `json:"started_at"`
+	FinishedAt  *time.Time   `json:"finished_at"`
+	DependsOn   *[]int32     `json:"depends_on"`
 }
 
 type UpdateTodoRequest struct {

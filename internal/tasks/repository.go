@@ -194,9 +194,13 @@ func (r *PostgresRepository) UpdateTask(ctx context.Context, req UpdateTaskReque
 		params.SetDescription = true
 		params.Description = *req.Description
 	}
-	if req.DueAt != nil {
-		params.SetDueAt = true
-		params.DueAt = *req.DueAt
+	if req.DueAt.Set {
+		if req.DueAt.Value != nil {
+			params.SetDueAt = true
+			params.DueAt = *req.DueAt.Value
+		} else {
+			params.ClearDueAt = true
+		}
 	}
 	if req.ProjectID != nil {
 		params.SetProjectID = true

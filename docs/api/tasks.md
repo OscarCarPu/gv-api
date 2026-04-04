@@ -211,7 +211,7 @@
   ```
   - `name` (optional): New name.
   - `description` (optional): New description.
-  - `due_at` (optional): New due date.
+  - `due_at` (optional): New due date. Pass `null` to clear the due date. Omitting the field leaves it unchanged.
   - `project_id` (optional): New parent project ID.
   - `started_at` (optional): Start timestamp.
   - `finished_at` (optional): Finish timestamp.
