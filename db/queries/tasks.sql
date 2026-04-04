@@ -252,15 +252,17 @@ FROM task_info ti
 LEFT JOIN time_entries te ON te.task_id = ti.id
 ORDER BY te.started_at;
 
--- name: ReplaceTaskDependencies :exec
-WITH deleted AS (
-    DELETE FROM task_dependencies WHERE task_id = $1
-)
+-- name: DeleteRemovedTaskDependencies :exec
+DELETE FROM task_dependencies
+WHERE task_id = $1 AND NOT (depends_on = ANY(@keep::int[]));
+
+-- name: UpsertTaskDependencies :exec
 INSERT INTO task_dependencies (task_id, depends_on)
 SELECT $1, t.id
 FROM unnest(@depends_on::int[]) AS dep_id
 JOIN tasks t ON t.id = dep_id AND t.finished_at IS NULL
-WHERE array_length(@depends_on::int[], 1) IS NOT NULL;
+WHERE array_length(@depends_on::int[], 1) IS NOT NULL
+ON CONFLICT (task_id, depends_on) DO NOTHING;
 
 -- name: GetTaskDependencies :one
 SELECT

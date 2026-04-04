@@ -717,7 +717,13 @@ func (r *PostgresRepository) GetTimeEntryHistory(ctx context.Context, frequency,
 }
 
 func (r *PostgresRepository) ReplaceTaskDependencies(ctx context.Context, taskID int32, dependsOn []int32) error {
-	return r.q.ReplaceTaskDependencies(ctx, tasksdb.ReplaceTaskDependenciesParams{
+	if err := r.q.DeleteRemovedTaskDependencies(ctx, tasksdb.DeleteRemovedTaskDependenciesParams{
+		TaskID: taskID,
+		Keep:   dependsOn,
+	}); err != nil {
+		return err
+	}
+	return r.q.UpsertTaskDependencies(ctx, tasksdb.UpsertTaskDependenciesParams{
 		TaskID:    taskID,
 		DependsOn: dependsOn,
 	})

@@ -154,6 +154,21 @@ func (q *Queries) DeleteProject(ctx context.Context, id int32) error {
 	return err
 }
 
+const deleteRemovedTaskDependencies = `-- name: DeleteRemovedTaskDependencies :exec
+DELETE FROM task_dependencies
+WHERE task_id = $1 AND NOT (depends_on = ANY($2::int[]))
+`
+
+type DeleteRemovedTaskDependenciesParams struct {
+	TaskID int32   `db:"task_id" json:"task_id"`
+	Keep   []int32 `db:"keep" json:"keep"`
+}
+
+func (q *Queries) DeleteRemovedTaskDependencies(ctx context.Context, arg DeleteRemovedTaskDependenciesParams) error {
+	_, err := q.db.Exec(ctx, deleteRemovedTaskDependencies, arg.TaskID, arg.Keep)
+	return err
+}
+
 const deleteTask = `-- name: DeleteTask :exec
 DELETE FROM tasks WHERE id = $1
 `
@@ -878,27 +893,6 @@ func (q *Queries) ListTasksFast(ctx context.Context) ([]ListTasksFastRow, error)
 	return items, nil
 }
 
-const replaceTaskDependencies = `-- name: ReplaceTaskDependencies :exec
-WITH deleted AS (
-    DELETE FROM task_dependencies WHERE task_id = $1
-)
-INSERT INTO task_dependencies (task_id, depends_on)
-SELECT $1, t.id
-FROM unnest($2::int[]) AS dep_id
-JOIN tasks t ON t.id = dep_id AND t.finished_at IS NULL
-WHERE array_length($2::int[], 1) IS NOT NULL
-`
-
-type ReplaceTaskDependenciesParams struct {
-	TaskID    int32   `db:"task_id" json:"task_id"`
-	DependsOn []int32 `db:"depends_on" json:"depends_on"`
-}
-
-func (q *Queries) ReplaceTaskDependencies(ctx context.Context, arg ReplaceTaskDependenciesParams) error {
-	_, err := q.db.Exec(ctx, replaceTaskDependencies, arg.TaskID, arg.DependsOn)
-	return err
-}
-
 const updateProject = `-- name: UpdateProject :one
 UPDATE projects SET
     name        = CASE WHEN $1::bool        THEN $2::text             ELSE name END,
@@ -1097,4 +1091,23 @@ func (q *Queries) UpdateTodo(ctx context.Context, arg UpdateTodoParams) (Todo, e
 		&i.IsDone,
 	)
 	return i, err
+}
+
+const upsertTaskDependencies = `-- name: UpsertTaskDependencies :exec
+INSERT INTO task_dependencies (task_id, depends_on)
+SELECT $1, t.id
+FROM unnest($2::int[]) AS dep_id
+JOIN tasks t ON t.id = dep_id AND t.finished_at IS NULL
+WHERE array_length($2::int[], 1) IS NOT NULL
+ON CONFLICT (task_id, depends_on) DO NOTHING
+`
+
+type UpsertTaskDependenciesParams struct {
+	TaskID    int32   `db:"task_id" json:"task_id"`
+	DependsOn []int32 `db:"depends_on" json:"depends_on"`
+}
+
+func (q *Queries) UpsertTaskDependencies(ctx context.Context, arg UpsertTaskDependenciesParams) error {
+	_, err := q.db.Exec(ctx, upsertTaskDependencies, arg.TaskID, arg.DependsOn)
+	return err
 }

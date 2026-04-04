@@ -14,6 +14,7 @@ type Querier interface {
 	CreateTimeEntry(ctx context.Context, arg CreateTimeEntryParams) (TimeEntry, error)
 	CreateTodo(ctx context.Context, arg CreateTodoParams) (CreateTodoRow, error)
 	DeleteProject(ctx context.Context, id int32) error
+	DeleteRemovedTaskDependencies(ctx context.Context, arg DeleteRemovedTaskDependenciesParams) error
 	DeleteTask(ctx context.Context, id int32) error
 	DeleteTimeEntry(ctx context.Context, id int32) error
 	DeleteTodo(ctx context.Context, id int32) error
@@ -33,11 +34,11 @@ type Querier interface {
 	GetUnfinishedTasks(ctx context.Context) ([]GetUnfinishedTasksRow, error)
 	ListProjectsFast(ctx context.Context) ([]ListProjectsFastRow, error)
 	ListTasksFast(ctx context.Context) ([]ListTasksFastRow, error)
-	ReplaceTaskDependencies(ctx context.Context, arg ReplaceTaskDependenciesParams) error
 	UpdateProject(ctx context.Context, arg UpdateProjectParams) (Project, error)
 	UpdateTask(ctx context.Context, arg UpdateTaskParams) (Task, error)
 	UpdateTimeEntry(ctx context.Context, arg UpdateTimeEntryParams) (TimeEntry, error)
 	UpdateTodo(ctx context.Context, arg UpdateTodoParams) (Todo, error)
+	UpsertTaskDependencies(ctx context.Context, arg UpsertTaskDependenciesParams) error
 }
 
 var _ Querier = (*Queries)(nil)
