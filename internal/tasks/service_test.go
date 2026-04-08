@@ -543,3 +543,90 @@ func TestService_GetTimeEntryHistory_FillsMissingPeriods(t *testing.T) {
 	assert.Equal(t, "2026-03-16", resp.StartAt)
 	assert.Equal(t, "2026-03-20", resp.EndAt)
 }
+
+func TestService_GetTimeEntriesByDateRange(t *testing.T) {
+	t.Run("parses dates and calls repo with timezone-aware timestamps", func(t *testing.T) {
+		repo := mocks.NewMockRepository(t)
+		loc, _ := time.LoadLocation("Europe/Madrid")
+
+		expectedStart := time.Date(2026, 3, 1, 0, 0, 0, 0, loc)
+		expectedEnd := time.Date(2026, 4, 1, 0, 0, 0, 0, loc) // end_time+1 day for inclusive
+
+		repo.EXPECT().
+			GetTimeEntriesByDateRange(mock.Anything,
+				mock.MatchedBy(func(t time.Time) bool { return t.Equal(expectedStart) }),
+				mock.MatchedBy(func(t time.Time) bool { return t.Equal(expectedEnd) }),
+			).
+			Return([]tasks.TimeEntryWithTaskResponse{
+				{ID: 1, TaskID: 5, TaskName: "Task A", TimeSpent: 3600},
+			}, nil)
+
+		svc := tasks.NewService(repo, loc)
+		result, err := svc.GetTimeEntriesByDateRange(context.Background(), "2026-03-01", "2026-03-31")
+		require.NoError(t, err)
+		require.Len(t, result, 1)
+		assert.Equal(t, int32(1), result[0].ID)
+		assert.Equal(t, "Task A", result[0].TaskName)
+	})
+
+	t.Run("defaults end_time to today when empty", func(t *testing.T) {
+		repo := mocks.NewMockRepository(t)
+		loc := time.UTC
+		now := time.Now().In(loc)
+		expectedEnd := time.Date(now.Year(), now.Month(), now.Day()+1, 0, 0, 0, 0, loc)
+
+		repo.EXPECT().
+			GetTimeEntriesByDateRange(mock.Anything, mock.AnythingOfType("time.Time"),
+				mock.MatchedBy(func(t time.Time) bool { return t.Equal(expectedEnd) }),
+			).
+			Return([]tasks.TimeEntryWithTaskResponse{}, nil)
+
+		svc := tasks.NewService(repo, loc)
+		result, err := svc.GetTimeEntriesByDateRange(context.Background(), "2026-03-01", "")
+		require.NoError(t, err)
+		assert.Empty(t, result)
+	})
+
+	t.Run("returns error for invalid start_time format", func(t *testing.T) {
+		repo := mocks.NewMockRepository(t)
+		svc := tasks.NewService(repo, time.UTC)
+
+		_, err := svc.GetTimeEntriesByDateRange(context.Background(), "bad", "")
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "invalid start_time")
+	})
+
+	t.Run("returns error for invalid end_time format", func(t *testing.T) {
+		repo := mocks.NewMockRepository(t)
+		svc := tasks.NewService(repo, time.UTC)
+
+		_, err := svc.GetTimeEntriesByDateRange(context.Background(), "2026-03-01", "bad")
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "invalid end_time")
+	})
+
+	t.Run("returns empty slice when repo returns nil", func(t *testing.T) {
+		repo := mocks.NewMockRepository(t)
+		repo.EXPECT().
+			GetTimeEntriesByDateRange(mock.Anything, mock.AnythingOfType("time.Time"), mock.AnythingOfType("time.Time")).
+			Return(nil, nil)
+
+		svc := tasks.NewService(repo, time.UTC)
+		result, err := svc.GetTimeEntriesByDateRange(context.Background(), "2026-03-01", "2026-03-31")
+		require.NoError(t, err)
+		assert.NotNil(t, result)
+		assert.Empty(t, result)
+	})
+
+	t.Run("propagates repo error", func(t *testing.T) {
+		repo := mocks.NewMockRepository(t)
+		repo.EXPECT().
+			GetTimeEntriesByDateRange(mock.Anything, mock.AnythingOfType("time.Time"), mock.AnythingOfType("time.Time")).
+			Return(nil, errors.New("db error"))
+
+		svc := tasks.NewService(repo, time.UTC)
+		_, err := svc.GetTimeEntriesByDateRange(context.Background(), "2026-03-01", "2026-03-31")
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "db error")
+	})
+}

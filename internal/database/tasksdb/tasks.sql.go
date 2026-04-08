@@ -619,6 +619,72 @@ func (q *Queries) GetTasksByProjectIDs(ctx context.Context, projectIds []int32) 
 	return items, nil
 }
 
+const getTimeEntriesByDateRange = `-- name: GetTimeEntriesByDateRange :many
+SELECT
+    te.id, te.task_id,
+    t.name AS task_name,
+    t.finished_at AS task_finished_at,
+    p.id AS project_id,
+    p.name AS project_name,
+    te.started_at, te.finished_at, te.comment,
+    EXTRACT(EPOCH FROM (COALESCE(te.finished_at, NOW()) - te.started_at))::bigint AS time_spent
+FROM time_entries te
+JOIN tasks t ON t.id = te.task_id
+LEFT JOIN projects p ON p.id = t.project_id
+WHERE te.started_at <= $1::timestamptz
+  AND (te.finished_at >= $2::timestamptz OR te.finished_at IS NULL)
+ORDER BY te.started_at DESC
+`
+
+type GetTimeEntriesByDateRangeParams struct {
+	EndTime   pgtype.Timestamptz `db:"end_time" json:"end_time"`
+	StartTime pgtype.Timestamptz `db:"start_time" json:"start_time"`
+}
+
+type GetTimeEntriesByDateRangeRow struct {
+	ID             int32              `db:"id" json:"id"`
+	TaskID         int32              `db:"task_id" json:"task_id"`
+	TaskName       string             `db:"task_name" json:"task_name"`
+	TaskFinishedAt pgtype.Timestamptz `db:"task_finished_at" json:"task_finished_at"`
+	ProjectID      *int32             `db:"project_id" json:"project_id"`
+	ProjectName    *string            `db:"project_name" json:"project_name"`
+	StartedAt      pgtype.Timestamptz `db:"started_at" json:"started_at"`
+	FinishedAt     pgtype.Timestamptz `db:"finished_at" json:"finished_at"`
+	Comment        *string            `db:"comment" json:"comment"`
+	TimeSpent      int64              `db:"time_spent" json:"time_spent"`
+}
+
+func (q *Queries) GetTimeEntriesByDateRange(ctx context.Context, arg GetTimeEntriesByDateRangeParams) ([]GetTimeEntriesByDateRangeRow, error) {
+	rows, err := q.db.Query(ctx, getTimeEntriesByDateRange, arg.EndTime, arg.StartTime)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []GetTimeEntriesByDateRangeRow{}
+	for rows.Next() {
+		var i GetTimeEntriesByDateRangeRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.TaskID,
+			&i.TaskName,
+			&i.TaskFinishedAt,
+			&i.ProjectID,
+			&i.ProjectName,
+			&i.StartedAt,
+			&i.FinishedAt,
+			&i.Comment,
+			&i.TimeSpent,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getTimeEntriesByTaskID = `-- name: GetTimeEntriesByTaskID :many
 WITH task_info AS (
     SELECT t.id, t.project_id, t.name, t.description, t.due_at, t.started_at, t.finished_at,

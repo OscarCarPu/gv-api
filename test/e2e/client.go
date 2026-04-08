@@ -123,6 +123,19 @@ type TimeEntryResponse struct {
 	Comment    *string    `json:"comment"`
 }
 
+type TimeEntryWithTaskResponse struct {
+	ID             int32      `json:"id"`
+	TaskID         int32      `json:"task_id"`
+	TaskName       string     `json:"task_name"`
+	ProjectID      *int32     `json:"project_id"`
+	ProjectName    *string    `json:"project_name"`
+	StartedAt      time.Time  `json:"started_at"`
+	FinishedAt     *time.Time `json:"finished_at"`
+	Comment        *string    `json:"comment"`
+	TaskFinishedAt *time.Time `json:"task_finished_at"`
+	TimeSpent      int64      `json:"time_spent"`
+}
+
 type UpdateProjectRequest struct {
 	Name        *string    `json:"name,omitempty"`
 	Description *string    `json:"description,omitempty"`
@@ -593,6 +606,21 @@ func (c *APIClient) GetTask(t *testing.T, id int32) TaskFullResponse {
 	var out TaskFullResponse
 	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
 		t.Fatalf("GetTask: decode: %v", err)
+	}
+	return out
+}
+
+func (c *APIClient) GetTimeEntriesByDateRange(t *testing.T, startTime, endTime string) []TimeEntryWithTaskResponse {
+	t.Helper()
+	path := fmt.Sprintf("/tasks/time-entries?start_time=%s&end_time=%s", startTime, endTime)
+	resp := c.do(t, http.MethodGet, path, nil)
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("GetTimeEntriesByDateRange: got status %d, want 200", resp.StatusCode)
+	}
+	var out []TimeEntryWithTaskResponse
+	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+		t.Fatalf("GetTimeEntriesByDateRange: decode: %v", err)
 	}
 	return out
 }

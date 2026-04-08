@@ -131,3 +131,7 @@ test:
 	@$(MAKE) test-integration --no-print-directory
 	@$(MAKE) test-e2e --no-print-directory
 	@printf "$(GREEN)>>> All tests passed$(NC)\n"
+
+# Authenticate and print a JWT token for manual testing
+auth:
+	@python scripts/auth.py

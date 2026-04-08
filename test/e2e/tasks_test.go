@@ -850,19 +850,24 @@ func TestE2E_TaskDependencies_DueDateList(t *testing.T) {
 	client := authenticate(t)
 
 	now := time.Now().UTC().Truncate(time.Second)
-	dueDateA := time.Date(2026, 6, 15, 0, 0, 0, 0, time.UTC)
+	dueDateB := time.Date(2026, 6, 15, 0, 0, 0, 0, time.UTC)
 	dueDateC := time.Date(2026, 9, 1, 0, 0, 0, 0, time.UTC)
 
-	// Task A: has due date June 15
-	taskA := client.CreateTask(t, CreateTaskRequest{Name: "Task A", DueAt: &dueDateA})
+	// Backward propagation: deadlines flow from blocked tasks to their blockers.
+	// A blocks B and C. A has no own due date but should inherit the earliest
+	// deadline from the tasks it blocks.
 
-	// Task B: no due date, depends on A → should inherit June 15
+	// Task A: no due date, blocks B and C
+	taskA := client.CreateTask(t, CreateTaskRequest{Name: "Task A"})
+
+	// Task B: due June 15, depends on A
 	taskB := client.CreateTask(t, CreateTaskRequest{
 		Name:      "Task B",
+		DueAt:     &dueDateB,
 		DependsOn: []int32{taskA.ID},
 	})
 
-	// Task C: due Sept 1, depends on A → effective due = min(Sept 1, June 15) = June 15
+	// Task C: due Sept 1, depends on A
 	taskC := client.CreateTask(t, CreateTaskRequest{
 		Name:      "Task C",
 		DueAt:     &dueDateC,
@@ -878,35 +883,46 @@ func TestE2E_TaskDependencies_DueDateList(t *testing.T) {
 	}
 
 	if _, ok := taskMap[taskA.ID]; !ok {
-		t.Fatal("Task A should appear in due-date list")
+		t.Fatal("Task A should appear in due-date list (inherited due from blocked tasks)")
 	}
 	if _, ok := taskMap[taskB.ID]; !ok {
-		t.Fatal("Task B should appear in due-date list (inherited due from A)")
+		t.Fatal("Task B should appear in due-date list")
 	}
 	if _, ok := taskMap[taskC.ID]; !ok {
 		t.Fatal("Task C should appear in due-date list")
 	}
 
-	// B should have effective due date = June 15 (from A)
-	if taskMap[taskB.ID].DueAt == nil {
-		t.Fatal("Task B due_at should not be nil (inherited from dep A)")
+	// A should have effective due = June 15 (min of B's June 15 and C's Sept 1)
+	if taskMap[taskA.ID].DueAt == nil {
+		t.Fatal("Task A due_at should not be nil (inherited from blocked tasks)")
 	}
-	if !taskMap[taskB.ID].DueAt.Equal(dueDateA) {
-		t.Errorf("Task B effective due: want %v, got %v", dueDateA, *taskMap[taskB.ID].DueAt)
+	if !taskMap[taskA.ID].DueAt.Equal(dueDateB) {
+		t.Errorf("Task A effective due: want %v, got %v", dueDateB, *taskMap[taskA.ID].DueAt)
 	}
 
-	// C should have effective due date = June 15 (min of own Sept 1 and dep A's June 15)
+	// B keeps its own due date
+	if taskMap[taskB.ID].DueAt == nil {
+		t.Fatal("Task B due_at should not be nil")
+	}
+	if !taskMap[taskB.ID].DueAt.Equal(dueDateB) {
+		t.Errorf("Task B due: want %v, got %v", dueDateB, *taskMap[taskB.ID].DueAt)
+	}
+
+	// C keeps its own due date
 	if taskMap[taskC.ID].DueAt == nil {
 		t.Fatal("Task C due_at should not be nil")
 	}
-	if !taskMap[taskC.ID].DueAt.Equal(dueDateA) {
-		t.Errorf("Task C effective due: want %v (from dep A), got %v", dueDateA, *taskMap[taskC.ID].DueAt)
+	if !taskMap[taskC.ID].DueAt.Equal(dueDateC) {
+		t.Errorf("Task C due: want %v, got %v", dueDateC, *taskMap[taskC.ID].DueAt)
 	}
 
 	// --- Hidden filtering with chain D → E → F ---
-	dueDateD := time.Date(2026, 7, 1, 0, 0, 0, 0, time.UTC)
+	// F has a due date. E and D inherit it backward through blocks.
+	// D blocks E blocks F. While D is unfinished, E is blocked and F is hidden
+	// (all of F's deps are blocked). After finishing D, E is unblocked and F appears.
+	dueDateF := time.Date(2026, 8, 1, 0, 0, 0, 0, time.UTC)
 
-	taskD := client.CreateTask(t, CreateTaskRequest{Name: "Task D", DueAt: &dueDateD})
+	taskD := client.CreateTask(t, CreateTaskRequest{Name: "Task D"})
 	client.UpdateTask(t, taskD.ID, UpdateTaskRequest{StartedAt: &now})
 
 	taskE := client.CreateTask(t, CreateTaskRequest{
@@ -917,11 +933,14 @@ func TestE2E_TaskDependencies_DueDateList(t *testing.T) {
 
 	taskF := client.CreateTask(t, CreateTaskRequest{
 		Name:      "Task F",
+		DueAt:     &dueDateF,
 		DependsOn: []int32{taskE.ID},
 	})
 	client.UpdateTask(t, taskF.ID, UpdateTaskRequest{StartedAt: &now})
 
-	// F should be hidden: E is blocked (D unfinished), all of F's deps are blocked
+	// D should inherit F's due date backward through the chain
+	// E is blocked (D unfinished) but not hidden (it has a blocking task D that is not itself blocked)
+	// F should be hidden: all of F's deps (E) are blocked
 	tasks = client.GetTasksByDueDate(t)
 	taskMap = map[int32]*TaskByDueDateResponse{}
 	for i := range tasks {
@@ -929,7 +948,7 @@ func TestE2E_TaskDependencies_DueDateList(t *testing.T) {
 	}
 
 	if _, ok := taskMap[taskD.ID]; !ok {
-		t.Error("Task D should appear in due-date list")
+		t.Error("Task D should appear in due-date list (inherited due from F via E)")
 	}
 	if _, ok := taskMap[taskE.ID]; !ok {
 		t.Error("Task E should appear in due-date list (blocked but not hidden)")
@@ -949,5 +968,121 @@ func TestE2E_TaskDependencies_DueDateList(t *testing.T) {
 
 	if _, ok := taskMap[taskF.ID]; !ok {
 		t.Error("Task F should appear after finishing D (E no longer blocked)")
+	}
+}
+
+func TestE2E_GetTimeEntriesByDateRange(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping e2e test in short mode")
+	}
+
+	truncateTables(t)
+	client := authenticate(t)
+
+	// Create project and task
+	proj := client.CreateProject(t, CreateProjectRequest{Name: "Range Project"})
+	now := time.Now().UTC().Truncate(time.Second)
+	client.UpdateProject(t, proj.ID, UpdateProjectRequest{StartedAt: &now})
+
+	task := client.CreateTask(t, CreateTaskRequest{Name: "Range Task", ProjectID: &proj.ID})
+	client.UpdateTask(t, task.ID, UpdateTaskRequest{StartedAt: &now})
+
+	// Create orphan task (no project)
+	orphan := client.CreateTask(t, CreateTaskRequest{Name: "Orphan Task"})
+	client.UpdateTask(t, orphan.ID, UpdateTaskRequest{StartedAt: &now})
+
+	// Entry 1: fully within March (March 10, 9:00 - 10:30, 1.5h = 5400s)
+	e1Start := time.Date(2026, 3, 10, 9, 0, 0, 0, time.UTC)
+	e1End := time.Date(2026, 3, 10, 10, 30, 0, 0, time.UTC)
+	client.CreateTimeEntry(t, CreateTimeEntryRequest{
+		TaskID: task.ID, StartedAt: e1Start, FinishedAt: &e1End,
+		Comment: strPtr("entry within range"),
+	})
+
+	// Entry 2: overlaps range start (Feb 28 23:00 - March 1 01:00, 2h)
+	e2Start := time.Date(2026, 2, 28, 23, 0, 0, 0, time.UTC)
+	e2End := time.Date(2026, 3, 1, 1, 0, 0, 0, time.UTC)
+	client.CreateTimeEntry(t, CreateTimeEntryRequest{
+		TaskID: task.ID, StartedAt: e2Start, FinishedAt: &e2End,
+	})
+
+	// Entry 3: overlaps range end (March 31 10:00 - March 31 12:00, 2h)
+	e3Start := time.Date(2026, 3, 31, 10, 0, 0, 0, time.UTC)
+	e3End := time.Date(2026, 3, 31, 12, 0, 0, 0, time.UTC)
+	client.CreateTimeEntry(t, CreateTimeEntryRequest{
+		TaskID: task.ID, StartedAt: e3Start, FinishedAt: &e3End,
+	})
+
+	// Entry 4: fully outside range (Feb 1 - Feb 2) — should NOT appear
+	e4Start := time.Date(2026, 2, 1, 9, 0, 0, 0, time.UTC)
+	e4End := time.Date(2026, 2, 1, 10, 0, 0, 0, time.UTC)
+	client.CreateTimeEntry(t, CreateTimeEntryRequest{
+		TaskID: task.ID, StartedAt: e4Start, FinishedAt: &e4End,
+	})
+
+	// Entry 5: active (started March 15, no finished_at) — should appear
+	e5Start := time.Date(2026, 3, 15, 14, 0, 0, 0, time.UTC)
+	client.CreateTimeEntry(t, CreateTimeEntryRequest{
+		TaskID: orphan.ID, StartedAt: e5Start,
+	})
+
+	// Query March 1 - March 31
+	entries := client.GetTimeEntriesByDateRange(t, "2026-03-01", "2026-03-31")
+
+	// Should get entries 1, 2, 3, 5 (not 4)
+	if len(entries) != 4 {
+		t.Fatalf("expected 4 entries, got %d", len(entries))
+	}
+
+	// Entries are ordered by started_at DESC
+	// e3 (March 31) > e5 (March 15) > e1 (March 10) > e2 (Feb 28)
+	if entries[0].StartedAt.Before(entries[1].StartedAt) {
+		t.Error("entries should be ordered by started_at DESC")
+	}
+
+	// Verify task/project metadata on a project-linked entry
+	found := false
+	for _, e := range entries {
+		if e.Comment != nil && *e.Comment == "entry within range" {
+			found = true
+			if e.TaskName != "Range Task" {
+				t.Errorf("expected task_name 'Range Task', got %q", e.TaskName)
+			}
+			if e.ProjectID == nil || *e.ProjectID != proj.ID {
+				t.Error("expected project_id to match")
+			}
+			if e.ProjectName == nil || *e.ProjectName != "Range Project" {
+				t.Error("expected project_name 'Range Project'")
+			}
+			if e.TimeSpent != 5400 {
+				t.Errorf("expected time_spent 5400, got %d", e.TimeSpent)
+			}
+			if e.TaskFinishedAt != nil {
+				t.Error("expected task_finished_at to be null (task not finished)")
+			}
+			break
+		}
+	}
+	if !found {
+		t.Error("did not find 'entry within range' entry")
+	}
+
+	// Verify orphan task entry has null project fields
+	for _, e := range entries {
+		if e.TaskName == "Orphan Task" {
+			if e.ProjectID != nil {
+				t.Error("orphan task entry should have null project_id")
+			}
+			if e.ProjectName != nil {
+				t.Error("orphan task entry should have null project_name")
+			}
+			if e.FinishedAt != nil {
+				t.Error("active entry should have null finished_at")
+			}
+			if e.TimeSpent <= 0 {
+				t.Error("active entry should have positive time_spent (now - started_at)")
+			}
+			break
+		}
 	}
 }

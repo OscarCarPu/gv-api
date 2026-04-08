@@ -22,13 +22,13 @@ A comprehensive life orchestrator built in Go, designed to centralize data from 
 | `gv-api/internal/habits/service.go` | ![82.8%](https://img.shields.io/badge/82.8%25-brightgreen) |
 | `gv-api/internal/history/history.go` | ![100.0%](https://img.shields.io/badge/100.0%25-brightgreen) |
 | `gv-api/internal/response/response.go` | ![87.5%](https://img.shields.io/badge/87.5%25-brightgreen) |
-| `gv-api/internal/tasks/dto.go` | ![0.0%](https://img.shields.io/badge/0.0%25-red) |
-| `gv-api/internal/tasks/handler.go` | ![87.1%](https://img.shields.io/badge/87.1%25-brightgreen) |
+| `gv-api/internal/tasks/dto.go` | ![14.8%](https://img.shields.io/badge/14.8%25-red) |
+| `gv-api/internal/tasks/handler.go` | ![87.7%](https://img.shields.io/badge/87.7%25-brightgreen) |
 | `gv-api/internal/tasks/repository.go` | ![0.0%](https://img.shields.io/badge/0.0%25-red) |
-| `gv-api/internal/tasks/service.go` | ![29.4%](https://img.shields.io/badge/29.4%25-red) |
+| `gv-api/internal/tasks/service.go` | ![31.9%](https://img.shields.io/badge/31.9%25-red) |
 | `gv-api/test/e2e/client.go` | ![78.5%](https://img.shields.io/badge/78.5%25-brightgreen) |
 | `gv-api/test/e2e/setup.go` | ![76.7%](https://img.shields.io/badge/76.7%25-brightgreen) |
-| **Total** | ![62.4%](https://img.shields.io/badge/62.4%25-yellow) |
+| **Total** | ![63.4%](https://img.shields.io/badge/63.4%25-yellow) |
 
 > Untested code not shown above is either auto-generated, boilerplate delegation, or covered by E2E.
 

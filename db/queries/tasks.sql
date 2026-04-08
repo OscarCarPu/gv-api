@@ -286,3 +286,19 @@ SELECT
     COALESCE((SELECT json_agg(json_build_object('id', t2.id, 'name', t2.name, 'due_at', t2.due_at) ORDER BY t2.name) FROM task_dependencies td JOIN tasks t2 ON t2.id = td.depends_on WHERE td.task_id = $1 AND t2.finished_at IS NULL), '[]')::json AS depends_on,
     COALESCE((SELECT json_agg(json_build_object('id', t2.id, 'name', t2.name) ORDER BY t2.name) FROM task_dependencies td JOIN tasks t2 ON t2.id = td.task_id WHERE td.depends_on = $1), '[]')::json AS blocks,
     EXISTS(SELECT 1 FROM task_dependencies td3 JOIN tasks t3 ON t3.id = td3.depends_on WHERE td3.task_id = $1 AND t3.finished_at IS NULL) AS blocked;
+
+-- name: GetTimeEntriesByDateRange :many
+SELECT
+    te.id, te.task_id,
+    t.name AS task_name,
+    t.finished_at AS task_finished_at,
+    p.id AS project_id,
+    p.name AS project_name,
+    te.started_at, te.finished_at, te.comment,
+    EXTRACT(EPOCH FROM (COALESCE(te.finished_at, NOW()) - te.started_at))::bigint AS time_spent
+FROM time_entries te
+JOIN tasks t ON t.id = te.task_id
+LEFT JOIN projects p ON p.id = t.project_id
+WHERE te.started_at <= @end_time::timestamptz
+  AND (te.finished_at >= @start_time::timestamptz OR te.finished_at IS NULL)
+ORDER BY te.started_at DESC;

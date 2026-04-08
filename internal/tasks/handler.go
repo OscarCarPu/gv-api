@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/http"
 	"strconv"
+	"time"
 
 	"gv-api/internal/history"
 	"gv-api/internal/response"
@@ -39,6 +40,7 @@ type ServiceInterface interface {
 	GetActiveTimeEntry(ctx context.Context) (TimeEntryResponse, error)
 	GetTimeEntrySummary(ctx context.Context) (TimeEntrySummaryResponse, error)
 	GetTimeEntryHistory(ctx context.Context, frequency, startAt, endAt string) (history.Response, error)
+	GetTimeEntriesByDateRange(ctx context.Context, startTime, endTime string) ([]TimeEntryWithTaskResponse, error)
 }
 
 type Handler struct {
@@ -495,6 +497,35 @@ func (h *Handler) GetTimeEntryHistory(w http.ResponseWriter, r *http.Request) {
 	}
 
 	response.JSON(w, http.StatusOK, history)
+}
+
+func (h *Handler) GetTimeEntriesByDateRange(w http.ResponseWriter, r *http.Request) {
+	startTime := r.URL.Query().Get("start_time")
+	if startTime == "" {
+		response.Error(w, http.StatusBadRequest, "start_time is required")
+		return
+	}
+
+	if _, err := time.Parse("2006-01-02", startTime); err != nil {
+		response.Error(w, http.StatusBadRequest, "invalid start_time format, expected YYYY-MM-DD")
+		return
+	}
+
+	endTime := r.URL.Query().Get("end_time")
+	if endTime != "" {
+		if _, err := time.Parse("2006-01-02", endTime); err != nil {
+			response.Error(w, http.StatusBadRequest, "invalid end_time format, expected YYYY-MM-DD")
+			return
+		}
+	}
+
+	entries, err := h.service.GetTimeEntriesByDateRange(r.Context(), startTime, endTime)
+	if err != nil {
+		response.Error(w, http.StatusInternalServerError, "Failed to get time entries")
+		return
+	}
+
+	response.JSON(w, http.StatusOK, entries)
 }
 
 func (h *Handler) ListTasksFast(w http.ResponseWriter, r *http.Request) {

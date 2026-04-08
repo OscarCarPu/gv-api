@@ -563,6 +563,51 @@
   - **Code:** `500 Internal Server Error`
     - **Content:** `Failed to get task time entries`
 
+## Get Time Entries by Date Range
+
+- **Method:** `GET`
+- **Endpoint:** `/tasks/time-entries`
+- **Description:** Returns time entries that overlap with the given date range. An entry overlaps if it started on or before the end date AND has not finished before the start date (or is still running). Includes task and project metadata. Results are ordered by `started_at` descending.
+- **Query Parameters:**
+  - `start_time` (required): Start date in `YYYY-MM-DD` format.
+  - `end_time` (optional): End date in `YYYY-MM-DD` format. Defaults to today.
+- **Success Response:**
+  - **Code:** `200 OK`
+  - **Content:**
+    ```json
+    [
+      {
+        "id": 1,
+        "task_id": 5,
+        "task_name": "Implement feature X",
+        "project_id": 2,
+        "project_name": "My Project",
+        "started_at": "2026-03-15T09:00:00Z",
+        "finished_at": "2026-03-15T10:30:00Z",
+        "comment": "Worked on feature X",
+        "task_finished_at": null,
+        "time_spent": 5400
+      },
+      {
+        "id": 2,
+        "task_id": 8,
+        "task_name": "Orphan task",
+        "project_id": null,
+        "project_name": null,
+        "started_at": "2026-03-14T14:00:00Z",
+        "finished_at": null,
+        "comment": null,
+        "task_finished_at": null,
+        "time_spent": 3600
+      }
+    ]
+    ```
+- **Error Responses:**
+  - **Code:** `400 Bad Request`
+    - **Content:** `start_time is required`, `invalid start_time format, expected YYYY-MM-DD`, or `invalid end_time format, expected YYYY-MM-DD`
+  - **Code:** `500 Internal Server Error`
+    - **Content:** `Failed to get time entries`
+
 ## Get Time Entry History
 
 - **Method:** `GET`

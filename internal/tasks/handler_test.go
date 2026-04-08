@@ -1414,3 +1414,111 @@ func TestHandler_GetTimeEntryHistory(t *testing.T) {
 		assert.Contains(t, rec.Body.String(), "Failed to get time entry history")
 	})
 }
+
+func TestHandler_GetTimeEntriesByDateRange(t *testing.T) {
+	t.Run("returns 400 when start_time is missing", func(t *testing.T) {
+		svc := mocks.NewMockServiceInterface(t)
+		handler := tasks.NewHandler(svc)
+
+		req := httptest.NewRequest(http.MethodGet, "/tasks/time-entries", nil)
+		rec := httptest.NewRecorder()
+		handler.GetTimeEntriesByDateRange(rec, req)
+
+		assert.Equal(t, http.StatusBadRequest, rec.Code)
+		assert.Contains(t, rec.Body.String(), "start_time is required")
+	})
+
+	t.Run("returns 400 when start_time format is invalid", func(t *testing.T) {
+		svc := mocks.NewMockServiceInterface(t)
+		handler := tasks.NewHandler(svc)
+
+		req := httptest.NewRequest(http.MethodGet, "/tasks/time-entries?start_time=bad", nil)
+		rec := httptest.NewRecorder()
+		handler.GetTimeEntriesByDateRange(rec, req)
+
+		assert.Equal(t, http.StatusBadRequest, rec.Code)
+		assert.Contains(t, rec.Body.String(), "invalid start_time format")
+	})
+
+	t.Run("returns 400 when end_time format is invalid", func(t *testing.T) {
+		svc := mocks.NewMockServiceInterface(t)
+		handler := tasks.NewHandler(svc)
+
+		req := httptest.NewRequest(http.MethodGet, "/tasks/time-entries?start_time=2026-03-01&end_time=bad", nil)
+		rec := httptest.NewRecorder()
+		handler.GetTimeEntriesByDateRange(rec, req)
+
+		assert.Equal(t, http.StatusBadRequest, rec.Code)
+		assert.Contains(t, rec.Body.String(), "invalid end_time format")
+	})
+
+	t.Run("returns 200 with entries", func(t *testing.T) {
+		svc := mocks.NewMockServiceInterface(t)
+		finished := time.Date(2026, 3, 15, 10, 30, 0, 0, time.UTC)
+		entries := []tasks.TimeEntryWithTaskResponse{
+			{
+				ID:        1,
+				TaskID:    5,
+				TaskName:  "My Task",
+				ProjectID: func() *int32 { v := int32(2); return &v }(),
+				StartedAt: time.Date(2026, 3, 15, 9, 0, 0, 0, time.UTC),
+				FinishedAt: &finished,
+				TimeSpent: 5400,
+			},
+		}
+		svc.EXPECT().GetTimeEntriesByDateRange(mock.Anything, "2026-03-01", "2026-03-31").Return(entries, nil)
+		handler := tasks.NewHandler(svc)
+
+		req := httptest.NewRequest(http.MethodGet, "/tasks/time-entries?start_time=2026-03-01&end_time=2026-03-31", nil)
+		rec := httptest.NewRecorder()
+		handler.GetTimeEntriesByDateRange(rec, req)
+
+		assert.Equal(t, http.StatusOK, rec.Code)
+		var got []tasks.TimeEntryWithTaskResponse
+		require.NoError(t, json.NewDecoder(rec.Body).Decode(&got))
+		require.Len(t, got, 1)
+		assert.Equal(t, int32(1), got[0].ID)
+		assert.Equal(t, "My Task", got[0].TaskName)
+		assert.Equal(t, int64(5400), got[0].TimeSpent)
+	})
+
+	t.Run("returns 200 with defaults when end_time is omitted", func(t *testing.T) {
+		svc := mocks.NewMockServiceInterface(t)
+		svc.EXPECT().GetTimeEntriesByDateRange(mock.Anything, "2026-03-01", "").Return([]tasks.TimeEntryWithTaskResponse{}, nil)
+		handler := tasks.NewHandler(svc)
+
+		req := httptest.NewRequest(http.MethodGet, "/tasks/time-entries?start_time=2026-03-01", nil)
+		rec := httptest.NewRecorder()
+		handler.GetTimeEntriesByDateRange(rec, req)
+
+		assert.Equal(t, http.StatusOK, rec.Code)
+	})
+
+	t.Run("returns 200 with empty array when no entries match", func(t *testing.T) {
+		svc := mocks.NewMockServiceInterface(t)
+		svc.EXPECT().GetTimeEntriesByDateRange(mock.Anything, "2026-01-01", "2026-01-31").Return([]tasks.TimeEntryWithTaskResponse{}, nil)
+		handler := tasks.NewHandler(svc)
+
+		req := httptest.NewRequest(http.MethodGet, "/tasks/time-entries?start_time=2026-01-01&end_time=2026-01-31", nil)
+		rec := httptest.NewRecorder()
+		handler.GetTimeEntriesByDateRange(rec, req)
+
+		assert.Equal(t, http.StatusOK, rec.Code)
+		var got []tasks.TimeEntryWithTaskResponse
+		require.NoError(t, json.NewDecoder(rec.Body).Decode(&got))
+		assert.Empty(t, got)
+	})
+
+	t.Run("returns 500 on service error", func(t *testing.T) {
+		svc := mocks.NewMockServiceInterface(t)
+		svc.EXPECT().GetTimeEntriesByDateRange(mock.Anything, "2026-03-01", "2026-03-31").Return(nil, errors.New("db error"))
+		handler := tasks.NewHandler(svc)
+
+		req := httptest.NewRequest(http.MethodGet, "/tasks/time-entries?start_time=2026-03-01&end_time=2026-03-31", nil)
+		rec := httptest.NewRecorder()
+		handler.GetTimeEntriesByDateRange(rec, req)
+
+		assert.Equal(t, http.StatusInternalServerError, rec.Code)
+		assert.Contains(t, rec.Body.String(), "Failed to get time entries")
+	})
+}

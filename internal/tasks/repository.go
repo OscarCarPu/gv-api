@@ -46,6 +46,7 @@ type Repository interface {
 	GetTimeEntryHistory(ctx context.Context, frequency, timezone string, startAt, endAt time.Time) ([]history.Point, error)
 	ReplaceTaskDependencies(ctx context.Context, taskID int32, dependsOn []int32) error
 	GetTaskDependencies(ctx context.Context, taskID int32) ([]TaskDepRef, []TaskDepRef, bool, error)
+	GetTimeEntriesByDateRange(ctx context.Context, startTime, endTime time.Time) ([]TimeEntryWithTaskResponse, error)
 }
 
 type PostgresRepository struct {
@@ -714,6 +715,34 @@ func (r *PostgresRepository) GetTimeEntryHistory(ctx context.Context, frequency,
 		}
 	}
 	return results, nil
+}
+
+func (r *PostgresRepository) GetTimeEntriesByDateRange(ctx context.Context, startTime, endTime time.Time) ([]TimeEntryWithTaskResponse, error) {
+	rows, err := r.q.GetTimeEntriesByDateRange(ctx, tasksdb.GetTimeEntriesByDateRangeParams{
+		StartTime: pgtype.Timestamptz{Time: startTime, Valid: true},
+		EndTime:   pgtype.Timestamptz{Time: endTime, Valid: true},
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	entries := make([]TimeEntryWithTaskResponse, len(rows))
+	for i, row := range rows {
+		entries[i] = TimeEntryWithTaskResponse{
+			ID:             row.ID,
+			TaskID:         row.TaskID,
+			TaskName:       row.TaskName,
+			ProjectID:      row.ProjectID,
+			ProjectName:    row.ProjectName,
+			StartedAt:      row.StartedAt.Time,
+			FinishedAt:     pgTimestamptzToPtr(row.FinishedAt),
+			Comment:        row.Comment,
+			TaskFinishedAt: pgTimestamptzToPtr(row.TaskFinishedAt),
+			TimeSpent:      row.TimeSpent,
+		}
+	}
+
+	return entries, nil
 }
 
 func (r *PostgresRepository) ReplaceTaskDependencies(ctx context.Context, taskID int32, dependsOn []int32) error {

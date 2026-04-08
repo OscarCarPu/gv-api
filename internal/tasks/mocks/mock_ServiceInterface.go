@@ -898,6 +898,66 @@ func (_c *MockServiceInterface_GetTasksByDueDate_Call) RunAndReturn(run func(con
 	return _c
 }
 
+// GetTimeEntriesByDateRange provides a mock function with given fields: ctx, startTime, endTime
+func (_m *MockServiceInterface) GetTimeEntriesByDateRange(ctx context.Context, startTime string, endTime string) ([]tasks.TimeEntryWithTaskResponse, error) {
+	ret := _m.Called(ctx, startTime, endTime)
+
+	if len(ret) == 0 {
+		panic("no return value specified for GetTimeEntriesByDateRange")
+	}
+
+	var r0 []tasks.TimeEntryWithTaskResponse
+	var r1 error
+	if rf, ok := ret.Get(0).(func(context.Context, string, string) ([]tasks.TimeEntryWithTaskResponse, error)); ok {
+		return rf(ctx, startTime, endTime)
+	}
+	if rf, ok := ret.Get(0).(func(context.Context, string, string) []tasks.TimeEntryWithTaskResponse); ok {
+		r0 = rf(ctx, startTime, endTime)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).([]tasks.TimeEntryWithTaskResponse)
+		}
+	}
+
+	if rf, ok := ret.Get(1).(func(context.Context, string, string) error); ok {
+		r1 = rf(ctx, startTime, endTime)
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
+}
+
+// MockServiceInterface_GetTimeEntriesByDateRange_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'GetTimeEntriesByDateRange'
+type MockServiceInterface_GetTimeEntriesByDateRange_Call struct {
+	*mock.Call
+}
+
+// GetTimeEntriesByDateRange is a helper method to define mock.On call
+//   - ctx context.Context
+//   - startTime string
+//   - endTime string
+func (_e *MockServiceInterface_Expecter) GetTimeEntriesByDateRange(ctx interface{}, startTime interface{}, endTime interface{}) *MockServiceInterface_GetTimeEntriesByDateRange_Call {
+	return &MockServiceInterface_GetTimeEntriesByDateRange_Call{Call: _e.mock.On("GetTimeEntriesByDateRange", ctx, startTime, endTime)}
+}
+
+func (_c *MockServiceInterface_GetTimeEntriesByDateRange_Call) Run(run func(ctx context.Context, startTime string, endTime string)) *MockServiceInterface_GetTimeEntriesByDateRange_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].(context.Context), args[1].(string), args[2].(string))
+	})
+	return _c
+}
+
+func (_c *MockServiceInterface_GetTimeEntriesByDateRange_Call) Return(_a0 []tasks.TimeEntryWithTaskResponse, _a1 error) *MockServiceInterface_GetTimeEntriesByDateRange_Call {
+	_c.Call.Return(_a0, _a1)
+	return _c
+}
+
+func (_c *MockServiceInterface_GetTimeEntriesByDateRange_Call) RunAndReturn(run func(context.Context, string, string) ([]tasks.TimeEntryWithTaskResponse, error)) *MockServiceInterface_GetTimeEntriesByDateRange_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // GetTimeEntryHistory provides a mock function with given fields: ctx, frequency, startAt, endAt
 func (_m *MockServiceInterface) GetTimeEntryHistory(ctx context.Context, frequency string, startAt string, endAt string) (history.Response, error) {
 	ret := _m.Called(ctx, frequency, startAt, endAt)
