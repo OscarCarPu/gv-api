@@ -19,7 +19,7 @@ func TestService_CreateTask(t *testing.T) {
 	t.Run("creates task with dependencies", func(t *testing.T) {
 		repo := mocks.NewMockRepository(t)
 		repo.EXPECT().
-			CreateTask(mock.Anything, mock.Anything, "My Task", mock.Anything, mock.Anything).
+			CreateTask(mock.Anything, mock.Anything, "My Task", mock.Anything, mock.Anything, "standard", mock.Anything).
 			Return(tasks.TaskResponse{ID: 10, Name: "My Task"}, nil)
 		repo.EXPECT().
 			ReplaceTaskDependencies(mock.Anything, int32(10), []int32{2, 3}).
@@ -44,7 +44,7 @@ func TestService_CreateTask(t *testing.T) {
 	t.Run("creates task without dependencies", func(t *testing.T) {
 		repo := mocks.NewMockRepository(t)
 		repo.EXPECT().
-			CreateTask(mock.Anything, mock.Anything, "Simple Task", mock.Anything, mock.Anything).
+			CreateTask(mock.Anything, mock.Anything, "Simple Task", mock.Anything, mock.Anything, "standard", mock.Anything).
 			Return(tasks.TaskResponse{ID: 11, Name: "Simple Task"}, nil)
 		repo.EXPECT().
 			GetTaskDependencies(mock.Anything, int32(11)).
@@ -63,7 +63,7 @@ func TestService_CreateTask(t *testing.T) {
 
 	t.Run("propagates error from ReplaceTaskDependencies", func(t *testing.T) {
 		repo := mocks.NewMockRepository(t)
-		repo.EXPECT().CreateTask(mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
+		repo.EXPECT().CreateTask(mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
 			Return(tasks.TaskResponse{ID: 10}, nil)
 		repo.EXPECT().ReplaceTaskDependencies(mock.Anything, int32(10), []int32{99}).
 			Return(errors.New("fk violation"))

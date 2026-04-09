@@ -86,9 +86,9 @@ func (_c *MockRepository_CreateProject_Call) RunAndReturn(run func(context.Conte
 	return _c
 }
 
-// CreateTask provides a mock function with given fields: ctx, projectID, name, description, dueAt
-func (_m *MockRepository) CreateTask(ctx context.Context, projectID *int32, name string, description *string, dueAt *time.Time) (tasks.TaskResponse, error) {
-	ret := _m.Called(ctx, projectID, name, description, dueAt)
+// CreateTask provides a mock function with given fields: ctx, projectID, name, description, dueAt, taskType, recurrence
+func (_m *MockRepository) CreateTask(ctx context.Context, projectID *int32, name string, description *string, dueAt *time.Time, taskType string, recurrence *int32) (tasks.TaskResponse, error) {
+	ret := _m.Called(ctx, projectID, name, description, dueAt, taskType, recurrence)
 
 	if len(ret) == 0 {
 		panic("no return value specified for CreateTask")
@@ -96,17 +96,17 @@ func (_m *MockRepository) CreateTask(ctx context.Context, projectID *int32, name
 
 	var r0 tasks.TaskResponse
 	var r1 error
-	if rf, ok := ret.Get(0).(func(context.Context, *int32, string, *string, *time.Time) (tasks.TaskResponse, error)); ok {
-		return rf(ctx, projectID, name, description, dueAt)
+	if rf, ok := ret.Get(0).(func(context.Context, *int32, string, *string, *time.Time, string, *int32) (tasks.TaskResponse, error)); ok {
+		return rf(ctx, projectID, name, description, dueAt, taskType, recurrence)
 	}
-	if rf, ok := ret.Get(0).(func(context.Context, *int32, string, *string, *time.Time) tasks.TaskResponse); ok {
-		r0 = rf(ctx, projectID, name, description, dueAt)
+	if rf, ok := ret.Get(0).(func(context.Context, *int32, string, *string, *time.Time, string, *int32) tasks.TaskResponse); ok {
+		r0 = rf(ctx, projectID, name, description, dueAt, taskType, recurrence)
 	} else {
 		r0 = ret.Get(0).(tasks.TaskResponse)
 	}
 
-	if rf, ok := ret.Get(1).(func(context.Context, *int32, string, *string, *time.Time) error); ok {
-		r1 = rf(ctx, projectID, name, description, dueAt)
+	if rf, ok := ret.Get(1).(func(context.Context, *int32, string, *string, *time.Time, string, *int32) error); ok {
+		r1 = rf(ctx, projectID, name, description, dueAt, taskType, recurrence)
 	} else {
 		r1 = ret.Error(1)
 	}
@@ -125,13 +125,15 @@ type MockRepository_CreateTask_Call struct {
 //   - name string
 //   - description *string
 //   - dueAt *time.Time
-func (_e *MockRepository_Expecter) CreateTask(ctx interface{}, projectID interface{}, name interface{}, description interface{}, dueAt interface{}) *MockRepository_CreateTask_Call {
-	return &MockRepository_CreateTask_Call{Call: _e.mock.On("CreateTask", ctx, projectID, name, description, dueAt)}
+//   - taskType string
+//   - recurrence *int32
+func (_e *MockRepository_Expecter) CreateTask(ctx interface{}, projectID interface{}, name interface{}, description interface{}, dueAt interface{}, taskType interface{}, recurrence interface{}) *MockRepository_CreateTask_Call {
+	return &MockRepository_CreateTask_Call{Call: _e.mock.On("CreateTask", ctx, projectID, name, description, dueAt, taskType, recurrence)}
 }
 
-func (_c *MockRepository_CreateTask_Call) Run(run func(ctx context.Context, projectID *int32, name string, description *string, dueAt *time.Time)) *MockRepository_CreateTask_Call {
+func (_c *MockRepository_CreateTask_Call) Run(run func(ctx context.Context, projectID *int32, name string, description *string, dueAt *time.Time, taskType string, recurrence *int32)) *MockRepository_CreateTask_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].(context.Context), args[1].(*int32), args[2].(string), args[3].(*string), args[4].(*time.Time))
+		run(args[0].(context.Context), args[1].(*int32), args[2].(string), args[3].(*string), args[4].(*time.Time), args[5].(string), args[6].(*int32))
 	})
 	return _c
 }
@@ -141,7 +143,7 @@ func (_c *MockRepository_CreateTask_Call) Return(_a0 tasks.TaskResponse, _a1 err
 	return _c
 }
 
-func (_c *MockRepository_CreateTask_Call) RunAndReturn(run func(context.Context, *int32, string, *string, *time.Time) (tasks.TaskResponse, error)) *MockRepository_CreateTask_Call {
+func (_c *MockRepository_CreateTask_Call) RunAndReturn(run func(context.Context, *int32, string, *string, *time.Time, string, *int32) (tasks.TaskResponse, error)) *MockRepository_CreateTask_Call {
 	_c.Call.Return(run)
 	return _c
 }

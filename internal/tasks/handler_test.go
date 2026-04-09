@@ -172,6 +172,83 @@ func TestHandler_CreateTask(t *testing.T) {
 		assert.Equal(t, http.StatusInternalServerError, rec.Code)
 		assert.Contains(t, rec.Body.String(), "Failed to create task")
 	})
+
+	t.Run("returns 400 when task_type is invalid", func(t *testing.T) {
+		svc := mocks.NewMockServiceInterface(t)
+		handler := tasks.NewHandler(svc)
+		req := httptest.NewRequest(http.MethodPost, "/tasks/tasks", strings.NewReader(`{"name": "My Task", "task_type": "invalid"}`))
+		rec := httptest.NewRecorder()
+		handler.CreateTask(rec, req)
+		assert.Equal(t, http.StatusBadRequest, rec.Code)
+		assert.Contains(t, rec.Body.String(), "task_type must be standard, continuous, or recurring")
+	})
+
+	t.Run("returns 400 when recurring without recurrence", func(t *testing.T) {
+		svc := mocks.NewMockServiceInterface(t)
+		handler := tasks.NewHandler(svc)
+		req := httptest.NewRequest(http.MethodPost, "/tasks/tasks", strings.NewReader(`{"name": "My Task", "task_type": "recurring"}`))
+		rec := httptest.NewRecorder()
+		handler.CreateTask(rec, req)
+		assert.Equal(t, http.StatusBadRequest, rec.Code)
+		assert.Contains(t, rec.Body.String(), "recurrence is required when task_type is recurring")
+	})
+
+	t.Run("returns 400 when non-recurring with recurrence", func(t *testing.T) {
+		svc := mocks.NewMockServiceInterface(t)
+		handler := tasks.NewHandler(svc)
+		req := httptest.NewRequest(http.MethodPost, "/tasks/tasks", strings.NewReader(`{"name": "My Task", "recurrence": 7}`))
+		rec := httptest.NewRecorder()
+		handler.CreateTask(rec, req)
+		assert.Equal(t, http.StatusBadRequest, rec.Code)
+		assert.Contains(t, rec.Body.String(), "recurrence is only valid when task_type is recurring")
+	})
+
+	t.Run("returns 400 when recurrence is not positive", func(t *testing.T) {
+		svc := mocks.NewMockServiceInterface(t)
+		handler := tasks.NewHandler(svc)
+		req := httptest.NewRequest(http.MethodPost, "/tasks/tasks", strings.NewReader(`{"name": "My Task", "task_type": "recurring", "recurrence": 0}`))
+		rec := httptest.NewRecorder()
+		handler.CreateTask(rec, req)
+		assert.Equal(t, http.StatusBadRequest, rec.Code)
+		assert.Contains(t, rec.Body.String(), "recurrence must be a positive number of days")
+	})
+
+	t.Run("creates recurring task successfully", func(t *testing.T) {
+		recurrence := int32(7)
+		svc := mocks.NewMockServiceInterface(t)
+		svc.EXPECT().CreateTask(mock.Anything, mock.MatchedBy(func(req tasks.CreateTaskRequest) bool {
+			return req.Name == "Clean kitchen" && *req.TaskType == "recurring" && *req.Recurrence == 7
+		})).Return(tasks.TaskResponse{ID: 1, Name: "Clean kitchen", TaskType: "recurring", Recurrence: &recurrence}, nil)
+		handler := tasks.NewHandler(svc)
+
+		req := httptest.NewRequest(http.MethodPost, "/tasks/tasks", strings.NewReader(`{"name": "Clean kitchen", "task_type": "recurring", "recurrence": 7}`))
+		rec := httptest.NewRecorder()
+		handler.CreateTask(rec, req)
+
+		assert.Equal(t, http.StatusCreated, rec.Code)
+		var got tasks.TaskResponse
+		require.NoError(t, json.NewDecoder(rec.Body).Decode(&got))
+		assert.Equal(t, "recurring", got.TaskType)
+		assert.Equal(t, &recurrence, got.Recurrence)
+	})
+
+	t.Run("creates continuous task successfully", func(t *testing.T) {
+		svc := mocks.NewMockServiceInterface(t)
+		svc.EXPECT().CreateTask(mock.Anything, mock.MatchedBy(func(req tasks.CreateTaskRequest) bool {
+			return req.Name == "Quick fixes" && *req.TaskType == "continuous"
+		})).Return(tasks.TaskResponse{ID: 2, Name: "Quick fixes", TaskType: "continuous"}, nil)
+		handler := tasks.NewHandler(svc)
+
+		req := httptest.NewRequest(http.MethodPost, "/tasks/tasks", strings.NewReader(`{"name": "Quick fixes", "task_type": "continuous"}`))
+		rec := httptest.NewRecorder()
+		handler.CreateTask(rec, req)
+
+		assert.Equal(t, http.StatusCreated, rec.Code)
+		var got tasks.TaskResponse
+		require.NoError(t, json.NewDecoder(rec.Body).Decode(&got))
+		assert.Equal(t, "continuous", got.TaskType)
+		assert.Nil(t, got.Recurrence)
+	})
 }
 
 func TestHandler_CreateTodo(t *testing.T) {
@@ -558,6 +635,70 @@ func TestHandler_UpdateTask(t *testing.T) {
 		handler.UpdateTask(rec, req)
 		assert.Equal(t, http.StatusInternalServerError, rec.Code)
 		assert.Contains(t, rec.Body.String(), "Failed to update task")
+	})
+
+	t.Run("returns 400 when task_type is invalid", func(t *testing.T) {
+		svc := mocks.NewMockServiceInterface(t)
+		handler := tasks.NewHandler(svc)
+		req := httptest.NewRequest(http.MethodPatch, "/tasks/tasks/1", strings.NewReader(`{"task_type": "invalid"}`))
+		req = withIDParam(req, "1")
+		rec := httptest.NewRecorder()
+		handler.UpdateTask(rec, req)
+		assert.Equal(t, http.StatusBadRequest, rec.Code)
+		assert.Contains(t, rec.Body.String(), "task_type must be standard, continuous, or recurring")
+	})
+
+	t.Run("returns 400 when updating to recurring without recurrence", func(t *testing.T) {
+		svc := mocks.NewMockServiceInterface(t)
+		handler := tasks.NewHandler(svc)
+		req := httptest.NewRequest(http.MethodPatch, "/tasks/tasks/1", strings.NewReader(`{"task_type": "recurring"}`))
+		req = withIDParam(req, "1")
+		rec := httptest.NewRecorder()
+		handler.UpdateTask(rec, req)
+		assert.Equal(t, http.StatusBadRequest, rec.Code)
+		assert.Contains(t, rec.Body.String(), "recurrence is required when task_type is recurring")
+	})
+
+	t.Run("returns 400 when updating to standard with recurrence", func(t *testing.T) {
+		svc := mocks.NewMockServiceInterface(t)
+		handler := tasks.NewHandler(svc)
+		req := httptest.NewRequest(http.MethodPatch, "/tasks/tasks/1", strings.NewReader(`{"task_type": "standard", "recurrence": 7}`))
+		req = withIDParam(req, "1")
+		rec := httptest.NewRecorder()
+		handler.UpdateTask(rec, req)
+		assert.Equal(t, http.StatusBadRequest, rec.Code)
+		assert.Contains(t, rec.Body.String(), "recurrence is only valid when task_type is recurring")
+	})
+
+	t.Run("returns 400 when recurrence is not positive", func(t *testing.T) {
+		svc := mocks.NewMockServiceInterface(t)
+		handler := tasks.NewHandler(svc)
+		req := httptest.NewRequest(http.MethodPatch, "/tasks/tasks/1", strings.NewReader(`{"task_type": "recurring", "recurrence": -1}`))
+		req = withIDParam(req, "1")
+		rec := httptest.NewRecorder()
+		handler.UpdateTask(rec, req)
+		assert.Equal(t, http.StatusBadRequest, rec.Code)
+		assert.Contains(t, rec.Body.String(), "recurrence must be a positive number of days")
+	})
+
+	t.Run("updates task to recurring successfully", func(t *testing.T) {
+		recurrence := int32(1)
+		svc := mocks.NewMockServiceInterface(t)
+		svc.EXPECT().UpdateTask(mock.Anything, mock.MatchedBy(func(req tasks.UpdateTaskRequest) bool {
+			return req.ID == 1 && *req.TaskType == "recurring" && *req.Recurrence == 1
+		})).Return(tasks.TaskResponse{ID: 1, Name: "task", TaskType: "recurring", Recurrence: &recurrence}, nil)
+		handler := tasks.NewHandler(svc)
+
+		req := httptest.NewRequest(http.MethodPatch, "/tasks/tasks/1", strings.NewReader(`{"task_type": "recurring", "recurrence": 1}`))
+		req = withIDParam(req, "1")
+		rec := httptest.NewRecorder()
+		handler.UpdateTask(rec, req)
+
+		assert.Equal(t, http.StatusOK, rec.Code)
+		var got tasks.TaskResponse
+		require.NoError(t, json.NewDecoder(rec.Body).Decode(&got))
+		assert.Equal(t, "recurring", got.TaskType)
+		assert.Equal(t, &recurrence, got.Recurrence)
 	})
 }
 

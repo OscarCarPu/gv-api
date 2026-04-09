@@ -44,6 +44,15 @@ Only finished entries count toward time calculations.
 - Orphans appear at the root level in the active tree.
 - Can be assigned to a project later via PATCH.
 
+**Task Types**
+- Tasks have a `task_type` field: `standard` (default), `continuous`, or `recurring`.
+- `standard`: a one-off task with a clear start and finish.
+- `continuous`: ongoing work that doesn't have a natural end (e.g. "quick fixes").
+- `recurring`: a task that repeats on a fixed interval (e.g. "clean kitchen").
+- Recurring tasks require a `recurrence` field: a positive integer representing the number of days between occurrences.
+- The backend stores these fields but does not enforce any special behavior on finish. All task types can have `finished_at` set freely. The frontend is responsible for recurring logic (advancing `due_at`, clearing `finished_at`, etc.).
+- When `task_type` is changed from `recurring` to another type via update, `recurrence` is automatically cleared to NULL.
+
 **Active Tree**
 - Shows the user's current work: active projects + unfinished tasks.
 - Active projects: `started_at IS NOT NULL AND finished_at IS NULL`.
@@ -103,6 +112,8 @@ Only finished entries count toward time calculations.
 
 **Create task**
 - `name` required.
+- `task_type` (optional): must be `standard`, `continuous`, or `recurring`.
+- `recurrence` required when `task_type` is `recurring` (positive integer, days). Rejected when `task_type` is not `recurring`.
 
 **Create todo**
 - `task_id` required.

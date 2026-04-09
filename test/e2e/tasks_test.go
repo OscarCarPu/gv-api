@@ -1086,3 +1086,110 @@ func TestE2E_GetTimeEntriesByDateRange(t *testing.T) {
 		}
 	}
 }
+
+func TestE2E_TaskTypeRecurrence(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping e2e test in short mode")
+	}
+
+	truncateTables(t)
+	client := authenticate(t)
+
+	// Create standard task (default)
+	standard := client.CreateTask(t, CreateTaskRequest{Name: "Standard task"})
+	if standard.TaskType != "standard" {
+		t.Errorf("expected task_type 'standard', got %q", standard.TaskType)
+	}
+	if standard.Recurrence != nil {
+		t.Errorf("expected nil recurrence, got %v", standard.Recurrence)
+	}
+
+	// Create recurring task
+	recurring := client.CreateTask(t, CreateTaskRequest{
+		Name:       "Clean kitchen",
+		TaskType:   strPtr("recurring"),
+		Recurrence: int32Ptr(1),
+		DueAt:      timePtr(time.Date(2026, 4, 10, 0, 0, 0, 0, time.UTC)),
+	})
+	if recurring.TaskType != "recurring" {
+		t.Errorf("expected task_type 'recurring', got %q", recurring.TaskType)
+	}
+	if recurring.Recurrence == nil || *recurring.Recurrence != 1 {
+		t.Errorf("expected recurrence 1, got %v", recurring.Recurrence)
+	}
+
+	// Create continuous task
+	continuous := client.CreateTask(t, CreateTaskRequest{
+		Name:     "Quick fixes",
+		TaskType: strPtr("continuous"),
+	})
+	if continuous.TaskType != "continuous" {
+		t.Errorf("expected task_type 'continuous', got %q", continuous.TaskType)
+	}
+	if continuous.Recurrence != nil {
+		t.Errorf("expected nil recurrence for continuous, got %v", continuous.Recurrence)
+	}
+
+	// Update standard to recurring
+	updated := client.UpdateTask(t, standard.ID, UpdateTaskRequest{
+		TaskType:   strPtr("recurring"),
+		Recurrence: int32Ptr(7),
+	})
+	if updated.TaskType != "recurring" {
+		t.Errorf("expected task_type 'recurring' after update, got %q", updated.TaskType)
+	}
+	if updated.Recurrence == nil || *updated.Recurrence != 7 {
+		t.Errorf("expected recurrence 7 after update, got %v", updated.Recurrence)
+	}
+
+	// Update recurring to standard (recurrence should be cleared)
+	updated2 := client.UpdateTask(t, standard.ID, UpdateTaskRequest{
+		TaskType: strPtr("standard"),
+	})
+	if updated2.TaskType != "standard" {
+		t.Errorf("expected task_type 'standard' after update, got %q", updated2.TaskType)
+	}
+	if updated2.Recurrence != nil {
+		t.Errorf("expected nil recurrence after changing to standard, got %v", updated2.Recurrence)
+	}
+
+	// Verify task_type appears in GetTask detail endpoint
+	detail := client.GetTask(t, recurring.ID)
+	if detail.TaskType != "recurring" {
+		t.Errorf("GetTask: expected task_type 'recurring', got %q", detail.TaskType)
+	}
+	if detail.Recurrence == nil || *detail.Recurrence != 1 {
+		t.Errorf("GetTask: expected recurrence 1, got %v", detail.Recurrence)
+	}
+
+	// Verify task_type appears in active tree
+	now := time.Now()
+	client.UpdateTask(t, recurring.ID, UpdateTaskRequest{StartedAt: &now})
+	tree := client.GetActiveTree(t)
+	for _, node := range tree {
+		if node.ID == recurring.ID {
+			if node.TaskType == nil || *node.TaskType != "recurring" {
+				t.Errorf("ActiveTree: expected task_type 'recurring', got %v", node.TaskType)
+			}
+			if node.Recurrence == nil || *node.Recurrence != 1 {
+				t.Errorf("ActiveTree: expected recurrence 1, got %v", node.Recurrence)
+			}
+		}
+	}
+
+	// Verify finished_at can be set on recurring tasks (no backend restriction)
+	finished := client.UpdateTask(t, recurring.ID, UpdateTaskRequest{
+		FinishedAt: timePtr(time.Now()),
+	})
+	if finished.FinishedAt == nil {
+		t.Error("expected finished_at to be set on recurring task")
+	}
+
+	// Verify finished_at can be set on continuous tasks (no backend restriction)
+	finishedCont := client.UpdateTask(t, continuous.ID, UpdateTaskRequest{
+		FinishedAt: timePtr(time.Now()),
+	})
+	if finishedCont.FinishedAt == nil {
+		t.Error("expected finished_at to be set on continuous task")
+	}
+}

@@ -26,7 +26,11 @@ func (s *Service) CreateProject(ctx context.Context, req CreateProjectRequest) (
 }
 
 func (s *Service) CreateTask(ctx context.Context, req CreateTaskRequest) (TaskResponse, error) {
-	resp, err := s.repo.CreateTask(ctx, req.ProjectID, req.Name, req.Description, req.DueAt)
+	taskType := "standard"
+	if req.TaskType != nil && *req.TaskType != "" {
+		taskType = *req.TaskType
+	}
+	resp, err := s.repo.CreateTask(ctx, req.ProjectID, req.Name, req.Description, req.DueAt, taskType, req.Recurrence)
 	if err != nil {
 		return resp, err
 	}
@@ -154,6 +158,7 @@ func (s *Service) GetActiveTree(ctx context.Context) ([]ActiveTreeNode, error) {
 	var orphanUnstarted []ActiveTreeNode
 
 	for _, t := range tasks {
+		taskType := t.TaskType
 		node := ActiveTreeNode{
 			ID:          t.ID,
 			Type:        "task",
@@ -161,6 +166,8 @@ func (s *Service) GetActiveTree(ctx context.Context) ([]ActiveTreeNode, error) {
 			Description: t.Description,
 			DueAt:       effectiveDueDate(t.ID, tasksByID, memo, make(map[int32]bool)),
 			StartedAt:   t.StartedAt,
+			TaskType:    &taskType,
+			Recurrence:  t.Recurrence,
 			DependsOn:   t.DependsOn,
 			Blocks:      t.Blocks,
 			Blocked:     isBlocked(t, unfinishedIDs),

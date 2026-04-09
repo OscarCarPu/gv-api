@@ -414,6 +414,24 @@ INSERT INTO tasks (name, description) VALUES
 INSERT INTO tasks (name, description, started_at, finished_at) VALUES
     ('Set up monitoring', 'Configure Prometheus and Grafana', NOW() - INTERVAL '15 days', NOW() - INTERVAL '12 days');                        -- id=23
 
+-- Recurring tasks
+INSERT INTO tasks (name, description, due_at, started_at, task_type, recurrence) VALUES
+    ('Clean kitchen', 'Wipe counters, sweep floor, take out trash', CURRENT_DATE + INTERVAL '1 day', NOW() - INTERVAL '20 days', 'recurring', 1),        -- id=24  daily
+    ('Weekly review', 'Review goals, plan next week', CURRENT_DATE + INTERVAL '4 days', NOW() - INTERVAL '30 days', 'recurring', 7),                     -- id=25  weekly
+    ('Pay rent', 'Transfer rent payment', CURRENT_DATE + INTERVAL '22 days', NULL, 'recurring', 30);                                                      -- id=26  monthly
+
+INSERT INTO tasks (project_id, name, description, due_at, started_at, task_type, recurrence) VALUES
+    (7, 'Run pipeline health check', 'Verify all pipeline stages are green', CURRENT_DATE + INTERVAL '1 day', NOW() - INTERVAL '10 days', 'recurring', 1); -- id=27  daily, under Data Pipeline
+
+-- Continuous tasks
+INSERT INTO tasks (name, description, started_at, task_type) VALUES
+    ('Quick fixes', 'Small bugs and minor improvements that take minutes', NOW() - INTERVAL '30 days', 'continuous'),                                      -- id=28
+    ('Code review', 'Review PRs as they come in', NOW() - INTERVAL '25 days', 'continuous');                                                               -- id=29
+
+INSERT INTO tasks (project_id, name, description, started_at, task_type) VALUES
+    (4, 'API bug triage', 'Investigate and fix reported API issues as they come in', NOW() - INTERVAL '5 days', 'continuous'),                             -- id=30  under API v2
+    (1, 'Design feedback', 'Address design review comments as they arrive', NOW() - INTERVAL '7 days', 'continuous');                                      -- id=31  under Website Redesign
+
 -- =============================================================================
 -- TODOS
 -- =============================================================================
@@ -456,7 +474,14 @@ INSERT INTO todos (task_id, name, is_done) VALUES
     (17, 'Smoke test script', FALSE),
     -- Fix server logs (task 18)
     (18, 'Check logrotate config', TRUE),
-    (18, 'Test with high volume', FALSE);
+    (18, 'Test with high volume', FALSE),
+    -- Clean kitchen (task 24, recurring)
+    (24, 'Wipe counters', FALSE),
+    (24, 'Sweep floor', FALSE),
+    (24, 'Take out trash', FALSE),
+    -- Weekly review (task 25, recurring)
+    (25, 'Review this week goals', FALSE),
+    (25, 'Plan next week', FALSE);
 
 -- =============================================================================
 -- TASK DEPENDENCIES
@@ -958,4 +983,35 @@ INSERT INTO time_entries (task_id, started_at, finished_at, comment) VALUES
     (17, CURRENT_DATE + INTERVAL '9 hours 15 minutes', CURRENT_DATE + INTERVAL '12 hours', 'Production deploy checklist and runbook'),
     (14, CURRENT_DATE + INTERVAL '12 hours 15 minutes', CURRENT_DATE + INTERVAL '13 hours 45 minutes', 'Transformation layer edge case fixes'),
     (12, CURRENT_DATE + INTERVAL '14 hours', CURRENT_DATE + INTERVAL '15 hours 30 minutes', 'Onboarding screens 4 and 5'),
-    (16, CURRENT_DATE + INTERVAL '15 hours 45 minutes', CURRENT_DATE + INTERVAL '16 hours 45 minutes', 'Pipeline load test with production-scale data');
+    (16, CURRENT_DATE + INTERVAL '15 hours 45 minutes', CURRENT_DATE + INTERVAL '16 hours 45 minutes', 'Pipeline load test with production-scale data'),
+
+    -- Recurring task time entries: Clean kitchen (task 24, daily)
+    (24, CURRENT_DATE - INTERVAL '6 days' + INTERVAL '19 hours', CURRENT_DATE - INTERVAL '6 days' + INTERVAL '19 hours 20 minutes', 'Quick wipe down'),
+    (24, CURRENT_DATE - INTERVAL '5 days' + INTERVAL '20 hours', CURRENT_DATE - INTERVAL '5 days' + INTERVAL '20 hours 25 minutes', 'Full clean'),
+    (24, CURRENT_DATE - INTERVAL '4 days' + INTERVAL '19 hours 30 minutes', CURRENT_DATE - INTERVAL '4 days' + INTERVAL '19 hours 45 minutes', 'Counters and trash'),
+    (24, CURRENT_DATE - INTERVAL '3 days' + INTERVAL '20 hours', CURRENT_DATE - INTERVAL '3 days' + INTERVAL '20 hours 30 minutes', 'Deep clean'),
+    (24, CURRENT_DATE - INTERVAL '1 day' + INTERVAL '19 hours', CURRENT_DATE - INTERVAL '1 day' + INTERVAL '19 hours 15 minutes', 'Quick sweep'),
+
+    -- Recurring task time entries: Weekly review (task 25, weekly)
+    (25, CURRENT_DATE - INTERVAL '14 days' + INTERVAL '17 hours', CURRENT_DATE - INTERVAL '14 days' + INTERVAL '17 hours 45 minutes', 'Reviewed sprint goals'),
+    (25, CURRENT_DATE - INTERVAL '7 days' + INTERVAL '17 hours', CURRENT_DATE - INTERVAL '7 days' + INTERVAL '18 hours', 'Planned next week priorities'),
+
+    -- Recurring task time entries: Pipeline health check (task 27, daily)
+    (27, CURRENT_DATE - INTERVAL '3 days' + INTERVAL '8 hours', CURRENT_DATE - INTERVAL '3 days' + INTERVAL '8 hours 10 minutes', 'All green'),
+    (27, CURRENT_DATE - INTERVAL '2 days' + INTERVAL '8 hours', CURRENT_DATE - INTERVAL '2 days' + INTERVAL '8 hours 15 minutes', 'Fixed stale consumer offset'),
+    (27, CURRENT_DATE - INTERVAL '1 day' + INTERVAL '8 hours', CURRENT_DATE - INTERVAL '1 day' + INTERVAL '8 hours 10 minutes', 'All green'),
+
+    -- Continuous task time entries: Quick fixes (task 28)
+    (28, CURRENT_DATE - INTERVAL '10 days' + INTERVAL '14 hours', CURRENT_DATE - INTERVAL '10 days' + INTERVAL '14 hours 15 minutes', 'Fixed typo in error message'),
+    (28, CURRENT_DATE - INTERVAL '7 days' + INTERVAL '11 hours', CURRENT_DATE - INTERVAL '7 days' + INTERVAL '11 hours 20 minutes', 'Corrected date format in footer'),
+    (28, CURRENT_DATE - INTERVAL '4 days' + INTERVAL '15 hours', CURRENT_DATE - INTERVAL '4 days' + INTERVAL '15 hours 10 minutes', 'Fixed broken link on about page'),
+    (28, CURRENT_DATE - INTERVAL '1 day' + INTERVAL '12 hours', CURRENT_DATE - INTERVAL '1 day' + INTERVAL '12 hours 25 minutes', 'Aligned button padding on mobile'),
+
+    -- Continuous task time entries: Code review (task 29)
+    (29, CURRENT_DATE - INTERVAL '8 days' + INTERVAL '10 hours', CURRENT_DATE - INTERVAL '8 days' + INTERVAL '10 hours 45 minutes', 'Reviewed auth middleware PR'),
+    (29, CURRENT_DATE - INTERVAL '5 days' + INTERVAL '13 hours', CURRENT_DATE - INTERVAL '5 days' + INTERVAL '13 hours 30 minutes', 'Reviewed data model changes'),
+    (29, CURRENT_DATE - INTERVAL '2 days' + INTERVAL '15 hours', CURRENT_DATE - INTERVAL '2 days' + INTERVAL '15 hours 40 minutes', 'Reviewed pipeline config PR'),
+
+    -- Continuous task time entries: API bug triage (task 30)
+    (30, CURRENT_DATE - INTERVAL '3 days' + INTERVAL '10 hours', CURRENT_DATE - INTERVAL '3 days' + INTERVAL '10 hours 30 minutes', 'Investigated 500 on /users endpoint'),
+    (30, CURRENT_DATE - INTERVAL '1 day' + INTERVAL '11 hours', CURRENT_DATE - INTERVAL '1 day' + INTERVAL '11 hours 20 minutes', 'Fixed null pointer in pagination');

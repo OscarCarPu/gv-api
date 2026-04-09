@@ -4,9 +4,9 @@ VALUES ($1, $2, $3, $4)
 RETURNING id, name, description, due_at, parent_id;
 
 -- name: CreateTask :one
-INSERT INTO tasks (project_id, name, description, due_at)
-VALUES ($1, $2, $3, $4)
-RETURNING id, project_id, name, description, due_at;
+INSERT INTO tasks (project_id, name, description, due_at, task_type, recurrence)
+VALUES ($1, $2, $3, $4, $5, $6)
+RETURNING id, project_id, name, description, due_at, task_type, recurrence;
 
 -- name: CreateTodo :one
 INSERT INTO todos (task_id, name)
@@ -34,9 +34,11 @@ UPDATE tasks SET
     due_at      = CASE WHEN @clear_due_at::bool THEN NULL WHEN @set_due_at::bool THEN @due_at::date ELSE due_at END,
     project_id  = CASE WHEN @set_project_id::bool   THEN @project_id::int        ELSE project_id END,
     started_at  = CASE WHEN @set_started_at::bool   THEN @started_at::timestamptz  ELSE started_at END,
-    finished_at = CASE WHEN @set_finished_at::bool  THEN @finished_at::timestamptz ELSE finished_at END
+    finished_at = CASE WHEN @set_finished_at::bool  THEN @finished_at::timestamptz ELSE finished_at END,
+    task_type   = CASE WHEN @set_task_type::bool     THEN @task_type::text         ELSE task_type END,
+    recurrence  = CASE WHEN @clear_recurrence::bool THEN NULL WHEN @set_recurrence::bool THEN @recurrence::int ELSE recurrence END
 WHERE id = @id
-RETURNING id, project_id, name, description, due_at, started_at, finished_at;
+RETURNING id, project_id, name, description, due_at, started_at, finished_at, task_type, recurrence;
 
 -- name: UpdateProject :one
 UPDATE projects SET
@@ -63,7 +65,7 @@ WITH RECURSIVE project_tree AS (
     JOIN project_tree pt ON c.parent_id = pt.id
     WHERE c.finished_at IS NULL
 )
-SELECT t.id, t.name, t.project_id, pt.name AS project_name
+SELECT t.id, t.name, t.project_id, pt.name AS project_name, t.task_type, t.recurrence
 FROM tasks t
 LEFT JOIN project_tree pt ON t.project_id = pt.id
 WHERE t.finished_at IS NULL
@@ -85,7 +87,7 @@ WHERE started_at IS NOT NULL AND finished_at IS NULL
 ORDER BY name;
 
 -- name: GetUnfinishedTasks :many
-SELECT t.id, t.project_id, t.name, t.description, t.due_at, t.started_at,
+SELECT t.id, t.project_id, t.name, t.description, t.due_at, t.started_at, t.task_type, t.recurrence,
     COALESCE((SELECT json_agg(json_build_object('id', t2.id, 'name', t2.name, 'due_at', t2.due_at) ORDER BY t2.name) FROM task_dependencies td JOIN tasks t2 ON t2.id = td.depends_on WHERE td.task_id = t.id AND t2.finished_at IS NULL), '[]')::json AS depends_on,
     COALESCE((SELECT json_agg(json_build_object('id', t2.id, 'name', t2.name) ORDER BY t2.name) FROM task_dependencies td JOIN tasks t2 ON t2.id = td.task_id WHERE td.depends_on = t.id), '[]')::json AS blocks
 FROM tasks t
@@ -108,7 +110,7 @@ ORDER BY depth, due_at ASC NULLS LAST, name;
 -- name: GetTasksByProjectIDs :many
 WITH task_times AS (
     SELECT
-        t.id, t.project_id, t.name, t.description, t.due_at, t.started_at, t.finished_at,
+        t.id, t.project_id, t.name, t.description, t.due_at, t.started_at, t.finished_at, t.task_type, t.recurrence,
         COALESCE(SUM(EXTRACT(EPOCH FROM (te.finished_at - te.started_at)))::bigint, 0)::bigint AS time_spent,
         COALESCE((SELECT json_agg(json_build_object('id', t2.id, 'name', t2.name, 'due_at', t2.due_at) ORDER BY t2.name) FROM task_dependencies td2 JOIN tasks t2 ON t2.id = td2.depends_on WHERE td2.task_id = t.id AND t2.finished_at IS NULL), '[]')::json AS depends_on,
         COALESCE((SELECT json_agg(json_build_object('id', t2.id, 'name', t2.name) ORDER BY t2.name) FROM task_dependencies td2 JOIN tasks t2 ON t2.id = td2.task_id WHERE td2.depends_on = t.id), '[]')::json AS blocks,
@@ -119,7 +121,7 @@ WITH task_times AS (
     GROUP BY t.id
 )
 SELECT
-    tt.id, tt.project_id, tt.name, tt.description, tt.due_at, tt.started_at, tt.finished_at,
+    tt.id, tt.project_id, tt.name, tt.description, tt.due_at, tt.started_at, tt.finished_at, tt.task_type, tt.recurrence,
     tt.time_spent, tt.depends_on, tt.blocks, tt.blocked,
     td.id AS todo_id, td.name AS todo_name, td.is_done AS todo_is_done
 FROM task_times tt
@@ -144,7 +146,7 @@ RETURNING id, task_id, name, is_done;
 
 -- name: GetTasksByDueDate :many
 SELECT
-    t.id, t.name, t.description, t.due_at, t.started_at,
+    t.id, t.name, t.description, t.due_at, t.started_at, t.task_type, t.recurrence,
     p.id AS project_id, p.name AS project_name, p.due_at AS project_due_at,
     COALESCE(SUM(EXTRACT(EPOCH FROM (te.finished_at - te.started_at)))::bigint, 0)::bigint AS time_spent,
     COALESCE((SELECT json_agg(json_build_object('id', t2.id, 'name', t2.name, 'due_at', t2.due_at) ORDER BY t2.name) FROM task_dependencies td JOIN tasks t2 ON t2.id = td.depends_on WHERE td.task_id = t.id AND t2.finished_at IS NULL), '[]')::json AS depends_on,
@@ -158,7 +160,7 @@ ORDER BY t.due_at ASC NULLS LAST, p.due_at ASC NULLS LAST, t.name;
 
 -- name: GetTaskByID :many
 WITH task_info AS (
-    SELECT t.id, t.project_id, t.name, t.description, t.due_at, t.started_at, t.finished_at,
+    SELECT t.id, t.project_id, t.name, t.description, t.due_at, t.started_at, t.finished_at, t.task_type, t.recurrence,
         COALESCE(SUM(EXTRACT(EPOCH FROM (te.finished_at - te.started_at)))::bigint, 0)::bigint AS time_spent,
         COALESCE((SELECT json_agg(json_build_object('id', t2.id, 'name', t2.name, 'due_at', t2.due_at) ORDER BY t2.name) FROM task_dependencies td JOIN tasks t2 ON t2.id = td.depends_on WHERE td.task_id = t.id AND t2.finished_at IS NULL), '[]')::json AS depends_on,
         COALESCE((SELECT json_agg(json_build_object('id', t2.id, 'name', t2.name) ORDER BY t2.name) FROM task_dependencies td JOIN tasks t2 ON t2.id = td.task_id WHERE td.depends_on = t.id), '[]')::json AS blocks,
@@ -169,8 +171,8 @@ WITH task_info AS (
     GROUP BY t.id
 )
 SELECT
-    ti.id, ti.project_id, ti.name, ti.description, ti.due_at, ti.started_at, ti.finished_at, ti.time_spent,
-    ti.depends_on, ti.blocks, ti.blocked,
+    ti.id, ti.project_id, ti.name, ti.description, ti.due_at, ti.started_at, ti.finished_at, ti.task_type, ti.recurrence,
+    ti.time_spent, ti.depends_on, ti.blocks, ti.blocked,
     td.id AS todo_id, td.name AS todo_name, td.is_done AS todo_is_done
 FROM task_info ti
 LEFT JOIN todos td ON td.task_id = ti.id
@@ -198,7 +200,7 @@ WHERE t.project_id = pt.id AND t.finished_at IS NULL;
 
 -- name: GetActiveTimeEntry :one
 SELECT te.id, te.task_id, te.started_at, te.finished_at, te.comment,
-       t.name AS task_name, p.name AS project_name
+       t.name AS task_name, t.task_type, t.recurrence, p.name AS project_name
 FROM time_entries te
 JOIN tasks t ON t.id = te.task_id
 LEFT JOIN projects p ON p.id = t.project_id
@@ -253,7 +255,7 @@ ORDER BY date;
 
 -- name: GetTimeEntriesByTaskID :many
 WITH task_info AS (
-    SELECT t.id, t.project_id, t.name, t.description, t.due_at, t.started_at, t.finished_at,
+    SELECT t.id, t.project_id, t.name, t.description, t.due_at, t.started_at, t.finished_at, t.task_type, t.recurrence,
         COALESCE(SUM(EXTRACT(EPOCH FROM (te.finished_at - te.started_at)))::bigint, 0)::bigint AS time_spent,
         COALESCE((SELECT json_agg(json_build_object('id', t2.id, 'name', t2.name, 'due_at', t2.due_at) ORDER BY t2.name) FROM task_dependencies td JOIN tasks t2 ON t2.id = td.depends_on WHERE td.task_id = t.id AND t2.finished_at IS NULL), '[]')::json AS depends_on,
         COALESCE((SELECT json_agg(json_build_object('id', t2.id, 'name', t2.name) ORDER BY t2.name) FROM task_dependencies td JOIN tasks t2 ON t2.id = td.task_id WHERE td.depends_on = t.id), '[]')::json AS blocks,
@@ -265,7 +267,7 @@ WITH task_info AS (
 )
 SELECT
     ti.id AS task_id, ti.project_id, ti.name, ti.description, ti.due_at,
-    ti.started_at AS task_started_at, ti.finished_at AS task_finished_at, ti.time_spent,
+    ti.started_at AS task_started_at, ti.finished_at AS task_finished_at, ti.task_type, ti.recurrence, ti.time_spent,
     ti.depends_on, ti.blocks, ti.blocked,
     te.id AS time_entry_id, te.started_at AS entry_started_at, te.finished_at AS entry_finished_at, te.comment
 FROM task_info ti
@@ -294,6 +296,7 @@ SELECT
 SELECT
     te.id, te.task_id,
     t.name AS task_name,
+    t.task_type, t.recurrence,
     t.finished_at AS task_finished_at,
     p.id AS project_id,
     p.name AS project_name,

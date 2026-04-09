@@ -103,6 +103,30 @@ func (h *Handler) CreateTask(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if req.TaskType != nil {
+		switch *req.TaskType {
+		case "standard", "continuous", "recurring":
+		default:
+			response.Error(w, http.StatusBadRequest, "task_type must be standard, continuous, or recurring")
+			return
+		}
+	}
+
+	isRecurring := req.TaskType != nil && *req.TaskType == "recurring"
+	if isRecurring {
+		if req.Recurrence == nil {
+			response.Error(w, http.StatusBadRequest, "recurrence is required when task_type is recurring")
+			return
+		}
+		if *req.Recurrence <= 0 {
+			response.Error(w, http.StatusBadRequest, "recurrence must be a positive number of days")
+			return
+		}
+	} else if req.Recurrence != nil {
+		response.Error(w, http.StatusBadRequest, "recurrence is only valid when task_type is recurring")
+		return
+	}
+
 	task, err := h.service.CreateTask(r.Context(), req)
 	if err != nil {
 		response.Error(w, http.StatusInternalServerError, "Failed to create task")
@@ -221,6 +245,28 @@ func (h *Handler) UpdateTask(w http.ResponseWriter, r *http.Request) {
 
 	if req.Name != nil && len(*req.Name) > 40 {
 		response.Error(w, http.StatusBadRequest, "name must be at most 40 characters")
+		return
+	}
+
+	if req.TaskType != nil {
+		switch *req.TaskType {
+		case "standard", "continuous", "recurring":
+		default:
+			response.Error(w, http.StatusBadRequest, "task_type must be standard, continuous, or recurring")
+			return
+		}
+		if *req.TaskType == "recurring" && req.Recurrence == nil {
+			response.Error(w, http.StatusBadRequest, "recurrence is required when task_type is recurring")
+			return
+		}
+		if *req.TaskType != "recurring" && req.Recurrence != nil {
+			response.Error(w, http.StatusBadRequest, "recurrence is only valid when task_type is recurring")
+			return
+		}
+	}
+
+	if req.Recurrence != nil && *req.Recurrence <= 0 {
+		response.Error(w, http.StatusBadRequest, "recurrence must be a positive number of days")
 		return
 	}
 

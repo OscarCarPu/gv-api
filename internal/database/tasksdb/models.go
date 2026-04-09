@@ -46,6 +46,8 @@ type Task struct {
 	DueAt       pgtype.Date        `db:"due_at" json:"due_at"`
 	StartedAt   pgtype.Timestamptz `db:"started_at" json:"started_at"`
 	FinishedAt  pgtype.Timestamptz `db:"finished_at" json:"finished_at"`
+	TaskType    string             `db:"task_type" json:"task_type"`
+	Recurrence  *int32             `db:"recurrence" json:"recurrence"`
 }
 
 type TaskDependency struct {

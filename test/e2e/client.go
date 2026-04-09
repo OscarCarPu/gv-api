@@ -81,6 +81,8 @@ type CreateTaskRequest struct {
 	Description *string    `json:"description"`
 	DueAt       *time.Time `json:"due_at,omitempty"`
 	DependsOn   []int32    `json:"depends_on,omitempty"`
+	TaskType    *string    `json:"task_type,omitempty"`
+	Recurrence  *int32     `json:"recurrence,omitempty"`
 }
 
 type TaskResponse struct {
@@ -91,6 +93,8 @@ type TaskResponse struct {
 	DueAt       *time.Time   `json:"due_at"`
 	StartedAt   *time.Time   `json:"started_at"`
 	FinishedAt  *time.Time   `json:"finished_at"`
+	TaskType    string       `json:"task_type"`
+	Recurrence  *int32      `json:"recurrence,omitempty"`
 	DependsOn []TaskDepRef `json:"depends_on"`
 	Blocks    []TaskDepRef `json:"blocks"`
 	Blocked   bool         `json:"blocked"`
@@ -127,6 +131,8 @@ type TimeEntryWithTaskResponse struct {
 	ID             int32      `json:"id"`
 	TaskID         int32      `json:"task_id"`
 	TaskName       string     `json:"task_name"`
+	TaskType       string     `json:"task_type"`
+	Recurrence     *int32    `json:"recurrence,omitempty"`
 	ProjectID      *int32     `json:"project_id"`
 	ProjectName    *string    `json:"project_name"`
 	StartedAt      time.Time  `json:"started_at"`
@@ -152,6 +158,8 @@ type UpdateTaskRequest struct {
 	StartedAt   *time.Time `json:"started_at,omitempty"`
 	FinishedAt  *time.Time `json:"finished_at,omitempty"`
 	DependsOn   *[]int32   `json:"depends_on,omitempty"`
+	TaskType    *string    `json:"task_type,omitempty"`
+	Recurrence  *int32     `json:"recurrence,omitempty"`
 }
 
 type UpdateTodoRequest struct {
@@ -173,6 +181,8 @@ type TaskDetailResponse struct {
 	DueAt       *time.Time   `json:"due_at"`
 	StartedAt   *time.Time   `json:"started_at"`
 	FinishedAt  *time.Time   `json:"finished_at"`
+	TaskType    string       `json:"task_type"`
+	Recurrence  *int32      `json:"recurrence,omitempty"`
 	TimeSpent   int64        `json:"time_spent"`
 	DependsOn []TaskDepRef `json:"depends_on"`
 	Blocks    []TaskDepRef `json:"blocks"`
@@ -203,11 +213,13 @@ type ProjectChildNode struct {
 	FinishedAt  *time.Time     `json:"finished_at"`
 	TimeSpent   int64          `json:"time_spent"`
 	ParentID    *int32         `json:"parent_id,omitempty"`
-	ProjectID *int32         `json:"project_id,omitempty"`
-	DependsOn []TaskDepRef   `json:"depends_on,omitempty"`
-	Blocks    []TaskDepRef   `json:"blocks,omitempty"`
-	Blocked   *bool          `json:"blocked,omitempty"`
-	Todos     []TodoResponse `json:"todos,omitempty"`
+	ProjectID  *int32         `json:"project_id,omitempty"`
+	TaskType   *string        `json:"task_type,omitempty"`
+	Recurrence *int32        `json:"recurrence,omitempty"`
+	DependsOn  []TaskDepRef   `json:"depends_on,omitempty"`
+	Blocks     []TaskDepRef   `json:"blocks,omitempty"`
+	Blocked    *bool          `json:"blocked,omitempty"`
+	Todos      []TodoResponse `json:"todos,omitempty"`
 }
 
 type ProjectChildrenResponse struct {
@@ -223,6 +235,8 @@ type TaskFullResponse struct {
 	DueAt       *time.Time     `json:"due_at"`
 	StartedAt   *time.Time     `json:"started_at"`
 	FinishedAt  *time.Time     `json:"finished_at"`
+	TaskType    string         `json:"task_type"`
+	Recurrence  *int32        `json:"recurrence,omitempty"`
 	TimeSpent   int64          `json:"time_spent"`
 	DependsOn []TaskDepRef   `json:"depends_on"`
 	Blocks    []TaskDepRef   `json:"blocks"`
@@ -236,6 +250,8 @@ type TaskByDueDateResponse struct {
 	Description  *string      `json:"description"`
 	DueAt        *time.Time   `json:"due_at"`
 	StartedAt    *time.Time   `json:"started_at"`
+	TaskType     string       `json:"task_type"`
+	Recurrence   *string      `json:"recurrence,omitempty"`
 	TimeSpent    int64        `json:"time_spent"`
 	ProjectID    *int32       `json:"project_id"`
 	ProjectName  *string      `json:"project_name"`
@@ -252,6 +268,8 @@ type ActiveTreeNode struct {
 	Description *string          `json:"description,omitempty"`
 	DueAt       *time.Time       `json:"due_at,omitempty"`
 	StartedAt   *time.Time       `json:"started_at,omitempty"`
+	TaskType    *string          `json:"task_type,omitempty"`
+	Recurrence  *int32          `json:"recurrence,omitempty"`
 	DependsOn []TaskDepRef     `json:"depends_on"`
 	Blocks    []TaskDepRef     `json:"blocks"`
 	Blocked   bool             `json:"blocked"`

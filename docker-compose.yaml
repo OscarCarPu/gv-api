@@ -7,7 +7,6 @@ services:
     ports:
       - "5432:5432"
     volumes:
-      - ./db/migrations:/docker-entrypoint-initdb.d
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
     # test with env vars

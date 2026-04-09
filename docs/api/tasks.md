@@ -1,3 +1,22 @@
+## Task Types
+
+Tasks have a `task_type` field that determines their behavior:
+
+| Type | Description | `recurrence` |
+|------|-------------|--------------|
+| `standard` | Default. A one-off task with a clear start and finish. | Must be absent |
+| `continuous` | A task that represents ongoing work (e.g. "quick fixes"). | Must be absent |
+| `recurring` | A task that repeats on a fixed interval (e.g. "clean kitchen"). | Required (days) |
+
+- `task_type` defaults to `"standard"` when not provided.
+- `recurrence` is an integer representing the number of days between recurrences (e.g. `1` = daily, `7` = weekly, `30` = monthly).
+- `recurrence` is required when `task_type` is `"recurring"` and must not be provided otherwise.
+- The backend does not enforce any special behavior on finish for any task type. `finished_at` can be set freely on all types. The frontend is responsible for handling recurrence logic (e.g. advancing `due_at` and clearing `finished_at`).
+- `task_type` and `recurrence` are returned on all endpoints that include task information.
+- `recurrence` is omitted from JSON responses when `null` (non-recurring tasks).
+
+---
+
 ## List Projects (Fast)
 
 - **Method:** `GET`
@@ -32,13 +51,16 @@
         "id": 1,
         "name": "My Task",
         "project_id": 5,
-        "project_name": "My Project"
+        "project_name": "My Project",
+        "task_type": "standard"
       },
       {
         "id": 2,
         "name": "Orphan Task",
         "project_id": null,
-        "project_name": null
+        "project_name": null,
+        "task_type": "recurring",
+        "recurrence": 7
       }
     ]
     ```
@@ -166,7 +188,9 @@
     "name": "My Task",
     "description": "Task description.",
     "due_at": "2025-06-01",
-    "depends_on": [2, 3]
+    "depends_on": [2, 3],
+    "task_type": "recurring",
+    "recurrence": 7
   }
   ```
   - `name` (required): The name of the task.
@@ -174,6 +198,8 @@
   - `description` (optional): A description of the task.
   - `due_at` (optional): The due date of the task in `YYYY-MM-DD` format.
   - `depends_on` (optional): List of task IDs this task depends on.
+  - `task_type` (optional): One of `"standard"` (default), `"continuous"`, or `"recurring"`. See [Task Types](#task-types).
+  - `recurrence` (required when `task_type` is `"recurring"`, rejected otherwise): Number of days between recurrences (positive integer).
 - **Success Response:**
   - **Code:** `201 Created`
   - **Content:**
@@ -186,6 +212,8 @@
       "due_at": "2025-06-01",
       "started_at": null,
       "finished_at": null,
+      "task_type": "recurring",
+      "recurrence": 7,
       "depends_on": [{"id": 2, "name": "Other Task", "due_at": "2025-05-15"}, {"id": 3, "name": "Another Task", "due_at": null}],
       "blocks": [],
       "blocked": true
@@ -194,9 +222,11 @@
   - `depends_on`: Tasks this task depends on (this task is blocked by them). Each entry contains `id`, `name`, and `due_at` (used for effective due date computation).
   - `blocks`: Tasks that depend on this task (they are blocked by this task). Each entry contains `id`, `name`, and `due_at`.
   - `blocked`: `true` if the task has at least one unfinished dependency, `false` otherwise.
+  - `task_type`: The task type. Always present.
+  - `recurrence`: Number of days between recurrences. Only present when `task_type` is `"recurring"`.
 - **Error Responses:**
   - **Code:** `400 Bad Request`
-    - **Content:** `Invalid Body` or `name is required`
+    - **Content:** `Invalid Body`, `name is required`, `task_type must be standard, continuous, or recurring`, `recurrence is required when task_type is recurring`, `recurrence is only valid when task_type is recurring`, or `recurrence must be a positive number of days`
   - **Code:** `500 Internal Server Error`
     - **Content:** `Failed to create task`
 
@@ -214,7 +244,9 @@
     "project_id": 2,
     "started_at": "2025-02-15T08:00:00Z",
     "finished_at": "2025-03-01T17:00:00Z",
-    "depends_on": [3, 4]
+    "depends_on": [3, 4],
+    "task_type": "recurring",
+    "recurrence": 7
   }
   ```
   - `name` (optional): New name.
@@ -224,6 +256,8 @@
   - `started_at` (optional): Start timestamp.
   - `finished_at` (optional): Finish timestamp.
   - `depends_on` (optional): List of task IDs this task depends on. Replaces all existing dependencies. Omitting the field leaves dependencies unchanged. Pass `[]` to clear all dependencies.
+  - `task_type` (optional): One of `"standard"`, `"continuous"`, or `"recurring"`. When changing to `"recurring"`, `recurrence` must be provided. When changing to a non-recurring type, `recurrence` is automatically cleared.
+  - `recurrence` (optional): Number of days between recurrences (positive integer). Required when `task_type` is set to `"recurring"`. Rejected when `task_type` is set to a non-recurring type. Can be sent alone to change the interval of an already-recurring task.
 - **Success Response:**
   - **Code:** `200 OK`
   - **Content:**
@@ -236,6 +270,8 @@
       "due_at": "2025-06-01",
       "started_at": "2025-02-15T08:00:00Z",
       "finished_at": "2025-03-01T17:00:00Z",
+      "task_type": "recurring",
+      "recurrence": 7,
       "depends_on": [{"id": 3, "name": "Dep A", "due_at": null}, {"id": 4, "name": "Dep B", "due_at": "2025-07-01"}],
       "blocks": [{"id": 7, "name": "Blocked Task", "due_at": null}],
       "blocked": true
@@ -243,7 +279,7 @@
     ```
 - **Error Responses:**
   - **Code:** `400 Bad Request`
-    - **Content:** `invalid task id` or `Invalid Body`
+    - **Content:** `invalid task id`, `Invalid Body`, `task_type must be standard, continuous, or recurring`, `recurrence is required when task_type is recurring`, `recurrence is only valid when task_type is recurring`, or `recurrence must be a positive number of days`
   - **Code:** `404 Not Found`
     - **Content:** `task not found`
   - **Code:** `500 Internal Server Error`
@@ -367,10 +403,13 @@
       "finished_at": null,
       "comment": "Working on feature X",
       "task_name": "Implement feature X",
+      "task_type": "standard",
       "project_name": "My Project"
     }
     ```
   - `task_name`: Name of the associated task.
+  - `task_type`: Task type of the associated task.
+  - `recurrence`: Recurrence interval in days. Only present when `task_type` is `"recurring"`.
   - `project_name`: Name of the task's project, or `null` if the task has no project.
 - **Error Responses:**
   - **Code:** `404 Not Found`
@@ -430,6 +469,7 @@
         "description": "Task description.",
         "due_at": "2025-06-01",
         "started_at": "2025-02-15T08:00:00Z",
+        "task_type": "standard",
         "time_spent": 5400,
         "project_id": 1,
         "project_name": "My Project",
@@ -469,6 +509,7 @@
             "id": 1,
             "type": "task",
             "name": "task_1",
+            "task_type": "standard",
             "depends_on": [{"id": 3, "name": "Blocking Task", "due_at": "2025-06-01"}],
             "blocks": [],
             "blocked": true
@@ -479,6 +520,7 @@
         "id": 5,
         "type": "task",
         "name": "orphan_task",
+        "task_type": "continuous",
         "depends_on": [],
         "blocks": [{"id": 1, "name": "task_1", "due_at": null}],
         "blocked": false
@@ -531,6 +573,7 @@
           "started_at": "2025-02-15T08:00:00Z",
           "finished_at": null,
           "time_spent": 5400,
+          "task_type": "standard",
           "depends_on": [{"id": 3, "name": "Setup DB", "due_at": null}],
           "blocks": [],
           "blocked": true,
@@ -570,6 +613,7 @@
         "due_at": "2025-04-01T00:00:00Z",
         "started_at": "2025-03-01T09:00:00Z",
         "finished_at": null,
+        "task_type": "standard",
         "time_spent": 5400,
         "depends_on": [{"id": 2, "name": "Setup DB"}],
         "blocks": [{"id": 4, "name": "Write tests", "due_at": null}],
@@ -609,6 +653,7 @@
         "id": 1,
         "task_id": 5,
         "task_name": "Implement feature X",
+        "task_type": "standard",
         "project_id": 2,
         "project_name": "My Project",
         "started_at": "2026-03-15T09:00:00Z",
@@ -621,6 +666,8 @@
         "id": 2,
         "task_id": 8,
         "task_name": "Orphan task",
+        "task_type": "recurring",
+        "recurrence": 1,
         "project_id": null,
         "project_name": null,
         "started_at": "2026-03-14T14:00:00Z",
