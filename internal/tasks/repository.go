@@ -11,10 +11,12 @@ import (
 	"gv-api/internal/history"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
 var ErrNotFound = errors.New("not found")
+var ErrActiveTimeEntryExists = errors.New("an active time entry already exists")
 
 type Repository interface {
 	CreateProject(ctx context.Context, name string, description *string, dueAt *time.Time, parentID *int32) (ProjectResponse, error)
@@ -41,7 +43,7 @@ type Repository interface {
 	DeleteTask(ctx context.Context, id int32) error
 	DeleteTodo(ctx context.Context, id int32) error
 	DeleteTimeEntry(ctx context.Context, id int32) error
-	GetActiveTimeEntry(ctx context.Context) (TimeEntryResponse, error)
+	GetActiveTimeEntry(ctx context.Context) (ActiveTimeEntryResponse, error)
 	GetTimeEntrySummary(ctx context.Context, todayStart, weekStart time.Time) (TimeEntrySummaryResponse, error)
 	GetTimeEntryHistory(ctx context.Context, frequency, timezone string, startAt, endAt time.Time) ([]history.Point, error)
 	ReplaceTaskDependencies(ctx context.Context, taskID int32, dependsOn []int32) error
@@ -317,6 +319,10 @@ func (r *PostgresRepository) CreateTimeEntry(ctx context.Context, taskID int32, 
 		Comment:    comment,
 	})
 	if err != nil {
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) && pgErr.Code == "23505" {
+			return TimeEntryResponse{}, ErrActiveTimeEntryExists
+		}
 		return TimeEntryResponse{}, err
 	}
 
@@ -663,21 +669,23 @@ func (r *PostgresRepository) DeleteTimeEntry(ctx context.Context, id int32) erro
 	return r.q.DeleteTimeEntry(ctx, id)
 }
 
-func (r *PostgresRepository) GetActiveTimeEntry(ctx context.Context) (TimeEntryResponse, error) {
+func (r *PostgresRepository) GetActiveTimeEntry(ctx context.Context) (ActiveTimeEntryResponse, error) {
 	row, err := r.q.GetActiveTimeEntry(ctx)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return TimeEntryResponse{}, ErrNotFound
+			return ActiveTimeEntryResponse{}, ErrNotFound
 		}
-		return TimeEntryResponse{}, err
+		return ActiveTimeEntryResponse{}, err
 	}
 
-	return TimeEntryResponse{
-		ID:         row.ID,
-		TaskID:     row.TaskID,
-		StartedAt:  row.StartedAt.Time,
-		FinishedAt: pgTimestamptzToPtr(row.FinishedAt),
-		Comment:    row.Comment,
+	return ActiveTimeEntryResponse{
+		ID:          row.ID,
+		TaskID:      row.TaskID,
+		StartedAt:   row.StartedAt.Time,
+		FinishedAt:  pgTimestamptzToPtr(row.FinishedAt),
+		Comment:     row.Comment,
+		TaskName:    row.TaskName,
+		ProjectName: row.ProjectName,
 	}, nil
 }
 

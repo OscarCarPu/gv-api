@@ -441,22 +441,22 @@ func (_c *MockServiceInterface_DeleteTodo_Call) RunAndReturn(run func(context.Co
 }
 
 // GetActiveTimeEntry provides a mock function with given fields: ctx
-func (_m *MockServiceInterface) GetActiveTimeEntry(ctx context.Context) (tasks.TimeEntryResponse, error) {
+func (_m *MockServiceInterface) GetActiveTimeEntry(ctx context.Context) (tasks.ActiveTimeEntryResponse, error) {
 	ret := _m.Called(ctx)
 
 	if len(ret) == 0 {
 		panic("no return value specified for GetActiveTimeEntry")
 	}
 
-	var r0 tasks.TimeEntryResponse
+	var r0 tasks.ActiveTimeEntryResponse
 	var r1 error
-	if rf, ok := ret.Get(0).(func(context.Context) (tasks.TimeEntryResponse, error)); ok {
+	if rf, ok := ret.Get(0).(func(context.Context) (tasks.ActiveTimeEntryResponse, error)); ok {
 		return rf(ctx)
 	}
-	if rf, ok := ret.Get(0).(func(context.Context) tasks.TimeEntryResponse); ok {
+	if rf, ok := ret.Get(0).(func(context.Context) tasks.ActiveTimeEntryResponse); ok {
 		r0 = rf(ctx)
 	} else {
-		r0 = ret.Get(0).(tasks.TimeEntryResponse)
+		r0 = ret.Get(0).(tasks.ActiveTimeEntryResponse)
 	}
 
 	if rf, ok := ret.Get(1).(func(context.Context) error); ok {
@@ -486,12 +486,12 @@ func (_c *MockServiceInterface_GetActiveTimeEntry_Call) Run(run func(ctx context
 	return _c
 }
 
-func (_c *MockServiceInterface_GetActiveTimeEntry_Call) Return(_a0 tasks.TimeEntryResponse, _a1 error) *MockServiceInterface_GetActiveTimeEntry_Call {
+func (_c *MockServiceInterface_GetActiveTimeEntry_Call) Return(_a0 tasks.ActiveTimeEntryResponse, _a1 error) *MockServiceInterface_GetActiveTimeEntry_Call {
 	_c.Call.Return(_a0, _a1)
 	return _c
 }
 
-func (_c *MockServiceInterface_GetActiveTimeEntry_Call) RunAndReturn(run func(context.Context) (tasks.TimeEntryResponse, error)) *MockServiceInterface_GetActiveTimeEntry_Call {
+func (_c *MockServiceInterface_GetActiveTimeEntry_Call) RunAndReturn(run func(context.Context) (tasks.ActiveTimeEntryResponse, error)) *MockServiceInterface_GetActiveTimeEntry_Call {
 	_c.Call.Return(run)
 	return _c
 }

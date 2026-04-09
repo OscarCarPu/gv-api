@@ -110,6 +110,16 @@ type TimeEntryResponse struct {
 	Comment    *string    `json:"comment"`
 }
 
+type ActiveTimeEntryResponse struct {
+	ID          int32      `json:"id"`
+	TaskID      int32      `json:"task_id"`
+	StartedAt   time.Time  `json:"started_at"`
+	FinishedAt  *time.Time `json:"finished_at"`
+	Comment     *string    `json:"comment"`
+	TaskName    string     `json:"task_name"`
+	ProjectName *string    `json:"project_name"`
+}
+
 type TimeEntryWithTaskResponse struct {
 	ID             int32      `json:"id"`
 	TaskID         int32      `json:"task_id"`

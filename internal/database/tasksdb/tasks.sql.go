@@ -268,20 +268,35 @@ func (q *Queries) GetActiveProjects(ctx context.Context) ([]GetActiveProjectsRow
 }
 
 const getActiveTimeEntry = `-- name: GetActiveTimeEntry :one
-SELECT id, task_id, started_at, finished_at, comment
-FROM time_entries
-WHERE finished_at IS NULL
+SELECT te.id, te.task_id, te.started_at, te.finished_at, te.comment,
+       t.name AS task_name, p.name AS project_name
+FROM time_entries te
+JOIN tasks t ON t.id = te.task_id
+LEFT JOIN projects p ON p.id = t.project_id
+WHERE te.finished_at IS NULL
 `
 
-func (q *Queries) GetActiveTimeEntry(ctx context.Context) (TimeEntry, error) {
+type GetActiveTimeEntryRow struct {
+	ID          int32              `db:"id" json:"id"`
+	TaskID      int32              `db:"task_id" json:"task_id"`
+	StartedAt   pgtype.Timestamptz `db:"started_at" json:"started_at"`
+	FinishedAt  pgtype.Timestamptz `db:"finished_at" json:"finished_at"`
+	Comment     *string            `db:"comment" json:"comment"`
+	TaskName    string             `db:"task_name" json:"task_name"`
+	ProjectName *string            `db:"project_name" json:"project_name"`
+}
+
+func (q *Queries) GetActiveTimeEntry(ctx context.Context) (GetActiveTimeEntryRow, error) {
 	row := q.db.QueryRow(ctx, getActiveTimeEntry)
-	var i TimeEntry
+	var i GetActiveTimeEntryRow
 	err := row.Scan(
 		&i.ID,
 		&i.TaskID,
 		&i.StartedAt,
 		&i.FinishedAt,
 		&i.Comment,
+		&i.TaskName,
+		&i.ProjectName,
 	)
 	return i, err
 }

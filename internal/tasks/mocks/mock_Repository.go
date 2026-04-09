@@ -605,22 +605,22 @@ func (_c *MockRepository_GetActiveProjects_Call) RunAndReturn(run func(context.C
 }
 
 // GetActiveTimeEntry provides a mock function with given fields: ctx
-func (_m *MockRepository) GetActiveTimeEntry(ctx context.Context) (tasks.TimeEntryResponse, error) {
+func (_m *MockRepository) GetActiveTimeEntry(ctx context.Context) (tasks.ActiveTimeEntryResponse, error) {
 	ret := _m.Called(ctx)
 
 	if len(ret) == 0 {
 		panic("no return value specified for GetActiveTimeEntry")
 	}
 
-	var r0 tasks.TimeEntryResponse
+	var r0 tasks.ActiveTimeEntryResponse
 	var r1 error
-	if rf, ok := ret.Get(0).(func(context.Context) (tasks.TimeEntryResponse, error)); ok {
+	if rf, ok := ret.Get(0).(func(context.Context) (tasks.ActiveTimeEntryResponse, error)); ok {
 		return rf(ctx)
 	}
-	if rf, ok := ret.Get(0).(func(context.Context) tasks.TimeEntryResponse); ok {
+	if rf, ok := ret.Get(0).(func(context.Context) tasks.ActiveTimeEntryResponse); ok {
 		r0 = rf(ctx)
 	} else {
-		r0 = ret.Get(0).(tasks.TimeEntryResponse)
+		r0 = ret.Get(0).(tasks.ActiveTimeEntryResponse)
 	}
 
 	if rf, ok := ret.Get(1).(func(context.Context) error); ok {
@@ -650,12 +650,12 @@ func (_c *MockRepository_GetActiveTimeEntry_Call) Run(run func(ctx context.Conte
 	return _c
 }
 
-func (_c *MockRepository_GetActiveTimeEntry_Call) Return(_a0 tasks.TimeEntryResponse, _a1 error) *MockRepository_GetActiveTimeEntry_Call {
+func (_c *MockRepository_GetActiveTimeEntry_Call) Return(_a0 tasks.ActiveTimeEntryResponse, _a1 error) *MockRepository_GetActiveTimeEntry_Call {
 	_c.Call.Return(_a0, _a1)
 	return _c
 }
 
-func (_c *MockRepository_GetActiveTimeEntry_Call) RunAndReturn(run func(context.Context) (tasks.TimeEntryResponse, error)) *MockRepository_GetActiveTimeEntry_Call {
+func (_c *MockRepository_GetActiveTimeEntry_Call) RunAndReturn(run func(context.Context) (tasks.ActiveTimeEntryResponse, error)) *MockRepository_GetActiveTimeEntry_Call {
 	_c.Call.Return(run)
 	return _c
 }

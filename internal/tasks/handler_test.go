@@ -291,6 +291,17 @@ func TestHandler_CreateTimeEntry(t *testing.T) {
 		assert.Contains(t, rec.Body.String(), "started_at is required")
 	})
 
+	t.Run("returns 409 when active time entry already exists", func(t *testing.T) {
+		svc := mocks.NewMockServiceInterface(t)
+		svc.EXPECT().CreateTimeEntry(mock.Anything, mock.Anything).Return(tasks.TimeEntryResponse{}, tasks.ErrActiveTimeEntryExists)
+		handler := tasks.NewHandler(svc)
+		req := httptest.NewRequest(http.MethodPost, "/tasks/time-entries", strings.NewReader(`{"task_id": 3, "started_at": "2026-03-01T09:00:00Z"}`))
+		rec := httptest.NewRecorder()
+		handler.CreateTimeEntry(rec, req)
+		assert.Equal(t, http.StatusConflict, rec.Code)
+		assert.Contains(t, rec.Body.String(), "an active time entry already exists")
+	})
+
 	t.Run("returns 500 when service fails", func(t *testing.T) {
 		svc := mocks.NewMockServiceInterface(t)
 		svc.EXPECT().CreateTimeEntry(mock.Anything, mock.Anything).Return(tasks.TimeEntryResponse{}, errors.New("db error"))
@@ -1291,7 +1302,7 @@ func TestHandler_GetActiveTimeEntry(t *testing.T) {
 
 	t.Run("returns 200 with active time entry", func(t *testing.T) {
 		svc := mocks.NewMockServiceInterface(t)
-		svc.EXPECT().GetActiveTimeEntry(mock.Anything).Return(tasks.TimeEntryResponse{ID: 1, TaskID: 5, StartedAt: now, Comment: &comment}, nil)
+		svc.EXPECT().GetActiveTimeEntry(mock.Anything).Return(tasks.ActiveTimeEntryResponse{ID: 1, TaskID: 5, StartedAt: now, Comment: &comment, TaskName: "test task"}, nil)
 		handler := tasks.NewHandler(svc)
 
 		req := httptest.NewRequest(http.MethodGet, "/tasks/time-entries/active", nil)
@@ -1299,16 +1310,17 @@ func TestHandler_GetActiveTimeEntry(t *testing.T) {
 		handler.GetActiveTimeEntry(rec, req)
 
 		assert.Equal(t, http.StatusOK, rec.Code)
-		var got tasks.TimeEntryResponse
+		var got tasks.ActiveTimeEntryResponse
 		require.NoError(t, json.NewDecoder(rec.Body).Decode(&got))
 		assert.Equal(t, int32(1), got.ID)
 		assert.Equal(t, int32(5), got.TaskID)
 		assert.Equal(t, &comment, got.Comment)
+		assert.Equal(t, "test task", got.TaskName)
 	})
 
 	t.Run("returns 404 when no active time entry", func(t *testing.T) {
 		svc := mocks.NewMockServiceInterface(t)
-		svc.EXPECT().GetActiveTimeEntry(mock.Anything).Return(tasks.TimeEntryResponse{}, tasks.ErrNotFound)
+		svc.EXPECT().GetActiveTimeEntry(mock.Anything).Return(tasks.ActiveTimeEntryResponse{}, tasks.ErrNotFound)
 		handler := tasks.NewHandler(svc)
 
 		req := httptest.NewRequest(http.MethodGet, "/tasks/time-entries/active", nil)
@@ -1321,7 +1333,7 @@ func TestHandler_GetActiveTimeEntry(t *testing.T) {
 
 	t.Run("returns 500 on service error", func(t *testing.T) {
 		svc := mocks.NewMockServiceInterface(t)
-		svc.EXPECT().GetActiveTimeEntry(mock.Anything).Return(tasks.TimeEntryResponse{}, errors.New("db error"))
+		svc.EXPECT().GetActiveTimeEntry(mock.Anything).Return(tasks.ActiveTimeEntryResponse{}, errors.New("db error"))
 		handler := tasks.NewHandler(svc)
 
 		req := httptest.NewRequest(http.MethodGet, "/tasks/time-entries/active", nil)

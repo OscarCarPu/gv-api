@@ -421,7 +421,7 @@ func (s *Service) GetTasksByDueDate(ctx context.Context) ([]TaskByDueDateRespons
 	return result, nil
 }
 
-func (s *Service) GetActiveTimeEntry(ctx context.Context) (TimeEntryResponse, error) {
+func (s *Service) GetActiveTimeEntry(ctx context.Context) (ActiveTimeEntryResponse, error) {
 	return s.repo.GetActiveTimeEntry(ctx)
 }
 

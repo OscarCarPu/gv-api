@@ -37,7 +37,7 @@ type ServiceInterface interface {
 	DeleteTask(ctx context.Context, id int32) error
 	DeleteTodo(ctx context.Context, id int32) error
 	DeleteTimeEntry(ctx context.Context, id int32) error
-	GetActiveTimeEntry(ctx context.Context) (TimeEntryResponse, error)
+	GetActiveTimeEntry(ctx context.Context) (ActiveTimeEntryResponse, error)
 	GetTimeEntrySummary(ctx context.Context) (TimeEntrySummaryResponse, error)
 	GetTimeEntryHistory(ctx context.Context, frequency, startAt, endAt string) (history.Response, error)
 	GetTimeEntriesByDateRange(ctx context.Context, startTime, endTime string) ([]TimeEntryWithTaskResponse, error)
@@ -162,6 +162,10 @@ func (h *Handler) CreateTimeEntry(w http.ResponseWriter, r *http.Request) {
 
 	entry, err := h.service.CreateTimeEntry(r.Context(), req)
 	if err != nil {
+		if errors.Is(err, ErrActiveTimeEntryExists) {
+			response.Error(w, http.StatusConflict, "an active time entry already exists")
+			return
+		}
 		response.Error(w, http.StatusInternalServerError, "Failed to create time entry")
 		return
 	}

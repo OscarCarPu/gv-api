@@ -28,7 +28,7 @@ A comprehensive life orchestrator built in Go, designed to centralize data from 
 | `gv-api/internal/tasks/service.go` | ![31.9%](https://img.shields.io/badge/31.9%25-red) |
 | `gv-api/test/e2e/client.go` | ![78.5%](https://img.shields.io/badge/78.5%25-brightgreen) |
 | `gv-api/test/e2e/setup.go` | ![76.7%](https://img.shields.io/badge/76.7%25-brightgreen) |
-| **Total** | ![63.4%](https://img.shields.io/badge/63.4%25-yellow) |
+| **Total** | ![63.3%](https://img.shields.io/badge/63.3%25-yellow) |
 
 > Untested code not shown above is either auto-generated, boilerplate delegation, or covered by E2E.
 

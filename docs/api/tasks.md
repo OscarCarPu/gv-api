@@ -346,8 +346,37 @@
 - **Error Responses:**
   - **Code:** `400 Bad Request`
     - **Content:** `Invalid Body`, `task_id is required`, or `started_at is required`
+  - **Code:** `409 Conflict`
+    - **Content:** `an active time entry already exists` — returned when creating a time entry without `finished_at` while another unfinished entry already exists. Only one active (unfinished) time entry can exist at a time.
   - **Code:** `500 Internal Server Error`
     - **Content:** `Failed to create time entry`
+
+## Get Active Time Entry
+
+- **Method:** `GET`
+- **Endpoint:** `/tasks/time-entries/active`
+- **Description:** Returns the currently running (unfinished) time entry, including the task name and project name. At most one active entry can exist at a time (enforced by a partial unique index).
+- **Success Response:**
+  - **Code:** `200 OK`
+  - **Content:**
+    ```json
+    {
+      "id": 1,
+      "task_id": 5,
+      "started_at": "2025-03-01T09:00:00Z",
+      "finished_at": null,
+      "comment": "Working on feature X",
+      "task_name": "Implement feature X",
+      "project_name": "My Project"
+    }
+    ```
+  - `task_name`: Name of the associated task.
+  - `project_name`: Name of the task's project, or `null` if the task has no project.
+- **Error Responses:**
+  - **Code:** `404 Not Found`
+    - **Content:** `no active time entry`
+  - **Code:** `500 Internal Server Error`
+    - **Content:** `Failed to get active time entry`
 
 ## Update Time Entry
 
