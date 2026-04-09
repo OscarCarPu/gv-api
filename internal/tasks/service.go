@@ -196,9 +196,46 @@ func (s *Service) GetActiveTree(ctx context.Context) ([]ActiveTreeNode, error) {
 		node.Children = append(node.Children, unstartedTasks[id]...)
 	}
 
+	// Compute depth for each project so we attach deepest children first.
+	// This ensures that when a project is copied into its parent, all its
+	// own children are already attached.
+	depthOf := make(map[int32]int, len(projects))
+	parentOf := make(map[int32]*int32, len(projects))
+	for _, p := range projects {
+		parentOf[p.ID] = p.ParentID
+	}
+	var getDepth func(id int32) int
+	getDepth = func(id int32) int {
+		if d, ok := depthOf[id]; ok {
+			return d
+		}
+		pid := parentOf[id]
+		if pid == nil {
+			depthOf[id] = 0
+			return 0
+		}
+		if _, ok := parentOf[*pid]; !ok {
+			depthOf[id] = 0
+			return 0
+		}
+		d := getDepth(*pid) + 1
+		depthOf[id] = d
+		return d
+	}
+	for _, p := range projects {
+		getDepth(p.ID)
+	}
+
+	// Sort projects by depth descending so deepest nest first
+	sorted := make([]ActiveProject, len(projects))
+	copy(sorted, projects)
+	sort.Slice(sorted, func(i, j int) bool {
+		return depthOf[sorted[i].ID] > depthOf[sorted[j].ID]
+	})
+
 	// Attach child projects to parent projects (sub-projects first, before tasks)
 	childProjectIDs := make(map[int32]bool)
-	for _, p := range projects {
+	for _, p := range sorted {
 		if p.ParentID != nil {
 			if parent, ok := projectNodes[*p.ParentID]; ok {
 				childProjectIDs[p.ID] = true
