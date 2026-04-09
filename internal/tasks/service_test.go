@@ -276,6 +276,35 @@ func TestService_GetActiveTree(t *testing.T) {
 		assert.Nil(t, taskB.StartedAt)
 	})
 
+	t.Run("3-level deep project nesting", func(t *testing.T) {
+		pid1 := int32(1)
+		pid2 := int32(2)
+		pid3 := int32(3)
+		repo := mocks.NewMockRepository(t)
+		repo.EXPECT().GetActiveProjects(mock.Anything).Return([]tasks.ActiveProject{
+			{ID: 1, Name: "root"},
+			{ID: 2, ParentID: &pid1, Name: "mid"},
+			{ID: 3, ParentID: &pid2, Name: "leaf"},
+		}, nil)
+		repo.EXPECT().GetUnfinishedTasks(mock.Anything).Return([]tasks.UnfinishedTask{
+			{ID: 10, ProjectID: &pid3, Name: "deep task", Started: true, StartedAt: &taskStarted},
+		}, nil)
+
+		svc := tasks.NewService(repo, nil)
+		got, err := svc.GetActiveTree(context.Background())
+		require.NoError(t, err)
+
+		// root → mid → leaf → deep task
+		require.Len(t, got, 1)
+		assert.Equal(t, "root", got[0].Name)
+		require.Len(t, got[0].Children, 1)
+		assert.Equal(t, "mid", got[0].Children[0].Name)
+		require.Len(t, got[0].Children[0].Children, 1)
+		assert.Equal(t, "leaf", got[0].Children[0].Children[0].Name)
+		require.Len(t, got[0].Children[0].Children[0].Children, 1)
+		assert.Equal(t, "deep task", got[0].Children[0].Children[0].Children[0].Name)
+	})
+
 	t.Run("orphan tasks at root level", func(t *testing.T) {
 		repo := mocks.NewMockRepository(t)
 		repo.EXPECT().GetActiveProjects(mock.Anything).Return([]tasks.ActiveProject{}, nil)
