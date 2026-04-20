@@ -157,9 +157,13 @@ func (r *PostgresRepository) UpdateProject(ctx context.Context, req UpdateProjec
 		params.SetDescription = true
 		params.Description = *req.Description
 	}
-	if req.DueAt != nil {
-		params.SetDueAt = true
-		params.DueAt = *req.DueAt
+	if req.DueAt.Set {
+		if req.DueAt.Value == nil {
+			params.ClearDueAt = true
+		} else {
+			params.SetDueAt = true
+			params.DueAt = *req.DueAt.Value
+		}
 	}
 	if req.ParentID != nil {
 		params.SetParentID = true

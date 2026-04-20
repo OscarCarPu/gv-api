@@ -45,7 +45,7 @@ RETURNING id, project_id, name, description, due_at, started_at, finished_at, ta
 UPDATE projects SET
     name        = CASE WHEN @set_name::bool        THEN @name::text             ELSE name END,
     description = CASE WHEN @set_description::bool  THEN @description::text      ELSE description END,
-    due_at      = CASE WHEN @set_due_at::bool       THEN @due_at::date           ELSE due_at END,
+    due_at      = CASE WHEN @clear_due_at::bool THEN NULL WHEN @set_due_at::bool THEN @due_at::date ELSE due_at END,
     parent_id   = CASE WHEN @set_parent_id::bool    THEN @parent_id::int         ELSE parent_id END,
     started_at  = CASE WHEN @set_started_at::bool   THEN @started_at::timestamptz  ELSE started_at END,
     finished_at = CASE WHEN @set_finished_at::bool  THEN @finished_at::timestamptz ELSE finished_at END

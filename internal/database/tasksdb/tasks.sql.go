@@ -1063,11 +1063,11 @@ const updateProject = `-- name: UpdateProject :one
 UPDATE projects SET
     name        = CASE WHEN $1::bool        THEN $2::text             ELSE name END,
     description = CASE WHEN $3::bool  THEN $4::text      ELSE description END,
-    due_at      = CASE WHEN $5::bool       THEN $6::date           ELSE due_at END,
-    parent_id   = CASE WHEN $7::bool    THEN $8::int         ELSE parent_id END,
-    started_at  = CASE WHEN $9::bool   THEN $10::timestamptz  ELSE started_at END,
-    finished_at = CASE WHEN $11::bool  THEN $12::timestamptz ELSE finished_at END
-WHERE id = $13
+    due_at      = CASE WHEN $5::bool THEN NULL WHEN $6::bool THEN $7::date ELSE due_at END,
+    parent_id   = CASE WHEN $8::bool    THEN $9::int         ELSE parent_id END,
+    started_at  = CASE WHEN $10::bool   THEN $11::timestamptz  ELSE started_at END,
+    finished_at = CASE WHEN $12::bool  THEN $13::timestamptz ELSE finished_at END
+WHERE id = $14
 RETURNING id, parent_id, name, description, due_at, started_at, finished_at
 `
 
@@ -1076,6 +1076,7 @@ type UpdateProjectParams struct {
 	Name           string             `db:"name" json:"name"`
 	SetDescription bool               `db:"set_description" json:"set_description"`
 	Description    string             `db:"description" json:"description"`
+	ClearDueAt     bool               `db:"clear_due_at" json:"clear_due_at"`
 	SetDueAt       bool               `db:"set_due_at" json:"set_due_at"`
 	DueAt          time.Time          `db:"due_at" json:"due_at"`
 	SetParentID    bool               `db:"set_parent_id" json:"set_parent_id"`
@@ -1093,6 +1094,7 @@ func (q *Queries) UpdateProject(ctx context.Context, arg UpdateProjectParams) (P
 		arg.Name,
 		arg.SetDescription,
 		arg.Description,
+		arg.ClearDueAt,
 		arg.SetDueAt,
 		arg.DueAt,
 		arg.SetParentID,
