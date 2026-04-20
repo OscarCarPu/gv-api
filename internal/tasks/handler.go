@@ -27,12 +27,12 @@ type ServiceInterface interface {
 	ListProjectsFast(ctx context.Context) ([]ProjectFastResponse, error)
 	ListTasksFast(ctx context.Context) ([]TaskFastResponse, error)
 	GetRootProjects(ctx context.Context) ([]ProjectResponse, error)
-	GetActiveTree(ctx context.Context) ([]ActiveTreeNode, error)
+	GetActiveTree(ctx context.Context, minPriority *int32) ([]ActiveTreeNode, error)
 	GetProject(ctx context.Context, id int32) (ProjectDetailResponse, error)
 	GetTask(ctx context.Context, id int32) (TaskFullResponse, error)
 	GetProjectChildren(ctx context.Context, projectID int32) (ProjectChildrenResponse, error)
 	GetTaskTimeEntries(ctx context.Context, taskID int32) (TaskTimeEntriesResponse, error)
-	GetTasksByDueDate(ctx context.Context) ([]TaskByDueDateResponse, error)
+	GetTasksByDueDate(ctx context.Context, minPriority *int32) ([]TaskByDueDateResponse, error)
 	DeleteProject(ctx context.Context, id int32) error
 	DeleteTask(ctx context.Context, id int32) error
 	DeleteTodo(ctx context.Context, id int32) error
@@ -124,6 +124,11 @@ func (h *Handler) CreateTask(w http.ResponseWriter, r *http.Request) {
 		}
 	} else if req.Recurrence != nil {
 		response.Error(w, http.StatusBadRequest, "recurrence is only valid when task_type is recurring")
+		return
+	}
+
+	if req.Priority != nil && (*req.Priority < 1 || *req.Priority > 5) {
+		response.Error(w, http.StatusBadRequest, "priority must be between 1 and 5")
 		return
 	}
 
@@ -270,6 +275,11 @@ func (h *Handler) UpdateTask(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if req.Priority != nil && (*req.Priority < 1 || *req.Priority > 5) {
+		response.Error(w, http.StatusBadRequest, "priority must be between 1 and 5")
+		return
+	}
+
 	task, err := h.service.UpdateTask(r.Context(), req)
 	if err != nil {
 		if errors.Is(err, ErrNotFound) {
@@ -343,7 +353,13 @@ func (h *Handler) UpdateTimeEntry(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) GetActiveTree(w http.ResponseWriter, r *http.Request) {
-	tree, err := h.service.GetActiveTree(r.Context())
+	minPriority, err := parseMinPriority(r)
+	if err != nil {
+		response.Error(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	tree, err := h.service.GetActiveTree(r.Context(), minPriority)
 	if err != nil {
 		response.Error(w, http.StatusInternalServerError, "Failed to get active tree")
 		return
@@ -433,12 +449,31 @@ func (h *Handler) GetTaskTimeEntries(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) GetTasksByDueDate(w http.ResponseWriter, r *http.Request) {
-	tasks, err := h.service.GetTasksByDueDate(r.Context())
+	minPriority, err := parseMinPriority(r)
+	if err != nil {
+		response.Error(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	tasks, err := h.service.GetTasksByDueDate(r.Context(), minPriority)
 	if err != nil {
 		response.Error(w, http.StatusInternalServerError, "Failed to get tasks by due date")
 		return
 	}
 	response.JSON(w, http.StatusOK, tasks)
+}
+
+func parseMinPriority(r *http.Request) (*int32, error) {
+	s := r.URL.Query().Get("min_priority")
+	if s == "" {
+		return nil, nil
+	}
+	n, err := strconv.Atoi(s)
+	if err != nil || n < 1 || n > 5 {
+		return nil, fmt.Errorf("min_priority must be between 1 and 5")
+	}
+	v := int32(n)
+	return &v, nil
 }
 
 func (h *Handler) DeleteProject(w http.ResponseWriter, r *http.Request) {

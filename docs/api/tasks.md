@@ -15,6 +15,10 @@ Tasks have a `task_type` field that determines their behavior:
 - `task_type` and `recurrence` are returned on all endpoints that include task information.
 - `recurrence` is omitted from JSON responses when `null` (non-recurring tasks).
 
+## Task Priority
+
+Tasks have a `priority` field with values from `1` (highest) to `5` (lowest). It defaults to `3` when not provided. Priority is returned on all endpoints that include task information.
+
 ---
 
 ## List Projects (Fast)
@@ -52,7 +56,8 @@ Tasks have a `task_type` field that determines their behavior:
         "name": "My Task",
         "project_id": 5,
         "project_name": "My Project",
-        "task_type": "standard"
+        "task_type": "standard",
+        "priority": 3
       },
       {
         "id": 2,
@@ -60,7 +65,8 @@ Tasks have a `task_type` field that determines their behavior:
         "project_id": null,
         "project_name": null,
         "task_type": "recurring",
-        "recurrence": 7
+        "recurrence": 7,
+        "priority": 1
       }
     ]
     ```
@@ -190,7 +196,8 @@ Tasks have a `task_type` field that determines their behavior:
     "due_at": "2025-06-01",
     "depends_on": [2, 3],
     "task_type": "recurring",
-    "recurrence": 7
+    "recurrence": 7,
+    "priority": 2
   }
   ```
   - `name` (required): The name of the task.
@@ -200,6 +207,7 @@ Tasks have a `task_type` field that determines their behavior:
   - `depends_on` (optional): List of task IDs this task depends on.
   - `task_type` (optional): One of `"standard"` (default), `"continuous"`, or `"recurring"`. See [Task Types](#task-types).
   - `recurrence` (required when `task_type` is `"recurring"`, rejected otherwise): Number of days between recurrences (positive integer).
+  - `priority` (optional): Integer from 1 (highest) to 5 (lowest). Defaults to 3.
 - **Success Response:**
   - **Code:** `201 Created`
   - **Content:**
@@ -214,6 +222,7 @@ Tasks have a `task_type` field that determines their behavior:
       "finished_at": null,
       "task_type": "recurring",
       "recurrence": 7,
+      "priority": 2,
       "depends_on": [{"id": 2, "name": "Other Task", "due_at": "2025-05-15"}, {"id": 3, "name": "Another Task", "due_at": null}],
       "blocks": [],
       "blocked": true
@@ -224,6 +233,7 @@ Tasks have a `task_type` field that determines their behavior:
   - `blocked`: `true` if the task has at least one unfinished dependency, `false` otherwise.
   - `task_type`: The task type. Always present.
   - `recurrence`: Number of days between recurrences. Only present when `task_type` is `"recurring"`.
+  - `priority`: Integer from 1 (highest) to 5 (lowest). Always present.
 - **Error Responses:**
   - **Code:** `400 Bad Request`
     - **Content:** `Invalid Body`, `name is required`, `task_type must be standard, continuous, or recurring`, `recurrence is required when task_type is recurring`, `recurrence is only valid when task_type is recurring`, or `recurrence must be a positive number of days`
@@ -246,7 +256,8 @@ Tasks have a `task_type` field that determines their behavior:
     "finished_at": "2025-03-01T17:00:00Z",
     "depends_on": [3, 4],
     "task_type": "recurring",
-    "recurrence": 7
+    "recurrence": 7,
+    "priority": 1
   }
   ```
   - `name` (optional): New name.
@@ -258,6 +269,7 @@ Tasks have a `task_type` field that determines their behavior:
   - `depends_on` (optional): List of task IDs this task depends on. Replaces all existing dependencies. Omitting the field leaves dependencies unchanged. Pass `[]` to clear all dependencies.
   - `task_type` (optional): One of `"standard"`, `"continuous"`, or `"recurring"`. When changing to `"recurring"`, `recurrence` must be provided. When changing to a non-recurring type, `recurrence` is automatically cleared.
   - `recurrence` (optional): Number of days between recurrences (positive integer). Required when `task_type` is set to `"recurring"`. Rejected when `task_type` is set to a non-recurring type. Can be sent alone to change the interval of an already-recurring task.
+  - `priority` (optional): Integer from 1 (highest) to 5 (lowest).
 - **Success Response:**
   - **Code:** `200 OK`
   - **Content:**
@@ -272,6 +284,7 @@ Tasks have a `task_type` field that determines their behavior:
       "finished_at": "2025-03-01T17:00:00Z",
       "task_type": "recurring",
       "recurrence": 7,
+      "priority": 1,
       "depends_on": [{"id": 3, "name": "Dep A", "due_at": null}, {"id": 4, "name": "Dep B", "due_at": "2025-07-01"}],
       "blocks": [{"id": 7, "name": "Blocked Task", "due_at": null}],
       "blocked": true
@@ -404,12 +417,14 @@ Tasks have a `task_type` field that determines their behavior:
       "comment": "Working on feature X",
       "task_name": "Implement feature X",
       "task_type": "standard",
+      "priority": 3,
       "project_name": "My Project"
     }
     ```
   - `task_name`: Name of the associated task.
   - `task_type`: Task type of the associated task.
   - `recurrence`: Recurrence interval in days. Only present when `task_type` is `"recurring"`.
+  - `priority`: Priority of the associated task (1 = highest, 5 = lowest).
   - `project_name`: Name of the task's project, or `null` if the task has no project.
 - **Error Responses:**
   - **Code:** `404 Not Found`
@@ -458,6 +473,8 @@ Tasks have a `task_type` field that determines their behavior:
 - **Method:** `GET`
 - **Endpoint:** `/tasks/tasks/by-due-date`
 - **Description:** Returns unfinished tasks that have a due date (own, project, or inherited from dependencies), ordered by effective `due_at` first, then by project `due_at`, then by name. Tasks hidden by blocked dependencies are excluded. A task's `due_at` in the response reflects its effective due date (minimum of own and dependencies'). Includes time spent from completed time entries.
+- **Query Parameters:**
+  - `min_priority` (optional): Integer from 1 to 5. When provided, only tasks with `priority <= min_priority` are returned (1 = highest importance).
 - **Success Response:**
   - **Code:** `200 OK`
   - **Content:**
@@ -470,6 +487,7 @@ Tasks have a `task_type` field that determines their behavior:
         "due_at": "2025-06-01",
         "started_at": "2025-02-15T08:00:00Z",
         "task_type": "standard",
+        "priority": 2,
         "time_spent": 5400,
         "project_id": 1,
         "project_name": "My Project",
@@ -489,6 +507,8 @@ Tasks have a `task_type` field that determines their behavior:
 - **Method:** `GET`
 - **Endpoint:** `/tasks/tree`
 - **Description:** Returns a nested JSON tree of active projects and tasks. Projects are included if `started_at IS NOT NULL` and `finished_at IS NULL`. Tasks are included if `finished_at IS NULL`. Orphan tasks (no `project_id`) appear at the root level. Ordered: first projects, then tasks with `started_at IS NOT NULL` then tasks with `started_at IS NULL`. Tasks hidden by blocked dependencies are excluded (a task is hidden if all of its dependencies are themselves blocked). Task `due_at` reflects the effective due date (minimum of own and dependencies').
+- **Query Parameters:**
+  - `min_priority` (optional): Integer from 1 to 5. When provided, only tasks with `priority <= min_priority` are kept in the tree; projects are always present regardless of their children.
 - **Success Response:**
   - **Code:** `200 OK`
   - **Content:**
@@ -510,6 +530,7 @@ Tasks have a `task_type` field that determines their behavior:
             "type": "task",
             "name": "task_1",
             "task_type": "standard",
+            "priority": 2,
             "depends_on": [{"id": 3, "name": "Blocking Task", "due_at": "2025-06-01"}],
             "blocks": [],
             "blocked": true
@@ -521,6 +542,7 @@ Tasks have a `task_type` field that determines their behavior:
         "type": "task",
         "name": "orphan_task",
         "task_type": "continuous",
+        "priority": 4,
         "depends_on": [],
         "blocks": [{"id": 1, "name": "task_1", "due_at": null}],
         "blocked": false
@@ -574,6 +596,7 @@ Tasks have a `task_type` field that determines their behavior:
           "finished_at": null,
           "time_spent": 5400,
           "task_type": "standard",
+          "priority": 3,
           "depends_on": [{"id": 3, "name": "Setup DB", "due_at": null}],
           "blocks": [],
           "blocked": true,
@@ -614,6 +637,7 @@ Tasks have a `task_type` field that determines their behavior:
         "started_at": "2025-03-01T09:00:00Z",
         "finished_at": null,
         "task_type": "standard",
+        "priority": 3,
         "time_spent": 5400,
         "depends_on": [{"id": 2, "name": "Setup DB"}],
         "blocks": [{"id": 4, "name": "Write tests", "due_at": null}],
@@ -654,6 +678,7 @@ Tasks have a `task_type` field that determines their behavior:
         "task_id": 5,
         "task_name": "Implement feature X",
         "task_type": "standard",
+        "priority": 3,
         "project_id": 2,
         "project_name": "My Project",
         "started_at": "2026-03-15T09:00:00Z",
@@ -668,6 +693,7 @@ Tasks have a `task_type` field that determines their behavior:
         "task_name": "Orphan task",
         "task_type": "recurring",
         "recurrence": 1,
+        "priority": 1,
         "project_id": null,
         "project_name": null,
         "started_at": "2026-03-14T14:00:00Z",

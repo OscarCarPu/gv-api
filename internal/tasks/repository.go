@@ -20,7 +20,7 @@ var ErrActiveTimeEntryExists = errors.New("an active time entry already exists")
 
 type Repository interface {
 	CreateProject(ctx context.Context, name string, description *string, dueAt *time.Time, parentID *int32) (ProjectResponse, error)
-	CreateTask(ctx context.Context, projectID *int32, name string, description *string, dueAt *time.Time, taskType string, recurrence *int32) (TaskResponse, error)
+	CreateTask(ctx context.Context, projectID *int32, name string, description *string, dueAt *time.Time, taskType string, recurrence *int32, priority int32) (TaskResponse, error)
 	CreateTodo(ctx context.Context, taskID int32, name string) (TodoResponse, error)
 	CreateTimeEntry(ctx context.Context, taskID int32, startedAt time.Time, finishedAt *time.Time, comment *string) (TimeEntryResponse, error)
 	UpdateProject(ctx context.Context, req UpdateProjectRequest) (ProjectResponse, error)
@@ -100,7 +100,7 @@ func (r *PostgresRepository) CreateProject(ctx context.Context, name string, des
 	}, nil
 }
 
-func (r *PostgresRepository) CreateTask(ctx context.Context, projectID *int32, name string, description *string, dueAt *time.Time, taskType string, recurrence *int32) (TaskResponse, error) {
+func (r *PostgresRepository) CreateTask(ctx context.Context, projectID *int32, name string, description *string, dueAt *time.Time, taskType string, recurrence *int32, priority int32) (TaskResponse, error) {
 	var pgDueAt pgtype.Date
 	if dueAt != nil {
 		pgDueAt = pgtype.Date{Time: *dueAt, Valid: true}
@@ -113,6 +113,7 @@ func (r *PostgresRepository) CreateTask(ctx context.Context, projectID *int32, n
 		DueAt:       pgDueAt,
 		TaskType:    taskType,
 		Recurrence:  recurrence,
+		Priority:    priority,
 	})
 	if err != nil {
 		return TaskResponse{}, err
@@ -126,6 +127,7 @@ func (r *PostgresRepository) CreateTask(ctx context.Context, projectID *int32, n
 		DueAt:       pgDateToPtr(row.DueAt),
 		TaskType:    row.TaskType,
 		Recurrence:  row.Recurrence,
+		Priority:    row.Priority,
 	}, nil
 }
 
@@ -232,7 +234,10 @@ func (r *PostgresRepository) UpdateTask(ctx context.Context, req UpdateTaskReque
 		params.SetRecurrence = true
 		params.Recurrence = *req.Recurrence
 	}
-
+	if req.Priority != nil {
+		params.SetPriority = true
+		params.Priority = *req.Priority
+	}
 
 	row, err := r.q.UpdateTask(ctx, params)
 	if err != nil {
@@ -252,6 +257,7 @@ func (r *PostgresRepository) UpdateTask(ctx context.Context, req UpdateTaskReque
 		FinishedAt:  pgTimestamptzToPtr(row.FinishedAt),
 		TaskType:    row.TaskType,
 		Recurrence:  row.Recurrence,
+		Priority:    row.Priority,
 	}, nil
 }
 
@@ -390,6 +396,7 @@ func (r *PostgresRepository) GetUnfinishedTasks(ctx context.Context) ([]Unfinish
 			StartedAt:   pgTimestamptzToPtr(row.StartedAt),
 			TaskType:    row.TaskType,
 			Recurrence:  row.Recurrence,
+			Priority:    row.Priority,
 			DependsOn:   unmarshalDepRefs(row.DependsOn),
 			Blocks: unmarshalDepRefs(row.Blocks),
 		}
@@ -440,6 +447,7 @@ func (r *PostgresRepository) GetTask(ctx context.Context, id int32) (TaskFullRes
 		FinishedAt:  pgTimestamptzToPtr(first.FinishedAt),
 		TaskType:    first.TaskType,
 		Recurrence:  first.Recurrence,
+		Priority:    first.Priority,
 		TimeSpent:   first.TimeSpent,
 		DependsOn: unmarshalDepRefs(first.DependsOn),
 		Blocks:    unmarshalDepRefs(first.Blocks),
@@ -503,6 +511,7 @@ func (r *PostgresRepository) GetProjectChildren(ctx context.Context, projectID i
 		}
 
 		blocked := tw.row.Blocked
+		priority := tw.row.Priority
 		node := ProjectChildNode{
 			ID:          tw.row.ID,
 			Type:        "task",
@@ -515,6 +524,7 @@ func (r *PostgresRepository) GetProjectChildren(ctx context.Context, projectID i
 			ProjectID:   tw.row.ProjectID,
 			TaskType:    &tw.row.TaskType,
 			Recurrence:  tw.row.Recurrence,
+			Priority:    &priority,
 			DependsOn:   unmarshalDepRefs(tw.row.DependsOn),
 			Blocks:      unmarshalDepRefs(tw.row.Blocks),
 			Blocked:     &blocked,
@@ -637,6 +647,7 @@ func (r *PostgresRepository) GetTaskTimeEntries(ctx context.Context, taskID int3
 			FinishedAt:  pgTimestamptzToPtr(first.TaskFinishedAt),
 			TaskType:    first.TaskType,
 			Recurrence:  first.Recurrence,
+			Priority:    first.Priority,
 			TimeSpent:   first.TimeSpent,
 			DependsOn: unmarshalDepRefs(first.DependsOn),
 			Blocks:    unmarshalDepRefs(first.Blocks),
@@ -662,6 +673,7 @@ func (r *PostgresRepository) GetTasksByDueDate(ctx context.Context) ([]TaskByDue
 			StartedAt:    pgTimestamptzToPtr(row.StartedAt),
 			TaskType:     row.TaskType,
 			Recurrence:   row.Recurrence,
+			Priority:     row.Priority,
 			TimeSpent:    row.TimeSpent,
 			ProjectID:    row.ProjectID,
 			ProjectName:  row.ProjectName,
@@ -715,6 +727,7 @@ func (r *PostgresRepository) GetActiveTimeEntry(ctx context.Context) (ActiveTime
 		TaskName:    row.TaskName,
 		TaskType:    row.TaskType,
 		Recurrence:  row.Recurrence,
+		Priority:    row.Priority,
 		ProjectName: row.ProjectName,
 	}, nil
 }
@@ -772,6 +785,7 @@ func (r *PostgresRepository) GetTimeEntriesByDateRange(ctx context.Context, star
 			TaskName:       row.TaskName,
 			TaskType:       row.TaskType,
 			Recurrence:     row.Recurrence,
+			Priority:       row.Priority,
 			ProjectID:      row.ProjectID,
 			ProjectName:    row.ProjectName,
 			StartedAt:      row.StartedAt.Time,
@@ -821,6 +835,7 @@ func (r *PostgresRepository) ListTasksFast(ctx context.Context) ([]TaskFastRespo
 			ProjectName: row.ProjectName,
 			TaskType:    row.TaskType,
 			Recurrence:  row.Recurrence,
+			Priority:    row.Priority,
 		}
 	}
 

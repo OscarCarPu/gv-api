@@ -249,6 +249,41 @@ func TestHandler_CreateTask(t *testing.T) {
 		assert.Equal(t, "continuous", got.TaskType)
 		assert.Nil(t, got.Recurrence)
 	})
+
+	t.Run("returns 400 when priority is below range", func(t *testing.T) {
+		svc := mocks.NewMockServiceInterface(t)
+		handler := tasks.NewHandler(svc)
+		req := httptest.NewRequest(http.MethodPost, "/tasks/tasks", strings.NewReader(`{"name": "My Task", "priority": 0}`))
+		rec := httptest.NewRecorder()
+		handler.CreateTask(rec, req)
+		assert.Equal(t, http.StatusBadRequest, rec.Code)
+		assert.Contains(t, rec.Body.String(), "priority must be between 1 and 5")
+	})
+
+	t.Run("returns 400 when priority is above range", func(t *testing.T) {
+		svc := mocks.NewMockServiceInterface(t)
+		handler := tasks.NewHandler(svc)
+		req := httptest.NewRequest(http.MethodPost, "/tasks/tasks", strings.NewReader(`{"name": "My Task", "priority": 6}`))
+		rec := httptest.NewRecorder()
+		handler.CreateTask(rec, req)
+		assert.Equal(t, http.StatusBadRequest, rec.Code)
+		assert.Contains(t, rec.Body.String(), "priority must be between 1 and 5")
+	})
+
+	t.Run("forwards priority to service", func(t *testing.T) {
+		svc := mocks.NewMockServiceInterface(t)
+		svc.EXPECT().CreateTask(mock.Anything, mock.MatchedBy(func(req tasks.CreateTaskRequest) bool {
+			return req.Priority != nil && *req.Priority == 1
+		})).Return(tasks.TaskResponse{ID: 1, Name: "Urgent", Priority: 1}, nil)
+		handler := tasks.NewHandler(svc)
+		req := httptest.NewRequest(http.MethodPost, "/tasks/tasks", strings.NewReader(`{"name": "Urgent", "priority": 1}`))
+		rec := httptest.NewRecorder()
+		handler.CreateTask(rec, req)
+		assert.Equal(t, http.StatusCreated, rec.Code)
+		var got tasks.TaskResponse
+		require.NoError(t, json.NewDecoder(rec.Body).Decode(&got))
+		assert.Equal(t, int32(1), got.Priority)
+	})
 }
 
 func TestHandler_CreateTodo(t *testing.T) {
@@ -700,6 +735,33 @@ func TestHandler_UpdateTask(t *testing.T) {
 		assert.Equal(t, "recurring", got.TaskType)
 		assert.Equal(t, &recurrence, got.Recurrence)
 	})
+
+	t.Run("returns 400 when priority is out of range", func(t *testing.T) {
+		svc := mocks.NewMockServiceInterface(t)
+		handler := tasks.NewHandler(svc)
+		req := httptest.NewRequest(http.MethodPatch, "/tasks/tasks/1", strings.NewReader(`{"priority": 6}`))
+		req = withIDParam(req, "1")
+		rec := httptest.NewRecorder()
+		handler.UpdateTask(rec, req)
+		assert.Equal(t, http.StatusBadRequest, rec.Code)
+		assert.Contains(t, rec.Body.String(), "priority must be between 1 and 5")
+	})
+
+	t.Run("forwards priority update to service", func(t *testing.T) {
+		svc := mocks.NewMockServiceInterface(t)
+		svc.EXPECT().UpdateTask(mock.Anything, mock.MatchedBy(func(req tasks.UpdateTaskRequest) bool {
+			return req.ID == 1 && req.Priority != nil && *req.Priority == 5
+		})).Return(tasks.TaskResponse{ID: 1, Name: "task", Priority: 5}, nil)
+		handler := tasks.NewHandler(svc)
+		req := httptest.NewRequest(http.MethodPatch, "/tasks/tasks/1", strings.NewReader(`{"priority": 5}`))
+		req = withIDParam(req, "1")
+		rec := httptest.NewRecorder()
+		handler.UpdateTask(rec, req)
+		assert.Equal(t, http.StatusOK, rec.Code)
+		var got tasks.TaskResponse
+		require.NoError(t, json.NewDecoder(rec.Body).Decode(&got))
+		assert.Equal(t, int32(5), got.Priority)
+	})
 }
 
 func TestHandler_UpdateTodo(t *testing.T) {
@@ -883,7 +945,7 @@ func TestHandler_GetActiveTree(t *testing.T) {
 
 	t.Run("returns 200 with tree nodes", func(t *testing.T) {
 		svc := mocks.NewMockServiceInterface(t)
-		svc.EXPECT().GetActiveTree(mock.Anything).Return([]tasks.ActiveTreeNode{
+		svc.EXPECT().GetActiveTree(mock.Anything, mock.Anything).Return([]tasks.ActiveTreeNode{
 			{ID: 1, Type: "project", Name: "Project A", DueAt: &projDue, Children: []tasks.ActiveTreeNode{
 				{ID: 1, Type: "task", Name: "Task 1", Description: &taskDesc, DueAt: &taskDue, StartedAt: &taskStarted},
 			}},
@@ -909,7 +971,7 @@ func TestHandler_GetActiveTree(t *testing.T) {
 
 	t.Run("returns 200 with empty array", func(t *testing.T) {
 		svc := mocks.NewMockServiceInterface(t)
-		svc.EXPECT().GetActiveTree(mock.Anything).Return([]tasks.ActiveTreeNode{}, nil)
+		svc.EXPECT().GetActiveTree(mock.Anything, mock.Anything).Return([]tasks.ActiveTreeNode{}, nil)
 		handler := tasks.NewHandler(svc)
 
 		req := httptest.NewRequest(http.MethodGet, "/tasks/tree", nil)
@@ -924,7 +986,7 @@ func TestHandler_GetActiveTree(t *testing.T) {
 
 	t.Run("returns 500 when service fails", func(t *testing.T) {
 		svc := mocks.NewMockServiceInterface(t)
-		svc.EXPECT().GetActiveTree(mock.Anything).Return(nil, errors.New("db error"))
+		svc.EXPECT().GetActiveTree(mock.Anything, mock.Anything).Return(nil, errors.New("db error"))
 		handler := tasks.NewHandler(svc)
 
 		req := httptest.NewRequest(http.MethodGet, "/tasks/tree", nil)
@@ -937,7 +999,7 @@ func TestHandler_GetActiveTree(t *testing.T) {
 
 	t.Run("includes depends_on and blocks in response", func(t *testing.T) {
 		svc := mocks.NewMockServiceInterface(t)
-		svc.EXPECT().GetActiveTree(mock.Anything).Return([]tasks.ActiveTreeNode{
+		svc.EXPECT().GetActiveTree(mock.Anything, mock.Anything).Return([]tasks.ActiveTreeNode{
 			{ID: 1, Type: "task", Name: "Task A",
 				DependsOn:   []tasks.TaskDepRef{{ID: 3, Name: "X"}},
 				Blocks: []tasks.TaskDepRef{{ID: 5, Name: "Y"}}},
@@ -956,6 +1018,28 @@ func TestHandler_GetActiveTree(t *testing.T) {
 		assert.Equal(t, int32(3), got[0].DependsOn[0].ID)
 		require.Len(t, got[0].Blocks, 1)
 		assert.Equal(t, int32(5), got[0].Blocks[0].ID)
+	})
+
+	t.Run("returns 400 when min_priority is out of range", func(t *testing.T) {
+		svc := mocks.NewMockServiceInterface(t)
+		handler := tasks.NewHandler(svc)
+		req := httptest.NewRequest(http.MethodGet, "/tasks/tree?min_priority=6", nil)
+		rec := httptest.NewRecorder()
+		handler.GetActiveTree(rec, req)
+		assert.Equal(t, http.StatusBadRequest, rec.Code)
+		assert.Contains(t, rec.Body.String(), "min_priority must be between 1 and 5")
+	})
+
+	t.Run("forwards min_priority to service", func(t *testing.T) {
+		svc := mocks.NewMockServiceInterface(t)
+		svc.EXPECT().GetActiveTree(mock.Anything, mock.MatchedBy(func(p *int32) bool {
+			return p != nil && *p == 2
+		})).Return([]tasks.ActiveTreeNode{}, nil)
+		handler := tasks.NewHandler(svc)
+		req := httptest.NewRequest(http.MethodGet, "/tasks/tree?min_priority=2", nil)
+		rec := httptest.NewRecorder()
+		handler.GetActiveTree(rec, req)
+		assert.Equal(t, http.StatusOK, rec.Code)
 	})
 }
 
@@ -1220,7 +1304,7 @@ func TestHandler_GetTasksByDueDate(t *testing.T) {
 		projectID := int32(5)
 		projectName := "My Project"
 		svc := mocks.NewMockServiceInterface(t)
-		svc.EXPECT().GetTasksByDueDate(mock.Anything).Return([]tasks.TaskByDueDateResponse{
+		svc.EXPECT().GetTasksByDueDate(mock.Anything, mock.Anything).Return([]tasks.TaskByDueDateResponse{
 			{ID: 1, Name: "Task A", DueAt: &now, TimeSpent: 3600, ProjectID: &projectID, ProjectName: &projectName},
 			{ID: 2, Name: "Task B"},
 		}, nil)
@@ -1241,7 +1325,7 @@ func TestHandler_GetTasksByDueDate(t *testing.T) {
 
 	t.Run("returns 200 with empty list", func(t *testing.T) {
 		svc := mocks.NewMockServiceInterface(t)
-		svc.EXPECT().GetTasksByDueDate(mock.Anything).Return([]tasks.TaskByDueDateResponse{}, nil)
+		svc.EXPECT().GetTasksByDueDate(mock.Anything, mock.Anything).Return([]tasks.TaskByDueDateResponse{}, nil)
 		handler := tasks.NewHandler(svc)
 
 		req := httptest.NewRequest(http.MethodGet, "/tasks/tasks/by-due-date", nil)
@@ -1256,7 +1340,7 @@ func TestHandler_GetTasksByDueDate(t *testing.T) {
 
 	t.Run("returns 500 when service fails", func(t *testing.T) {
 		svc := mocks.NewMockServiceInterface(t)
-		svc.EXPECT().GetTasksByDueDate(mock.Anything).Return(nil, errors.New("db error"))
+		svc.EXPECT().GetTasksByDueDate(mock.Anything, mock.Anything).Return(nil, errors.New("db error"))
 		handler := tasks.NewHandler(svc)
 
 		req := httptest.NewRequest(http.MethodGet, "/tasks/tasks/by-due-date", nil)
@@ -1269,7 +1353,7 @@ func TestHandler_GetTasksByDueDate(t *testing.T) {
 
 	t.Run("includes depends_on and blocks in response", func(t *testing.T) {
 		svc := mocks.NewMockServiceInterface(t)
-		svc.EXPECT().GetTasksByDueDate(mock.Anything).Return([]tasks.TaskByDueDateResponse{
+		svc.EXPECT().GetTasksByDueDate(mock.Anything, mock.Anything).Return([]tasks.TaskByDueDateResponse{
 			{ID: 1, Name: "Task A",
 				DependsOn:   []tasks.TaskDepRef{{ID: 2, Name: "X"}},
 				Blocks: []tasks.TaskDepRef{{ID: 3, Name: "Y"}, {ID: 4, Name: "Z"}}},
@@ -1287,6 +1371,28 @@ func TestHandler_GetTasksByDueDate(t *testing.T) {
 		require.Len(t, got[0].DependsOn, 1)
 		assert.Equal(t, int32(2), got[0].DependsOn[0].ID)
 		require.Len(t, got[0].Blocks, 2)
+	})
+
+	t.Run("returns 400 when min_priority is invalid", func(t *testing.T) {
+		svc := mocks.NewMockServiceInterface(t)
+		handler := tasks.NewHandler(svc)
+		req := httptest.NewRequest(http.MethodGet, "/tasks/tasks/by-due-date?min_priority=abc", nil)
+		rec := httptest.NewRecorder()
+		handler.GetTasksByDueDate(rec, req)
+		assert.Equal(t, http.StatusBadRequest, rec.Code)
+		assert.Contains(t, rec.Body.String(), "min_priority must be between 1 and 5")
+	})
+
+	t.Run("forwards min_priority to service", func(t *testing.T) {
+		svc := mocks.NewMockServiceInterface(t)
+		svc.EXPECT().GetTasksByDueDate(mock.Anything, mock.MatchedBy(func(p *int32) bool {
+			return p != nil && *p == 3
+		})).Return([]tasks.TaskByDueDateResponse{}, nil)
+		handler := tasks.NewHandler(svc)
+		req := httptest.NewRequest(http.MethodGet, "/tasks/tasks/by-due-date?min_priority=3", nil)
+		rec := httptest.NewRecorder()
+		handler.GetTasksByDueDate(rec, req)
+		assert.Equal(t, http.StatusOK, rec.Code)
 	})
 }
 

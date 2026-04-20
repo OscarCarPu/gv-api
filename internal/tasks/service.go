@@ -30,7 +30,11 @@ func (s *Service) CreateTask(ctx context.Context, req CreateTaskRequest) (TaskRe
 	if req.TaskType != nil && *req.TaskType != "" {
 		taskType = *req.TaskType
 	}
-	resp, err := s.repo.CreateTask(ctx, req.ProjectID, req.Name, req.Description, req.DueAt, taskType, req.Recurrence)
+	priority := int32(3)
+	if req.Priority != nil {
+		priority = *req.Priority
+	}
+	resp, err := s.repo.CreateTask(ctx, req.ProjectID, req.Name, req.Description, req.DueAt, taskType, req.Recurrence, priority)
 	if err != nil {
 		return resp, err
 	}
@@ -109,7 +113,7 @@ func (s *Service) UpdateTimeEntry(ctx context.Context, req UpdateTimeEntryReques
 	return s.repo.UpdateTimeEntry(ctx, req)
 }
 
-func (s *Service) GetActiveTree(ctx context.Context) ([]ActiveTreeNode, error) {
+func (s *Service) GetActiveTree(ctx context.Context, minPriority *int32) ([]ActiveTreeNode, error) {
 	projects, err := s.repo.GetActiveProjects(ctx)
 	if err != nil {
 		return nil, err
@@ -118,6 +122,16 @@ func (s *Service) GetActiveTree(ctx context.Context) ([]ActiveTreeNode, error) {
 	allTasks, err := s.repo.GetUnfinishedTasks(ctx)
 	if err != nil {
 		return nil, err
+	}
+
+	if minPriority != nil {
+		filtered := allTasks[:0]
+		for _, t := range allTasks {
+			if t.Priority <= *minPriority {
+				filtered = append(filtered, t)
+			}
+		}
+		allTasks = filtered
 	}
 
 	// Build dependency lookup structures
@@ -159,6 +173,7 @@ func (s *Service) GetActiveTree(ctx context.Context) ([]ActiveTreeNode, error) {
 
 	for _, t := range tasks {
 		taskType := t.TaskType
+		priority := t.Priority
 		node := ActiveTreeNode{
 			ID:          t.ID,
 			Type:        "task",
@@ -168,6 +183,7 @@ func (s *Service) GetActiveTree(ctx context.Context) ([]ActiveTreeNode, error) {
 			StartedAt:   t.StartedAt,
 			TaskType:    &taskType,
 			Recurrence:  t.Recurrence,
+			Priority:    &priority,
 			DependsOn:   t.DependsOn,
 			Blocks:      t.Blocks,
 			Blocked:     isBlocked(t, unfinishedIDs),
@@ -335,10 +351,20 @@ func (s *Service) GetTaskTimeEntries(ctx context.Context, taskID int32) (TaskTim
 	return s.repo.GetTaskTimeEntries(ctx, taskID)
 }
 
-func (s *Service) GetTasksByDueDate(ctx context.Context) ([]TaskByDueDateResponse, error) {
+func (s *Service) GetTasksByDueDate(ctx context.Context, minPriority *int32) ([]TaskByDueDateResponse, error) {
 	rows, err := s.repo.GetTasksByDueDate(ctx)
 	if err != nil {
 		return nil, err
+	}
+
+	if minPriority != nil {
+		filtered := rows[:0]
+		for _, r := range rows {
+			if r.Priority <= *minPriority {
+				filtered = append(filtered, r)
+			}
+		}
+		rows = filtered
 	}
 
 	// Build lookup structures for dependency logic

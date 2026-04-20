@@ -19,7 +19,7 @@ func TestService_CreateTask(t *testing.T) {
 	t.Run("creates task with dependencies", func(t *testing.T) {
 		repo := mocks.NewMockRepository(t)
 		repo.EXPECT().
-			CreateTask(mock.Anything, mock.Anything, "My Task", mock.Anything, mock.Anything, "standard", mock.Anything).
+			CreateTask(mock.Anything, mock.Anything, "My Task", mock.Anything, mock.Anything, "standard", mock.Anything, int32(3)).
 			Return(tasks.TaskResponse{ID: 10, Name: "My Task"}, nil)
 		repo.EXPECT().
 			ReplaceTaskDependencies(mock.Anything, int32(10), []int32{2, 3}).
@@ -44,7 +44,7 @@ func TestService_CreateTask(t *testing.T) {
 	t.Run("creates task without dependencies", func(t *testing.T) {
 		repo := mocks.NewMockRepository(t)
 		repo.EXPECT().
-			CreateTask(mock.Anything, mock.Anything, "Simple Task", mock.Anything, mock.Anything, "standard", mock.Anything).
+			CreateTask(mock.Anything, mock.Anything, "Simple Task", mock.Anything, mock.Anything, "standard", mock.Anything, int32(3)).
 			Return(tasks.TaskResponse{ID: 11, Name: "Simple Task"}, nil)
 		repo.EXPECT().
 			GetTaskDependencies(mock.Anything, int32(11)).
@@ -63,7 +63,7 @@ func TestService_CreateTask(t *testing.T) {
 
 	t.Run("propagates error from ReplaceTaskDependencies", func(t *testing.T) {
 		repo := mocks.NewMockRepository(t)
-		repo.EXPECT().CreateTask(mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
+		repo.EXPECT().CreateTask(mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
 			Return(tasks.TaskResponse{ID: 10}, nil)
 		repo.EXPECT().ReplaceTaskDependencies(mock.Anything, int32(10), []int32{99}).
 			Return(errors.New("fk violation"))
@@ -75,6 +75,35 @@ func TestService_CreateTask(t *testing.T) {
 		})
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "fk violation")
+	})
+
+	t.Run("defaults priority to 3 when not provided", func(t *testing.T) {
+		repo := mocks.NewMockRepository(t)
+		repo.EXPECT().
+			CreateTask(mock.Anything, mock.Anything, "T", mock.Anything, mock.Anything, "standard", mock.Anything, int32(3)).
+			Return(tasks.TaskResponse{ID: 1, Name: "T", Priority: 3}, nil)
+		repo.EXPECT().GetTaskDependencies(mock.Anything, int32(1)).
+			Return([]tasks.TaskDepRef{}, []tasks.TaskDepRef{}, false, nil)
+
+		svc := tasks.NewService(repo, nil)
+		got, err := svc.CreateTask(context.Background(), tasks.CreateTaskRequest{Name: "T"})
+		require.NoError(t, err)
+		assert.Equal(t, int32(3), got.Priority)
+	})
+
+	t.Run("uses provided priority", func(t *testing.T) {
+		p := int32(1)
+		repo := mocks.NewMockRepository(t)
+		repo.EXPECT().
+			CreateTask(mock.Anything, mock.Anything, "T", mock.Anything, mock.Anything, "standard", mock.Anything, int32(1)).
+			Return(tasks.TaskResponse{ID: 1, Name: "T", Priority: 1}, nil)
+		repo.EXPECT().GetTaskDependencies(mock.Anything, int32(1)).
+			Return([]tasks.TaskDepRef{}, []tasks.TaskDepRef{}, false, nil)
+
+		svc := tasks.NewService(repo, nil)
+		got, err := svc.CreateTask(context.Background(), tasks.CreateTaskRequest{Name: "T", Priority: &p})
+		require.NoError(t, err)
+		assert.Equal(t, int32(1), got.Priority)
 	})
 }
 
@@ -247,7 +276,7 @@ func TestService_GetActiveTree(t *testing.T) {
 		}, nil)
 
 		svc := tasks.NewService(repo, nil)
-		got, err := svc.GetActiveTree(context.Background())
+		got, err := svc.GetActiveTree(context.Background(), nil)
 		require.NoError(t, err)
 
 		require.Len(t, got, 1)
@@ -291,7 +320,7 @@ func TestService_GetActiveTree(t *testing.T) {
 		}, nil)
 
 		svc := tasks.NewService(repo, nil)
-		got, err := svc.GetActiveTree(context.Background())
+		got, err := svc.GetActiveTree(context.Background(), nil)
 		require.NoError(t, err)
 
 		// root → mid → leaf → deep task
@@ -314,7 +343,7 @@ func TestService_GetActiveTree(t *testing.T) {
 		}, nil)
 
 		svc := tasks.NewService(repo, nil)
-		got, err := svc.GetActiveTree(context.Background())
+		got, err := svc.GetActiveTree(context.Background(), nil)
 		require.NoError(t, err)
 
 		require.Len(t, got, 2)
@@ -332,7 +361,7 @@ func TestService_GetActiveTree(t *testing.T) {
 		}, nil)
 
 		svc := tasks.NewService(repo, nil)
-		got, err := svc.GetActiveTree(context.Background())
+		got, err := svc.GetActiveTree(context.Background(), nil)
 		require.NoError(t, err)
 
 		require.Len(t, got, 1)
@@ -345,7 +374,7 @@ func TestService_GetActiveTree(t *testing.T) {
 		repo.EXPECT().GetUnfinishedTasks(mock.Anything).Return([]tasks.UnfinishedTask{}, nil)
 
 		svc := tasks.NewService(repo, nil)
-		got, err := svc.GetActiveTree(context.Background())
+		got, err := svc.GetActiveTree(context.Background(), nil)
 		require.NoError(t, err)
 		assert.Empty(t, got)
 		assert.NotNil(t, got)
@@ -364,7 +393,7 @@ func TestService_GetActiveTree(t *testing.T) {
 		}, nil)
 
 		svc := tasks.NewService(repo, nil)
-		got, err := svc.GetActiveTree(context.Background())
+		got, err := svc.GetActiveTree(context.Background(), nil)
 		require.NoError(t, err)
 
 		require.Len(t, got, 3)
@@ -382,7 +411,7 @@ func TestService_GetActiveTree(t *testing.T) {
 		repo.EXPECT().GetActiveProjects(mock.Anything).Return(nil, errors.New("db error"))
 
 		svc := tasks.NewService(repo, nil)
-		_, err := svc.GetActiveTree(context.Background())
+		_, err := svc.GetActiveTree(context.Background(), nil)
 		assert.Error(t, err)
 	})
 
@@ -392,7 +421,7 @@ func TestService_GetActiveTree(t *testing.T) {
 		repo.EXPECT().GetUnfinishedTasks(mock.Anything).Return(nil, errors.New("db error"))
 
 		svc := tasks.NewService(repo, nil)
-		_, err := svc.GetActiveTree(context.Background())
+		_, err := svc.GetActiveTree(context.Background(), nil)
 		assert.Error(t, err)
 	})
 
@@ -408,7 +437,7 @@ func TestService_GetActiveTree(t *testing.T) {
 		}, nil)
 
 		svc := tasks.NewService(repo, nil)
-		got, err := svc.GetActiveTree(context.Background())
+		got, err := svc.GetActiveTree(context.Background(), nil)
 		require.NoError(t, err)
 
 		require.Len(t, got, 2)
@@ -449,7 +478,7 @@ func TestService_GetActiveTree(t *testing.T) {
 		}, nil)
 
 		svc := tasks.NewService(repo, nil)
-		got, err := svc.GetActiveTree(context.Background())
+		got, err := svc.GetActiveTree(context.Background(), nil)
 		require.NoError(t, err)
 
 		for _, node := range got {
@@ -477,7 +506,7 @@ func TestService_GetActiveTree(t *testing.T) {
 		}, nil)
 
 		svc := tasks.NewService(repo, nil)
-		got, err := svc.GetActiveTree(context.Background())
+		got, err := svc.GetActiveTree(context.Background(), nil)
 		require.NoError(t, err)
 
 		var nodeA, nodeB *tasks.ActiveTreeNode
@@ -657,5 +686,62 @@ func TestService_GetTimeEntriesByDateRange(t *testing.T) {
 		_, err := svc.GetTimeEntriesByDateRange(context.Background(), "2026-03-01", "2026-03-31")
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "db error")
+	})
+}
+
+func TestService_PriorityFilter(t *testing.T) {
+	due := time.Date(2026, 6, 15, 0, 0, 0, 0, time.UTC)
+
+	t.Run("GetActiveTree filters out tasks with priority above threshold", func(t *testing.T) {
+		repo := mocks.NewMockRepository(t)
+		repo.EXPECT().GetActiveProjects(mock.Anything).Return([]tasks.ActiveProject{}, nil)
+		repo.EXPECT().GetUnfinishedTasks(mock.Anything).Return([]tasks.UnfinishedTask{
+			{ID: 1, Name: "Urgent", Priority: 1, DueAt: &due},
+			{ID: 2, Name: "Normal", Priority: 3, DueAt: &due},
+			{ID: 3, Name: "Low", Priority: 5, DueAt: &due},
+		}, nil)
+
+		svc := tasks.NewService(repo, nil)
+		threshold := int32(2)
+		got, err := svc.GetActiveTree(context.Background(), &threshold)
+		require.NoError(t, err)
+
+		names := make([]string, len(got))
+		for i, n := range got {
+			names[i] = n.Name
+		}
+		assert.Contains(t, names, "Urgent")
+		assert.NotContains(t, names, "Normal")
+		assert.NotContains(t, names, "Low")
+	})
+
+	t.Run("GetActiveTree returns everything when min_priority is nil", func(t *testing.T) {
+		repo := mocks.NewMockRepository(t)
+		repo.EXPECT().GetActiveProjects(mock.Anything).Return([]tasks.ActiveProject{}, nil)
+		repo.EXPECT().GetUnfinishedTasks(mock.Anything).Return([]tasks.UnfinishedTask{
+			{ID: 1, Name: "Urgent", Priority: 1, DueAt: &due},
+			{ID: 2, Name: "Low", Priority: 5, DueAt: &due},
+		}, nil)
+
+		svc := tasks.NewService(repo, nil)
+		got, err := svc.GetActiveTree(context.Background(), nil)
+		require.NoError(t, err)
+		assert.Len(t, got, 2)
+	})
+
+	t.Run("GetTasksByDueDate filters out tasks with priority above threshold", func(t *testing.T) {
+		repo := mocks.NewMockRepository(t)
+		repo.EXPECT().GetTasksByDueDate(mock.Anything).Return([]tasks.TaskByDueDateResponse{
+			{ID: 1, Name: "Urgent", Priority: 1, DueAt: &due},
+			{ID: 2, Name: "Normal", Priority: 3, DueAt: &due},
+			{ID: 3, Name: "Low", Priority: 5, DueAt: &due},
+		}, nil)
+
+		svc := tasks.NewService(repo, nil)
+		threshold := int32(2)
+		got, err := svc.GetTasksByDueDate(context.Background(), &threshold)
+		require.NoError(t, err)
+		require.Len(t, got, 1)
+		assert.Equal(t, "Urgent", got[0].Name)
 	})
 }

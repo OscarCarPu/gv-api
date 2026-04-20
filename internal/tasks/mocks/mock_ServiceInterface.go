@@ -496,9 +496,9 @@ func (_c *MockServiceInterface_GetActiveTimeEntry_Call) RunAndReturn(run func(co
 	return _c
 }
 
-// GetActiveTree provides a mock function with given fields: ctx
-func (_m *MockServiceInterface) GetActiveTree(ctx context.Context) ([]tasks.ActiveTreeNode, error) {
-	ret := _m.Called(ctx)
+// GetActiveTree provides a mock function with given fields: ctx, minPriority
+func (_m *MockServiceInterface) GetActiveTree(ctx context.Context, minPriority *int32) ([]tasks.ActiveTreeNode, error) {
+	ret := _m.Called(ctx, minPriority)
 
 	if len(ret) == 0 {
 		panic("no return value specified for GetActiveTree")
@@ -506,19 +506,19 @@ func (_m *MockServiceInterface) GetActiveTree(ctx context.Context) ([]tasks.Acti
 
 	var r0 []tasks.ActiveTreeNode
 	var r1 error
-	if rf, ok := ret.Get(0).(func(context.Context) ([]tasks.ActiveTreeNode, error)); ok {
-		return rf(ctx)
+	if rf, ok := ret.Get(0).(func(context.Context, *int32) ([]tasks.ActiveTreeNode, error)); ok {
+		return rf(ctx, minPriority)
 	}
-	if rf, ok := ret.Get(0).(func(context.Context) []tasks.ActiveTreeNode); ok {
-		r0 = rf(ctx)
+	if rf, ok := ret.Get(0).(func(context.Context, *int32) []tasks.ActiveTreeNode); ok {
+		r0 = rf(ctx, minPriority)
 	} else {
 		if ret.Get(0) != nil {
 			r0 = ret.Get(0).([]tasks.ActiveTreeNode)
 		}
 	}
 
-	if rf, ok := ret.Get(1).(func(context.Context) error); ok {
-		r1 = rf(ctx)
+	if rf, ok := ret.Get(1).(func(context.Context, *int32) error); ok {
+		r1 = rf(ctx, minPriority)
 	} else {
 		r1 = ret.Error(1)
 	}
@@ -533,13 +533,14 @@ type MockServiceInterface_GetActiveTree_Call struct {
 
 // GetActiveTree is a helper method to define mock.On call
 //   - ctx context.Context
-func (_e *MockServiceInterface_Expecter) GetActiveTree(ctx interface{}) *MockServiceInterface_GetActiveTree_Call {
-	return &MockServiceInterface_GetActiveTree_Call{Call: _e.mock.On("GetActiveTree", ctx)}
+//   - minPriority *int32
+func (_e *MockServiceInterface_Expecter) GetActiveTree(ctx interface{}, minPriority interface{}) *MockServiceInterface_GetActiveTree_Call {
+	return &MockServiceInterface_GetActiveTree_Call{Call: _e.mock.On("GetActiveTree", ctx, minPriority)}
 }
 
-func (_c *MockServiceInterface_GetActiveTree_Call) Run(run func(ctx context.Context)) *MockServiceInterface_GetActiveTree_Call {
+func (_c *MockServiceInterface_GetActiveTree_Call) Run(run func(ctx context.Context, minPriority *int32)) *MockServiceInterface_GetActiveTree_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].(context.Context))
+		run(args[0].(context.Context), args[1].(*int32))
 	})
 	return _c
 }
@@ -549,7 +550,7 @@ func (_c *MockServiceInterface_GetActiveTree_Call) Return(_a0 []tasks.ActiveTree
 	return _c
 }
 
-func (_c *MockServiceInterface_GetActiveTree_Call) RunAndReturn(run func(context.Context) ([]tasks.ActiveTreeNode, error)) *MockServiceInterface_GetActiveTree_Call {
+func (_c *MockServiceInterface_GetActiveTree_Call) RunAndReturn(run func(context.Context, *int32) ([]tasks.ActiveTreeNode, error)) *MockServiceInterface_GetActiveTree_Call {
 	_c.Call.Return(run)
 	return _c
 }
@@ -840,9 +841,9 @@ func (_c *MockServiceInterface_GetTaskTimeEntries_Call) RunAndReturn(run func(co
 	return _c
 }
 
-// GetTasksByDueDate provides a mock function with given fields: ctx
-func (_m *MockServiceInterface) GetTasksByDueDate(ctx context.Context) ([]tasks.TaskByDueDateResponse, error) {
-	ret := _m.Called(ctx)
+// GetTasksByDueDate provides a mock function with given fields: ctx, minPriority
+func (_m *MockServiceInterface) GetTasksByDueDate(ctx context.Context, minPriority *int32) ([]tasks.TaskByDueDateResponse, error) {
+	ret := _m.Called(ctx, minPriority)
 
 	if len(ret) == 0 {
 		panic("no return value specified for GetTasksByDueDate")
@@ -850,19 +851,19 @@ func (_m *MockServiceInterface) GetTasksByDueDate(ctx context.Context) ([]tasks.
 
 	var r0 []tasks.TaskByDueDateResponse
 	var r1 error
-	if rf, ok := ret.Get(0).(func(context.Context) ([]tasks.TaskByDueDateResponse, error)); ok {
-		return rf(ctx)
+	if rf, ok := ret.Get(0).(func(context.Context, *int32) ([]tasks.TaskByDueDateResponse, error)); ok {
+		return rf(ctx, minPriority)
 	}
-	if rf, ok := ret.Get(0).(func(context.Context) []tasks.TaskByDueDateResponse); ok {
-		r0 = rf(ctx)
+	if rf, ok := ret.Get(0).(func(context.Context, *int32) []tasks.TaskByDueDateResponse); ok {
+		r0 = rf(ctx, minPriority)
 	} else {
 		if ret.Get(0) != nil {
 			r0 = ret.Get(0).([]tasks.TaskByDueDateResponse)
 		}
 	}
 
-	if rf, ok := ret.Get(1).(func(context.Context) error); ok {
-		r1 = rf(ctx)
+	if rf, ok := ret.Get(1).(func(context.Context, *int32) error); ok {
+		r1 = rf(ctx, minPriority)
 	} else {
 		r1 = ret.Error(1)
 	}
@@ -877,13 +878,14 @@ type MockServiceInterface_GetTasksByDueDate_Call struct {
 
 // GetTasksByDueDate is a helper method to define mock.On call
 //   - ctx context.Context
-func (_e *MockServiceInterface_Expecter) GetTasksByDueDate(ctx interface{}) *MockServiceInterface_GetTasksByDueDate_Call {
-	return &MockServiceInterface_GetTasksByDueDate_Call{Call: _e.mock.On("GetTasksByDueDate", ctx)}
+//   - minPriority *int32
+func (_e *MockServiceInterface_Expecter) GetTasksByDueDate(ctx interface{}, minPriority interface{}) *MockServiceInterface_GetTasksByDueDate_Call {
+	return &MockServiceInterface_GetTasksByDueDate_Call{Call: _e.mock.On("GetTasksByDueDate", ctx, minPriority)}
 }
 
-func (_c *MockServiceInterface_GetTasksByDueDate_Call) Run(run func(ctx context.Context)) *MockServiceInterface_GetTasksByDueDate_Call {
+func (_c *MockServiceInterface_GetTasksByDueDate_Call) Run(run func(ctx context.Context, minPriority *int32)) *MockServiceInterface_GetTasksByDueDate_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].(context.Context))
+		run(args[0].(context.Context), args[1].(*int32))
 	})
 	return _c
 }
@@ -893,7 +895,7 @@ func (_c *MockServiceInterface_GetTasksByDueDate_Call) Return(_a0 []tasks.TaskBy
 	return _c
 }
 
-func (_c *MockServiceInterface_GetTasksByDueDate_Call) RunAndReturn(run func(context.Context) ([]tasks.TaskByDueDateResponse, error)) *MockServiceInterface_GetTasksByDueDate_Call {
+func (_c *MockServiceInterface_GetTasksByDueDate_Call) RunAndReturn(run func(context.Context, *int32) ([]tasks.TaskByDueDateResponse, error)) *MockServiceInterface_GetTasksByDueDate_Call {
 	_c.Call.Return(run)
 	return _c
 }

@@ -29,6 +29,7 @@
 | finished_at | TIMESTAMPTZ | nullable                      |
 | task_type   | TEXT        | NOT NULL, DEFAULT 'standard'  |
 | recurrence  | INTEGER     | nullable                      |
+| priority    | INTEGER     | NOT NULL, DEFAULT 3           |
 
 **Indexes:** idx_tasks_project_id, idx_tasks_unfinished (WHERE finished_at IS NULL), idx_tasks_due_at (WHERE due_at IS NOT NULL)
 
@@ -36,6 +37,7 @@
 - `task_type` must be one of: `'standard'`, `'continuous'`, `'recurring'`
 - `recurrence` must be a positive integer (number of days) or NULL
 - `recurrence` is required when `task_type = 'recurring'` and must be NULL otherwise
+- `priority` must be between 1 and 5 (inclusive)
 
 ### task_dependencies
 

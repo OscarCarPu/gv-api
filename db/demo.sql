@@ -354,83 +354,83 @@ INSERT INTO projects (name, description, due_at, started_at) VALUES
 -- =============================================================================
 
 -- Website Redesign (project 1)
-INSERT INTO tasks (project_id, name, description, due_at, started_at) VALUES
-    (1, 'Create wireframes', 'Design wireframes for all pages', CURRENT_DATE + INTERVAL '5 days', NOW() - INTERVAL '8 days'),                -- id=1
-    (1, 'Set up CI/CD', 'Configure deployment pipeline', CURRENT_DATE + INTERVAL '10 days', NOW() - INTERVAL '3 days');                      -- id=2
+INSERT INTO tasks (project_id, name, description, due_at, started_at, priority) VALUES
+    (1, 'Create wireframes', 'Design wireframes for all pages', CURRENT_DATE + INTERVAL '5 days', NOW() - INTERVAL '8 days', 2),                -- id=1
+    (1, 'Set up CI/CD', 'Configure deployment pipeline', CURRENT_DATE + INTERVAL '10 days', NOW() - INTERVAL '3 days', 2);                      -- id=2
 
-INSERT INTO tasks (project_id, name, description, started_at) VALUES
-    (1, 'Content migration', 'Migrate existing content to new layout', NOW() - INTERVAL '2 days');                                            -- id=3
+INSERT INTO tasks (project_id, name, description, started_at, priority) VALUES
+    (1, 'Content migration', 'Migrate existing content to new layout', NOW() - INTERVAL '2 days', 3);                                            -- id=3
 
-INSERT INTO tasks (project_id, name, description, started_at, finished_at) VALUES
-    (1, 'Choose color palette', 'Select brand colors', NOW() - INTERVAL '9 days', NOW() - INTERVAL '7 days');                                -- id=4
+INSERT INTO tasks (project_id, name, description, started_at, finished_at, priority) VALUES
+    (1, 'Choose color palette', 'Select brand colors', NOW() - INTERVAL '9 days', NOW() - INTERVAL '7 days', 3);                                -- id=4
 
 -- Homepage Revamp (project 2)
-INSERT INTO tasks (project_id, name, description, due_at, started_at) VALUES
-    (2, 'Design homepage layout', 'Create mockups for the new homepage', CURRENT_DATE + INTERVAL '7 days', NOW() - INTERVAL '6 days');       -- id=5
+INSERT INTO tasks (project_id, name, description, due_at, started_at, priority) VALUES
+    (2, 'Design homepage layout', 'Create mockups for the new homepage', CURRENT_DATE + INTERVAL '7 days', NOW() - INTERVAL '6 days', 2);       -- id=5
 
 -- Hero Section (project 3)
-INSERT INTO tasks (project_id, name, description, due_at, started_at) VALUES
-    (3, 'Implement hero animation', 'Build the hero section parallax effect', CURRENT_DATE + INTERVAL '12 days', NOW() - INTERVAL '2 days'); -- id=6
+INSERT INTO tasks (project_id, name, description, due_at, started_at, priority) VALUES
+    (3, 'Implement hero animation', 'Build the hero section parallax effect', CURRENT_DATE + INTERVAL '12 days', NOW() - INTERVAL '2 days', 3); -- id=6
 
 -- API v2 (project 4)
-INSERT INTO tasks (project_id, name, description, due_at, started_at) VALUES
-    (4, 'Design API schema', 'Define OpenAPI spec for v2', CURRENT_DATE + INTERVAL '14 days', NOW() - INTERVAL '5 days'),                    -- id=7
-    (4, 'Auth system', 'Implement OAuth2 authentication', CURRENT_DATE + INTERVAL '21 days', NULL);                                           -- id=8
+INSERT INTO tasks (project_id, name, description, due_at, started_at, priority) VALUES
+    (4, 'Design API schema', 'Define OpenAPI spec for v2', CURRENT_DATE + INTERVAL '14 days', NOW() - INTERVAL '5 days', 1),                    -- id=7
+    (4, 'Auth system', 'Implement OAuth2 authentication', CURRENT_DATE + INTERVAL '21 days', NULL, 1);                                           -- id=8
 
-INSERT INTO tasks (project_id, name, description) VALUES
-    (4, 'Rate limiting', 'Implement rate limiting middleware');                                                                                 -- id=9
+INSERT INTO tasks (project_id, name, description, priority) VALUES
+    (4, 'Rate limiting', 'Implement rate limiting middleware', 3);                                                                                 -- id=9
 
 -- Mobile App (project 5)
-INSERT INTO tasks (project_id, name, description, due_at) VALUES
-    (5, 'Research frameworks', 'Evaluate React Native vs Flutter', CURRENT_DATE + INTERVAL '7 days');                                         -- id=10
+INSERT INTO tasks (project_id, name, description, due_at, priority) VALUES
+    (5, 'Research frameworks', 'Evaluate React Native vs Flutter', CURRENT_DATE + INTERVAL '7 days', 4);                                         -- id=10
 
-INSERT INTO tasks (project_id, name, description) VALUES
-    (5, 'Push notifications', 'Set up push notification service');                                                                             -- id=11
+INSERT INTO tasks (project_id, name, description, priority) VALUES
+    (5, 'Push notifications', 'Set up push notification service', 4);                                                                             -- id=11
 
 -- Onboarding Flow (project 6)
-INSERT INTO tasks (project_id, name, description, due_at) VALUES
-    (6, 'Design onboarding screens', 'Mockups for the 5-step onboarding', CURRENT_DATE + INTERVAL '20 days');                                -- id=12
+INSERT INTO tasks (project_id, name, description, due_at, priority) VALUES
+    (6, 'Design onboarding screens', 'Mockups for the 5-step onboarding', CURRENT_DATE + INTERVAL '20 days', 4);                                -- id=12
 
 -- Data Pipeline (project 7)
-INSERT INTO tasks (project_id, name, description, due_at, started_at) VALUES
-    (7, 'Set up data ingestion', 'Configure Kafka consumers for raw event data', CURRENT_DATE + INTERVAL '10 days', NOW() - INTERVAL '14 days'),   -- id=13
-    (7, 'Build transformation layer', 'Data cleaning, normalization, and enrichment', CURRENT_DATE + INTERVAL '20 days', NOW() - INTERVAL '12 days'), -- id=14
-    (7, 'Create reporting views', 'SQL views and materialized views for dashboards', CURRENT_DATE + INTERVAL '30 days', NOW() - INTERVAL '10 days'), -- id=15
-    (7, 'Write pipeline tests', 'Integration tests for the full ETL pipeline', CURRENT_DATE + INTERVAL '35 days', NOW() - INTERVAL '8 days'),       -- id=16
-    (7, 'Deploy pipeline to staging', 'Set up staging env and run validation', CURRENT_DATE + INTERVAL '40 days', NOW() - INTERVAL '6 days');        -- id=17
+INSERT INTO tasks (project_id, name, description, due_at, started_at, priority) VALUES
+    (7, 'Set up data ingestion', 'Configure Kafka consumers for raw event data', CURRENT_DATE + INTERVAL '10 days', NOW() - INTERVAL '14 days', 2),   -- id=13
+    (7, 'Build transformation layer', 'Data cleaning, normalization, and enrichment', CURRENT_DATE + INTERVAL '20 days', NOW() - INTERVAL '12 days', 2), -- id=14
+    (7, 'Create reporting views', 'SQL views and materialized views for dashboards', CURRENT_DATE + INTERVAL '30 days', NOW() - INTERVAL '10 days', 3), -- id=15
+    (7, 'Write pipeline tests', 'Integration tests for the full ETL pipeline', CURRENT_DATE + INTERVAL '35 days', NOW() - INTERVAL '8 days', 3),       -- id=16
+    (7, 'Deploy pipeline to staging', 'Set up staging env and run validation', CURRENT_DATE + INTERVAL '40 days', NOW() - INTERVAL '6 days', 2);        -- id=17
 
 -- Standalone tasks (no project)
-INSERT INTO tasks (name, description, due_at, started_at) VALUES
-    ('Fix server logs', 'Investigate and fix log rotation issue', CURRENT_DATE + INTERVAL '2 days', NOW() - INTERVAL '1 day'),               -- id=18
-    ('Update dependencies', 'Bump Go modules to latest versions', CURRENT_DATE + INTERVAL '3 days', NULL),                                    -- id=19
-    ('Write blog post', 'Draft a blog post about the new API', CURRENT_DATE + INTERVAL '14 days', NULL);                                     -- id=20
+INSERT INTO tasks (name, description, due_at, started_at, priority) VALUES
+    ('Fix server logs', 'Investigate and fix log rotation issue', CURRENT_DATE + INTERVAL '2 days', NOW() - INTERVAL '1 day', 1),               -- id=18
+    ('Update dependencies', 'Bump Go modules to latest versions', CURRENT_DATE + INTERVAL '3 days', NULL, 4),                                    -- id=19
+    ('Write blog post', 'Draft a blog post about the new API', CURRENT_DATE + INTERVAL '14 days', NULL, 5);                                     -- id=20
 
-INSERT INTO tasks (name, description, started_at) VALUES
-    ('Clean up Docker images', 'Remove unused Docker images from registry', NOW() - INTERVAL '1 day');                                        -- id=21
+INSERT INTO tasks (name, description, started_at, priority) VALUES
+    ('Clean up Docker images', 'Remove unused Docker images from registry', NOW() - INTERVAL '1 day', 5);                                        -- id=21
 
-INSERT INTO tasks (name, description) VALUES
-    ('Review PR backlog', 'Go through open pull requests and review');                                                                         -- id=22
+INSERT INTO tasks (name, description, priority) VALUES
+    ('Review PR backlog', 'Go through open pull requests and review', 3);                                                                         -- id=22
 
-INSERT INTO tasks (name, description, started_at, finished_at) VALUES
-    ('Set up monitoring', 'Configure Prometheus and Grafana', NOW() - INTERVAL '15 days', NOW() - INTERVAL '12 days');                        -- id=23
+INSERT INTO tasks (name, description, started_at, finished_at, priority) VALUES
+    ('Set up monitoring', 'Configure Prometheus and Grafana', NOW() - INTERVAL '15 days', NOW() - INTERVAL '12 days', 3);                        -- id=23
 
 -- Recurring tasks
-INSERT INTO tasks (name, description, due_at, started_at, task_type, recurrence) VALUES
-    ('Clean kitchen', 'Wipe counters, sweep floor, take out trash', CURRENT_DATE + INTERVAL '1 day', NOW() - INTERVAL '20 days', 'recurring', 1),        -- id=24  daily
-    ('Weekly review', 'Review goals, plan next week', CURRENT_DATE + INTERVAL '4 days', NOW() - INTERVAL '30 days', 'recurring', 7),                     -- id=25  weekly
-    ('Pay rent', 'Transfer rent payment', CURRENT_DATE + INTERVAL '22 days', NULL, 'recurring', 30);                                                      -- id=26  monthly
+INSERT INTO tasks (name, description, due_at, started_at, task_type, recurrence, priority) VALUES
+    ('Clean kitchen', 'Wipe counters, sweep floor, take out trash', CURRENT_DATE + INTERVAL '1 day', NOW() - INTERVAL '20 days', 'recurring', 1, 4),        -- id=24  daily
+    ('Weekly review', 'Review goals, plan next week', CURRENT_DATE + INTERVAL '4 days', NOW() - INTERVAL '30 days', 'recurring', 7, 2),                     -- id=25  weekly
+    ('Pay rent', 'Transfer rent payment', CURRENT_DATE + INTERVAL '22 days', NULL, 'recurring', 30, 1);                                                      -- id=26  monthly
 
-INSERT INTO tasks (project_id, name, description, due_at, started_at, task_type, recurrence) VALUES
-    (7, 'Run pipeline health check', 'Verify all pipeline stages are green', CURRENT_DATE + INTERVAL '1 day', NOW() - INTERVAL '10 days', 'recurring', 1); -- id=27  daily, under Data Pipeline
+INSERT INTO tasks (project_id, name, description, due_at, started_at, task_type, recurrence, priority) VALUES
+    (7, 'Run pipeline health check', 'Verify all pipeline stages are green', CURRENT_DATE + INTERVAL '1 day', NOW() - INTERVAL '10 days', 'recurring', 1, 2); -- id=27  daily, under Data Pipeline
 
 -- Continuous tasks
-INSERT INTO tasks (name, description, started_at, task_type) VALUES
-    ('Quick fixes', 'Small bugs and minor improvements that take minutes', NOW() - INTERVAL '30 days', 'continuous'),                                      -- id=28
-    ('Code review', 'Review PRs as they come in', NOW() - INTERVAL '25 days', 'continuous');                                                               -- id=29
+INSERT INTO tasks (name, description, started_at, task_type, priority) VALUES
+    ('Quick fixes', 'Small bugs and minor improvements that take minutes', NOW() - INTERVAL '30 days', 'continuous', 3),                                      -- id=28
+    ('Code review', 'Review PRs as they come in', NOW() - INTERVAL '25 days', 'continuous', 3);                                                               -- id=29
 
-INSERT INTO tasks (project_id, name, description, started_at, task_type) VALUES
-    (4, 'API bug triage', 'Investigate and fix reported API issues as they come in', NOW() - INTERVAL '5 days', 'continuous'),                             -- id=30  under API v2
-    (1, 'Design feedback', 'Address design review comments as they arrive', NOW() - INTERVAL '7 days', 'continuous');                                      -- id=31  under Website Redesign
+INSERT INTO tasks (project_id, name, description, started_at, task_type, priority) VALUES
+    (4, 'API bug triage', 'Investigate and fix reported API issues as they come in', NOW() - INTERVAL '5 days', 'continuous', 2),                             -- id=30  under API v2
+    (1, 'Design feedback', 'Address design review comments as they arrive', NOW() - INTERVAL '7 days', 'continuous', 3);                                      -- id=31  under Website Redesign
 
 -- =============================================================================
 -- TODOS

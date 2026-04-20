@@ -1193,3 +1193,75 @@ func TestE2E_TaskTypeRecurrence(t *testing.T) {
 		t.Error("expected finished_at to be set on continuous task")
 	}
 }
+
+func TestE2E_TaskPriorityAndFilter(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping e2e test in short mode")
+	}
+
+	truncateTables(t)
+	client := authenticate(t)
+
+	// Start a project so its tasks appear in the active tree.
+	proj := client.CreateProject(t, CreateProjectRequest{Name: "Priority Project"})
+	now := time.Now().UTC().Truncate(time.Second)
+	client.UpdateProject(t, proj.ID, UpdateProjectRequest{StartedAt: &now})
+
+	due := time.Date(2026, 6, 1, 0, 0, 0, 0, time.UTC)
+
+	// Task without priority → defaults to 3.
+	taskDefault := client.CreateTask(t, CreateTaskRequest{Name: "Default", ProjectID: &proj.ID, DueAt: &due})
+	if taskDefault.Priority != 3 {
+		t.Fatalf("default priority: got %d, want 3", taskDefault.Priority)
+	}
+	// Round-trip: GET should preserve 3.
+	fetched := client.GetTask(t, taskDefault.ID)
+	if fetched.Priority != 3 {
+		t.Errorf("GetTask default priority: got %d, want 3", fetched.Priority)
+	}
+
+	taskUrgent := client.CreateTask(t, CreateTaskRequest{Name: "Urgent", ProjectID: &proj.ID, DueAt: &due, Priority: int32Ptr(1)})
+	taskLow := client.CreateTask(t, CreateTaskRequest{Name: "Low", ProjectID: &proj.ID, DueAt: &due, Priority: int32Ptr(5)})
+
+	if taskUrgent.Priority != 1 || taskLow.Priority != 5 {
+		t.Fatalf("explicit priorities: got urgent=%d low=%d", taskUrgent.Priority, taskLow.Priority)
+	}
+
+	// min_priority=2 → only priority-1 task returned on both endpoints.
+	byDue := client.GetTasksByDueDateWithMinPriority(t, 2)
+	if len(byDue) != 1 || byDue[0].ID != taskUrgent.ID {
+		t.Fatalf("by-due-date min_priority=2: got %d tasks, want only Urgent", len(byDue))
+	}
+	if byDue[0].Priority != 1 {
+		t.Errorf("by-due-date priority: got %d, want 1", byDue[0].Priority)
+	}
+
+	tree := client.GetActiveTreeWithMinPriority(t, 2)
+	// Project always present (user decision: keep empty projects).
+	var projNode *ActiveTreeNode
+	for i := range tree {
+		if tree[i].ID == proj.ID && tree[i].Type == "project" {
+			projNode = &tree[i]
+			break
+		}
+	}
+	if projNode == nil {
+		t.Fatal("project missing from filtered active tree")
+	}
+	taskIDs := map[int32]bool{}
+	for _, c := range projNode.Children {
+		if c.Type == "task" {
+			taskIDs[c.ID] = true
+		}
+	}
+	if !taskIDs[taskUrgent.ID] || taskIDs[taskDefault.ID] || taskIDs[taskLow.ID] {
+		t.Errorf("filtered tree tasks: urgent=%v default=%v low=%v (want true, false, false)",
+			taskIDs[taskUrgent.ID], taskIDs[taskDefault.ID], taskIDs[taskLow.ID])
+	}
+
+	// Unfiltered → all three tasks come back on by-due-date.
+	allByDue := client.GetTasksByDueDate(t)
+	if len(allByDue) != 3 {
+		t.Errorf("unfiltered by-due-date: got %d tasks, want 3", len(allByDue))
+	}
+}

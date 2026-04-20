@@ -83,6 +83,7 @@ type CreateTaskRequest struct {
 	DependsOn   []int32    `json:"depends_on,omitempty"`
 	TaskType    *string    `json:"task_type,omitempty"`
 	Recurrence  *int32     `json:"recurrence,omitempty"`
+	Priority    *int32     `json:"priority,omitempty"`
 }
 
 type TaskResponse struct {
@@ -95,6 +96,7 @@ type TaskResponse struct {
 	FinishedAt  *time.Time   `json:"finished_at"`
 	TaskType    string       `json:"task_type"`
 	Recurrence  *int32      `json:"recurrence,omitempty"`
+	Priority    int32        `json:"priority"`
 	DependsOn []TaskDepRef `json:"depends_on"`
 	Blocks    []TaskDepRef `json:"blocks"`
 	Blocked   bool         `json:"blocked"`
@@ -160,6 +162,7 @@ type UpdateTaskRequest struct {
 	DependsOn   *[]int32   `json:"depends_on,omitempty"`
 	TaskType    *string    `json:"task_type,omitempty"`
 	Recurrence  *int32     `json:"recurrence,omitempty"`
+	Priority    *int32     `json:"priority,omitempty"`
 }
 
 type UpdateTodoRequest struct {
@@ -236,7 +239,8 @@ type TaskFullResponse struct {
 	StartedAt   *time.Time     `json:"started_at"`
 	FinishedAt  *time.Time     `json:"finished_at"`
 	TaskType    string         `json:"task_type"`
-	Recurrence  *int32        `json:"recurrence,omitempty"`
+	Recurrence  *int32         `json:"recurrence,omitempty"`
+	Priority    int32          `json:"priority"`
 	TimeSpent   int64          `json:"time_spent"`
 	DependsOn []TaskDepRef   `json:"depends_on"`
 	Blocks    []TaskDepRef   `json:"blocks"`
@@ -252,6 +256,7 @@ type TaskByDueDateResponse struct {
 	StartedAt    *time.Time   `json:"started_at"`
 	TaskType     string       `json:"task_type"`
 	Recurrence   *string      `json:"recurrence,omitempty"`
+	Priority     int32        `json:"priority"`
 	TimeSpent    int64        `json:"time_spent"`
 	ProjectID    *int32       `json:"project_id"`
 	ProjectName  *string      `json:"project_name"`
@@ -269,7 +274,8 @@ type ActiveTreeNode struct {
 	DueAt       *time.Time       `json:"due_at,omitempty"`
 	StartedAt   *time.Time       `json:"started_at,omitempty"`
 	TaskType    *string          `json:"task_type,omitempty"`
-	Recurrence  *int32          `json:"recurrence,omitempty"`
+	Recurrence  *int32           `json:"recurrence,omitempty"`
+	Priority    *int32           `json:"priority,omitempty"`
 	DependsOn []TaskDepRef     `json:"depends_on"`
 	Blocks    []TaskDepRef     `json:"blocks"`
 	Blocked   bool             `json:"blocked"`
@@ -574,7 +580,17 @@ func (c *APIClient) UpdateTimeEntry(t *testing.T, id int32, req UpdateTimeEntryR
 
 func (c *APIClient) GetActiveTree(t *testing.T) []ActiveTreeNode {
 	t.Helper()
-	resp := c.do(t, http.MethodGet, "/tasks/tree", nil)
+	return c.getActiveTree(t, "/tasks/tree")
+}
+
+func (c *APIClient) GetActiveTreeWithMinPriority(t *testing.T, minPriority int32) []ActiveTreeNode {
+	t.Helper()
+	return c.getActiveTree(t, fmt.Sprintf("/tasks/tree?min_priority=%d", minPriority))
+}
+
+func (c *APIClient) getActiveTree(t *testing.T, path string) []ActiveTreeNode {
+	t.Helper()
+	resp := c.do(t, http.MethodGet, path, nil)
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("GetActiveTree: got status %d, want 200", resp.StatusCode)
@@ -588,7 +604,17 @@ func (c *APIClient) GetActiveTree(t *testing.T) []ActiveTreeNode {
 
 func (c *APIClient) GetTasksByDueDate(t *testing.T) []TaskByDueDateResponse {
 	t.Helper()
-	resp := c.do(t, http.MethodGet, "/tasks/tasks/by-due-date", nil)
+	return c.getTasksByDueDate(t, "/tasks/tasks/by-due-date")
+}
+
+func (c *APIClient) GetTasksByDueDateWithMinPriority(t *testing.T, minPriority int32) []TaskByDueDateResponse {
+	t.Helper()
+	return c.getTasksByDueDate(t, fmt.Sprintf("/tasks/tasks/by-due-date?min_priority=%d", minPriority))
+}
+
+func (c *APIClient) getTasksByDueDate(t *testing.T, path string) []TaskByDueDateResponse {
+	t.Helper()
+	resp := c.do(t, http.MethodGet, path, nil)
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("GetTasksByDueDate: got status %d, want 200", resp.StatusCode)
