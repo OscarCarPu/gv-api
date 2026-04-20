@@ -11,6 +11,7 @@ jobs:
     steps:
       - name: Deploy
         run: |
+          git config --global --add safe.directory /home/ocp/docker/gv/gv-api
           cd /home/ocp/docker/gv/gv-api
           git pull
           make up
