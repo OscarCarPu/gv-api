@@ -17,6 +17,7 @@ import (
 
 var ErrNotFound = errors.New("not found")
 var ErrActiveTimeEntryExists = errors.New("an active time entry already exists")
+var ErrCircularDependency = errors.New("circular task dependency")
 
 type Repository interface {
 	CreateProject(ctx context.Context, name string, description *string, dueAt *time.Time, parentID *int32) (ProjectResponse, error)
@@ -804,6 +805,18 @@ func (r *PostgresRepository) GetTimeEntriesByDateRange(ctx context.Context, star
 }
 
 func (r *PostgresRepository) ReplaceTaskDependencies(ctx context.Context, taskID int32, dependsOn []int32) error {
+	if len(dependsOn) > 0 {
+		hasCycle, err := r.q.TaskDependencyWouldCycle(ctx, tasksdb.TaskDependencyWouldCycleParams{
+			TaskID:   taskID,
+			NewDeps:  dependsOn,
+		})
+		if err != nil {
+			return err
+		}
+		if hasCycle {
+			return ErrCircularDependency
+		}
+	}
 	if err := r.q.DeleteRemovedTaskDependencies(ctx, tasksdb.DeleteRemovedTaskDependenciesParams{
 		TaskID: taskID,
 		Keep:   dependsOn,

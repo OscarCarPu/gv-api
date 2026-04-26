@@ -9,29 +9,6 @@ A comprehensive life orchestrator built in Go, designed to centralize data from 
 - **`pgx/v5` & `sqlc`** — efficient PostgreSQL interaction with auto-generated type-safe queries
 - **`testify` & `mockery`** — testing assertions and auto-generated interface mocks with type-safe expecters
 
-## Coverage
-
-| File | Coverage |
-| :--- | :---: |
-| `gv-api/internal/auth/handler.go` | ![100.0%](https://img.shields.io/badge/100.0%25-brightgreen) |
-| `gv-api/internal/auth/middleware.go` | ![92.8%](https://img.shields.io/badge/92.8%25-brightgreen) |
-| `gv-api/internal/auth/service.go` | ![96.0%](https://img.shields.io/badge/96.0%25-brightgreen) |
-| `gv-api/internal/habits/handler.go` | ![98.1%](https://img.shields.io/badge/98.1%25-brightgreen) |
-| `gv-api/internal/habits/period.go` | ![100.0%](https://img.shields.io/badge/100.0%25-brightgreen) |
-| `gv-api/internal/habits/repository.go` | ![0.0%](https://img.shields.io/badge/0.0%25-red) |
-| `gv-api/internal/habits/service.go` | ![82.8%](https://img.shields.io/badge/82.8%25-brightgreen) |
-| `gv-api/internal/history/history.go` | ![100.0%](https://img.shields.io/badge/100.0%25-brightgreen) |
-| `gv-api/internal/response/response.go` | ![87.5%](https://img.shields.io/badge/87.5%25-brightgreen) |
-| `gv-api/internal/tasks/dto.go` | ![14.8%](https://img.shields.io/badge/14.8%25-red) |
-| `gv-api/internal/tasks/handler.go` | ![88.3%](https://img.shields.io/badge/88.3%25-brightgreen) |
-| `gv-api/internal/tasks/repository.go` | ![0.0%](https://img.shields.io/badge/0.0%25-red) |
-| `gv-api/internal/tasks/service.go` | ![33.7%](https://img.shields.io/badge/33.7%25-red) |
-| `gv-api/test/e2e/client.go` | ![81.5%](https://img.shields.io/badge/81.5%25-brightgreen) |
-| `gv-api/test/e2e/setup.go` | ![76.7%](https://img.shields.io/badge/76.7%25-brightgreen) |
-| **Total** | ![67.3%](https://img.shields.io/badge/67.3%25-yellow) |
-
-> Untested code not shown above is either auto-generated, boilerplate delegation, or covered by E2E.
-
 ## Setup
 
 ### Requirements
@@ -77,8 +54,3 @@ make generate-mocks
 
 Mocks are generated into `internal/*/mocks/` directories and used by handler and service tests.
 
-## Testing
-
-```bash
-make test-coverage
-```

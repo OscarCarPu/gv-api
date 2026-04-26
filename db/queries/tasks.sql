@@ -287,6 +287,12 @@ JOIN tasks t ON t.id = dep_id AND t.finished_at IS NULL
 WHERE array_length(@depends_on::int[], 1) IS NOT NULL
 ON CONFLICT (task_id, depends_on) DO NOTHING;
 
+-- name: TaskDependencyWouldCycle :one
+-- Wraps the task_dependency_would_cycle SQL function (see migration 011).
+-- Returns true if replacing @task_id's outgoing dep edges with @new_deps
+-- would create a cycle.
+SELECT task_dependency_would_cycle(@task_id::int, @new_deps::int[]) AS has_cycle;
+
 -- name: GetTaskDependencies :one
 SELECT
     COALESCE((SELECT json_agg(json_build_object('id', t2.id, 'name', t2.name, 'due_at', t2.due_at) ORDER BY t2.name) FROM task_dependencies td JOIN tasks t2 ON t2.id = td.depends_on WHERE td.task_id = $1 AND t2.finished_at IS NULL), '[]')::json AS depends_on,

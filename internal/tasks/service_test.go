@@ -77,35 +77,32 @@ func TestService_CreateTask(t *testing.T) {
 		assert.Contains(t, err.Error(), "fk violation")
 	})
 
-	t.Run("defaults priority to 3 when not provided", func(t *testing.T) {
-		repo := mocks.NewMockRepository(t)
-		repo.EXPECT().
-			CreateTask(mock.Anything, mock.Anything, "T", mock.Anything, mock.Anything, "standard", mock.Anything, int32(3)).
-			Return(tasks.TaskResponse{ID: 1, Name: "T", Priority: 3}, nil)
-		repo.EXPECT().GetTaskDependencies(mock.Anything, int32(1)).
-			Return([]tasks.TaskDepRef{}, []tasks.TaskDepRef{}, false, nil)
+	priorityCases := []struct {
+		name  string
+		input *int32
+		want  int32
+	}{
+		{"defaults to 3 when not provided", nil, 3},
+		{"uses provided priority", ptr(int32(1)), 1},
+	}
+	for _, tc := range priorityCases {
+		t.Run(tc.name, func(t *testing.T) {
+			repo := mocks.NewMockRepository(t)
+			repo.EXPECT().
+				CreateTask(mock.Anything, mock.Anything, "T", mock.Anything, mock.Anything, "standard", mock.Anything, tc.want).
+				Return(tasks.TaskResponse{ID: 1, Name: "T", Priority: tc.want}, nil)
+			repo.EXPECT().GetTaskDependencies(mock.Anything, int32(1)).
+				Return([]tasks.TaskDepRef{}, []tasks.TaskDepRef{}, false, nil)
 
-		svc := tasks.NewService(repo, nil)
-		got, err := svc.CreateTask(context.Background(), tasks.CreateTaskRequest{Name: "T"})
-		require.NoError(t, err)
-		assert.Equal(t, int32(3), got.Priority)
-	})
-
-	t.Run("uses provided priority", func(t *testing.T) {
-		p := int32(1)
-		repo := mocks.NewMockRepository(t)
-		repo.EXPECT().
-			CreateTask(mock.Anything, mock.Anything, "T", mock.Anything, mock.Anything, "standard", mock.Anything, int32(1)).
-			Return(tasks.TaskResponse{ID: 1, Name: "T", Priority: 1}, nil)
-		repo.EXPECT().GetTaskDependencies(mock.Anything, int32(1)).
-			Return([]tasks.TaskDepRef{}, []tasks.TaskDepRef{}, false, nil)
-
-		svc := tasks.NewService(repo, nil)
-		got, err := svc.CreateTask(context.Background(), tasks.CreateTaskRequest{Name: "T", Priority: &p})
-		require.NoError(t, err)
-		assert.Equal(t, int32(1), got.Priority)
-	})
+			svc := tasks.NewService(repo, nil)
+			got, err := svc.CreateTask(context.Background(), tasks.CreateTaskRequest{Name: "T", Priority: tc.input})
+			require.NoError(t, err)
+			assert.Equal(t, tc.want, got.Priority)
+		})
+	}
 }
+
+func ptr[T any](v T) *T { return &v }
 
 func TestService_UpdateTask(t *testing.T) {
 	t.Run("updates task with new dependencies", func(t *testing.T) {
