@@ -50,7 +50,10 @@ gv-api/
     migrations/              # SQL schema files (used by Docker init + sqlc)
     queries/                 # SQL queries consumed by sqlc
   test/e2e/                  # End-to-end tests (full stack via HTTP)
-  docs/api/                  # API endpoint documentation
+  docs/
+    api/                     # API endpoint documentation (auth, habits, tasks/)
+    business_logic/          # Domain rules narrative
+    data_models/             # DB schema reference
 ```
 
 ## Architecture Pattern
@@ -101,14 +104,22 @@ Environment variables loaded via `os.Getenv` with sensible defaults. No `.env` f
 | DELETE | `/habits/{id}` | Delete a habit |
 | GET | `/tasks/tree` | Active project/task tree |
 | GET | `/tasks/projects` | Root (unfinished, parentless) projects |
+| GET | `/tasks/projects/list-fast` | Flat list of active projects (id, name) |
+| GET | `/tasks/projects/{id}` | Single project with recursive time_spent |
 | GET | `/tasks/projects/{id}/children` | Project with descendants, tasks, todos, time stats |
 | POST | `/tasks/projects` | Create project |
 | PATCH | `/tasks/projects/{id}` | Update a project |
+| DELETE | `/tasks/projects/{id}` | Delete a project |
+| GET | `/tasks/tasks/list-fast` | Flat list of unfinished tasks (id, name, project) |
+| GET | `/tasks/tasks/by-due-date` | Unfinished tasks with effective due date |
 | POST | `/tasks/tasks` | Create task |
+| GET | `/tasks/tasks/{id}` | Single task with deps, todos, time_spent |
 | PATCH | `/tasks/tasks/{id}` | Update a task |
+| DELETE | `/tasks/tasks/{id}` | Delete a task (cascades) |
 | GET | `/tasks/tasks/{id}/time-entries` | Task detail with time entries |
 | POST | `/tasks/todos` | Create todo |
 | PATCH | `/tasks/todos/{id}` | Update a todo |
+| DELETE | `/tasks/todos/{id}` | Delete a todo |
 | POST | `/tasks/time-entries` | Create time entry |
 | PATCH | `/tasks/time-entries/{id}` | Update a time entry |
 | DELETE | `/tasks/time-entries/{id}` | Delete a time entry |

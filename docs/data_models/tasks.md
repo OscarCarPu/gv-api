@@ -70,7 +70,7 @@
 | finished_at | TIMESTAMPTZ | nullable                                    |
 | comment     | TEXT        | nullable                                    |
 
-**Indexes:** idx_time_entries_task_id, idx_time_entries_started_at
+**Indexes:** idx_time_entries_task_id, idx_time_entries_started_at, idx_time_entries_one_active (UNIQUE, partial WHERE finished_at IS NULL — at most one active entry across all tasks)
 
 ## Relationships
 
