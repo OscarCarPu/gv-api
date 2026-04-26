@@ -116,6 +116,14 @@ test-e2e: test-api-setup
 	@TEST_DB_URL=$(OUTSIDE_TEST_DB_URL) PORT=$(PORT) PASSWORD=$(PASSWORD) TOTP_SECRET=$(TOTP_SECRET) go test ./test/e2e/... -v
 	@$(MAKE) test-db-cleanup --no-print-directory
 
+# Benchmarks: require a running database. Override iterations with BENCHTIME=10x or BENCHTIME=3s.
+BENCHTIME ?= 5x
+test-bench: test-api-setup
+	@printf "$(CYAN)>>> Running benchmarks ($(BENCHTIME))...$(NC)\n"
+	@TEST_DB_URL=$(OUTSIDE_TEST_DB_URL) go test -bench=. -run='^$$' -benchtime=$(BENCHTIME) ./internal/tasks/ ./internal/habits/ \
+		| awk '{ for (i=1;i<=NF;i++) if ($$i=="ns/op") { $$(i-1)=sprintf("%.3f",$$(i-1)/1e6); $$i="ms/op" } print }'
+	@$(MAKE) test-db-cleanup --no-print-directory
+
 # Run all tests
 test:
 	@$(MAKE) test-unit --no-print-directory

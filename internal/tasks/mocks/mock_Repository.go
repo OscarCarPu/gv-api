@@ -1024,9 +1024,9 @@ func (_c *MockRepository_GetTaskTimeEntries_Call) RunAndReturn(run func(context.
 	return _c
 }
 
-// GetTasksByDueDate provides a mock function with given fields: ctx
-func (_m *MockRepository) GetTasksByDueDate(ctx context.Context) ([]tasks.TaskByDueDateResponse, error) {
-	ret := _m.Called(ctx)
+// GetTasksByDueDate provides a mock function with given fields: ctx, minPriority
+func (_m *MockRepository) GetTasksByDueDate(ctx context.Context, minPriority *int32) ([]tasks.TaskByDueDateResponse, error) {
+	ret := _m.Called(ctx, minPriority)
 
 	if len(ret) == 0 {
 		panic("no return value specified for GetTasksByDueDate")
@@ -1034,19 +1034,19 @@ func (_m *MockRepository) GetTasksByDueDate(ctx context.Context) ([]tasks.TaskBy
 
 	var r0 []tasks.TaskByDueDateResponse
 	var r1 error
-	if rf, ok := ret.Get(0).(func(context.Context) ([]tasks.TaskByDueDateResponse, error)); ok {
-		return rf(ctx)
+	if rf, ok := ret.Get(0).(func(context.Context, *int32) ([]tasks.TaskByDueDateResponse, error)); ok {
+		return rf(ctx, minPriority)
 	}
-	if rf, ok := ret.Get(0).(func(context.Context) []tasks.TaskByDueDateResponse); ok {
-		r0 = rf(ctx)
+	if rf, ok := ret.Get(0).(func(context.Context, *int32) []tasks.TaskByDueDateResponse); ok {
+		r0 = rf(ctx, minPriority)
 	} else {
 		if ret.Get(0) != nil {
 			r0 = ret.Get(0).([]tasks.TaskByDueDateResponse)
 		}
 	}
 
-	if rf, ok := ret.Get(1).(func(context.Context) error); ok {
-		r1 = rf(ctx)
+	if rf, ok := ret.Get(1).(func(context.Context, *int32) error); ok {
+		r1 = rf(ctx, minPriority)
 	} else {
 		r1 = ret.Error(1)
 	}
@@ -1061,13 +1061,14 @@ type MockRepository_GetTasksByDueDate_Call struct {
 
 // GetTasksByDueDate is a helper method to define mock.On call
 //   - ctx context.Context
-func (_e *MockRepository_Expecter) GetTasksByDueDate(ctx interface{}) *MockRepository_GetTasksByDueDate_Call {
-	return &MockRepository_GetTasksByDueDate_Call{Call: _e.mock.On("GetTasksByDueDate", ctx)}
+//   - minPriority *int32
+func (_e *MockRepository_Expecter) GetTasksByDueDate(ctx interface{}, minPriority interface{}) *MockRepository_GetTasksByDueDate_Call {
+	return &MockRepository_GetTasksByDueDate_Call{Call: _e.mock.On("GetTasksByDueDate", ctx, minPriority)}
 }
 
-func (_c *MockRepository_GetTasksByDueDate_Call) Run(run func(ctx context.Context)) *MockRepository_GetTasksByDueDate_Call {
+func (_c *MockRepository_GetTasksByDueDate_Call) Run(run func(ctx context.Context, minPriority *int32)) *MockRepository_GetTasksByDueDate_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].(context.Context))
+		run(args[0].(context.Context), args[1].(*int32))
 	})
 	return _c
 }
@@ -1077,7 +1078,7 @@ func (_c *MockRepository_GetTasksByDueDate_Call) Return(_a0 []tasks.TaskByDueDat
 	return _c
 }
 
-func (_c *MockRepository_GetTasksByDueDate_Call) RunAndReturn(run func(context.Context) ([]tasks.TaskByDueDateResponse, error)) *MockRepository_GetTasksByDueDate_Call {
+func (_c *MockRepository_GetTasksByDueDate_Call) RunAndReturn(run func(context.Context, *int32) ([]tasks.TaskByDueDateResponse, error)) *MockRepository_GetTasksByDueDate_Call {
 	_c.Call.Return(run)
 	return _c
 }
@@ -1262,9 +1263,9 @@ func (_c *MockRepository_GetTimeEntrySummary_Call) RunAndReturn(run func(context
 	return _c
 }
 
-// GetUnfinishedTasks provides a mock function with given fields: ctx
-func (_m *MockRepository) GetUnfinishedTasks(ctx context.Context) ([]tasks.UnfinishedTask, error) {
-	ret := _m.Called(ctx)
+// GetUnfinishedTasks provides a mock function with given fields: ctx, minPriority
+func (_m *MockRepository) GetUnfinishedTasks(ctx context.Context, minPriority *int32) ([]tasks.UnfinishedTask, error) {
+	ret := _m.Called(ctx, minPriority)
 
 	if len(ret) == 0 {
 		panic("no return value specified for GetUnfinishedTasks")
@@ -1272,19 +1273,19 @@ func (_m *MockRepository) GetUnfinishedTasks(ctx context.Context) ([]tasks.Unfin
 
 	var r0 []tasks.UnfinishedTask
 	var r1 error
-	if rf, ok := ret.Get(0).(func(context.Context) ([]tasks.UnfinishedTask, error)); ok {
-		return rf(ctx)
+	if rf, ok := ret.Get(0).(func(context.Context, *int32) ([]tasks.UnfinishedTask, error)); ok {
+		return rf(ctx, minPriority)
 	}
-	if rf, ok := ret.Get(0).(func(context.Context) []tasks.UnfinishedTask); ok {
-		r0 = rf(ctx)
+	if rf, ok := ret.Get(0).(func(context.Context, *int32) []tasks.UnfinishedTask); ok {
+		r0 = rf(ctx, minPriority)
 	} else {
 		if ret.Get(0) != nil {
 			r0 = ret.Get(0).([]tasks.UnfinishedTask)
 		}
 	}
 
-	if rf, ok := ret.Get(1).(func(context.Context) error); ok {
-		r1 = rf(ctx)
+	if rf, ok := ret.Get(1).(func(context.Context, *int32) error); ok {
+		r1 = rf(ctx, minPriority)
 	} else {
 		r1 = ret.Error(1)
 	}
@@ -1299,13 +1300,14 @@ type MockRepository_GetUnfinishedTasks_Call struct {
 
 // GetUnfinishedTasks is a helper method to define mock.On call
 //   - ctx context.Context
-func (_e *MockRepository_Expecter) GetUnfinishedTasks(ctx interface{}) *MockRepository_GetUnfinishedTasks_Call {
-	return &MockRepository_GetUnfinishedTasks_Call{Call: _e.mock.On("GetUnfinishedTasks", ctx)}
+//   - minPriority *int32
+func (_e *MockRepository_Expecter) GetUnfinishedTasks(ctx interface{}, minPriority interface{}) *MockRepository_GetUnfinishedTasks_Call {
+	return &MockRepository_GetUnfinishedTasks_Call{Call: _e.mock.On("GetUnfinishedTasks", ctx, minPriority)}
 }
 
-func (_c *MockRepository_GetUnfinishedTasks_Call) Run(run func(ctx context.Context)) *MockRepository_GetUnfinishedTasks_Call {
+func (_c *MockRepository_GetUnfinishedTasks_Call) Run(run func(ctx context.Context, minPriority *int32)) *MockRepository_GetUnfinishedTasks_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].(context.Context))
+		run(args[0].(context.Context), args[1].(*int32))
 	})
 	return _c
 }
@@ -1315,7 +1317,7 @@ func (_c *MockRepository_GetUnfinishedTasks_Call) Return(_a0 []tasks.UnfinishedT
 	return _c
 }
 
-func (_c *MockRepository_GetUnfinishedTasks_Call) RunAndReturn(run func(context.Context) ([]tasks.UnfinishedTask, error)) *MockRepository_GetUnfinishedTasks_Call {
+func (_c *MockRepository_GetUnfinishedTasks_Call) RunAndReturn(run func(context.Context, *int32) ([]tasks.UnfinishedTask, error)) *MockRepository_GetUnfinishedTasks_Call {
 	_c.Call.Return(run)
 	return _c
 }

@@ -192,9 +192,9 @@ func (_c *MockRepository_GetHabitByID_Call) RunAndReturn(run func(context.Contex
 	return _c
 }
 
-// GetHabitHistory provides a mock function with given fields: ctx, habitID, frequency, startAt, endAt
-func (_m *MockRepository) GetHabitHistory(ctx context.Context, habitID int32, frequency string, startAt time.Time, endAt time.Time) ([]habits.HistoryPoint, error) {
-	ret := _m.Called(ctx, habitID, frequency, startAt, endAt)
+// GetHabitHistory provides a mock function with given fields: ctx, habitID, frequency, startAt, endAt, fillZeros
+func (_m *MockRepository) GetHabitHistory(ctx context.Context, habitID int32, frequency string, startAt time.Time, endAt time.Time, fillZeros bool) ([]habits.HistoryPoint, error) {
+	ret := _m.Called(ctx, habitID, frequency, startAt, endAt, fillZeros)
 
 	if len(ret) == 0 {
 		panic("no return value specified for GetHabitHistory")
@@ -202,19 +202,19 @@ func (_m *MockRepository) GetHabitHistory(ctx context.Context, habitID int32, fr
 
 	var r0 []habits.HistoryPoint
 	var r1 error
-	if rf, ok := ret.Get(0).(func(context.Context, int32, string, time.Time, time.Time) ([]habits.HistoryPoint, error)); ok {
-		return rf(ctx, habitID, frequency, startAt, endAt)
+	if rf, ok := ret.Get(0).(func(context.Context, int32, string, time.Time, time.Time, bool) ([]habits.HistoryPoint, error)); ok {
+		return rf(ctx, habitID, frequency, startAt, endAt, fillZeros)
 	}
-	if rf, ok := ret.Get(0).(func(context.Context, int32, string, time.Time, time.Time) []habits.HistoryPoint); ok {
-		r0 = rf(ctx, habitID, frequency, startAt, endAt)
+	if rf, ok := ret.Get(0).(func(context.Context, int32, string, time.Time, time.Time, bool) []habits.HistoryPoint); ok {
+		r0 = rf(ctx, habitID, frequency, startAt, endAt, fillZeros)
 	} else {
 		if ret.Get(0) != nil {
 			r0 = ret.Get(0).([]habits.HistoryPoint)
 		}
 	}
 
-	if rf, ok := ret.Get(1).(func(context.Context, int32, string, time.Time, time.Time) error); ok {
-		r1 = rf(ctx, habitID, frequency, startAt, endAt)
+	if rf, ok := ret.Get(1).(func(context.Context, int32, string, time.Time, time.Time, bool) error); ok {
+		r1 = rf(ctx, habitID, frequency, startAt, endAt, fillZeros)
 	} else {
 		r1 = ret.Error(1)
 	}
@@ -233,13 +233,14 @@ type MockRepository_GetHabitHistory_Call struct {
 //   - frequency string
 //   - startAt time.Time
 //   - endAt time.Time
-func (_e *MockRepository_Expecter) GetHabitHistory(ctx interface{}, habitID interface{}, frequency interface{}, startAt interface{}, endAt interface{}) *MockRepository_GetHabitHistory_Call {
-	return &MockRepository_GetHabitHistory_Call{Call: _e.mock.On("GetHabitHistory", ctx, habitID, frequency, startAt, endAt)}
+//   - fillZeros bool
+func (_e *MockRepository_Expecter) GetHabitHistory(ctx interface{}, habitID interface{}, frequency interface{}, startAt interface{}, endAt interface{}, fillZeros interface{}) *MockRepository_GetHabitHistory_Call {
+	return &MockRepository_GetHabitHistory_Call{Call: _e.mock.On("GetHabitHistory", ctx, habitID, frequency, startAt, endAt, fillZeros)}
 }
 
-func (_c *MockRepository_GetHabitHistory_Call) Run(run func(ctx context.Context, habitID int32, frequency string, startAt time.Time, endAt time.Time)) *MockRepository_GetHabitHistory_Call {
+func (_c *MockRepository_GetHabitHistory_Call) Run(run func(ctx context.Context, habitID int32, frequency string, startAt time.Time, endAt time.Time, fillZeros bool)) *MockRepository_GetHabitHistory_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].(context.Context), args[1].(int32), args[2].(string), args[3].(time.Time), args[4].(time.Time))
+		run(args[0].(context.Context), args[1].(int32), args[2].(string), args[3].(time.Time), args[4].(time.Time), args[5].(bool))
 	})
 	return _c
 }
@@ -249,14 +250,14 @@ func (_c *MockRepository_GetHabitHistory_Call) Return(_a0 []habits.HistoryPoint,
 	return _c
 }
 
-func (_c *MockRepository_GetHabitHistory_Call) RunAndReturn(run func(context.Context, int32, string, time.Time, time.Time) ([]habits.HistoryPoint, error)) *MockRepository_GetHabitHistory_Call {
+func (_c *MockRepository_GetHabitHistory_Call) RunAndReturn(run func(context.Context, int32, string, time.Time, time.Time, bool) ([]habits.HistoryPoint, error)) *MockRepository_GetHabitHistory_Call {
 	_c.Call.Return(run)
 	return _c
 }
 
-// GetHabitHistoryAvg provides a mock function with given fields: ctx, habitID, frequency, startAt, endAt
-func (_m *MockRepository) GetHabitHistoryAvg(ctx context.Context, habitID int32, frequency string, startAt time.Time, endAt time.Time) ([]habits.HistoryPoint, error) {
-	ret := _m.Called(ctx, habitID, frequency, startAt, endAt)
+// GetHabitHistoryAvg provides a mock function with given fields: ctx, habitID, frequency, startAt, endAt, fillZeros
+func (_m *MockRepository) GetHabitHistoryAvg(ctx context.Context, habitID int32, frequency string, startAt time.Time, endAt time.Time, fillZeros bool) ([]habits.HistoryPoint, error) {
+	ret := _m.Called(ctx, habitID, frequency, startAt, endAt, fillZeros)
 
 	if len(ret) == 0 {
 		panic("no return value specified for GetHabitHistoryAvg")
@@ -264,19 +265,19 @@ func (_m *MockRepository) GetHabitHistoryAvg(ctx context.Context, habitID int32,
 
 	var r0 []habits.HistoryPoint
 	var r1 error
-	if rf, ok := ret.Get(0).(func(context.Context, int32, string, time.Time, time.Time) ([]habits.HistoryPoint, error)); ok {
-		return rf(ctx, habitID, frequency, startAt, endAt)
+	if rf, ok := ret.Get(0).(func(context.Context, int32, string, time.Time, time.Time, bool) ([]habits.HistoryPoint, error)); ok {
+		return rf(ctx, habitID, frequency, startAt, endAt, fillZeros)
 	}
-	if rf, ok := ret.Get(0).(func(context.Context, int32, string, time.Time, time.Time) []habits.HistoryPoint); ok {
-		r0 = rf(ctx, habitID, frequency, startAt, endAt)
+	if rf, ok := ret.Get(0).(func(context.Context, int32, string, time.Time, time.Time, bool) []habits.HistoryPoint); ok {
+		r0 = rf(ctx, habitID, frequency, startAt, endAt, fillZeros)
 	} else {
 		if ret.Get(0) != nil {
 			r0 = ret.Get(0).([]habits.HistoryPoint)
 		}
 	}
 
-	if rf, ok := ret.Get(1).(func(context.Context, int32, string, time.Time, time.Time) error); ok {
-		r1 = rf(ctx, habitID, frequency, startAt, endAt)
+	if rf, ok := ret.Get(1).(func(context.Context, int32, string, time.Time, time.Time, bool) error); ok {
+		r1 = rf(ctx, habitID, frequency, startAt, endAt, fillZeros)
 	} else {
 		r1 = ret.Error(1)
 	}
@@ -295,13 +296,14 @@ type MockRepository_GetHabitHistoryAvg_Call struct {
 //   - frequency string
 //   - startAt time.Time
 //   - endAt time.Time
-func (_e *MockRepository_Expecter) GetHabitHistoryAvg(ctx interface{}, habitID interface{}, frequency interface{}, startAt interface{}, endAt interface{}) *MockRepository_GetHabitHistoryAvg_Call {
-	return &MockRepository_GetHabitHistoryAvg_Call{Call: _e.mock.On("GetHabitHistoryAvg", ctx, habitID, frequency, startAt, endAt)}
+//   - fillZeros bool
+func (_e *MockRepository_Expecter) GetHabitHistoryAvg(ctx interface{}, habitID interface{}, frequency interface{}, startAt interface{}, endAt interface{}, fillZeros interface{}) *MockRepository_GetHabitHistoryAvg_Call {
+	return &MockRepository_GetHabitHistoryAvg_Call{Call: _e.mock.On("GetHabitHistoryAvg", ctx, habitID, frequency, startAt, endAt, fillZeros)}
 }
 
-func (_c *MockRepository_GetHabitHistoryAvg_Call) Run(run func(ctx context.Context, habitID int32, frequency string, startAt time.Time, endAt time.Time)) *MockRepository_GetHabitHistoryAvg_Call {
+func (_c *MockRepository_GetHabitHistoryAvg_Call) Run(run func(ctx context.Context, habitID int32, frequency string, startAt time.Time, endAt time.Time, fillZeros bool)) *MockRepository_GetHabitHistoryAvg_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].(context.Context), args[1].(int32), args[2].(string), args[3].(time.Time), args[4].(time.Time))
+		run(args[0].(context.Context), args[1].(int32), args[2].(string), args[3].(time.Time), args[4].(time.Time), args[5].(bool))
 	})
 	return _c
 }
@@ -311,66 +313,7 @@ func (_c *MockRepository_GetHabitHistoryAvg_Call) Return(_a0 []habits.HistoryPoi
 	return _c
 }
 
-func (_c *MockRepository_GetHabitHistoryAvg_Call) RunAndReturn(run func(context.Context, int32, string, time.Time, time.Time) ([]habits.HistoryPoint, error)) *MockRepository_GetHabitHistoryAvg_Call {
-	_c.Call.Return(run)
-	return _c
-}
-
-// GetHabitLogs provides a mock function with given fields: ctx, habitID
-func (_m *MockRepository) GetHabitLogs(ctx context.Context, habitID int32) ([]habitsdb.HabitLog, error) {
-	ret := _m.Called(ctx, habitID)
-
-	if len(ret) == 0 {
-		panic("no return value specified for GetHabitLogs")
-	}
-
-	var r0 []habitsdb.HabitLog
-	var r1 error
-	if rf, ok := ret.Get(0).(func(context.Context, int32) ([]habitsdb.HabitLog, error)); ok {
-		return rf(ctx, habitID)
-	}
-	if rf, ok := ret.Get(0).(func(context.Context, int32) []habitsdb.HabitLog); ok {
-		r0 = rf(ctx, habitID)
-	} else {
-		if ret.Get(0) != nil {
-			r0 = ret.Get(0).([]habitsdb.HabitLog)
-		}
-	}
-
-	if rf, ok := ret.Get(1).(func(context.Context, int32) error); ok {
-		r1 = rf(ctx, habitID)
-	} else {
-		r1 = ret.Error(1)
-	}
-
-	return r0, r1
-}
-
-// MockRepository_GetHabitLogs_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'GetHabitLogs'
-type MockRepository_GetHabitLogs_Call struct {
-	*mock.Call
-}
-
-// GetHabitLogs is a helper method to define mock.On call
-//   - ctx context.Context
-//   - habitID int32
-func (_e *MockRepository_Expecter) GetHabitLogs(ctx interface{}, habitID interface{}) *MockRepository_GetHabitLogs_Call {
-	return &MockRepository_GetHabitLogs_Call{Call: _e.mock.On("GetHabitLogs", ctx, habitID)}
-}
-
-func (_c *MockRepository_GetHabitLogs_Call) Run(run func(ctx context.Context, habitID int32)) *MockRepository_GetHabitLogs_Call {
-	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].(context.Context), args[1].(int32))
-	})
-	return _c
-}
-
-func (_c *MockRepository_GetHabitLogs_Call) Return(_a0 []habitsdb.HabitLog, _a1 error) *MockRepository_GetHabitLogs_Call {
-	_c.Call.Return(_a0, _a1)
-	return _c
-}
-
-func (_c *MockRepository_GetHabitLogs_Call) RunAndReturn(run func(context.Context, int32) ([]habitsdb.HabitLog, error)) *MockRepository_GetHabitLogs_Call {
+func (_c *MockRepository_GetHabitHistoryAvg_Call) RunAndReturn(run func(context.Context, int32, string, time.Time, time.Time, bool) ([]habits.HistoryPoint, error)) *MockRepository_GetHabitHistoryAvg_Call {
 	_c.Call.Return(run)
 	return _c
 }
@@ -434,17 +377,17 @@ func (_c *MockRepository_GetHabitsWithLogs_Call) RunAndReturn(run func(context.C
 	return _c
 }
 
-// UpdateHabitStreak provides a mock function with given fields: ctx, id, currentStreak, longestStreak
-func (_m *MockRepository) UpdateHabitStreak(ctx context.Context, id int32, currentStreak int32, longestStreak int32) error {
-	ret := _m.Called(ctx, id, currentStreak, longestStreak)
+// RecalculateStreak provides a mock function with given fields: ctx, habitID, today
+func (_m *MockRepository) RecalculateStreak(ctx context.Context, habitID int32, today time.Time) error {
+	ret := _m.Called(ctx, habitID, today)
 
 	if len(ret) == 0 {
-		panic("no return value specified for UpdateHabitStreak")
+		panic("no return value specified for RecalculateStreak")
 	}
 
 	var r0 error
-	if rf, ok := ret.Get(0).(func(context.Context, int32, int32, int32) error); ok {
-		r0 = rf(ctx, id, currentStreak, longestStreak)
+	if rf, ok := ret.Get(0).(func(context.Context, int32, time.Time) error); ok {
+		r0 = rf(ctx, habitID, today)
 	} else {
 		r0 = ret.Error(0)
 	}
@@ -452,33 +395,32 @@ func (_m *MockRepository) UpdateHabitStreak(ctx context.Context, id int32, curre
 	return r0
 }
 
-// MockRepository_UpdateHabitStreak_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'UpdateHabitStreak'
-type MockRepository_UpdateHabitStreak_Call struct {
+// MockRepository_RecalculateStreak_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'RecalculateStreak'
+type MockRepository_RecalculateStreak_Call struct {
 	*mock.Call
 }
 
-// UpdateHabitStreak is a helper method to define mock.On call
+// RecalculateStreak is a helper method to define mock.On call
 //   - ctx context.Context
-//   - id int32
-//   - currentStreak int32
-//   - longestStreak int32
-func (_e *MockRepository_Expecter) UpdateHabitStreak(ctx interface{}, id interface{}, currentStreak interface{}, longestStreak interface{}) *MockRepository_UpdateHabitStreak_Call {
-	return &MockRepository_UpdateHabitStreak_Call{Call: _e.mock.On("UpdateHabitStreak", ctx, id, currentStreak, longestStreak)}
+//   - habitID int32
+//   - today time.Time
+func (_e *MockRepository_Expecter) RecalculateStreak(ctx interface{}, habitID interface{}, today interface{}) *MockRepository_RecalculateStreak_Call {
+	return &MockRepository_RecalculateStreak_Call{Call: _e.mock.On("RecalculateStreak", ctx, habitID, today)}
 }
 
-func (_c *MockRepository_UpdateHabitStreak_Call) Run(run func(ctx context.Context, id int32, currentStreak int32, longestStreak int32)) *MockRepository_UpdateHabitStreak_Call {
+func (_c *MockRepository_RecalculateStreak_Call) Run(run func(ctx context.Context, habitID int32, today time.Time)) *MockRepository_RecalculateStreak_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].(context.Context), args[1].(int32), args[2].(int32), args[3].(int32))
+		run(args[0].(context.Context), args[1].(int32), args[2].(time.Time))
 	})
 	return _c
 }
 
-func (_c *MockRepository_UpdateHabitStreak_Call) Return(_a0 error) *MockRepository_UpdateHabitStreak_Call {
+func (_c *MockRepository_RecalculateStreak_Call) Return(_a0 error) *MockRepository_RecalculateStreak_Call {
 	_c.Call.Return(_a0)
 	return _c
 }
 
-func (_c *MockRepository_UpdateHabitStreak_Call) RunAndReturn(run func(context.Context, int32, int32, int32) error) *MockRepository_UpdateHabitStreak_Call {
+func (_c *MockRepository_RecalculateStreak_Call) RunAndReturn(run func(context.Context, int32, time.Time) error) *MockRepository_RecalculateStreak_Call {
 	_c.Call.Return(run)
 	return _c
 }

@@ -267,7 +267,7 @@ func TestService_GetActiveTree(t *testing.T) {
 			{ID: 1, Name: "Parent Project", DueAt: &projDue},
 			{ID: 2, ParentID: &parentID1, Name: "Child Project"},
 		}, nil)
-		repo.EXPECT().GetUnfinishedTasks(mock.Anything).Return([]tasks.UnfinishedTask{
+		repo.EXPECT().GetUnfinishedTasks(mock.Anything, mock.Anything).Return([]tasks.UnfinishedTask{
 			{ID: 1, ProjectID: &projectID1, Name: "Task A", Description: &taskDesc, DueAt: &taskDue, Started: true, StartedAt: &taskStarted},
 			{ID: 2, ProjectID: &projectID2, Name: "Task B"},
 		}, nil)
@@ -312,7 +312,7 @@ func TestService_GetActiveTree(t *testing.T) {
 			{ID: 2, ParentID: &pid1, Name: "mid"},
 			{ID: 3, ParentID: &pid2, Name: "leaf"},
 		}, nil)
-		repo.EXPECT().GetUnfinishedTasks(mock.Anything).Return([]tasks.UnfinishedTask{
+		repo.EXPECT().GetUnfinishedTasks(mock.Anything, mock.Anything).Return([]tasks.UnfinishedTask{
 			{ID: 10, ProjectID: &pid3, Name: "deep task", Started: true, StartedAt: &taskStarted},
 		}, nil)
 
@@ -334,7 +334,7 @@ func TestService_GetActiveTree(t *testing.T) {
 	t.Run("orphan tasks at root level", func(t *testing.T) {
 		repo := mocks.NewMockRepository(t)
 		repo.EXPECT().GetActiveProjects(mock.Anything).Return([]tasks.ActiveProject{}, nil)
-		repo.EXPECT().GetUnfinishedTasks(mock.Anything).Return([]tasks.UnfinishedTask{
+		repo.EXPECT().GetUnfinishedTasks(mock.Anything, mock.Anything).Return([]tasks.UnfinishedTask{
 			{ID: 1, Name: "Orphan Started", Started: true},
 			{ID: 2, Name: "Orphan Unstarted"},
 		}, nil)
@@ -352,7 +352,7 @@ func TestService_GetActiveTree(t *testing.T) {
 		inactiveProjectID := int32(99)
 		repo := mocks.NewMockRepository(t)
 		repo.EXPECT().GetActiveProjects(mock.Anything).Return([]tasks.ActiveProject{}, nil)
-		repo.EXPECT().GetUnfinishedTasks(mock.Anything).Return([]tasks.UnfinishedTask{
+		repo.EXPECT().GetUnfinishedTasks(mock.Anything, mock.Anything).Return([]tasks.UnfinishedTask{
 			{ID: 1, ProjectID: &inactiveProjectID, Name: "Task with inactive project", Started: true},
 			{ID: 2, Name: "Root task"},
 		}, nil)
@@ -368,7 +368,7 @@ func TestService_GetActiveTree(t *testing.T) {
 	t.Run("empty tree", func(t *testing.T) {
 		repo := mocks.NewMockRepository(t)
 		repo.EXPECT().GetActiveProjects(mock.Anything).Return([]tasks.ActiveProject{}, nil)
-		repo.EXPECT().GetUnfinishedTasks(mock.Anything).Return([]tasks.UnfinishedTask{}, nil)
+		repo.EXPECT().GetUnfinishedTasks(mock.Anything, mock.Anything).Return([]tasks.UnfinishedTask{}, nil)
 
 		svc := tasks.NewService(repo, nil)
 		got, err := svc.GetActiveTree(context.Background(), nil)
@@ -382,7 +382,7 @@ func TestService_GetActiveTree(t *testing.T) {
 		repo.EXPECT().GetActiveProjects(mock.Anything).Return([]tasks.ActiveProject{
 			{ID: 1, Name: "Project"},
 		}, nil)
-		repo.EXPECT().GetUnfinishedTasks(mock.Anything).Return([]tasks.UnfinishedTask{
+		repo.EXPECT().GetUnfinishedTasks(mock.Anything, mock.Anything).Return([]tasks.UnfinishedTask{
 			{ID: 1, Name: "Unstarted Orphan"},
 			{ID: 2, Name: "Started Orphan", Started: true},
 			{ID: 3, ProjectID: &projectID1, Name: "Unstarted Child"},
@@ -415,22 +415,22 @@ func TestService_GetActiveTree(t *testing.T) {
 	t.Run("error from GetUnfinishedTasks propagates", func(t *testing.T) {
 		repo := mocks.NewMockRepository(t)
 		repo.EXPECT().GetActiveProjects(mock.Anything).Return([]tasks.ActiveProject{}, nil)
-		repo.EXPECT().GetUnfinishedTasks(mock.Anything).Return(nil, errors.New("db error"))
+		repo.EXPECT().GetUnfinishedTasks(mock.Anything, mock.Anything).Return(nil, errors.New("db error"))
 
 		svc := tasks.NewService(repo, nil)
 		_, err := svc.GetActiveTree(context.Background(), nil)
 		assert.Error(t, err)
 	})
 
-	t.Run("dependency fields populated in tree nodes", func(t *testing.T) {
+	t.Run("dependency fields are wired through to tree nodes", func(t *testing.T) {
 		taskAID := int32(1)
 		taskBID := int32(2)
 
 		repo := mocks.NewMockRepository(t)
 		repo.EXPECT().GetActiveProjects(mock.Anything).Return([]tasks.ActiveProject{}, nil)
-		repo.EXPECT().GetUnfinishedTasks(mock.Anything).Return([]tasks.UnfinishedTask{
-			{ID: taskAID, Name: "Task A", Blocks: []tasks.TaskDepRef{{ID: taskBID, Name: "Task B"}}},
-			{ID: taskBID, Name: "Task B", DependsOn: []tasks.TaskDepRef{{ID: taskAID, Name: "Task A"}}},
+		repo.EXPECT().GetUnfinishedTasks(mock.Anything, mock.Anything).Return([]tasks.UnfinishedTask{
+			{ID: taskAID, Name: "Task A", Blocks: []tasks.TaskDepRef{{ID: taskBID, Name: "Task B"}}, Blocked: false},
+			{ID: taskBID, Name: "Task B", DependsOn: []tasks.TaskDepRef{{ID: taskAID, Name: "Task A"}}, Blocked: true},
 		}, nil)
 
 		svc := tasks.NewService(repo, nil)
@@ -453,75 +453,10 @@ func TestService_GetActiveTree(t *testing.T) {
 		require.NotNil(t, nodeB)
 		require.Len(t, nodeA.Blocks, 1)
 		assert.Equal(t, taskBID, nodeA.Blocks[0].ID)
-		assert.Empty(t, nodeA.DependsOn)
-		assert.False(t, nodeA.Blocked, "Task A has no deps, should not be blocked")
+		assert.False(t, nodeA.Blocked)
 		require.Len(t, nodeB.DependsOn, 1)
 		assert.Equal(t, taskAID, nodeB.DependsOn[0].ID)
-		assert.Empty(t, nodeB.Blocks)
-		assert.True(t, nodeB.Blocked, "Task B depends on unfinished A, should be blocked")
-	})
-
-	t.Run("task hidden when all dependencies are blocked", func(t *testing.T) {
-		taskAID := int32(1)
-		taskBID := int32(2)
-		taskCID := int32(3)
-
-		repo := mocks.NewMockRepository(t)
-		repo.EXPECT().GetActiveProjects(mock.Anything).Return([]tasks.ActiveProject{}, nil)
-		repo.EXPECT().GetUnfinishedTasks(mock.Anything).Return([]tasks.UnfinishedTask{
-			{ID: taskAID, Name: "Task A"},
-			{ID: taskBID, Name: "Task B", DependsOn: []tasks.TaskDepRef{{ID: taskAID, Name: "Task A"}}},
-			{ID: taskCID, Name: "Task C", DependsOn: []tasks.TaskDepRef{{ID: taskBID, Name: "Task B"}}},
-		}, nil)
-
-		svc := tasks.NewService(repo, nil)
-		got, err := svc.GetActiveTree(context.Background(), nil)
-		require.NoError(t, err)
-
-		for _, node := range got {
-			assert.NotEqual(t, taskCID, node.ID, "Task C should be hidden from active tree")
-		}
-		ids := make([]int32, len(got))
-		for i, node := range got {
-			ids[i] = node.ID
-		}
-		assert.Contains(t, ids, taskAID)
-		assert.Contains(t, ids, taskBID)
-	})
-
-	t.Run("effective due date propagates backward through blocks", func(t *testing.T) {
-		taskAID := int32(1)
-		taskBID := int32(2)
-		lateDue := time.Date(2026, 12, 31, 0, 0, 0, 0, time.UTC)
-		earlyDue := time.Date(2026, 6, 15, 0, 0, 0, 0, time.UTC)
-
-		repo := mocks.NewMockRepository(t)
-		repo.EXPECT().GetActiveProjects(mock.Anything).Return([]tasks.ActiveProject{}, nil)
-		repo.EXPECT().GetUnfinishedTasks(mock.Anything).Return([]tasks.UnfinishedTask{
-			{ID: taskAID, Name: "Task A", DueAt: &lateDue, Blocks: []tasks.TaskDepRef{{ID: taskBID, Name: "Task B"}}},
-			{ID: taskBID, Name: "Task B", DueAt: &earlyDue, DependsOn: []tasks.TaskDepRef{{ID: taskAID, Name: "Task A"}}},
-		}, nil)
-
-		svc := tasks.NewService(repo, nil)
-		got, err := svc.GetActiveTree(context.Background(), nil)
-		require.NoError(t, err)
-
-		var nodeA, nodeB *tasks.ActiveTreeNode
-		for i := range got {
-			switch got[i].ID {
-			case taskAID:
-				nodeA = &got[i]
-			case taskBID:
-				nodeB = &got[i]
-			}
-		}
-		require.NotNil(t, nodeA)
-		require.NotNil(t, nodeA.DueAt)
-		assert.Equal(t, earlyDue, *nodeA.DueAt, "A should inherit B's earlier due date since A blocks B")
-
-		require.NotNil(t, nodeB)
-		require.NotNil(t, nodeB.DueAt)
-		assert.Equal(t, earlyDue, *nodeB.DueAt, "B keeps its own due date")
+		assert.True(t, nodeB.Blocked)
 	})
 }
 
@@ -556,11 +491,11 @@ func TestService_GetTimeEntryHistory_DefaultDatesDaily(t *testing.T) {
 	repo := mocks.NewMockRepository(t)
 	loc := time.UTC
 
+	// Service no longer fills missing periods (SQL does); just verify it forwards
+	// the parsed date range and returns whatever the repo returned.
 	repo.EXPECT().
 		GetTimeEntryHistory(mock.Anything, "day", "UTC", mock.AnythingOfType("time.Time"), mock.AnythingOfType("time.Time")).
-		Return([]history.Point{
-			{Date: "2026-03-17", Value: 2.5},
-		}, nil)
+		Return([]history.Point{{Date: "2026-03-17", Value: 2.5}}, nil)
 
 	svc := tasks.NewService(repo, loc)
 	resp, err := svc.GetTimeEntryHistory(context.Background(), "daily", "", "")
@@ -568,35 +503,7 @@ func TestService_GetTimeEntryHistory_DefaultDatesDaily(t *testing.T) {
 
 	assert.NotEmpty(t, resp.StartAt)
 	assert.NotEmpty(t, resp.EndAt)
-	// Should have filled data (at least 28 days for a daily default of 1 month)
-	assert.True(t, len(resp.Data) >= 28, "expected at least 28 data points, got %d", len(resp.Data))
-}
-
-func TestService_GetTimeEntryHistory_FillsMissingPeriods(t *testing.T) {
-	repo := mocks.NewMockRepository(t)
-	loc := time.UTC
-
-	// Repo returns sparse data: only two points in a 5-day range
-	repo.EXPECT().
-		GetTimeEntryHistory(mock.Anything, "day", "UTC", mock.AnythingOfType("time.Time"), mock.AnythingOfType("time.Time")).
-		Return([]history.Point{
-			{Date: "2026-03-16", Value: 1},
-			{Date: "2026-03-19", Value: 3},
-		}, nil)
-
-	svc := tasks.NewService(repo, loc)
-	resp, err := svc.GetTimeEntryHistory(context.Background(), "daily", "2026-03-16", "2026-03-20")
-	require.NoError(t, err)
-
-	// 2026-03-16 through 2026-03-20 = 5 daily periods
-	require.Len(t, resp.Data, 5)
-	assert.Equal(t, float32(1), resp.Data[0].Value) // 03-16
-	assert.Equal(t, float32(0), resp.Data[1].Value) // 03-17 filled
-	assert.Equal(t, float32(0), resp.Data[2].Value) // 03-18 filled
-	assert.Equal(t, float32(3), resp.Data[3].Value) // 03-19
-	assert.Equal(t, float32(0), resp.Data[4].Value) // 03-20 filled
-	assert.Equal(t, "2026-03-16", resp.StartAt)
-	assert.Equal(t, "2026-03-20", resp.EndAt)
+	require.Len(t, resp.Data, 1, "service is now a pass-through; repo decides fill")
 }
 
 func TestService_GetTimeEntriesByDateRange(t *testing.T) {
@@ -687,58 +594,34 @@ func TestService_GetTimeEntriesByDateRange(t *testing.T) {
 }
 
 func TestService_PriorityFilter(t *testing.T) {
-	due := time.Date(2026, 6, 15, 0, 0, 0, 0, time.UTC)
-
-	t.Run("GetActiveTree filters out tasks with priority above threshold", func(t *testing.T) {
+	t.Run("GetActiveTree forwards min_priority to repo", func(t *testing.T) {
 		repo := mocks.NewMockRepository(t)
+		threshold := int32(2)
 		repo.EXPECT().GetActiveProjects(mock.Anything).Return([]tasks.ActiveProject{}, nil)
-		repo.EXPECT().GetUnfinishedTasks(mock.Anything).Return([]tasks.UnfinishedTask{
-			{ID: 1, Name: "Urgent", Priority: 1, DueAt: &due},
-			{ID: 2, Name: "Normal", Priority: 3, DueAt: &due},
-			{ID: 3, Name: "Low", Priority: 5, DueAt: &due},
-		}, nil)
+		repo.EXPECT().GetUnfinishedTasks(mock.Anything, &threshold).Return([]tasks.UnfinishedTask{}, nil)
 
 		svc := tasks.NewService(repo, nil)
-		threshold := int32(2)
-		got, err := svc.GetActiveTree(context.Background(), &threshold)
+		_, err := svc.GetActiveTree(context.Background(), &threshold)
 		require.NoError(t, err)
-
-		names := make([]string, len(got))
-		for i, n := range got {
-			names[i] = n.Name
-		}
-		assert.Contains(t, names, "Urgent")
-		assert.NotContains(t, names, "Normal")
-		assert.NotContains(t, names, "Low")
 	})
 
-	t.Run("GetActiveTree returns everything when min_priority is nil", func(t *testing.T) {
+	t.Run("GetActiveTree forwards nil when min_priority is unset", func(t *testing.T) {
 		repo := mocks.NewMockRepository(t)
 		repo.EXPECT().GetActiveProjects(mock.Anything).Return([]tasks.ActiveProject{}, nil)
-		repo.EXPECT().GetUnfinishedTasks(mock.Anything).Return([]tasks.UnfinishedTask{
-			{ID: 1, Name: "Urgent", Priority: 1, DueAt: &due},
-			{ID: 2, Name: "Low", Priority: 5, DueAt: &due},
-		}, nil)
+		repo.EXPECT().GetUnfinishedTasks(mock.Anything, (*int32)(nil)).Return([]tasks.UnfinishedTask{}, nil)
 
 		svc := tasks.NewService(repo, nil)
-		got, err := svc.GetActiveTree(context.Background(), nil)
+		_, err := svc.GetActiveTree(context.Background(), nil)
 		require.NoError(t, err)
-		assert.Len(t, got, 2)
 	})
 
-	t.Run("GetTasksByDueDate filters out tasks with priority above threshold", func(t *testing.T) {
+	t.Run("GetTasksByDueDate forwards min_priority to repo", func(t *testing.T) {
 		repo := mocks.NewMockRepository(t)
-		repo.EXPECT().GetTasksByDueDate(mock.Anything).Return([]tasks.TaskByDueDateResponse{
-			{ID: 1, Name: "Urgent", Priority: 1, DueAt: &due},
-			{ID: 2, Name: "Normal", Priority: 3, DueAt: &due},
-			{ID: 3, Name: "Low", Priority: 5, DueAt: &due},
-		}, nil)
+		threshold := int32(2)
+		repo.EXPECT().GetTasksByDueDate(mock.Anything, &threshold).Return([]tasks.TaskByDueDateResponse{}, nil)
 
 		svc := tasks.NewService(repo, nil)
-		threshold := int32(2)
-		got, err := svc.GetTasksByDueDate(context.Background(), &threshold)
+		_, err := svc.GetTasksByDueDate(context.Background(), &threshold)
 		require.NoError(t, err)
-		require.Len(t, got, 1)
-		assert.Equal(t, "Urgent", got[0].Name)
 	})
 }

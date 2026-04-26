@@ -1,10 +1,8 @@
 package tasks
 
 import (
-	"cmp"
 	"context"
 	"errors"
-	"slices"
 	"time"
 
 	"gv-api/internal/database/tasksdb"
@@ -32,12 +30,12 @@ type Repository interface {
 	ListTasksFast(ctx context.Context) ([]TaskFastResponse, error)
 	GetRootProjects(ctx context.Context) ([]ProjectResponse, error)
 	GetActiveProjects(ctx context.Context) ([]ActiveProject, error)
-	GetUnfinishedTasks(ctx context.Context) ([]UnfinishedTask, error)
+	GetUnfinishedTasks(ctx context.Context, minPriority *int32) ([]UnfinishedTask, error)
 	GetProject(ctx context.Context, id int32) (ProjectDetailResponse, error)
 	GetTask(ctx context.Context, id int32) (TaskFullResponse, error)
 	GetProjectChildren(ctx context.Context, projectID int32) (ProjectChildrenResponse, error)
 	GetTaskTimeEntries(ctx context.Context, taskID int32) (TaskTimeEntriesResponse, error)
-	GetTasksByDueDate(ctx context.Context) ([]TaskByDueDateResponse, error)
+	GetTasksByDueDate(ctx context.Context, minPriority *int32) ([]TaskByDueDateResponse, error)
 	FinishDescendantProjects(ctx context.Context, projectID int32) error
 	FinishTasksByProjectTree(ctx context.Context, projectID int32) error
 	DeleteProject(ctx context.Context, id int32) error
@@ -71,6 +69,19 @@ func pgTimestamptzToPtr(ts pgtype.Timestamptz) *time.Time {
 func pgDateToPtr(d pgtype.Date) *time.Time {
 	if d.Valid {
 		t := d.Time
+		return &t
+	}
+	return nil
+}
+
+// anyDateToPtr handles a date column scanned into interface{} (sqlc emits
+// this for date expressions whose nullability it cannot infer through CTEs).
+// pgx returns either time.Time or nil for a date scanned into interface{}.
+func anyDateToPtr(v interface{}) *time.Time {
+	if v == nil {
+		return nil
+	}
+	if t, ok := v.(time.Time); ok {
 		return &t
 	}
 	return nil
@@ -383,8 +394,8 @@ func (r *PostgresRepository) GetActiveProjects(ctx context.Context) ([]ActivePro
 	return projects, nil
 }
 
-func (r *PostgresRepository) GetUnfinishedTasks(ctx context.Context) ([]UnfinishedTask, error) {
-	rows, err := r.q.GetUnfinishedTasks(ctx)
+func (r *PostgresRepository) GetUnfinishedTasks(ctx context.Context, minPriority *int32) ([]UnfinishedTask, error) {
+	rows, err := r.q.GetUnfinishedTasks(ctx, minPriority)
 	if err != nil {
 		return nil, err
 	}
@@ -396,14 +407,15 @@ func (r *PostgresRepository) GetUnfinishedTasks(ctx context.Context) ([]Unfinish
 			ProjectID:   row.ProjectID,
 			Name:        row.Name,
 			Description: row.Description,
-			DueAt:       pgDateToPtr(row.DueAt),
+			DueAt:       anyDateToPtr(row.DueAt),
 			Started:     row.StartedAt.Valid,
 			StartedAt:   pgTimestamptzToPtr(row.StartedAt),
 			TaskType:    row.TaskType,
 			Recurrence:  row.Recurrence,
 			Priority:    row.Priority,
 			DependsOn:   unmarshalDepRefs(row.DependsOn),
-			Blocks: unmarshalDepRefs(row.Blocks),
+			Blocks:      unmarshalDepRefs(row.Blocks),
+			Blocked:     row.Blocked,
 		}
 	}
 	return tasks, nil
@@ -418,46 +430,30 @@ func (r *PostgresRepository) GetProject(ctx context.Context, id int32) (ProjectD
 }
 
 func (r *PostgresRepository) GetTask(ctx context.Context, id int32) (TaskFullResponse, error) {
-	rows, err := r.q.GetTaskByID(ctx, id)
+	row, err := r.q.GetTaskByID(ctx, id)
 	if err != nil {
-		return TaskFullResponse{}, err
-	}
-	if len(rows) == 0 {
-		return TaskFullResponse{}, ErrNotFound
-	}
-
-	first := rows[0]
-	var todos []TodoResponse
-	for _, row := range rows {
-		if row.TodoID != nil {
-			todos = append(todos, TodoResponse{
-				ID:     *row.TodoID,
-				TaskID: first.ID,
-				Name:   *row.TodoName,
-				IsDone: *row.TodoIsDone,
-			})
+		if errors.Is(err, pgx.ErrNoRows) {
+			return TaskFullResponse{}, ErrNotFound
 		}
-	}
-	if todos == nil {
-		todos = []TodoResponse{}
+		return TaskFullResponse{}, err
 	}
 
 	return TaskFullResponse{
-		ID:          first.ID,
-		ProjectID:   first.ProjectID,
-		Name:        first.Name,
-		Description: first.Description,
-		DueAt:       pgDateToPtr(first.DueAt),
-		StartedAt:   pgTimestamptzToPtr(first.StartedAt),
-		FinishedAt:  pgTimestamptzToPtr(first.FinishedAt),
-		TaskType:    first.TaskType,
-		Recurrence:  first.Recurrence,
-		Priority:    first.Priority,
-		TimeSpent:   first.TimeSpent,
-		DependsOn: unmarshalDepRefs(first.DependsOn),
-		Blocks:    unmarshalDepRefs(first.Blocks),
-		Blocked:   first.Blocked,
-		Todos:     todos,
+		ID:          row.ID,
+		ProjectID:   row.ProjectID,
+		Name:        row.Name,
+		Description: row.Description,
+		DueAt:       pgDateToPtr(row.DueAt),
+		StartedAt:   pgTimestamptzToPtr(row.StartedAt),
+		FinishedAt:  pgTimestamptzToPtr(row.FinishedAt),
+		TaskType:    row.TaskType,
+		Recurrence:  row.Recurrence,
+		Priority:    row.Priority,
+		TimeSpent:   row.TimeSpent,
+		DependsOn:   unmarshalDepRefs(row.DependsOn),
+		Blocks:      unmarshalDepRefs(row.Blocks),
+		Blocked:     row.Blocked,
+		Todos:       unmarshalTodos(row.Todos, row.ID),
 	}, nil
 }
 
@@ -470,7 +466,6 @@ func (r *PostgresRepository) GetProjectChildren(ctx context.Context, projectID i
 		return ProjectChildrenResponse{}, ErrNotFound
 	}
 
-	// Collect all project IDs for task query
 	projectIDs := make([]int32, len(descendants))
 	for i, d := range descendants {
 		projectIDs[i] = d.ID
@@ -481,95 +476,34 @@ func (r *PostgresRepository) GetProjectChildren(ctx context.Context, projectID i
 		return ProjectChildrenResponse{}, err
 	}
 
-	// Group task rows by task ID (multiple rows per task due to LEFT JOIN todos)
-	type taskWithTodos struct {
-		row   tasksdb.GetTasksByProjectIDsRow
-		todos []TodoResponse
-	}
-	taskMap := make(map[int32]*taskWithTodos)
-	var taskOrder []int32
-	for _, row := range taskRows {
-		tw, exists := taskMap[row.ID]
-		if !exists {
-			tw = &taskWithTodos{row: row}
-			taskMap[row.ID] = tw
-			taskOrder = append(taskOrder, row.ID)
-		}
-		if row.TodoID != nil {
-			tw.todos = append(tw.todos, TodoResponse{
-				ID:     *row.TodoID,
-				TaskID: row.ID,
-				Name:   *row.TodoName,
-				IsDone: *row.TodoIsDone,
-			})
-		}
-	}
-
-	// Build per-project direct task time_spent
-	projectTaskTime := make(map[int32]int64)
-	// Also build tasks grouped by project
 	projectTasks := make(map[int32][]ProjectChildNode)
-	for _, id := range taskOrder {
-		tw := taskMap[id]
-		if tw.row.ProjectID != nil {
-			projectTaskTime[*tw.row.ProjectID] += tw.row.TimeSpent
-		}
-
-		blocked := tw.row.Blocked
-		priority := tw.row.Priority
+	for _, row := range taskRows {
+		blocked := row.Blocked
+		priority := row.Priority
+		taskType := row.TaskType
 		node := ProjectChildNode{
-			ID:          tw.row.ID,
+			ID:          row.ID,
 			Type:        "task",
-			Name:        tw.row.Name,
-			Description: tw.row.Description,
-			DueAt:       pgDateToPtr(tw.row.DueAt),
-			StartedAt:   pgTimestamptzToPtr(tw.row.StartedAt),
-			FinishedAt:  pgTimestamptzToPtr(tw.row.FinishedAt),
-			TimeSpent:   tw.row.TimeSpent,
-			ProjectID:   tw.row.ProjectID,
-			TaskType:    &tw.row.TaskType,
-			Recurrence:  tw.row.Recurrence,
+			Name:        row.Name,
+			Description: row.Description,
+			DueAt:       pgDateToPtr(row.DueAt),
+			StartedAt:   pgTimestamptzToPtr(row.StartedAt),
+			FinishedAt:  pgTimestamptzToPtr(row.FinishedAt),
+			TimeSpent:   row.TimeSpent,
+			ProjectID:   row.ProjectID,
+			TaskType:    &taskType,
+			Recurrence:  row.Recurrence,
 			Priority:    &priority,
-			DependsOn:   unmarshalDepRefs(tw.row.DependsOn),
-			Blocks:      unmarshalDepRefs(tw.row.Blocks),
+			DependsOn:   unmarshalDepRefs(row.DependsOn),
+			Blocks:      unmarshalDepRefs(row.Blocks),
 			Blocked:     &blocked,
-			Todos:       tw.todos,
+			Todos:       unmarshalTodos(row.Todos, row.ID),
 		}
-		if tw.row.ProjectID != nil {
-			projectTasks[*tw.row.ProjectID] = append(projectTasks[*tw.row.ProjectID], node)
-		}
-	}
-
-	// Build descendant map indexed by ID, with depth for bottom-up accumulation
-	type projectInfo struct {
-		row      tasksdb.GetProjectWithDescendantsRow
-		parentID *int32
-		depth    int32
-	}
-	projectInfoMap := make(map[int32]*projectInfo, len(descendants))
-	for _, d := range descendants {
-		projectInfoMap[d.ID] = &projectInfo{row: d, parentID: d.ParentID, depth: d.Depth}
-	}
-
-	// Sort descendants by depth descending for bottom-up time accumulation
-	sorted := make([]tasksdb.GetProjectWithDescendantsRow, len(descendants))
-	copy(sorted, descendants)
-	slices.SortFunc(sorted, func(a, b tasksdb.GetProjectWithDescendantsRow) int {
-		return cmp.Compare(b.Depth, a.Depth)
-	})
-
-	// Accumulate time_spent bottom-up
-	projectTimeSpent := make(map[int32]int64)
-	for _, d := range sorted {
-		projectTimeSpent[d.ID] += projectTaskTime[d.ID]
-		if d.ParentID != nil {
-			if _, ok := projectInfoMap[*d.ParentID]; ok {
-				projectTimeSpent[*d.ParentID] += projectTimeSpent[d.ID]
-			}
+		if row.ProjectID != nil {
+			projectTasks[*row.ProjectID] = append(projectTasks[*row.ProjectID], node)
 		}
 	}
 
-	// Build root project response
 	root := descendants[0]
 	project := ProjectDetailResponse{
 		ID:          root.ID,
@@ -579,10 +513,9 @@ func (r *PostgresRepository) GetProjectChildren(ctx context.Context, projectID i
 		DueAt:       pgDateToPtr(root.DueAt),
 		StartedAt:   pgTimestamptzToPtr(root.StartedAt),
 		FinishedAt:  pgTimestamptzToPtr(root.FinishedAt),
-		TimeSpent:   projectTimeSpent[root.ID],
+		TimeSpent:   root.TimeSpent,
 	}
 
-	// Build children: direct sub-projects first, then tasks
 	var children []ProjectChildNode
 	for _, d := range descendants[1:] {
 		if d.ParentID != nil && *d.ParentID == projectID {
@@ -594,7 +527,7 @@ func (r *PostgresRepository) GetProjectChildren(ctx context.Context, projectID i
 				DueAt:       pgDateToPtr(d.DueAt),
 				StartedAt:   pgTimestamptzToPtr(d.StartedAt),
 				FinishedAt:  pgTimestamptzToPtr(d.FinishedAt),
-				TimeSpent:   projectTimeSpent[d.ID],
+				TimeSpent:   d.TimeSpent,
 				ParentID:    d.ParentID,
 			})
 		}
@@ -662,8 +595,8 @@ func (r *PostgresRepository) GetTaskTimeEntries(ctx context.Context, taskID int3
 	}, nil
 }
 
-func (r *PostgresRepository) GetTasksByDueDate(ctx context.Context) ([]TaskByDueDateResponse, error) {
-	rows, err := r.q.GetTasksByDueDate(ctx)
+func (r *PostgresRepository) GetTasksByDueDate(ctx context.Context, minPriority *int32) ([]TaskByDueDateResponse, error) {
+	rows, err := r.q.GetTasksByDueDate(ctx, minPriority)
 	if err != nil {
 		return nil, err
 	}
@@ -674,7 +607,7 @@ func (r *PostgresRepository) GetTasksByDueDate(ctx context.Context) ([]TaskByDue
 			ID:           row.ID,
 			Name:         row.Name,
 			Description:  row.Description,
-			DueAt:        pgDateToPtr(row.DueAt),
+			DueAt:        anyDateToPtr(row.DueAt),
 			StartedAt:    pgTimestamptzToPtr(row.StartedAt),
 			TaskType:     row.TaskType,
 			Recurrence:   row.Recurrence,
@@ -684,7 +617,8 @@ func (r *PostgresRepository) GetTasksByDueDate(ctx context.Context) ([]TaskByDue
 			ProjectName:  row.ProjectName,
 			ProjectDueAt: pgDateToPtr(row.ProjectDueAt),
 			DependsOn:    unmarshalDepRefs(row.DependsOn),
-			Blocks:  unmarshalDepRefs(row.Blocks),
+			Blocks:       unmarshalDepRefs(row.Blocks),
+			Blocked:      row.Blocked,
 		}
 	}
 	return tasks, nil

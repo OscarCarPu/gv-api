@@ -44,34 +44,56 @@ RETURNING id, name, description, frequency, target_min, target_max, recording_re
 SELECT id, name, description, frequency, target_min, target_max, recording_required, current_streak, longest_streak
 FROM habits WHERE id = $1;
 
--- name: GetHabitLogs :many
-SELECT habit_id, log_date, value
-FROM habit_logs
-WHERE habit_id = $1
-ORDER BY log_date DESC;
-
--- name: UpdateHabitStreak :exec
-UPDATE habits
-SET current_streak = $2, longest_streak = $3
-WHERE id = $1;
+-- name: RecalculateHabitStreak :exec
+-- Computes current_streak and longest_streak from this habit's logs (see
+-- migration 012's recalculate_habit_streak function) and writes them back.
+-- @today_in is the user's "today" snapped to UTC midnight (caller decides
+-- the location), used to determine the current period.
+UPDATE habits AS h
+SET current_streak = r.current_streak, longest_streak = r.longest_streak
+FROM recalculate_habit_streak($1, @today_in::date) AS r
+WHERE h.id = $1;
 
 -- name: GetHabitHistory :many
-SELECT
-    date_trunc(@frequency::text, hl.log_date::timestamp)::date AS date,
+-- When @fill_zeros is true, every period in the inclusive [start_at, end_at]
+-- range is returned with COALESCE(SUM, 0); otherwise only periods with logs
+-- appear. Caller is responsible for snapping start/end to period boundaries.
+SELECT s.date::date AS date,
+    COALESCE((
+        SELECT SUM(hl.value)::REAL
+        FROM habit_logs hl
+        WHERE hl.habit_id = @habit_id
+          AND date_trunc(@frequency::text, hl.log_date::timestamp)::date = s.date
+    ), 0)::REAL AS value
+FROM generate_series(@start_at::date, @end_at::date, ('1 ' || @frequency::text)::interval) AS s(date)
+WHERE @fill_zeros::bool
+UNION ALL
+SELECT date_trunc(@frequency::text, hl.log_date::timestamp)::date AS date,
     SUM(hl.value)::REAL AS value
 FROM habit_logs hl
-WHERE hl.habit_id = @habit_id
+WHERE NOT @fill_zeros::bool
+  AND hl.habit_id = @habit_id
   AND hl.log_date >= @start_at::date
   AND hl.log_date <= @end_at::date
 GROUP BY date_trunc(@frequency::text, hl.log_date::timestamp)
 ORDER BY date;
 
 -- name: GetHabitHistoryAvg :many
-SELECT
-    date_trunc(@frequency::text, hl.log_date::timestamp)::date AS date,
+SELECT s.date::date AS date,
+    COALESCE((
+        SELECT AVG(hl.value)::REAL
+        FROM habit_logs hl
+        WHERE hl.habit_id = @habit_id
+          AND date_trunc(@frequency::text, hl.log_date::timestamp)::date = s.date
+    ), 0)::REAL AS value
+FROM generate_series(@start_at::date, @end_at::date, ('1 ' || @frequency::text)::interval) AS s(date)
+WHERE @fill_zeros::bool
+UNION ALL
+SELECT date_trunc(@frequency::text, hl.log_date::timestamp)::date AS date,
     AVG(hl.value)::REAL AS value
 FROM habit_logs hl
-WHERE hl.habit_id = @habit_id
+WHERE NOT @fill_zeros::bool
+  AND hl.habit_id = @habit_id
   AND hl.log_date >= @start_at::date
   AND hl.log_date <= @end_at::date
 GROUP BY date_trunc(@frequency::text, hl.log_date::timestamp)

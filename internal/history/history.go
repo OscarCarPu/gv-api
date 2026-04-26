@@ -95,28 +95,6 @@ func NextPeriodStart(start time.Time, frequency string) time.Time {
 	}
 }
 
-// FillMissingPeriods inserts zero-valued points for any periods in the range that have no data.
-func FillMissingPeriods(data []Point, start, end time.Time, frequency string) []Point {
-	existing := make(map[string]Point, len(data))
-	for _, p := range data {
-		existing[p.Date] = p
-	}
-
-	var filled []Point
-	ps := PeriodStart(start, frequency)
-	endPS := PeriodStart(end, frequency)
-	for !ps.After(endPS) {
-		key := ps.Format("2006-01-02")
-		if p, ok := existing[key]; ok {
-			filled = append(filled, p)
-		} else {
-			filled = append(filled, Point{Date: key, Value: 0})
-		}
-		ps = NextPeriodStart(ps, frequency)
-	}
-	return filled
-}
-
 // ParseDateRange parses start/end date strings and applies defaults based on frequency and location.
 // Returns the snapped start and end dates.
 func ParseDateRange(loc *time.Location, frequency, startAt, endAt string) (start, end time.Time, err error) {

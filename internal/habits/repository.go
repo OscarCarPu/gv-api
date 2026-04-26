@@ -13,10 +13,9 @@ type Repository interface {
 	CreateHabit(ctx context.Context, name string, description *string, frequency string, targetMin, targetMax *float32, recordingRequired bool) (CreateHabitResponse, error)
 	DeleteHabit(ctx context.Context, id int32) error
 	GetHabitByID(ctx context.Context, id int32) (habitsdb.GetHabitByIDRow, error)
-	GetHabitLogs(ctx context.Context, habitID int32) ([]habitsdb.HabitLog, error)
-	UpdateHabitStreak(ctx context.Context, id int32, currentStreak, longestStreak int32) error
-	GetHabitHistory(ctx context.Context, habitID int32, frequency string, startAt, endAt time.Time) ([]HistoryPoint, error)
-	GetHabitHistoryAvg(ctx context.Context, habitID int32, frequency string, startAt, endAt time.Time) ([]HistoryPoint, error)
+	RecalculateStreak(ctx context.Context, habitID int32, today time.Time) error
+	GetHabitHistory(ctx context.Context, habitID int32, frequency string, startAt, endAt time.Time, fillZeros bool) ([]HistoryPoint, error)
+	GetHabitHistoryAvg(ctx context.Context, habitID int32, frequency string, startAt, endAt time.Time, fillZeros bool) ([]HistoryPoint, error)
 }
 
 type PostgresRepository struct {
@@ -96,24 +95,20 @@ func (r *PostgresRepository) GetHabitByID(ctx context.Context, id int32) (habits
 	return r.q.GetHabitByID(ctx, id)
 }
 
-func (r *PostgresRepository) GetHabitLogs(ctx context.Context, habitID int32) ([]habitsdb.HabitLog, error) {
-	return r.q.GetHabitLogs(ctx, habitID)
-}
-
-func (r *PostgresRepository) UpdateHabitStreak(ctx context.Context, id int32, currentStreak, longestStreak int32) error {
-	return r.q.UpdateHabitStreak(ctx, habitsdb.UpdateHabitStreakParams{
-		ID:            id,
-		CurrentStreak: currentStreak,
-		LongestStreak: longestStreak,
+func (r *PostgresRepository) RecalculateStreak(ctx context.Context, habitID int32, today time.Time) error {
+	return r.q.RecalculateHabitStreak(ctx, habitsdb.RecalculateHabitStreakParams{
+		ID:      habitID,
+		TodayIn: today,
 	})
 }
 
-func (r *PostgresRepository) GetHabitHistory(ctx context.Context, habitID int32, frequency string, startAt, endAt time.Time) ([]HistoryPoint, error) {
+func (r *PostgresRepository) GetHabitHistory(ctx context.Context, habitID int32, frequency string, startAt, endAt time.Time, fillZeros bool) ([]HistoryPoint, error) {
 	rows, err := r.q.GetHabitHistory(ctx, habitsdb.GetHabitHistoryParams{
 		HabitID:   habitID,
 		Frequency: frequency,
 		StartAt:   startAt,
 		EndAt:     endAt,
+		FillZeros: fillZeros,
 	})
 	if err != nil {
 		return nil, err
@@ -129,12 +124,13 @@ func (r *PostgresRepository) GetHabitHistory(ctx context.Context, habitID int32,
 	return results, nil
 }
 
-func (r *PostgresRepository) GetHabitHistoryAvg(ctx context.Context, habitID int32, frequency string, startAt, endAt time.Time) ([]HistoryPoint, error) {
+func (r *PostgresRepository) GetHabitHistoryAvg(ctx context.Context, habitID int32, frequency string, startAt, endAt time.Time, fillZeros bool) ([]HistoryPoint, error) {
 	rows, err := r.q.GetHabitHistoryAvg(ctx, habitsdb.GetHabitHistoryAvgParams{
 		HabitID:   habitID,
 		Frequency: frequency,
 		StartAt:   startAt,
 		EndAt:     endAt,
+		FillZeros: fillZeros,
 	})
 	if err != nil {
 		return nil, err

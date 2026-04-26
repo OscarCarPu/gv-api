@@ -154,62 +154,6 @@ func TestValidFrequency(t *testing.T) {
 	})
 }
 
-func TestFillMissingPeriods(t *testing.T) {
-	t.Run("sparse data gets zeros filled", func(t *testing.T) {
-		start := d(2026, 3, 16) // Monday
-		end := d(2026, 3, 20)   // Friday
-
-		data := []history.Point{
-			{Date: "2026-03-16", Value: 5},
-			{Date: "2026-03-18", Value: 3},
-		}
-
-		filled := history.FillMissingPeriods(data, start, end, "daily")
-
-		require.Len(t, filled, 5)
-		assert.Equal(t, history.Point{Date: "2026-03-16", Value: 5}, filled[0])
-		assert.Equal(t, history.Point{Date: "2026-03-17", Value: 0}, filled[1])
-		assert.Equal(t, history.Point{Date: "2026-03-18", Value: 3}, filled[2])
-		assert.Equal(t, history.Point{Date: "2026-03-19", Value: 0}, filled[3])
-		assert.Equal(t, history.Point{Date: "2026-03-20", Value: 0}, filled[4])
-	})
-
-	t.Run("dense data untouched", func(t *testing.T) {
-		start := d(2026, 3, 16)
-		end := d(2026, 3, 18)
-
-		data := []history.Point{
-			{Date: "2026-03-16", Value: 1},
-			{Date: "2026-03-17", Value: 2},
-			{Date: "2026-03-18", Value: 3},
-		}
-
-		filled := history.FillMissingPeriods(data, start, end, "daily")
-
-		require.Len(t, filled, 3)
-		assert.Equal(t, float32(1), filled[0].Value)
-		assert.Equal(t, float32(2), filled[1].Value)
-		assert.Equal(t, float32(3), filled[2].Value)
-	})
-
-	t.Run("weekly fill", func(t *testing.T) {
-		start := d(2026, 3, 2) // Monday
-		end := d(2026, 3, 23)  // Monday
-
-		data := []history.Point{
-			{Date: "2026-03-02", Value: 10},
-		}
-
-		filled := history.FillMissingPeriods(data, start, end, "weekly")
-
-		require.Len(t, filled, 4) // Mar 2, 9, 16, 23
-		assert.Equal(t, float32(10), filled[0].Value)
-		assert.Equal(t, float32(0), filled[1].Value)
-		assert.Equal(t, float32(0), filled[2].Value)
-		assert.Equal(t, float32(0), filled[3].Value)
-	})
-}
-
 func TestParseDateRange(t *testing.T) {
 	loc := time.UTC
 

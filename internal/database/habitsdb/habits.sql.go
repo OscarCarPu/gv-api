@@ -105,22 +105,33 @@ func (q *Queries) GetHabitByID(ctx context.Context, id int32) (GetHabitByIDRow, 
 }
 
 const getHabitHistory = `-- name: GetHabitHistory :many
-SELECT
-    date_trunc($1::text, hl.log_date::timestamp)::date AS date,
+SELECT s.date::date AS date,
+    COALESCE((
+        SELECT SUM(hl.value)::REAL
+        FROM habit_logs hl
+        WHERE hl.habit_id = $1
+          AND date_trunc($2::text, hl.log_date::timestamp)::date = s.date
+    ), 0)::REAL AS value
+FROM generate_series($3::date, $4::date, ('1 ' || $2::text)::interval) AS s(date)
+WHERE $5::bool
+UNION ALL
+SELECT date_trunc($2::text, hl.log_date::timestamp)::date AS date,
     SUM(hl.value)::REAL AS value
 FROM habit_logs hl
-WHERE hl.habit_id = $2
+WHERE NOT $5::bool
+  AND hl.habit_id = $1
   AND hl.log_date >= $3::date
   AND hl.log_date <= $4::date
-GROUP BY date_trunc($1::text, hl.log_date::timestamp)
+GROUP BY date_trunc($2::text, hl.log_date::timestamp)
 ORDER BY date
 `
 
 type GetHabitHistoryParams struct {
-	Frequency string    `db:"frequency" json:"frequency"`
 	HabitID   int32     `db:"habit_id" json:"habit_id"`
+	Frequency string    `db:"frequency" json:"frequency"`
 	StartAt   time.Time `db:"start_at" json:"start_at"`
 	EndAt     time.Time `db:"end_at" json:"end_at"`
+	FillZeros bool      `db:"fill_zeros" json:"fill_zeros"`
 }
 
 type GetHabitHistoryRow struct {
@@ -128,12 +139,16 @@ type GetHabitHistoryRow struct {
 	Value float32   `db:"value" json:"value"`
 }
 
+// When @fill_zeros is true, every period in the inclusive [start_at, end_at]
+// range is returned with COALESCE(SUM, 0); otherwise only periods with logs
+// appear. Caller is responsible for snapping start/end to period boundaries.
 func (q *Queries) GetHabitHistory(ctx context.Context, arg GetHabitHistoryParams) ([]GetHabitHistoryRow, error) {
 	rows, err := q.db.Query(ctx, getHabitHistory,
-		arg.Frequency,
 		arg.HabitID,
+		arg.Frequency,
 		arg.StartAt,
 		arg.EndAt,
+		arg.FillZeros,
 	)
 	if err != nil {
 		return nil, err
@@ -154,22 +169,33 @@ func (q *Queries) GetHabitHistory(ctx context.Context, arg GetHabitHistoryParams
 }
 
 const getHabitHistoryAvg = `-- name: GetHabitHistoryAvg :many
-SELECT
-    date_trunc($1::text, hl.log_date::timestamp)::date AS date,
+SELECT s.date::date AS date,
+    COALESCE((
+        SELECT AVG(hl.value)::REAL
+        FROM habit_logs hl
+        WHERE hl.habit_id = $1
+          AND date_trunc($2::text, hl.log_date::timestamp)::date = s.date
+    ), 0)::REAL AS value
+FROM generate_series($3::date, $4::date, ('1 ' || $2::text)::interval) AS s(date)
+WHERE $5::bool
+UNION ALL
+SELECT date_trunc($2::text, hl.log_date::timestamp)::date AS date,
     AVG(hl.value)::REAL AS value
 FROM habit_logs hl
-WHERE hl.habit_id = $2
+WHERE NOT $5::bool
+  AND hl.habit_id = $1
   AND hl.log_date >= $3::date
   AND hl.log_date <= $4::date
-GROUP BY date_trunc($1::text, hl.log_date::timestamp)
+GROUP BY date_trunc($2::text, hl.log_date::timestamp)
 ORDER BY date
 `
 
 type GetHabitHistoryAvgParams struct {
-	Frequency string    `db:"frequency" json:"frequency"`
 	HabitID   int32     `db:"habit_id" json:"habit_id"`
+	Frequency string    `db:"frequency" json:"frequency"`
 	StartAt   time.Time `db:"start_at" json:"start_at"`
 	EndAt     time.Time `db:"end_at" json:"end_at"`
+	FillZeros bool      `db:"fill_zeros" json:"fill_zeros"`
 }
 
 type GetHabitHistoryAvgRow struct {
@@ -179,10 +205,11 @@ type GetHabitHistoryAvgRow struct {
 
 func (q *Queries) GetHabitHistoryAvg(ctx context.Context, arg GetHabitHistoryAvgParams) ([]GetHabitHistoryAvgRow, error) {
 	rows, err := q.db.Query(ctx, getHabitHistoryAvg,
-		arg.Frequency,
 		arg.HabitID,
+		arg.Frequency,
 		arg.StartAt,
 		arg.EndAt,
+		arg.FillZeros,
 	)
 	if err != nil {
 		return nil, err
@@ -192,33 +219,6 @@ func (q *Queries) GetHabitHistoryAvg(ctx context.Context, arg GetHabitHistoryAvg
 	for rows.Next() {
 		var i GetHabitHistoryAvgRow
 		if err := rows.Scan(&i.Date, &i.Value); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const getHabitLogs = `-- name: GetHabitLogs :many
-SELECT habit_id, log_date, value
-FROM habit_logs
-WHERE habit_id = $1
-ORDER BY log_date DESC
-`
-
-func (q *Queries) GetHabitLogs(ctx context.Context, habitID int32) ([]HabitLog, error) {
-	rows, err := q.db.Query(ctx, getHabitLogs, habitID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	items := []HabitLog{}
-	for rows.Next() {
-		var i HabitLog
-		if err := rows.Scan(&i.HabitID, &i.LogDate, &i.Value); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
@@ -304,20 +304,24 @@ func (q *Queries) GetHabitsWithLogs(ctx context.Context, targetDate time.Time) (
 	return items, nil
 }
 
-const updateHabitStreak = `-- name: UpdateHabitStreak :exec
-UPDATE habits
-SET current_streak = $2, longest_streak = $3
-WHERE id = $1
+const recalculateHabitStreak = `-- name: RecalculateHabitStreak :exec
+UPDATE habits AS h
+SET current_streak = r.current_streak, longest_streak = r.longest_streak
+FROM recalculate_habit_streak($1, $2::date) AS r
+WHERE h.id = $1
 `
 
-type UpdateHabitStreakParams struct {
-	ID            int32 `db:"id" json:"id"`
-	CurrentStreak int32 `db:"current_streak" json:"current_streak"`
-	LongestStreak int32 `db:"longest_streak" json:"longest_streak"`
+type RecalculateHabitStreakParams struct {
+	ID      int32     `db:"id" json:"id"`
+	TodayIn time.Time `db:"today_in" json:"today_in"`
 }
 
-func (q *Queries) UpdateHabitStreak(ctx context.Context, arg UpdateHabitStreakParams) error {
-	_, err := q.db.Exec(ctx, updateHabitStreak, arg.ID, arg.CurrentStreak, arg.LongestStreak)
+// Computes current_streak and longest_streak from this habit's logs (see
+// migration 012's recalculate_habit_streak function) and writes them back.
+// @today_in is the user's "today" snapped to UTC midnight (caller decides
+// the location), used to determine the current period.
+func (q *Queries) RecalculateHabitStreak(ctx context.Context, arg RecalculateHabitStreakParams) error {
+	_, err := q.db.Exec(ctx, recalculateHabitStreak, arg.ID, arg.TodayIn)
 	return err
 }
 

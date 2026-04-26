@@ -25,6 +25,25 @@ func unmarshalDepRefs(data []byte) []TaskDepRef {
 	return refs
 }
 
+func unmarshalTodos(data []byte, taskID int32) []TodoResponse {
+	if len(data) == 0 {
+		return []TodoResponse{}
+	}
+	var raw []struct {
+		ID     int32  `json:"id"`
+		Name   string `json:"name"`
+		IsDone bool   `json:"is_done"`
+	}
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return []TodoResponse{}
+	}
+	todos := make([]TodoResponse, len(raw))
+	for i, r := range raw {
+		todos[i] = TodoResponse{ID: r.ID, TaskID: taskID, Name: r.Name, IsDone: r.IsDone}
+	}
+	return todos
+}
+
 func depRefIDs(refs []TaskDepRef) []int32 {
 	ids := make([]int32, len(refs))
 	for i, r := range refs {
@@ -291,6 +310,7 @@ type UnfinishedTask struct {
 	Priority    int32
 	DependsOn   []TaskDepRef
 	Blocks      []TaskDepRef
+	Blocked     bool
 }
 
 type ActiveTreeNode struct {

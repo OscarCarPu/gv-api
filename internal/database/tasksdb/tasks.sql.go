@@ -321,16 +321,31 @@ func (q *Queries) GetActiveTimeEntry(ctx context.Context) (GetActiveTimeEntryRow
 
 const getProjectWithDescendants = `-- name: GetProjectWithDescendants :many
 WITH RECURSIVE project_tree AS (
-    SELECT p.id, p.parent_id, p.name, p.description, p.due_at, p.started_at, p.finished_at, 0 AS depth
+    SELECT p.id, p.parent_id, p.name, p.description, p.due_at, p.started_at, p.finished_at,
+        0 AS depth, ARRAY[p.id]::int[] AS path
     FROM projects p WHERE p.id = $1
     UNION ALL
-    SELECT c.id, c.parent_id, c.name, c.description, c.due_at, c.started_at, c.finished_at, pt.depth + 1
+    SELECT c.id, c.parent_id, c.name, c.description, c.due_at, c.started_at, c.finished_at,
+        pt.depth + 1, pt.path || c.id
     FROM projects c
     JOIN project_tree pt ON c.parent_id = pt.id
+),
+project_direct_time AS (
+    SELECT t.project_id, COALESCE(SUM(EXTRACT(EPOCH FROM (te.finished_at - te.started_at)))::bigint, 0)::bigint AS direct_time
+    FROM tasks t
+    LEFT JOIN time_entries te ON te.task_id = t.id AND te.finished_at IS NOT NULL
+    WHERE t.project_id IN (SELECT id FROM project_tree)
+    GROUP BY t.project_id
 )
-SELECT id, parent_id, name, description, due_at, started_at, finished_at, depth
-FROM project_tree
-ORDER BY depth, due_at ASC NULLS LAST, name
+SELECT pt.id, pt.parent_id, pt.name, pt.description, pt.due_at, pt.started_at, pt.finished_at, pt.depth,
+    COALESCE((
+        SELECT SUM(pdt.direct_time)::bigint
+        FROM project_direct_time pdt
+        JOIN project_tree d ON d.id = pdt.project_id
+        WHERE pt.id = ANY(d.path)
+    ), 0)::bigint AS time_spent
+FROM project_tree pt
+ORDER BY pt.depth, pt.due_at ASC NULLS LAST, pt.name
 `
 
 type GetProjectWithDescendantsRow struct {
@@ -342,6 +357,7 @@ type GetProjectWithDescendantsRow struct {
 	StartedAt   pgtype.Timestamptz `db:"started_at" json:"started_at"`
 	FinishedAt  pgtype.Timestamptz `db:"finished_at" json:"finished_at"`
 	Depth       int32              `db:"depth" json:"depth"`
+	TimeSpent   int64              `db:"time_spent" json:"time_spent"`
 }
 
 func (q *Queries) GetProjectWithDescendants(ctx context.Context, id int32) ([]GetProjectWithDescendantsRow, error) {
@@ -362,6 +378,7 @@ func (q *Queries) GetProjectWithDescendants(ctx context.Context, id int32) ([]Ge
 			&i.StartedAt,
 			&i.FinishedAt,
 			&i.Depth,
+			&i.TimeSpent,
 		); err != nil {
 			return nil, err
 		}
@@ -416,25 +433,17 @@ func (q *Queries) GetRootProjects(ctx context.Context) ([]GetRootProjectsRow, er
 	return items, nil
 }
 
-const getTaskByID = `-- name: GetTaskByID :many
-WITH task_info AS (
-    SELECT t.id, t.project_id, t.name, t.description, t.due_at, t.started_at, t.finished_at, t.task_type, t.recurrence, t.priority,
-        COALESCE(SUM(EXTRACT(EPOCH FROM (te.finished_at - te.started_at)))::bigint, 0)::bigint AS time_spent,
-        COALESCE((SELECT json_agg(json_build_object('id', t2.id, 'name', t2.name, 'due_at', t2.due_at) ORDER BY t2.name) FROM task_dependencies td JOIN tasks t2 ON t2.id = td.depends_on WHERE td.task_id = t.id AND t2.finished_at IS NULL), '[]')::json AS depends_on,
-        COALESCE((SELECT json_agg(json_build_object('id', t2.id, 'name', t2.name) ORDER BY t2.name) FROM task_dependencies td JOIN tasks t2 ON t2.id = td.task_id WHERE td.depends_on = t.id), '[]')::json AS blocks,
-        EXISTS(SELECT 1 FROM task_dependencies td3 JOIN tasks t3 ON t3.id = td3.depends_on WHERE td3.task_id = t.id AND t3.finished_at IS NULL) AS blocked
-    FROM tasks t
-    LEFT JOIN time_entries te ON te.task_id = t.id AND te.finished_at IS NOT NULL
-    WHERE t.id = $1
-    GROUP BY t.id
-)
-SELECT
-    ti.id, ti.project_id, ti.name, ti.description, ti.due_at, ti.started_at, ti.finished_at, ti.task_type, ti.recurrence, ti.priority,
-    ti.time_spent, ti.depends_on, ti.blocks, ti.blocked,
-    td.id AS todo_id, td.name AS todo_name, td.is_done AS todo_is_done
-FROM task_info ti
-LEFT JOIN todos td ON td.task_id = ti.id
-ORDER BY td.is_done ASC NULLS LAST, td.id
+const getTaskByID = `-- name: GetTaskByID :one
+SELECT t.id, t.project_id, t.name, t.description, t.due_at, t.started_at, t.finished_at, t.task_type, t.recurrence, t.priority,
+    COALESCE(SUM(EXTRACT(EPOCH FROM (te.finished_at - te.started_at)))::bigint, 0)::bigint AS time_spent,
+    COALESCE((SELECT json_agg(json_build_object('id', t2.id, 'name', t2.name, 'due_at', t2.due_at) ORDER BY t2.name) FROM task_dependencies td JOIN tasks t2 ON t2.id = td.depends_on WHERE td.task_id = t.id AND t2.finished_at IS NULL), '[]')::json AS depends_on,
+    COALESCE((SELECT json_agg(json_build_object('id', t2.id, 'name', t2.name) ORDER BY t2.name) FROM task_dependencies td JOIN tasks t2 ON t2.id = td.task_id WHERE td.depends_on = t.id), '[]')::json AS blocks,
+    EXISTS(SELECT 1 FROM task_dependencies td3 JOIN tasks t3 ON t3.id = td3.depends_on WHERE td3.task_id = t.id AND t3.finished_at IS NULL) AS blocked,
+    COALESCE((SELECT json_agg(json_build_object('id', td.id, 'name', td.name, 'is_done', td.is_done) ORDER BY td.is_done ASC NULLS LAST, td.id) FROM todos td WHERE td.task_id = t.id), '[]')::json AS todos
+FROM tasks t
+LEFT JOIN time_entries te ON te.task_id = t.id AND te.finished_at IS NOT NULL
+WHERE t.id = $1
+GROUP BY t.id
 `
 
 type GetTaskByIDRow struct {
@@ -452,47 +461,30 @@ type GetTaskByIDRow struct {
 	DependsOn   []byte             `db:"depends_on" json:"depends_on"`
 	Blocks      []byte             `db:"blocks" json:"blocks"`
 	Blocked     bool               `db:"blocked" json:"blocked"`
-	TodoID      *int32             `db:"todo_id" json:"todo_id"`
-	TodoName    *string            `db:"todo_name" json:"todo_name"`
-	TodoIsDone  *bool              `db:"todo_is_done" json:"todo_is_done"`
+	Todos       []byte             `db:"todos" json:"todos"`
 }
 
-func (q *Queries) GetTaskByID(ctx context.Context, id int32) ([]GetTaskByIDRow, error) {
-	rows, err := q.db.Query(ctx, getTaskByID, id)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	items := []GetTaskByIDRow{}
-	for rows.Next() {
-		var i GetTaskByIDRow
-		if err := rows.Scan(
-			&i.ID,
-			&i.ProjectID,
-			&i.Name,
-			&i.Description,
-			&i.DueAt,
-			&i.StartedAt,
-			&i.FinishedAt,
-			&i.TaskType,
-			&i.Recurrence,
-			&i.Priority,
-			&i.TimeSpent,
-			&i.DependsOn,
-			&i.Blocks,
-			&i.Blocked,
-			&i.TodoID,
-			&i.TodoName,
-			&i.TodoIsDone,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
+func (q *Queries) GetTaskByID(ctx context.Context, id int32) (GetTaskByIDRow, error) {
+	row := q.db.QueryRow(ctx, getTaskByID, id)
+	var i GetTaskByIDRow
+	err := row.Scan(
+		&i.ID,
+		&i.ProjectID,
+		&i.Name,
+		&i.Description,
+		&i.DueAt,
+		&i.StartedAt,
+		&i.FinishedAt,
+		&i.TaskType,
+		&i.Recurrence,
+		&i.Priority,
+		&i.TimeSpent,
+		&i.DependsOn,
+		&i.Blocks,
+		&i.Blocked,
+		&i.Todos,
+	)
+	return i, err
 }
 
 const getTaskDependencies = `-- name: GetTaskDependencies :one
@@ -516,25 +508,70 @@ func (q *Queries) GetTaskDependencies(ctx context.Context, taskID int32) (GetTas
 }
 
 const getTasksByDueDate = `-- name: GetTasksByDueDate :many
+WITH RECURSIVE
+unfinished AS (
+    SELECT t.id, t.due_at FROM tasks t WHERE t.finished_at IS NULL
+),
+blocks_closure(root_id, descendant_id, descendant_due) AS (
+    SELECT u.id, u.id, u.due_at FROM unfinished u
+    UNION
+    SELECT bc.root_id, td.task_id, t2.due_at
+    FROM blocks_closure bc
+    JOIN task_dependencies td ON td.depends_on = bc.descendant_id
+    JOIN tasks t2 ON t2.id = td.task_id AND t2.finished_at IS NULL
+),
+effective AS (
+    SELECT root_id AS id, MIN(descendant_due) AS effective_due_at
+    FROM blocks_closure GROUP BY root_id
+),
+task_blocked AS (
+    SELECT u.id,
+        EXISTS(SELECT 1 FROM task_dependencies td
+               JOIN tasks t2 ON t2.id = td.depends_on
+               WHERE td.task_id = u.id AND t2.finished_at IS NULL) AS blocked
+    FROM unfinished u
+),
+task_hidden AS (
+    SELECT u.id,
+        EXISTS(SELECT 1 FROM task_dependencies td
+               JOIN tasks t2 ON t2.id = td.depends_on
+               WHERE td.task_id = u.id AND t2.finished_at IS NULL)
+        AND NOT EXISTS(
+            SELECT 1 FROM task_dependencies td
+            JOIN tasks t2 ON t2.id = td.depends_on
+            JOIN task_blocked tb ON tb.id = t2.id
+            WHERE td.task_id = u.id AND t2.finished_at IS NULL AND NOT tb.blocked
+        ) AS hidden
+    FROM unfinished u
+)
 SELECT
-    t.id, t.name, t.description, t.due_at, t.started_at, t.task_type, t.recurrence, t.priority,
+    t.id, t.name, t.description,
+    e.effective_due_at AS due_at,
+    t.started_at, t.task_type, t.recurrence, t.priority,
     p.id AS project_id, p.name AS project_name, p.due_at AS project_due_at,
     COALESCE(SUM(EXTRACT(EPOCH FROM (te.finished_at - te.started_at)))::bigint, 0)::bigint AS time_spent,
     COALESCE((SELECT json_agg(json_build_object('id', t2.id, 'name', t2.name, 'due_at', t2.due_at) ORDER BY t2.name) FROM task_dependencies td JOIN tasks t2 ON t2.id = td.depends_on WHERE td.task_id = t.id AND t2.finished_at IS NULL), '[]')::json AS depends_on,
-    COALESCE((SELECT json_agg(json_build_object('id', t2.id, 'name', t2.name) ORDER BY t2.name) FROM task_dependencies td JOIN tasks t2 ON t2.id = td.task_id WHERE td.depends_on = t.id), '[]')::json AS blocks
+    COALESCE((SELECT json_agg(json_build_object('id', t2.id, 'name', t2.name) ORDER BY t2.name) FROM task_dependencies td JOIN tasks t2 ON t2.id = td.task_id WHERE td.depends_on = t.id), '[]')::json AS blocks,
+    tb.blocked
 FROM tasks t
+JOIN effective e ON e.id = t.id
+JOIN task_blocked tb ON tb.id = t.id
+JOIN task_hidden th ON th.id = t.id
 LEFT JOIN projects p ON p.id = t.project_id
 LEFT JOIN time_entries te ON te.task_id = t.id AND te.finished_at IS NOT NULL
 WHERE t.finished_at IS NULL
-GROUP BY t.id, p.id
-ORDER BY t.due_at ASC NULLS LAST, p.due_at ASC NULLS LAST, t.name
+  AND ($1::int IS NULL OR t.priority <= $1::int)
+  AND NOT th.hidden
+  AND (e.effective_due_at IS NOT NULL OR p.due_at IS NOT NULL)
+GROUP BY t.id, p.id, e.effective_due_at, tb.blocked
+ORDER BY e.effective_due_at ASC NULLS LAST, p.due_at ASC NULLS LAST, t.name
 `
 
 type GetTasksByDueDateRow struct {
 	ID           int32              `db:"id" json:"id"`
 	Name         string             `db:"name" json:"name"`
 	Description  *string            `db:"description" json:"description"`
-	DueAt        pgtype.Date        `db:"due_at" json:"due_at"`
+	DueAt        interface{}        `db:"due_at" json:"due_at"`
 	StartedAt    pgtype.Timestamptz `db:"started_at" json:"started_at"`
 	TaskType     string             `db:"task_type" json:"task_type"`
 	Recurrence   *int32             `db:"recurrence" json:"recurrence"`
@@ -545,10 +582,13 @@ type GetTasksByDueDateRow struct {
 	TimeSpent    int64              `db:"time_spent" json:"time_spent"`
 	DependsOn    []byte             `db:"depends_on" json:"depends_on"`
 	Blocks       []byte             `db:"blocks" json:"blocks"`
+	Blocked      bool               `db:"blocked" json:"blocked"`
 }
 
-func (q *Queries) GetTasksByDueDate(ctx context.Context) ([]GetTasksByDueDateRow, error) {
-	rows, err := q.db.Query(ctx, getTasksByDueDate)
+// Returns unfinished tasks that have a due_at (own or inherited from a blocked task) or whose project has one.
+// effective_due_at propagates backward via the "blocks" relation; hidden tasks are filtered out.
+func (q *Queries) GetTasksByDueDate(ctx context.Context, minPriority *int32) ([]GetTasksByDueDateRow, error) {
+	rows, err := q.db.Query(ctx, getTasksByDueDate, minPriority)
 	if err != nil {
 		return nil, err
 	}
@@ -571,6 +611,7 @@ func (q *Queries) GetTasksByDueDate(ctx context.Context) ([]GetTasksByDueDateRow
 			&i.TimeSpent,
 			&i.DependsOn,
 			&i.Blocks,
+			&i.Blocked,
 		); err != nil {
 			return nil, err
 		}
@@ -583,33 +624,25 @@ func (q *Queries) GetTasksByDueDate(ctx context.Context) ([]GetTasksByDueDateRow
 }
 
 const getTasksByProjectIDs = `-- name: GetTasksByProjectIDs :many
-WITH task_times AS (
-    SELECT
-        t.id, t.project_id, t.name, t.description, t.due_at, t.started_at, t.finished_at, t.task_type, t.recurrence, t.priority,
-        COALESCE(SUM(EXTRACT(EPOCH FROM (te.finished_at - te.started_at)))::bigint, 0)::bigint AS time_spent,
-        COALESCE((SELECT json_agg(json_build_object('id', t2.id, 'name', t2.name, 'due_at', t2.due_at) ORDER BY t2.name) FROM task_dependencies td2 JOIN tasks t2 ON t2.id = td2.depends_on WHERE td2.task_id = t.id AND t2.finished_at IS NULL), '[]')::json AS depends_on,
-        COALESCE((SELECT json_agg(json_build_object('id', t2.id, 'name', t2.name) ORDER BY t2.name) FROM task_dependencies td2 JOIN tasks t2 ON t2.id = td2.task_id WHERE td2.depends_on = t.id), '[]')::json AS blocks,
-        EXISTS(SELECT 1 FROM task_dependencies td3 JOIN tasks t3 ON t3.id = td3.depends_on WHERE td3.task_id = t.id AND t3.finished_at IS NULL) AS blocked
-    FROM tasks t
-    LEFT JOIN time_entries te ON te.task_id = t.id AND te.finished_at IS NOT NULL
-    WHERE t.project_id = ANY($1::int[])
-    GROUP BY t.id
-)
 SELECT
-    tt.id, tt.project_id, tt.name, tt.description, tt.due_at, tt.started_at, tt.finished_at, tt.task_type, tt.recurrence, tt.priority,
-    tt.time_spent, tt.depends_on, tt.blocks, tt.blocked,
-    td.id AS todo_id, td.name AS todo_name, td.is_done AS todo_is_done
-FROM task_times tt
-LEFT JOIN todos td ON td.task_id = tt.id
+    t.id, t.project_id, t.name, t.description, t.due_at, t.started_at, t.finished_at, t.task_type, t.recurrence, t.priority,
+    COALESCE(SUM(EXTRACT(EPOCH FROM (te.finished_at - te.started_at)))::bigint, 0)::bigint AS time_spent,
+    COALESCE((SELECT json_agg(json_build_object('id', t2.id, 'name', t2.name, 'due_at', t2.due_at) ORDER BY t2.name) FROM task_dependencies td2 JOIN tasks t2 ON t2.id = td2.depends_on WHERE td2.task_id = t.id AND t2.finished_at IS NULL), '[]')::json AS depends_on,
+    COALESCE((SELECT json_agg(json_build_object('id', t2.id, 'name', t2.name) ORDER BY t2.name) FROM task_dependencies td2 JOIN tasks t2 ON t2.id = td2.task_id WHERE td2.depends_on = t.id), '[]')::json AS blocks,
+    EXISTS(SELECT 1 FROM task_dependencies td3 JOIN tasks t3 ON t3.id = td3.depends_on WHERE td3.task_id = t.id AND t3.finished_at IS NULL) AS blocked,
+    COALESCE((SELECT json_agg(json_build_object('id', td.id, 'name', td.name, 'is_done', td.is_done) ORDER BY td.is_done ASC NULLS LAST, td.id) FROM todos td WHERE td.task_id = t.id), '[]')::json AS todos
+FROM tasks t
+LEFT JOIN time_entries te ON te.task_id = t.id AND te.finished_at IS NOT NULL
+WHERE t.project_id = ANY($1::int[])
+GROUP BY t.id
 ORDER BY
     CASE
-        WHEN tt.finished_at IS NOT NULL THEN 2
-        WHEN tt.started_at IS NOT NULL THEN 0
+        WHEN t.finished_at IS NOT NULL THEN 2
+        WHEN t.started_at IS NOT NULL THEN 0
         ELSE 1
     END,
-    tt.due_at ASC NULLS LAST,
-    tt.name,
-    td.is_done ASC NULLS LAST, todo_id
+    t.due_at ASC NULLS LAST,
+    t.name
 `
 
 type GetTasksByProjectIDsRow struct {
@@ -627,9 +660,7 @@ type GetTasksByProjectIDsRow struct {
 	DependsOn   []byte             `db:"depends_on" json:"depends_on"`
 	Blocks      []byte             `db:"blocks" json:"blocks"`
 	Blocked     bool               `db:"blocked" json:"blocked"`
-	TodoID      *int32             `db:"todo_id" json:"todo_id"`
-	TodoName    *string            `db:"todo_name" json:"todo_name"`
-	TodoIsDone  *bool              `db:"todo_is_done" json:"todo_is_done"`
+	Todos       []byte             `db:"todos" json:"todos"`
 }
 
 func (q *Queries) GetTasksByProjectIDs(ctx context.Context, projectIds []int32) ([]GetTasksByProjectIDsRow, error) {
@@ -656,9 +687,7 @@ func (q *Queries) GetTasksByProjectIDs(ctx context.Context, projectIds []int32) 
 			&i.DependsOn,
 			&i.Blocks,
 			&i.Blocked,
-			&i.TodoID,
-			&i.TodoName,
-			&i.TodoIsDone,
+			&i.Todos,
 		); err != nil {
 			return nil, err
 		}
@@ -826,37 +855,43 @@ func (q *Queries) GetTimeEntriesByTaskID(ctx context.Context, id int32) ([]GetTi
 }
 
 const getTimeEntryHistory = `-- name: GetTimeEntryHistory :many
-WITH entry_periods AS (
-    SELECT
-        te.started_at,
-        te.finished_at,
-        gs.period_start
+WITH all_periods AS (
+    SELECT period_start::date AS date
+    FROM generate_series($1::date, $2::date, ('1 ' || $3::text)::interval) AS period_start
+),
+entry_periods AS (
+    SELECT te.started_at, te.finished_at, gs.period_start
     FROM time_entries te,
     LATERAL generate_series(
-        date_trunc($2::text, te.started_at AT TIME ZONE $1::text),
-        date_trunc($2::text, te.finished_at AT TIME ZONE $1::text),
-        ('1 ' || $2::text)::interval
+        date_trunc($3::text, te.started_at AT TIME ZONE $4::text),
+        date_trunc($3::text, te.finished_at AT TIME ZONE $4::text),
+        ('1 ' || $3::text)::interval
     ) AS gs(period_start)
     WHERE te.finished_at IS NOT NULL
-      AND (te.started_at AT TIME ZONE $1::text)::date >= $3::date
-      AND (te.started_at AT TIME ZONE $1::text)::date <= $4::date
+      AND (te.started_at AT TIME ZONE $4::text)::date >= $1::date
+      AND (te.started_at AT TIME ZONE $4::text)::date <= $2::date
+),
+sums AS (
+    SELECT
+        ep.period_start::date AS date,
+        (SUM(EXTRACT(EPOCH FROM (
+            LEAST(ep.finished_at, (ep.period_start + ('1 ' || $3::text)::interval) AT TIME ZONE $4::text)
+            - GREATEST(ep.started_at, ep.period_start AT TIME ZONE $4::text)
+        ))) / 3600)::REAL AS value
+    FROM entry_periods ep
+    GROUP BY ep.period_start
 )
-SELECT
-    ep.period_start::date AS date,
-    (SUM(EXTRACT(EPOCH FROM (
-        LEAST(ep.finished_at, (ep.period_start + ('1 ' || $2::text)::interval) AT TIME ZONE $1::text)
-        - GREATEST(ep.started_at, ep.period_start AT TIME ZONE $1::text)
-    ))) / 3600)::REAL AS value
-FROM entry_periods ep
-GROUP BY ep.period_start
-ORDER BY date
+SELECT ap.date, COALESCE(s.value, 0)::REAL AS value
+FROM all_periods ap
+LEFT JOIN sums s ON s.date = ap.date
+ORDER BY ap.date
 `
 
 type GetTimeEntryHistoryParams struct {
-	Timezone  string    `db:"timezone" json:"timezone"`
-	Frequency string    `db:"frequency" json:"frequency"`
 	StartAt   time.Time `db:"start_at" json:"start_at"`
 	EndAt     time.Time `db:"end_at" json:"end_at"`
+	Frequency string    `db:"frequency" json:"frequency"`
+	Timezone  string    `db:"timezone" json:"timezone"`
 }
 
 type GetTimeEntryHistoryRow struct {
@@ -864,12 +899,15 @@ type GetTimeEntryHistoryRow struct {
 	Value float32   `db:"value" json:"value"`
 }
 
+// Each entry is split at period boundaries (in @timezone) and the resulting
+// segments are summed per period. Empty periods in [start_at, end_at] are
+// zero-filled via the outer LEFT JOIN against generate_series.
 func (q *Queries) GetTimeEntryHistory(ctx context.Context, arg GetTimeEntryHistoryParams) ([]GetTimeEntryHistoryRow, error) {
 	rows, err := q.db.Query(ctx, getTimeEntryHistory,
-		arg.Timezone,
-		arg.Frequency,
 		arg.StartAt,
 		arg.EndAt,
+		arg.Frequency,
+		arg.Timezone,
 	)
 	if err != nil {
 		return nil, err
@@ -917,11 +955,55 @@ func (q *Queries) GetTimeEntrySummary(ctx context.Context, arg GetTimeEntrySumma
 }
 
 const getUnfinishedTasks = `-- name: GetUnfinishedTasks :many
-SELECT t.id, t.project_id, t.name, t.description, t.due_at, t.started_at, t.task_type, t.recurrence, t.priority,
+WITH RECURSIVE
+unfinished AS (
+    SELECT t.id, t.due_at FROM tasks t WHERE t.finished_at IS NULL
+),
+blocks_closure(root_id, descendant_id, descendant_due) AS (
+    SELECT u.id, u.id, u.due_at FROM unfinished u
+    UNION
+    SELECT bc.root_id, td.task_id, t2.due_at
+    FROM blocks_closure bc
+    JOIN task_dependencies td ON td.depends_on = bc.descendant_id
+    JOIN tasks t2 ON t2.id = td.task_id AND t2.finished_at IS NULL
+),
+effective AS (
+    SELECT root_id AS id, MIN(descendant_due) AS effective_due_at
+    FROM blocks_closure GROUP BY root_id
+),
+task_blocked AS (
+    SELECT u.id,
+        EXISTS(SELECT 1 FROM task_dependencies td
+               JOIN tasks t2 ON t2.id = td.depends_on
+               WHERE td.task_id = u.id AND t2.finished_at IS NULL) AS blocked
+    FROM unfinished u
+),
+task_hidden AS (
+    SELECT u.id,
+        EXISTS(SELECT 1 FROM task_dependencies td
+               JOIN tasks t2 ON t2.id = td.depends_on
+               WHERE td.task_id = u.id AND t2.finished_at IS NULL)
+        AND NOT EXISTS(
+            SELECT 1 FROM task_dependencies td
+            JOIN tasks t2 ON t2.id = td.depends_on
+            JOIN task_blocked tb ON tb.id = t2.id
+            WHERE td.task_id = u.id AND t2.finished_at IS NULL AND NOT tb.blocked
+        ) AS hidden
+    FROM unfinished u
+)
+SELECT t.id, t.project_id, t.name, t.description,
+    e.effective_due_at AS due_at,
+    t.started_at, t.task_type, t.recurrence, t.priority,
     COALESCE((SELECT json_agg(json_build_object('id', t2.id, 'name', t2.name, 'due_at', t2.due_at) ORDER BY t2.name) FROM task_dependencies td JOIN tasks t2 ON t2.id = td.depends_on WHERE td.task_id = t.id AND t2.finished_at IS NULL), '[]')::json AS depends_on,
-    COALESCE((SELECT json_agg(json_build_object('id', t2.id, 'name', t2.name) ORDER BY t2.name) FROM task_dependencies td JOIN tasks t2 ON t2.id = td.task_id WHERE td.depends_on = t.id), '[]')::json AS blocks
+    COALESCE((SELECT json_agg(json_build_object('id', t2.id, 'name', t2.name) ORDER BY t2.name) FROM task_dependencies td JOIN tasks t2 ON t2.id = td.task_id WHERE td.depends_on = t.id), '[]')::json AS blocks,
+    tb.blocked
 FROM tasks t
+JOIN effective e ON e.id = t.id
+JOIN task_blocked tb ON tb.id = t.id
+JOIN task_hidden th ON th.id = t.id
 WHERE t.finished_at IS NULL
+  AND ($1::int IS NULL OR t.priority <= $1::int)
+  AND NOT th.hidden
 ORDER BY t.name
 `
 
@@ -930,17 +1012,20 @@ type GetUnfinishedTasksRow struct {
 	ProjectID   *int32             `db:"project_id" json:"project_id"`
 	Name        string             `db:"name" json:"name"`
 	Description *string            `db:"description" json:"description"`
-	DueAt       pgtype.Date        `db:"due_at" json:"due_at"`
+	DueAt       interface{}        `db:"due_at" json:"due_at"`
 	StartedAt   pgtype.Timestamptz `db:"started_at" json:"started_at"`
 	TaskType    string             `db:"task_type" json:"task_type"`
 	Recurrence  *int32             `db:"recurrence" json:"recurrence"`
 	Priority    int32              `db:"priority" json:"priority"`
 	DependsOn   []byte             `db:"depends_on" json:"depends_on"`
 	Blocks      []byte             `db:"blocks" json:"blocks"`
+	Blocked     bool               `db:"blocked" json:"blocked"`
 }
 
-func (q *Queries) GetUnfinishedTasks(ctx context.Context) ([]GetUnfinishedTasksRow, error) {
-	rows, err := q.db.Query(ctx, getUnfinishedTasks)
+// effective_due_at = MIN(self.due_at, due_at of every transitive blocks-descendant).
+// A task is "hidden" iff it has at least one unfinished dep AND every unfinished dep is itself blocked.
+func (q *Queries) GetUnfinishedTasks(ctx context.Context, minPriority *int32) ([]GetUnfinishedTasksRow, error) {
+	rows, err := q.db.Query(ctx, getUnfinishedTasks, minPriority)
 	if err != nil {
 		return nil, err
 	}
@@ -960,6 +1045,7 @@ func (q *Queries) GetUnfinishedTasks(ctx context.Context) ([]GetUnfinishedTasksR
 			&i.Priority,
 			&i.DependsOn,
 			&i.Blocks,
+			&i.Blocked,
 		); err != nil {
 			return nil, err
 		}

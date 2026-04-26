@@ -13,11 +13,17 @@ type Querier interface {
 	CreateHabit(ctx context.Context, arg CreateHabitParams) (CreateHabitRow, error)
 	DeleteHabit(ctx context.Context, id int32) error
 	GetHabitByID(ctx context.Context, id int32) (GetHabitByIDRow, error)
+	// When @fill_zeros is true, every period in the inclusive [start_at, end_at]
+	// range is returned with COALESCE(SUM, 0); otherwise only periods with logs
+	// appear. Caller is responsible for snapping start/end to period boundaries.
 	GetHabitHistory(ctx context.Context, arg GetHabitHistoryParams) ([]GetHabitHistoryRow, error)
 	GetHabitHistoryAvg(ctx context.Context, arg GetHabitHistoryAvgParams) ([]GetHabitHistoryAvgRow, error)
-	GetHabitLogs(ctx context.Context, habitID int32) ([]HabitLog, error)
 	GetHabitsWithLogs(ctx context.Context, targetDate time.Time) ([]GetHabitsWithLogsRow, error)
-	UpdateHabitStreak(ctx context.Context, arg UpdateHabitStreakParams) error
+	// Computes current_streak and longest_streak from this habit's logs (see
+	// migration 012's recalculate_habit_streak function) and writes them back.
+	// @today_in is the user's "today" snapped to UTC midnight (caller decides
+	// the location), used to determine the current period.
+	RecalculateHabitStreak(ctx context.Context, arg RecalculateHabitStreakParams) error
 	UpsertLog(ctx context.Context, arg UpsertLogParams) error
 }
 

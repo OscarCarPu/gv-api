@@ -24,15 +24,22 @@ type Querier interface {
 	GetActiveTimeEntry(ctx context.Context) (GetActiveTimeEntryRow, error)
 	GetProjectWithDescendants(ctx context.Context, id int32) ([]GetProjectWithDescendantsRow, error)
 	GetRootProjects(ctx context.Context) ([]GetRootProjectsRow, error)
-	GetTaskByID(ctx context.Context, id int32) ([]GetTaskByIDRow, error)
+	GetTaskByID(ctx context.Context, id int32) (GetTaskByIDRow, error)
 	GetTaskDependencies(ctx context.Context, taskID int32) (GetTaskDependenciesRow, error)
-	GetTasksByDueDate(ctx context.Context) ([]GetTasksByDueDateRow, error)
+	// Returns unfinished tasks that have a due_at (own or inherited from a blocked task) or whose project has one.
+	// effective_due_at propagates backward via the "blocks" relation; hidden tasks are filtered out.
+	GetTasksByDueDate(ctx context.Context, minPriority *int32) ([]GetTasksByDueDateRow, error)
 	GetTasksByProjectIDs(ctx context.Context, projectIds []int32) ([]GetTasksByProjectIDsRow, error)
 	GetTimeEntriesByDateRange(ctx context.Context, arg GetTimeEntriesByDateRangeParams) ([]GetTimeEntriesByDateRangeRow, error)
 	GetTimeEntriesByTaskID(ctx context.Context, id int32) ([]GetTimeEntriesByTaskIDRow, error)
+	// Each entry is split at period boundaries (in @timezone) and the resulting
+	// segments are summed per period. Empty periods in [start_at, end_at] are
+	// zero-filled via the outer LEFT JOIN against generate_series.
 	GetTimeEntryHistory(ctx context.Context, arg GetTimeEntryHistoryParams) ([]GetTimeEntryHistoryRow, error)
 	GetTimeEntrySummary(ctx context.Context, arg GetTimeEntrySummaryParams) (GetTimeEntrySummaryRow, error)
-	GetUnfinishedTasks(ctx context.Context) ([]GetUnfinishedTasksRow, error)
+	// effective_due_at = MIN(self.due_at, due_at of every transitive blocks-descendant).
+	// A task is "hidden" iff it has at least one unfinished dep AND every unfinished dep is itself blocked.
+	GetUnfinishedTasks(ctx context.Context, minPriority *int32) ([]GetUnfinishedTasksRow, error)
 	ListProjectsFast(ctx context.Context) ([]ListProjectsFastRow, error)
 	ListTasksFast(ctx context.Context) ([]ListTasksFastRow, error)
 	// Wraps the task_dependency_would_cycle SQL function (see migration 011).

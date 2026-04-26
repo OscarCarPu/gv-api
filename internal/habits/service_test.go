@@ -41,181 +41,43 @@ func ceilToFirstOfMonth(d time.Time) time.Time {
 	return time.Date(d.Year(), d.Month()+1, 1, 0, 0, 0, 0, d.Location())
 }
 
-// --- LogHabit + streak recalculation ---
+// --- LogHabit ---
 
-func TestService_LogHabit_RecalculatesStreak_Daily(t *testing.T) {
+func TestService_LogHabit_HasTargets_CallsRecalculateStreak(t *testing.T) {
 	repo := mocks.NewMockRepository(t)
 	svc := habits.NewService(repo, time.UTC)
-	ctx := context.Background()
 
-	now := time.Now().In(time.UTC)
-	today := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC)
-	yesterday := today.AddDate(0, 0, -1)
-	twoDaysAgo := today.AddDate(0, 0, -2)
-	fourDaysAgo := today.AddDate(0, 0, -4)
-
-	// 3 consecutive days meeting target_min=1, then a gap, then an older day
 	repo.EXPECT().UpsertLog(mock.Anything, int32(1), mock.Anything, float32(1)).Return(nil)
 	repo.EXPECT().GetHabitByID(mock.Anything, int32(1)).Return(habitsdb.GetHabitByIDRow{
-		ID: 1, Frequency: "daily", TargetMin: ptr(float32(1)), RecordingRequired: true, LongestStreak: 5,
+		ID: 1, Frequency: "daily", TargetMin: ptr(float32(1)), RecordingRequired: true,
 	}, nil)
-	repo.EXPECT().GetHabitLogs(mock.Anything, int32(1)).Return([]habitsdb.HabitLog{
-		{HabitID: 1, LogDate: today, Value: 1},
-		{HabitID: 1, LogDate: yesterday, Value: 1},
-		{HabitID: 1, LogDate: twoDaysAgo, Value: 1},
-		// gap on 3 days ago
-		{HabitID: 1, LogDate: fourDaysAgo, Value: 1},
-	}, nil)
-	// Current streak=3 (today + 2 previous), longest recalculated from all periods=3
-	repo.EXPECT().UpdateHabitStreak(mock.Anything, int32(1), int32(3), int32(3)).Return(nil)
+	repo.EXPECT().RecalculateStreak(mock.Anything, int32(1), mock.Anything).Return(nil)
 
-	err := svc.LogHabit(ctx, habits.LogUpsertRequest{HabitID: 1, Date: today.Format("2006-01-02"), Value: 1})
-	require.NoError(t, err)
-}
-
-func TestService_LogHabit_CurrentPeriodNotMet_SkipsWithoutBreaking(t *testing.T) {
-	repo := mocks.NewMockRepository(t)
-	loc := time.FixedZone("UTC", 0)
-	svc := habits.NewService(repo, loc)
-	ctx := context.Background()
-
-	today := time.Now().In(loc)
-	todayDate := time.Date(today.Year(), today.Month(), today.Day(), 0, 0, 0, 0, time.UTC)
-	yesterday := todayDate.AddDate(0, 0, -1)
-	twoDaysAgo := todayDate.AddDate(0, 0, -2)
-
-	repo.EXPECT().UpsertLog(mock.Anything, int32(1), mock.Anything, float32(0.5)).Return(nil)
-	repo.EXPECT().GetHabitByID(mock.Anything, int32(1)).Return(habitsdb.GetHabitByIDRow{
-		ID: 1, Frequency: "daily", TargetMin: ptr(float32(1)), RecordingRequired: true, LongestStreak: 0,
-	}, nil)
-	// Today has 0.5 (below target of 1), but yesterday and day before met it
-	repo.EXPECT().GetHabitLogs(mock.Anything, int32(1)).Return([]habitsdb.HabitLog{
-		{HabitID: 1, LogDate: todayDate, Value: 0.5},
-		{HabitID: 1, LogDate: yesterday, Value: 1},
-		{HabitID: 1, LogDate: twoDaysAgo, Value: 1.5},
-	}, nil)
-	// Current period (today) not met -> skip it, streak = 2 from yesterday+day before
-	repo.EXPECT().UpdateHabitStreak(mock.Anything, int32(1), int32(2), int32(2)).Return(nil)
-
-	err := svc.LogHabit(ctx, habits.LogUpsertRequest{HabitID: 1, Date: todayDate.Format("2006-01-02"), Value: 0.5})
+	err := svc.LogHabit(context.Background(), habits.LogUpsertRequest{HabitID: 1, Date: "2026-03-17", Value: 1})
 	require.NoError(t, err)
 }
 
 func TestService_LogHabit_NoTargets_SkipsStreak(t *testing.T) {
 	repo := mocks.NewMockRepository(t)
 	svc := habits.NewService(repo, time.UTC)
-	ctx := context.Background()
 
 	repo.EXPECT().UpsertLog(mock.Anything, int32(1), mock.Anything, float32(1)).Return(nil)
 	repo.EXPECT().GetHabitByID(mock.Anything, int32(1)).Return(habitsdb.GetHabitByIDRow{
-		ID: 1, Frequency: "daily", TargetMin: nil, TargetMax: nil, RecordingRequired: true, LongestStreak: 0,
+		ID: 1, Frequency: "daily", TargetMin: nil, TargetMax: nil, RecordingRequired: true,
 	}, nil)
-	// Should NOT call GetHabitLogs or UpdateHabitStreak
+	// RecalculateStreak should NOT be called
 
-	err := svc.LogHabit(ctx, habits.LogUpsertRequest{HabitID: 1, Date: "2026-03-17", Value: 1})
-	require.NoError(t, err)
-}
-
-func TestService_LogHabit_WeeklyStreak(t *testing.T) {
-	repo := mocks.NewMockRepository(t)
-	loc := time.FixedZone("UTC", 0)
-	svc := habits.NewService(repo, loc)
-	ctx := context.Background()
-
-	today := time.Now().In(loc)
-	todayDate := time.Date(today.Year(), today.Month(), today.Day(), 0, 0, 0, 0, time.UTC)
-
-	// Find current week's Monday
-	weekday := todayDate.Weekday()
-	offset := (int(weekday) - int(time.Monday) + 7) % 7
-	thisMonday := todayDate.AddDate(0, 0, -offset)
-	lastMonday := thisMonday.AddDate(0, 0, -7)
-	twoWeeksAgoMonday := thisMonday.AddDate(0, 0, -14)
-
-	repo.EXPECT().UpsertLog(mock.Anything, int32(2), mock.Anything, float32(1)).Return(nil)
-	repo.EXPECT().GetHabitByID(mock.Anything, int32(2)).Return(habitsdb.GetHabitByIDRow{
-		ID: 2, Frequency: "weekly", TargetMin: ptr(float32(3)), RecordingRequired: true, LongestStreak: 0,
-	}, nil)
-	repo.EXPECT().GetHabitLogs(mock.Anything, int32(2)).Return([]habitsdb.HabitLog{
-		// This week: 2 sessions (not yet meeting 3)
-		{HabitID: 2, LogDate: thisMonday, Value: 1},
-		{HabitID: 2, LogDate: thisMonday.AddDate(0, 0, 2), Value: 1},
-		// Last week: 4 sessions (meets 3)
-		{HabitID: 2, LogDate: lastMonday, Value: 1},
-		{HabitID: 2, LogDate: lastMonday.AddDate(0, 0, 1), Value: 1},
-		{HabitID: 2, LogDate: lastMonday.AddDate(0, 0, 3), Value: 1},
-		{HabitID: 2, LogDate: lastMonday.AddDate(0, 0, 5), Value: 1},
-		// Two weeks ago: 3 sessions (meets 3)
-		{HabitID: 2, LogDate: twoWeeksAgoMonday, Value: 1},
-		{HabitID: 2, LogDate: twoWeeksAgoMonday.AddDate(0, 0, 2), Value: 1},
-		{HabitID: 2, LogDate: twoWeeksAgoMonday.AddDate(0, 0, 4), Value: 1},
-	}, nil)
-	// This week not met -> skip. Last 2 weeks met -> streak=2
-	repo.EXPECT().UpdateHabitStreak(mock.Anything, int32(2), int32(2), int32(2)).Return(nil)
-
-	err := svc.LogHabit(ctx, habits.LogUpsertRequest{HabitID: 2, Date: todayDate.Format("2006-01-02"), Value: 1})
-	require.NoError(t, err)
-}
-
-func TestService_LogHabit_LongestStreakUpdated(t *testing.T) {
-	repo := mocks.NewMockRepository(t)
-	loc := time.FixedZone("UTC", 0)
-	svc := habits.NewService(repo, loc)
-	ctx := context.Background()
-
-	today := time.Now().In(loc)
-	todayDate := time.Date(today.Year(), today.Month(), today.Day(), 0, 0, 0, 0, time.UTC)
-
-	repo.EXPECT().UpsertLog(mock.Anything, int32(1), mock.Anything, float32(1)).Return(nil)
-	repo.EXPECT().GetHabitByID(mock.Anything, int32(1)).Return(habitsdb.GetHabitByIDRow{
-		ID: 1, Frequency: "daily", TargetMin: ptr(float32(1)), RecordingRequired: true, LongestStreak: 2,
-	}, nil)
-	repo.EXPECT().GetHabitLogs(mock.Anything, int32(1)).Return([]habitsdb.HabitLog{
-		{HabitID: 1, LogDate: todayDate, Value: 1},
-		{HabitID: 1, LogDate: todayDate.AddDate(0, 0, -1), Value: 1},
-		{HabitID: 1, LogDate: todayDate.AddDate(0, 0, -2), Value: 1},
-	}, nil)
-	// Current streak=3 exceeds longest=2, so longest should update to 3
-	repo.EXPECT().UpdateHabitStreak(mock.Anything, int32(1), int32(3), int32(3)).Return(nil)
-
-	err := svc.LogHabit(ctx, habits.LogUpsertRequest{HabitID: 1, Date: todayDate.Format("2006-01-02"), Value: 1})
-	require.NoError(t, err)
-}
-
-func TestService_LogHabit_BrokenStreak_ResetToZero(t *testing.T) {
-	repo := mocks.NewMockRepository(t)
-	loc := time.FixedZone("UTC", 0)
-	svc := habits.NewService(repo, loc)
-	ctx := context.Background()
-
-	today := time.Now().In(loc)
-	todayDate := time.Date(today.Year(), today.Month(), today.Day(), 0, 0, 0, 0, time.UTC)
-
-	repo.EXPECT().UpsertLog(mock.Anything, int32(1), mock.Anything, float32(0.5)).Return(nil)
-	repo.EXPECT().GetHabitByID(mock.Anything, int32(1)).Return(habitsdb.GetHabitByIDRow{
-		ID: 1, Frequency: "daily", TargetMin: ptr(float32(1)), RecordingRequired: true, LongestStreak: 5,
-	}, nil)
-	// Today not met, yesterday not met either -> streak=0
-	repo.EXPECT().GetHabitLogs(mock.Anything, int32(1)).Return([]habitsdb.HabitLog{
-		{HabitID: 1, LogDate: todayDate, Value: 0.5},
-		// gap yesterday
-		{HabitID: 1, LogDate: todayDate.AddDate(0, 0, -2), Value: 1},
-	}, nil)
-	// Streak=0, longest recalculated from all periods=1 (only one day meets target)
-	repo.EXPECT().UpdateHabitStreak(mock.Anything, int32(1), int32(0), int32(1)).Return(nil)
-
-	err := svc.LogHabit(ctx, habits.LogUpsertRequest{HabitID: 1, Date: todayDate.Format("2006-01-02"), Value: 0.5})
+	err := svc.LogHabit(context.Background(), habits.LogUpsertRequest{HabitID: 1, Date: "2026-03-17", Value: 1})
 	require.NoError(t, err)
 }
 
 func TestService_LogHabit_UpsertError_Propagates(t *testing.T) {
 	repo := mocks.NewMockRepository(t)
 	svc := habits.NewService(repo, time.UTC)
-	ctx := context.Background()
 
 	repo.EXPECT().UpsertLog(mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(errors.New("db error"))
 
-	err := svc.LogHabit(ctx, habits.LogUpsertRequest{HabitID: 1, Date: "2026-03-17", Value: 1})
+	err := svc.LogHabit(context.Background(), habits.LogUpsertRequest{HabitID: 1, Date: "2026-03-17", Value: 1})
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "db error")
 }
@@ -223,120 +85,9 @@ func TestService_LogHabit_UpsertError_Propagates(t *testing.T) {
 func TestService_LogHabit_InvalidDate_ReturnsError(t *testing.T) {
 	repo := mocks.NewMockRepository(t)
 	svc := habits.NewService(repo, time.UTC)
-	ctx := context.Background()
 
-	err := svc.LogHabit(ctx, habits.LogUpsertRequest{HabitID: 1, Date: "not-a-date", Value: 1})
+	err := svc.LogHabit(context.Background(), habits.LogUpsertRequest{HabitID: 1, Date: "not-a-date", Value: 1})
 	assert.Error(t, err)
-}
-
-// --- Range target (target_max only) ---
-
-func TestService_LogHabit_MaxOnlyTarget(t *testing.T) {
-	repo := mocks.NewMockRepository(t)
-	loc := time.FixedZone("UTC", 0)
-	svc := habits.NewService(repo, loc)
-	ctx := context.Background()
-
-	today := time.Now().In(loc)
-	todayDate := time.Date(today.Year(), today.Month(), today.Day(), 0, 0, 0, 0, time.UTC)
-
-	repo.EXPECT().UpsertLog(mock.Anything, int32(1), mock.Anything, float32(5)).Return(nil)
-	repo.EXPECT().GetHabitByID(mock.Anything, int32(1)).Return(habitsdb.GetHabitByIDRow{
-		ID: 1, Frequency: "daily", TargetMax: ptr(float32(8)), RecordingRequired: true,
-	}, nil)
-	repo.EXPECT().GetHabitLogs(mock.Anything, int32(1)).Return([]habitsdb.HabitLog{
-		{HabitID: 1, LogDate: todayDate, Value: 5},
-		{HabitID: 1, LogDate: todayDate.AddDate(0, 0, -1), Value: 7},
-		{HabitID: 1, LogDate: todayDate.AddDate(0, 0, -2), Value: 6},
-	}, nil)
-	// All 3 days <= 8, streak=3
-	repo.EXPECT().UpdateHabitStreak(mock.Anything, int32(1), int32(3), int32(3)).Return(nil)
-
-	err := svc.LogHabit(ctx, habits.LogUpsertRequest{HabitID: 1, Date: todayDate.Format("2006-01-02"), Value: 5})
-	require.NoError(t, err)
-}
-
-// --- Range target (both min and max) ---
-
-func TestService_LogHabit_RangeTarget(t *testing.T) {
-	repo := mocks.NewMockRepository(t)
-	loc := time.FixedZone("UTC", 0)
-	svc := habits.NewService(repo, loc)
-	ctx := context.Background()
-
-	today := time.Now().In(loc)
-	todayDate := time.Date(today.Year(), today.Month(), today.Day(), 0, 0, 0, 0, time.UTC)
-
-	repo.EXPECT().UpsertLog(mock.Anything, int32(1), mock.Anything, float32(70)).Return(nil)
-	repo.EXPECT().GetHabitByID(mock.Anything, int32(1)).Return(habitsdb.GetHabitByIDRow{
-		ID: 1, Frequency: "daily", TargetMin: ptr(float32(60)), TargetMax: ptr(float32(80)), RecordingRequired: true,
-	}, nil)
-	repo.EXPECT().GetHabitLogs(mock.Anything, int32(1)).Return([]habitsdb.HabitLog{
-		{HabitID: 1, LogDate: todayDate, Value: 70},
-		{HabitID: 1, LogDate: todayDate.AddDate(0, 0, -1), Value: 65},
-		// day -2: value 90 exceeds max
-		{HabitID: 1, LogDate: todayDate.AddDate(0, 0, -2), Value: 90},
-	}, nil)
-	// Today and yesterday in range -> streak=2, longest=2
-	repo.EXPECT().UpdateHabitStreak(mock.Anything, int32(1), int32(2), int32(2)).Return(nil)
-
-	err := svc.LogHabit(ctx, habits.LogUpsertRequest{HabitID: 1, Date: todayDate.Format("2006-01-02"), Value: 70})
-	require.NoError(t, err)
-}
-
-// --- recording_required=false carry-forward ---
-
-func TestService_LogHabit_RecordingNotRequired_CarryForward(t *testing.T) {
-	repo := mocks.NewMockRepository(t)
-	loc := time.FixedZone("UTC", 0)
-	svc := habits.NewService(repo, loc)
-	ctx := context.Background()
-
-	today := time.Now().In(loc)
-	todayDate := time.Date(today.Year(), today.Month(), today.Day(), 0, 0, 0, 0, time.UTC)
-
-	repo.EXPECT().UpsertLog(mock.Anything, int32(1), mock.Anything, float32(1)).Return(nil)
-	repo.EXPECT().GetHabitByID(mock.Anything, int32(1)).Return(habitsdb.GetHabitByIDRow{
-		ID: 1, Frequency: "daily", TargetMin: ptr(float32(1)), RecordingRequired: false,
-	}, nil)
-	// Logs: day-3=1, day-2=missing, day-1=missing, today=1
-	// With carry-forward: day-3=1, day-2=1(carried), day-1=1(carried), today=1
-	// All meet target -> streak=4
-	repo.EXPECT().GetHabitLogs(mock.Anything, int32(1)).Return([]habitsdb.HabitLog{
-		{HabitID: 1, LogDate: todayDate, Value: 1},
-		{HabitID: 1, LogDate: todayDate.AddDate(0, 0, -3), Value: 1},
-	}, nil)
-	repo.EXPECT().UpdateHabitStreak(mock.Anything, int32(1), int32(4), int32(4)).Return(nil)
-
-	err := svc.LogHabit(ctx, habits.LogUpsertRequest{HabitID: 1, Date: todayDate.Format("2006-01-02"), Value: 1})
-	require.NoError(t, err)
-}
-
-func TestService_LogHabit_RecordingNotRequired_CarryForwardBreaks(t *testing.T) {
-	repo := mocks.NewMockRepository(t)
-	loc := time.FixedZone("UTC", 0)
-	svc := habits.NewService(repo, loc)
-	ctx := context.Background()
-
-	today := time.Now().In(loc)
-	todayDate := time.Date(today.Year(), today.Month(), today.Day(), 0, 0, 0, 0, time.UTC)
-
-	repo.EXPECT().UpsertLog(mock.Anything, int32(1), mock.Anything, float32(0)).Return(nil)
-	repo.EXPECT().GetHabitByID(mock.Anything, int32(1)).Return(habitsdb.GetHabitByIDRow{
-		ID: 1, Frequency: "daily", TargetMin: ptr(float32(1)), RecordingRequired: false,
-	}, nil)
-	// Logs: day-3=1, day-2=1, day-1=0, today=missing(carried 0)
-	// day-1 and today don't meet target -> streak=0 (today skipped as current, day-1 breaks)
-	// longest=2 (day-3, day-2)
-	repo.EXPECT().GetHabitLogs(mock.Anything, int32(1)).Return([]habitsdb.HabitLog{
-		{HabitID: 1, LogDate: todayDate.AddDate(0, 0, -1), Value: 0},
-		{HabitID: 1, LogDate: todayDate.AddDate(0, 0, -2), Value: 1},
-		{HabitID: 1, LogDate: todayDate.AddDate(0, 0, -3), Value: 1},
-	}, nil)
-	repo.EXPECT().UpdateHabitStreak(mock.Anything, int32(1), int32(0), int32(2)).Return(nil)
-
-	err := svc.LogHabit(ctx, habits.LogUpsertRequest{HabitID: 1, Date: todayDate.Format("2006-01-02"), Value: 0})
-	require.NoError(t, err)
 }
 
 // --- CreateHabit ---
@@ -427,7 +178,7 @@ func TestService_GetHistory_DefaultFrequencyFromHabit(t *testing.T) {
 	repo.EXPECT().GetHabitByID(mock.Anything, int32(1)).Return(habitsdb.GetHabitByIDRow{
 		ID: 1, Frequency: "weekly", RecordingRequired: false,
 	}, nil)
-	repo.EXPECT().GetHabitHistory(mock.Anything, int32(1), "week", mock.Anything, mock.Anything).
+	repo.EXPECT().GetHabitHistory(mock.Anything, int32(1), "week", mock.Anything, mock.Anything, mock.Anything).
 		Return([]habits.HistoryPoint{{Date: "2026-03-10", Value: 5}}, nil)
 
 	result, err := svc.GetHistory(ctx, 1, "", "2026-03-01", "2026-03-19")
@@ -447,7 +198,7 @@ func TestService_GetHistory_ExplicitFrequency(t *testing.T) {
 	repo.EXPECT().GetHabitByID(mock.Anything, int32(1)).Return(habitsdb.GetHabitByIDRow{
 		ID: 1, Frequency: "weekly", RecordingRequired: false,
 	}, nil)
-	repo.EXPECT().GetHabitHistory(mock.Anything, int32(1), "day", mock.Anything, mock.Anything).
+	repo.EXPECT().GetHabitHistory(mock.Anything, int32(1), "day", mock.Anything, mock.Anything, mock.Anything).
 		Return([]habits.HistoryPoint{}, nil)
 
 	result, err := svc.GetHistory(ctx, 1, "daily", "2026-03-01", "2026-03-19")
@@ -472,6 +223,7 @@ func TestService_GetHistory_DefaultDates_Daily(t *testing.T) {
 	repo.EXPECT().GetHabitHistory(mock.Anything, int32(1), "day",
 		mock.MatchedBy(func(t time.Time) bool { return t.Equal(oneMonthAgo) }),
 		mock.MatchedBy(func(t time.Time) bool { return t.Equal(today) }),
+		mock.Anything,
 	).Return([]habits.HistoryPoint{}, nil)
 
 	result, err := svc.GetHistory(ctx, 1, "daily", "", "")
@@ -499,6 +251,7 @@ func TestService_GetHistory_DefaultDates_Weekly(t *testing.T) {
 	repo.EXPECT().GetHabitHistory(mock.Anything, int32(1), "week",
 		mock.MatchedBy(func(t time.Time) bool { return t.Equal(mondayOfStart) }),
 		mock.MatchedBy(func(t time.Time) bool { return t.Equal(mondayOfEnd) }),
+		mock.Anything,
 	).Return([]habits.HistoryPoint{}, nil)
 
 	result, err := svc.GetHistory(ctx, 1, "weekly", "", "")
@@ -526,6 +279,7 @@ func TestService_GetHistory_DefaultDates_Monthly(t *testing.T) {
 	repo.EXPECT().GetHabitHistory(mock.Anything, int32(1), "month",
 		mock.MatchedBy(func(t time.Time) bool { return t.Equal(firstOfStartMonth) }),
 		mock.MatchedBy(func(t time.Time) bool { return t.Equal(firstOfEndMonth) }),
+		mock.Anything,
 	).Return([]habits.HistoryPoint{}, nil)
 
 	result, err := svc.GetHistory(ctx, 1, "monthly", "", "")
@@ -534,96 +288,34 @@ func TestService_GetHistory_DefaultDates_Monthly(t *testing.T) {
 	assert.Equal(t, firstOfEndMonth.Format("2006-01-02"), result.EndAt)
 }
 
-func TestService_GetHistory_RecordingRequired_FillsZeros_Daily(t *testing.T) {
-	repo := mocks.NewMockRepository(t)
-	svc := habits.NewService(repo, time.UTC)
-	ctx := context.Background()
+func TestService_GetHistory_ForwardsRecordingRequiredAsFillZeros(t *testing.T) {
+	t.Run("recording_required=true forwards fill_zeros=true", func(t *testing.T) {
+		repo := mocks.NewMockRepository(t)
+		svc := habits.NewService(repo, time.UTC)
 
-	repo.EXPECT().GetHabitByID(mock.Anything, int32(1)).Return(habitsdb.GetHabitByIDRow{
-		ID: 1, Frequency: "daily", RecordingRequired: true,
-	}, nil)
-	// Only 2 of the 4 days have data
-	repo.EXPECT().GetHabitHistory(mock.Anything, int32(1), "day", mock.Anything, mock.Anything).
-		Return([]habits.HistoryPoint{
-			{Date: "2026-03-01", Value: 5},
-			{Date: "2026-03-03", Value: 3},
+		repo.EXPECT().GetHabitByID(mock.Anything, int32(1)).Return(habitsdb.GetHabitByIDRow{
+			ID: 1, Frequency: "daily", RecordingRequired: true,
 		}, nil)
+		repo.EXPECT().GetHabitHistory(mock.Anything, int32(1), "day", mock.Anything, mock.Anything, true).
+			Return([]habits.HistoryPoint{}, nil)
 
-	result, err := svc.GetHistory(ctx, 1, "daily", "2026-03-01", "2026-03-04")
-	require.NoError(t, err)
-	require.Len(t, result.Data, 4)
-	assert.Equal(t, habits.HistoryPoint{Date: "2026-03-01", Value: 5}, result.Data[0])
-	assert.Equal(t, habits.HistoryPoint{Date: "2026-03-02", Value: 0}, result.Data[1])
-	assert.Equal(t, habits.HistoryPoint{Date: "2026-03-03", Value: 3}, result.Data[2])
-	assert.Equal(t, habits.HistoryPoint{Date: "2026-03-04", Value: 0}, result.Data[3])
-}
+		_, err := svc.GetHistory(context.Background(), 1, "daily", "2026-03-01", "2026-03-04")
+		require.NoError(t, err)
+	})
 
-func TestService_GetHistory_RecordingRequired_FillsZeros_Weekly(t *testing.T) {
-	repo := mocks.NewMockRepository(t)
-	svc := habits.NewService(repo, time.UTC)
-	ctx := context.Background()
+	t.Run("recording_required=false forwards fill_zeros=false", func(t *testing.T) {
+		repo := mocks.NewMockRepository(t)
+		svc := habits.NewService(repo, time.UTC)
 
-	repo.EXPECT().GetHabitByID(mock.Anything, int32(1)).Return(habitsdb.GetHabitByIDRow{
-		ID: 1, Frequency: "weekly", RecordingRequired: true,
-	}, nil)
-	// 2026-03-02 is a Monday, 2026-03-16 is a Monday — 3 weeks
-	// Only week 1 and 3 have data
-	repo.EXPECT().GetHabitHistory(mock.Anything, int32(1), "week", mock.Anything, mock.Anything).
-		Return([]habits.HistoryPoint{
-			{Date: "2026-03-02", Value: 10},
-			{Date: "2026-03-16", Value: 7},
+		repo.EXPECT().GetHabitByID(mock.Anything, int32(1)).Return(habitsdb.GetHabitByIDRow{
+			ID: 1, Frequency: "daily", RecordingRequired: false,
 		}, nil)
+		repo.EXPECT().GetHabitHistory(mock.Anything, int32(1), "day", mock.Anything, mock.Anything, false).
+			Return([]habits.HistoryPoint{}, nil)
 
-	result, err := svc.GetHistory(ctx, 1, "weekly", "2026-03-02", "2026-03-16")
-	require.NoError(t, err)
-	require.Len(t, result.Data, 3)
-	assert.Equal(t, habits.HistoryPoint{Date: "2026-03-02", Value: 10}, result.Data[0])
-	assert.Equal(t, habits.HistoryPoint{Date: "2026-03-09", Value: 0}, result.Data[1])
-	assert.Equal(t, habits.HistoryPoint{Date: "2026-03-16", Value: 7}, result.Data[2])
-}
-
-func TestService_GetHistory_RecordingRequired_FillsZeros_Monthly(t *testing.T) {
-	repo := mocks.NewMockRepository(t)
-	svc := habits.NewService(repo, time.UTC)
-	ctx := context.Background()
-
-	repo.EXPECT().GetHabitByID(mock.Anything, int32(1)).Return(habitsdb.GetHabitByIDRow{
-		ID: 1, Frequency: "monthly", RecordingRequired: true,
-	}, nil)
-	// Jan 15 floors to Jan 1, Mar 19 ceils to Apr 1 — only Jan and Mar have data
-	repo.EXPECT().GetHabitHistory(mock.Anything, int32(1), "month", mock.Anything, mock.Anything).
-		Return([]habits.HistoryPoint{
-			{Date: "2026-01-01", Value: 55},
-			{Date: "2026-03-01", Value: 42},
-		}, nil)
-
-	result, err := svc.GetHistory(ctx, 1, "monthly", "2026-01-15", "2026-03-19")
-	require.NoError(t, err)
-	require.Len(t, result.Data, 4)
-	assert.Equal(t, habits.HistoryPoint{Date: "2026-01-01", Value: 55}, result.Data[0])
-	assert.Equal(t, habits.HistoryPoint{Date: "2026-02-01", Value: 0}, result.Data[1])
-	assert.Equal(t, habits.HistoryPoint{Date: "2026-03-01", Value: 42}, result.Data[2])
-	assert.Equal(t, habits.HistoryPoint{Date: "2026-04-01", Value: 0}, result.Data[3])
-}
-
-func TestService_GetHistory_RecordingNotRequired_NoZeroFill(t *testing.T) {
-	repo := mocks.NewMockRepository(t)
-	svc := habits.NewService(repo, time.UTC)
-	ctx := context.Background()
-
-	repo.EXPECT().GetHabitByID(mock.Anything, int32(1)).Return(habitsdb.GetHabitByIDRow{
-		ID: 1, Frequency: "daily", RecordingRequired: false,
-	}, nil)
-	repo.EXPECT().GetHabitHistory(mock.Anything, int32(1), "day", mock.Anything, mock.Anything).
-		Return([]habits.HistoryPoint{
-			{Date: "2026-03-01", Value: 70.5},
-			{Date: "2026-03-03", Value: 71.0},
-		}, nil)
-
-	result, err := svc.GetHistory(ctx, 1, "daily", "2026-03-01", "2026-03-04")
-	require.NoError(t, err)
-	// No zero-fill: only the 2 points that have data
-	assert.Len(t, result.Data, 2)
+		_, err := svc.GetHistory(context.Background(), 1, "daily", "2026-03-01", "2026-03-04")
+		require.NoError(t, err)
+	})
 }
 
 func TestService_GetHistory_CoarserFrequency_UsesAvg(t *testing.T) {
@@ -635,7 +327,7 @@ func TestService_GetHistory_CoarserFrequency_UsesAvg(t *testing.T) {
 	repo.EXPECT().GetHabitByID(mock.Anything, int32(1)).Return(habitsdb.GetHabitByIDRow{
 		ID: 1, Frequency: "daily", RecordingRequired: false,
 	}, nil)
-	repo.EXPECT().GetHabitHistoryAvg(mock.Anything, int32(1), "week", mock.Anything, mock.Anything).
+	repo.EXPECT().GetHabitHistoryAvg(mock.Anything, int32(1), "week", mock.Anything, mock.Anything, mock.Anything).
 		Return([]habits.HistoryPoint{
 			{Date: "2026-03-02", Value: 7.5},
 		}, nil)
@@ -655,7 +347,7 @@ func TestService_GetHistory_SameFrequency_UsesSum(t *testing.T) {
 	repo.EXPECT().GetHabitByID(mock.Anything, int32(1)).Return(habitsdb.GetHabitByIDRow{
 		ID: 1, Frequency: "weekly", RecordingRequired: false,
 	}, nil)
-	repo.EXPECT().GetHabitHistory(mock.Anything, int32(1), "week", mock.Anything, mock.Anything).
+	repo.EXPECT().GetHabitHistory(mock.Anything, int32(1), "week", mock.Anything, mock.Anything, mock.Anything).
 		Return([]habits.HistoryPoint{
 			{Date: "2026-03-02", Value: 15},
 		}, nil)
@@ -675,7 +367,7 @@ func TestService_GetHistory_FinerFrequency_UsesSum(t *testing.T) {
 	repo.EXPECT().GetHabitByID(mock.Anything, int32(1)).Return(habitsdb.GetHabitByIDRow{
 		ID: 1, Frequency: "weekly", RecordingRequired: false,
 	}, nil)
-	repo.EXPECT().GetHabitHistory(mock.Anything, int32(1), "day", mock.Anything, mock.Anything).
+	repo.EXPECT().GetHabitHistory(mock.Anything, int32(1), "day", mock.Anything, mock.Anything, mock.Anything).
 		Return([]habits.HistoryPoint{
 			{Date: "2026-03-02", Value: 3},
 			{Date: "2026-03-04", Value: 5},
