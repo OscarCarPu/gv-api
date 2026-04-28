@@ -177,6 +177,39 @@ func TestIntegration_GetProjectChildren_BottomUpTimeAccumulation(t *testing.T) {
 	require.Equal(t, int64(120), respLeaf.Project.TimeSpent, "leaf counts its own tasks")
 }
 
+func TestIntegration_GetProjectChildren_BlocksOrderBeforeBlocked(t *testing.T) {
+	ctx := context.Background()
+	repo := NewRepo(t)
+
+	proj, err := repo.CreateProject(ctx, "p", nil, nil, nil)
+	require.NoError(t, err)
+
+	// Create in alphabetical order so SQL would naturally sort a, b, c, d.
+	// Then wire deps so the topological order must be: c -> a, d -> b.
+	a, err := repo.CreateTask(ctx, &proj.ID, "a", nil, nil, "standard", nil, 4)
+	require.NoError(t, err)
+	b, err := repo.CreateTask(ctx, &proj.ID, "b", nil, nil, "standard", nil, 4)
+	require.NoError(t, err)
+	c, err := repo.CreateTask(ctx, &proj.ID, "c", nil, nil, "standard", nil, 4)
+	require.NoError(t, err)
+	d, err := repo.CreateTask(ctx, &proj.ID, "d", nil, nil, "standard", nil, 4)
+	require.NoError(t, err)
+
+	// a depends on c (c blocks a) and b depends on d (d blocks b).
+	require.NoError(t, repo.ReplaceTaskDependencies(ctx, a.ID, []int32{c.ID}))
+	require.NoError(t, repo.ReplaceTaskDependencies(ctx, b.ID, []int32{d.ID}))
+
+	resp, err := repo.GetProjectChildren(ctx, proj.ID)
+	require.NoError(t, err)
+
+	names := make([]string, len(resp.Children))
+	for i, ch := range resp.Children {
+		names[i] = ch.Name
+	}
+	require.Equal(t, []string{"c", "a", "d", "b"}, names,
+		"blocking tasks must appear before the tasks they block; alpha order is the tiebreaker")
+}
+
 func TestIntegration_GetProjectChildren_TodosAggregated(t *testing.T) {
 	ctx := context.Background()
 	repo := NewRepo(t)

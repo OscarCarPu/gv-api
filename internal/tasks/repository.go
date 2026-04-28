@@ -3,6 +3,7 @@ package tasks
 import (
 	"context"
 	"errors"
+	"sort"
 	"time"
 
 	"gv-api/internal/database/tasksdb"
@@ -532,7 +533,7 @@ func (r *PostgresRepository) GetProjectChildren(ctx context.Context, projectID i
 			})
 		}
 	}
-	children = append(children, projectTasks[projectID]...)
+	children = append(children, topoSortByDeps(projectTasks[projectID])...)
 
 	if children == nil {
 		children = []ProjectChildNode{}
@@ -542,6 +543,59 @@ func (r *PostgresRepository) GetProjectChildren(ctx context.Context, projectID i
 		Project:  project,
 		Children: children,
 	}, nil
+}
+
+// topoSortByDeps reorders a project's task list so that any task whose
+// DependsOn references another task in the same list comes after that
+// dependency. The pre-existing relative order is preserved as the tiebreaker
+// (Kahn's algorithm with a min-heap keyed by original index).
+func topoSortByDeps(nodes []ProjectChildNode) []ProjectChildNode {
+	n := len(nodes)
+	if n <= 1 {
+		return nodes
+	}
+	idx := make(map[int32]int, n)
+	for i, t := range nodes {
+		idx[t.ID] = i
+	}
+	inDeg := make([]int, n)
+	blockedBy := make([][]int, n)
+	for i, t := range nodes {
+		for _, d := range t.DependsOn {
+			j, ok := idx[d.ID]
+			if !ok {
+				continue
+			}
+			inDeg[i]++
+			blockedBy[j] = append(blockedBy[j], i)
+		}
+	}
+	ready := make([]int, 0, n)
+	for i, deg := range inDeg {
+		if deg == 0 {
+			ready = append(ready, i)
+		}
+	}
+	sort.Ints(ready)
+	out := make([]ProjectChildNode, 0, n)
+	for len(ready) > 0 {
+		cur := ready[0]
+		ready = ready[1:]
+		out = append(out, nodes[cur])
+		for _, j := range blockedBy[cur] {
+			inDeg[j]--
+			if inDeg[j] == 0 {
+				pos := sort.SearchInts(ready, j)
+				ready = append(ready, 0)
+				copy(ready[pos+1:], ready[pos:])
+				ready[pos] = j
+			}
+		}
+	}
+	if len(out) != n {
+		return nodes
+	}
+	return out
 }
 
 func (r *PostgresRepository) GetTaskTimeEntries(ctx context.Context, taskID int32) (TaskTimeEntriesResponse, error) {
