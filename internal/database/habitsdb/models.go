@@ -70,3 +70,15 @@ type Todo struct {
 	Name   string `db:"name" json:"name"`
 	IsDone bool   `db:"is_done" json:"is_done"`
 }
+
+type WeedVariety struct {
+	ID       int32   `db:"id" json:"id"`
+	Name     string  `db:"name" json:"name"`
+	Scent    float32 `db:"scent" json:"scent"`
+	Flavor   float32 `db:"flavor" json:"flavor"`
+	Power    float32 `db:"power" json:"power"`
+	Quality  float32 `db:"quality" json:"quality"`
+	Score    float32 `db:"score" json:"score"`
+	Price    float32 `db:"price" json:"price"`
+	Comments *string `db:"comments" json:"comments"`
+}

@@ -12,8 +12,10 @@ import (
 	"gv-api/internal/database"
 	"gv-api/internal/database/habitsdb"
 	"gv-api/internal/database/tasksdb"
+	"gv-api/internal/database/varietiesdb"
 	"gv-api/internal/habits"
 	"gv-api/internal/tasks"
+	"gv-api/internal/varieties"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/cors"
@@ -54,25 +56,45 @@ func main() {
 	taskService := tasks.NewService(taskRepo, loc)
 	taskHandler := tasks.NewHandler(taskService)
 
+	// Varieties Setup
+	varietyQueries := varietiesdb.New(db)
+	varietyRepo := varieties.NewRepository(varietyQueries)
+	varietyService := varieties.NewService(varietyRepo)
+	varietyHandler := varieties.NewHandler(varietyService)
+
 	// Auth Setup
 	authService := auth.NewService(cfg, nil)
 	authHandler := auth.NewHandler(authService)
-	authMiddleware := auth.NewMiddleware(authService, "full")
+	fullMiddleware := auth.NewMiddleware(authService, "full")
+	semiMiddleware := auth.NewMiddleware(authService, "semi", "full")
 
 	r := chi.NewRouter()
 	r.Use(cors.Handler(cors.Options{
-		AllowedOrigins: []string{"*"},
-		AllowedMethods: []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},
-		AllowedHeaders: []string{"Content-Type", "Authorization"},
+		AllowedOrigins:   []string{"*"},
+		AllowedMethods:   []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS", "HEAD"},
+		AllowedHeaders:   []string{"Content-Type", "Authorization"},
+		ExposedHeaders:   []string{"Content-Length"},
+		AllowCredentials: false,
+		MaxAge:           300,
 	}))
 
 	// Public
 	r.Post("/login", authHandler.Login)
 	r.Post("/login/2fa", authHandler.Login2FA)
 
-	// Protected
+	// Semiprivate (semi or full token)
 	r.Group(func(r chi.Router) {
-		r.Use(authMiddleware.Handle)
+		r.Use(semiMiddleware.Handle)
+		r.Get("/varieties", varietyHandler.List)
+		r.Get("/varieties/{id}", varietyHandler.Get)
+		r.Post("/varieties", varietyHandler.Create)
+		r.Put("/varieties/{id}", varietyHandler.Update)
+		r.Delete("/varieties/{id}", varietyHandler.Delete)
+	})
+
+	// Full private
+	r.Group(func(r chi.Router) {
+		r.Use(fullMiddleware.Handle)
 		r.Get("/habits", habitHandler.GetDaily)
 		r.Post("/habits", habitHandler.CreateHabit)
 		r.Post("/habits/log", habitHandler.UpsertLog)

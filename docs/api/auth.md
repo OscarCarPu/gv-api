@@ -1,15 +1,24 @@
 
 ## Authentication
 
-The API uses a two-step JWT authentication flow:
+The API issues JWTs with a `kind` claim that determines which endpoints the token can access:
 
-1. **POST /login** — submit your password to receive a short-lived temporary token (`kind: tmp`, 5 min).
-2. **POST /login/2fa** — submit the temporary token and your TOTP code to receive a full month token (`kind: full`, 30 days).
+| `kind` | How to obtain                                                                | Lifetime | Accepted by                          |
+|--------|------------------------------------------------------------------------------|----------|--------------------------------------|
+| `tmp`  | `POST /login` with the **private** password.                                 | 5 min    | Only `POST /login/2fa`.              |
+| `full` | `POST /login/2fa` with a `tmp` token + TOTP code.                            | 30 days  | All protected endpoints.             |
+| `semi` | `POST /login` with the **semi-private** password (no 2FA required).          | 30 days  | Semi-private endpoints only.         |
 
-All protected endpoints require the full token in the `Authorization` header:
+**Endpoint tiers:**
+
+- **Public:** `POST /login`, `POST /login/2fa`.
+- **Semi-private** (accept `semi` *or* `full`): `/varieties` CRUD.
+- **Full-private** (require `full`): everything else (`/habits`, `/tasks/*`).
+
+All protected endpoints expect the token in the `Authorization` header:
 
 ```
-Authorization: Bearer <full-token>
+Authorization: Bearer <jwt>
 ```
 
 Error responses are JSON: `{"error": "<message>"}`.
@@ -20,7 +29,7 @@ Error responses are JSON: `{"error": "<message>"}`.
 
 - **Method:** `POST`
 - **Endpoint:** `/login`
-- **Description:** Authenticates with a password and returns a temporary token to be used in the 2FA step.
+- **Description:** Authenticates with a password. Returns a `tmp` token for the private password (use it with `/login/2fa`) or a `semi` token for the semi-private password (use it directly on semi-private endpoints).
 - **Request Body:**
   ```json
   { "password": "your-password" }
@@ -29,8 +38,9 @@ Error responses are JSON: `{"error": "<message>"}`.
   - **Code:** `200 OK`
   - **Content:**
     ```json
-    { "token": "<tmp-jwt>" }
+    { "token": "<jwt>", "kind": "tmp" }
     ```
+    `kind` will be `"tmp"` for the private password or `"semi"` for the semi-private password.
 - **Error Responses:**
   - **Code:** `400 Bad Request` — `{"error": "Invalid Request"}`
   - **Code:** `401 Unauthorized` — `{"error": "invalid password"}`
