@@ -93,6 +93,11 @@ func (s *Service) UpdateTask(ctx context.Context, req UpdateTaskRequest) (TaskRe
 			return resp, err
 		}
 	}
+	if req.Blocks != nil {
+		if err := s.repo.ReplaceTaskBlocks(ctx, resp.ID, *req.Blocks); err != nil {
+			return resp, err
+		}
+	}
 
 	dependsOn, blocks, blocked, err := s.repo.GetTaskDependencies(ctx, resp.ID)
 	if err != nil {

@@ -261,15 +261,17 @@ ORDER BY e.effective_due_at ASC NULLS LAST, p.due_at ASC NULLS LAST, t.name;
 
 -- name: GetTaskByID :one
 SELECT t.id, t.project_id, t.name, t.description, t.due_at, t.started_at, t.finished_at, t.task_type, t.recurrence, t.priority,
+    p.name AS project_name,
     COALESCE(SUM(EXTRACT(EPOCH FROM (te.finished_at - te.started_at)))::bigint, 0)::bigint AS time_spent,
     COALESCE((SELECT json_agg(json_build_object('id', t2.id, 'name', t2.name, 'due_at', t2.due_at) ORDER BY t2.name) FROM task_dependencies td JOIN tasks t2 ON t2.id = td.depends_on WHERE td.task_id = t.id AND t2.finished_at IS NULL), '[]')::json AS depends_on,
     COALESCE((SELECT json_agg(json_build_object('id', t2.id, 'name', t2.name) ORDER BY t2.name) FROM task_dependencies td JOIN tasks t2 ON t2.id = td.task_id WHERE td.depends_on = t.id), '[]')::json AS blocks,
     EXISTS(SELECT 1 FROM task_dependencies td3 JOIN tasks t3 ON t3.id = td3.depends_on WHERE td3.task_id = t.id AND t3.finished_at IS NULL) AS blocked,
     COALESCE((SELECT json_agg(json_build_object('id', td.id, 'name', td.name, 'is_done', td.is_done) ORDER BY td.is_done ASC NULLS LAST, td.id) FROM todos td WHERE td.task_id = t.id), '[]')::json AS todos
 FROM tasks t
+LEFT JOIN projects p ON p.id = t.project_id
 LEFT JOIN time_entries te ON te.task_id = t.id AND te.finished_at IS NOT NULL
 WHERE t.id = $1
-GROUP BY t.id;
+GROUP BY t.id, p.name;
 
 -- name: FinishDescendantProjects :exec
 WITH RECURSIVE project_tree AS (
@@ -393,6 +395,27 @@ ON CONFLICT (task_id, depends_on) DO NOTHING;
 -- Returns true if replacing @task_id's outgoing dep edges with @new_deps
 -- would create a cycle.
 SELECT task_dependency_would_cycle(@task_id::int, @new_deps::int[]) AS has_cycle;
+
+-- name: TaskBlocksWouldCycle :one
+-- Returns true if any of the @blocks tasks depending on @task_id would
+-- create a cycle. Reuses task_dependency_would_cycle by checking each
+-- (block -> task_id) edge in a single query.
+SELECT EXISTS(
+    SELECT 1 FROM unnest(@blocks::int[]) AS b(id)
+    WHERE task_dependency_would_cycle(b.id, ARRAY[@task_id::int]::int[])
+) AS has_cycle;
+
+-- name: DeleteRemovedTaskBlocks :exec
+DELETE FROM task_dependencies
+WHERE depends_on = $1 AND NOT (task_id = ANY(@keep::int[]));
+
+-- name: UpsertTaskBlocks :exec
+INSERT INTO task_dependencies (task_id, depends_on)
+SELECT t.id, $1
+FROM unnest(@blocks::int[]) AS block_id
+JOIN tasks t ON t.id = block_id AND t.finished_at IS NULL
+WHERE array_length(@blocks::int[], 1) IS NOT NULL
+ON CONFLICT (task_id, depends_on) DO NOTHING;
 
 -- name: GetTaskDependencies :one
 SELECT

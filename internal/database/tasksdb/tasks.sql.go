@@ -435,15 +435,17 @@ func (q *Queries) GetRootProjects(ctx context.Context) ([]GetRootProjectsRow, er
 
 const getTaskByID = `-- name: GetTaskByID :one
 SELECT t.id, t.project_id, t.name, t.description, t.due_at, t.started_at, t.finished_at, t.task_type, t.recurrence, t.priority,
+    p.name AS project_name,
     COALESCE(SUM(EXTRACT(EPOCH FROM (te.finished_at - te.started_at)))::bigint, 0)::bigint AS time_spent,
     COALESCE((SELECT json_agg(json_build_object('id', t2.id, 'name', t2.name, 'due_at', t2.due_at) ORDER BY t2.name) FROM task_dependencies td JOIN tasks t2 ON t2.id = td.depends_on WHERE td.task_id = t.id AND t2.finished_at IS NULL), '[]')::json AS depends_on,
     COALESCE((SELECT json_agg(json_build_object('id', t2.id, 'name', t2.name) ORDER BY t2.name) FROM task_dependencies td JOIN tasks t2 ON t2.id = td.task_id WHERE td.depends_on = t.id), '[]')::json AS blocks,
     EXISTS(SELECT 1 FROM task_dependencies td3 JOIN tasks t3 ON t3.id = td3.depends_on WHERE td3.task_id = t.id AND t3.finished_at IS NULL) AS blocked,
     COALESCE((SELECT json_agg(json_build_object('id', td.id, 'name', td.name, 'is_done', td.is_done) ORDER BY td.is_done ASC NULLS LAST, td.id) FROM todos td WHERE td.task_id = t.id), '[]')::json AS todos
 FROM tasks t
+LEFT JOIN projects p ON p.id = t.project_id
 LEFT JOIN time_entries te ON te.task_id = t.id AND te.finished_at IS NOT NULL
 WHERE t.id = $1
-GROUP BY t.id
+GROUP BY t.id, p.name
 `
 
 type GetTaskByIDRow struct {
@@ -457,6 +459,7 @@ type GetTaskByIDRow struct {
 	TaskType    string             `db:"task_type" json:"task_type"`
 	Recurrence  *int32             `db:"recurrence" json:"recurrence"`
 	Priority    int32              `db:"priority" json:"priority"`
+	ProjectName *string            `db:"project_name" json:"project_name"`
 	TimeSpent   int64              `db:"time_spent" json:"time_spent"`
 	DependsOn   []byte             `db:"depends_on" json:"depends_on"`
 	Blocks      []byte             `db:"blocks" json:"blocks"`
@@ -478,6 +481,7 @@ func (q *Queries) GetTaskByID(ctx context.Context, id int32) (GetTaskByIDRow, er
 		&i.TaskType,
 		&i.Recurrence,
 		&i.Priority,
+		&i.ProjectName,
 		&i.TimeSpent,
 		&i.DependsOn,
 		&i.Blocks,
@@ -1162,6 +1166,62 @@ func (q *Queries) TaskDependencyWouldCycle(ctx context.Context, arg TaskDependen
 	var has_cycle bool
 	err := row.Scan(&has_cycle)
 	return has_cycle, err
+}
+
+const taskBlocksWouldCycle = `-- name: TaskBlocksWouldCycle :one
+SELECT EXISTS(
+    SELECT 1 FROM unnest($1::int[]) AS b(id)
+    WHERE task_dependency_would_cycle(b.id, ARRAY[$2::int]::int[])
+) AS has_cycle
+`
+
+type TaskBlocksWouldCycleParams struct {
+	Blocks []int32 `db:"blocks" json:"blocks"`
+	TaskID int32   `db:"task_id" json:"task_id"`
+}
+
+// Returns true if any of the @blocks tasks depending on @task_id would
+// create a cycle. Reuses task_dependency_would_cycle by checking each
+// (block -> task_id) edge in a single query.
+func (q *Queries) TaskBlocksWouldCycle(ctx context.Context, arg TaskBlocksWouldCycleParams) (bool, error) {
+	row := q.db.QueryRow(ctx, taskBlocksWouldCycle, arg.Blocks, arg.TaskID)
+	var has_cycle bool
+	err := row.Scan(&has_cycle)
+	return has_cycle, err
+}
+
+const deleteRemovedTaskBlocks = `-- name: DeleteRemovedTaskBlocks :exec
+DELETE FROM task_dependencies
+WHERE depends_on = $1 AND NOT (task_id = ANY($2::int[]))
+`
+
+type DeleteRemovedTaskBlocksParams struct {
+	DependsOn int32   `db:"depends_on" json:"depends_on"`
+	Keep      []int32 `db:"keep" json:"keep"`
+}
+
+func (q *Queries) DeleteRemovedTaskBlocks(ctx context.Context, arg DeleteRemovedTaskBlocksParams) error {
+	_, err := q.db.Exec(ctx, deleteRemovedTaskBlocks, arg.DependsOn, arg.Keep)
+	return err
+}
+
+const upsertTaskBlocks = `-- name: UpsertTaskBlocks :exec
+INSERT INTO task_dependencies (task_id, depends_on)
+SELECT t.id, $1
+FROM unnest($2::int[]) AS block_id
+JOIN tasks t ON t.id = block_id AND t.finished_at IS NULL
+WHERE array_length($2::int[], 1) IS NOT NULL
+ON CONFLICT (task_id, depends_on) DO NOTHING
+`
+
+type UpsertTaskBlocksParams struct {
+	DependsOn int32   `db:"depends_on" json:"depends_on"`
+	Blocks    []int32 `db:"blocks" json:"blocks"`
+}
+
+func (q *Queries) UpsertTaskBlocks(ctx context.Context, arg UpsertTaskBlocksParams) error {
+	_, err := q.db.Exec(ctx, upsertTaskBlocks, arg.DependsOn, arg.Blocks)
+	return err
 }
 
 const updateProject = `-- name: UpdateProject :one

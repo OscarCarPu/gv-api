@@ -102,6 +102,7 @@ See [README](README.md) for shared `task_type` / `recurrence` / `priority` seman
     {
       "id": 1,
       "project_id": 5,
+      "project_name": "My Project",
       "name": "Implement feature X",
       "description": "...",
       "due_at": "2025-04-01",
@@ -153,6 +154,7 @@ See [README](README.md) for shared `task_type` / `recurrence` / `priority` seman
   - `started_at` (optional): Start timestamp.
   - `finished_at` (optional): Finish timestamp.
   - `depends_on` (optional): List of task IDs this task depends on. Replaces all existing dependencies. Omitting the field leaves dependencies unchanged. Pass `[]` to clear all dependencies.
+  - `blocks` (optional): List of task IDs that depend on this task (reverse edges). Replaces all existing reverse dependencies. Omitting the field leaves them unchanged. Pass `[]` to clear all reverse dependencies.
   - `task_type` (optional): One of `"standard"`, `"continuous"`, or `"recurring"`. When changing to `"recurring"`, `recurrence` must be provided. When changing to a non-recurring type, `recurrence` is automatically cleared.
   - `recurrence` (optional): Number of days between recurrences (positive integer). Required when `task_type` is set to `"recurring"`. Rejected when `task_type` is set to a non-recurring type. Can be sent alone to change the interval of an already-recurring task.
   - `priority` (optional): Integer from 1 (highest) to 5 (lowest).

@@ -47,6 +47,7 @@ type Repository interface {
 	GetTimeEntrySummary(ctx context.Context, todayStart, weekStart time.Time) (TimeEntrySummaryResponse, error)
 	GetTimeEntryHistory(ctx context.Context, frequency, timezone string, startAt, endAt time.Time) ([]history.Point, error)
 	ReplaceTaskDependencies(ctx context.Context, taskID int32, dependsOn []int32) error
+	ReplaceTaskBlocks(ctx context.Context, taskID int32, blocks []int32) error
 	GetTaskDependencies(ctx context.Context, taskID int32) ([]TaskDepRef, []TaskDepRef, bool, error)
 	GetTimeEntriesByDateRange(ctx context.Context, startTime, endTime time.Time) ([]TimeEntryWithTaskResponse, error)
 }
@@ -442,6 +443,7 @@ func (r *PostgresRepository) GetTask(ctx context.Context, id int32) (TaskFullRes
 	return TaskFullResponse{
 		ID:          row.ID,
 		ProjectID:   row.ProjectID,
+		ProjectName: row.ProjectName,
 		Name:        row.Name,
 		Description: row.Description,
 		DueAt:       pgDateToPtr(row.DueAt),
@@ -814,6 +816,31 @@ func (r *PostgresRepository) ReplaceTaskDependencies(ctx context.Context, taskID
 	return r.q.UpsertTaskDependencies(ctx, tasksdb.UpsertTaskDependenciesParams{
 		TaskID:    taskID,
 		DependsOn: dependsOn,
+	})
+}
+
+func (r *PostgresRepository) ReplaceTaskBlocks(ctx context.Context, taskID int32, blocks []int32) error {
+	if len(blocks) > 0 {
+		hasCycle, err := r.q.TaskBlocksWouldCycle(ctx, tasksdb.TaskBlocksWouldCycleParams{
+			Blocks: blocks,
+			TaskID: taskID,
+		})
+		if err != nil {
+			return err
+		}
+		if hasCycle {
+			return ErrCircularDependency
+		}
+	}
+	if err := r.q.DeleteRemovedTaskBlocks(ctx, tasksdb.DeleteRemovedTaskBlocksParams{
+		DependsOn: taskID,
+		Keep:      blocks,
+	}); err != nil {
+		return err
+	}
+	return r.q.UpsertTaskBlocks(ctx, tasksdb.UpsertTaskBlocksParams{
+		DependsOn: taskID,
+		Blocks:    blocks,
 	})
 }
 

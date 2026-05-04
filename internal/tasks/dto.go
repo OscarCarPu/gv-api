@@ -207,6 +207,7 @@ type UpdateTaskRequest struct {
 	StartedAt   *time.Time   `json:"started_at"`
 	FinishedAt  *time.Time   `json:"finished_at"`
 	DependsOn   *[]int32     `json:"depends_on"`
+	Blocks      *[]int32     `json:"blocks"`
 	TaskType    *string      `json:"task_type"`
 	Recurrence  *int32       `json:"recurrence"`
 	Priority    *int32       `json:"priority"`
@@ -252,6 +253,7 @@ type TaskDetailResponse struct {
 type TaskFullResponse struct {
 	ID          int32          `json:"id"`
 	ProjectID   *int32         `json:"project_id"`
+	ProjectName *string        `json:"project_name"`
 	Name        string         `json:"name"`
 	Description *string        `json:"description"`
 	DueAt       *time.Time     `json:"due_at"`

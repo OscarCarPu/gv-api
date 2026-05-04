@@ -1486,6 +1486,54 @@ func (_c *MockRepository_ReplaceTaskDependencies_Call) RunAndReturn(run func(con
 	return _c
 }
 
+// ReplaceTaskBlocks provides a mock function with given fields: ctx, taskID, blocks
+func (_m *MockRepository) ReplaceTaskBlocks(ctx context.Context, taskID int32, blocks []int32) error {
+	ret := _m.Called(ctx, taskID, blocks)
+
+	if len(ret) == 0 {
+		panic("no return value specified for ReplaceTaskBlocks")
+	}
+
+	var r0 error
+	if rf, ok := ret.Get(0).(func(context.Context, int32, []int32) error); ok {
+		r0 = rf(ctx, taskID, blocks)
+	} else {
+		r0 = ret.Error(0)
+	}
+
+	return r0
+}
+
+// MockRepository_ReplaceTaskBlocks_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'ReplaceTaskBlocks'
+type MockRepository_ReplaceTaskBlocks_Call struct {
+	*mock.Call
+}
+
+// ReplaceTaskBlocks is a helper method to define mock.On call
+//   - ctx context.Context
+//   - taskID int32
+//   - blocks []int32
+func (_e *MockRepository_Expecter) ReplaceTaskBlocks(ctx interface{}, taskID interface{}, blocks interface{}) *MockRepository_ReplaceTaskBlocks_Call {
+	return &MockRepository_ReplaceTaskBlocks_Call{Call: _e.mock.On("ReplaceTaskBlocks", ctx, taskID, blocks)}
+}
+
+func (_c *MockRepository_ReplaceTaskBlocks_Call) Run(run func(ctx context.Context, taskID int32, blocks []int32)) *MockRepository_ReplaceTaskBlocks_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].(context.Context), args[1].(int32), args[2].([]int32))
+	})
+	return _c
+}
+
+func (_c *MockRepository_ReplaceTaskBlocks_Call) Return(_a0 error) *MockRepository_ReplaceTaskBlocks_Call {
+	_c.Call.Return(_a0)
+	return _c
+}
+
+func (_c *MockRepository_ReplaceTaskBlocks_Call) RunAndReturn(run func(context.Context, int32, []int32) error) *MockRepository_ReplaceTaskBlocks_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // UpdateProject provides a mock function with given fields: ctx, req
 func (_m *MockRepository) UpdateProject(ctx context.Context, req tasks.UpdateProjectRequest) (tasks.ProjectResponse, error) {
 	ret := _m.Called(ctx, req)

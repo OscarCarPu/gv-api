@@ -14,6 +14,7 @@ type Querier interface {
 	CreateTimeEntry(ctx context.Context, arg CreateTimeEntryParams) (TimeEntry, error)
 	CreateTodo(ctx context.Context, arg CreateTodoParams) (CreateTodoRow, error)
 	DeleteProject(ctx context.Context, id int32) error
+	DeleteRemovedTaskBlocks(ctx context.Context, arg DeleteRemovedTaskBlocksParams) error
 	DeleteRemovedTaskDependencies(ctx context.Context, arg DeleteRemovedTaskDependenciesParams) error
 	DeleteTask(ctx context.Context, id int32) error
 	DeleteTimeEntry(ctx context.Context, id int32) error
@@ -42,6 +43,10 @@ type Querier interface {
 	GetUnfinishedTasks(ctx context.Context, minPriority *int32) ([]GetUnfinishedTasksRow, error)
 	ListProjectsFast(ctx context.Context) ([]ListProjectsFastRow, error)
 	ListTasksFast(ctx context.Context) ([]ListTasksFastRow, error)
+	// Returns true if any of the @blocks tasks depending on @task_id would
+	// create a cycle. Reuses task_dependency_would_cycle by checking each
+	// (block -> task_id) edge in a single query.
+	TaskBlocksWouldCycle(ctx context.Context, arg TaskBlocksWouldCycleParams) (bool, error)
 	// Wraps the task_dependency_would_cycle SQL function (see migration 011).
 	// Returns true if replacing @task_id's outgoing dep edges with @new_deps
 	// would create a cycle.
@@ -50,6 +55,7 @@ type Querier interface {
 	UpdateTask(ctx context.Context, arg UpdateTaskParams) (Task, error)
 	UpdateTimeEntry(ctx context.Context, arg UpdateTimeEntryParams) (TimeEntry, error)
 	UpdateTodo(ctx context.Context, arg UpdateTodoParams) (Todo, error)
+	UpsertTaskBlocks(ctx context.Context, arg UpsertTaskBlocksParams) error
 	UpsertTaskDependencies(ctx context.Context, arg UpsertTaskDependenciesParams) error
 }
 
