@@ -57,7 +57,7 @@ func main() {
 	// Auth Setup
 	authService := auth.NewService(cfg, nil)
 	authHandler := auth.NewHandler(authService)
-	authMiddleware := auth.NewMiddleware(authService)
+	authMiddleware := auth.NewMiddleware(authService, "full")
 
 	r := chi.NewRouter()
 	r.Use(cors.Handler(cors.Options{

@@ -50,11 +50,17 @@ func (s *Service) GenerateToken(expiringTime time.Duration, kind string) (string
 	return token.SignedString([]byte(s.cfg.JwtSecret))
 }
 
-func (s *Service) Login(password string) (string, error) {
-	if password != s.cfg.Password {
-		return "", ErrInvalidPassword
+func (s *Service) Login(password string) (string, string, error) {
+	switch password {
+	case s.cfg.Password:
+		token, err := s.GenerateToken(time.Minute*5, "tmp")
+		return token, "tmp", err
+	case s.cfg.SemiprivatePassword:
+		token, err := s.GenerateToken(time.Hour*24*30, "semi")
+		return token, "semi", err
+	default:
+		return "", "", ErrInvalidPassword
 	}
-	return s.GenerateToken(time.Minute*5, "tmp")
 }
 
 func (s *Service) ValidateToken(tokenString, kind string) error {

@@ -13,10 +13,11 @@ type TokenValidator interface {
 
 type Middleware struct {
 	authService TokenValidator
+	kinds       []string
 }
 
-func NewMiddleware(authService TokenValidator) *Middleware {
-	return &Middleware{authService: authService}
+func NewMiddleware(authService TokenValidator, kinds ...string) *Middleware {
+	return &Middleware{authService: authService, kinds: kinds}
 }
 
 func (m *Middleware) Handle(next http.Handler) http.Handler {
@@ -33,12 +34,13 @@ func (m *Middleware) Handle(next http.Handler) http.Handler {
 			return
 		}
 
-		err := m.authService.ValidateToken(token, "full")
-		if err != nil {
-			response.Error(w, http.StatusUnauthorized, "Unauthorized")
-			return
+		for _, kind := range m.kinds {
+			if m.authService.ValidateToken(token, kind) == nil {
+				next.ServeHTTP(w, r)
+				return
+			}
 		}
 
-		next.ServeHTTP(w, r)
+		response.Error(w, http.StatusUnauthorized, "Unauthorized")
 	})
 }

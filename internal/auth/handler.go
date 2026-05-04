@@ -8,7 +8,7 @@ import (
 )
 
 type ServiceInterface interface {
-	Login(password string) (string, error)
+	Login(password string) (string, string, error)
 	Login2FA(tokenString, code string) (string, error)
 }
 
@@ -29,13 +29,13 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	token, err := h.svc.Login(req.Password)
+	token, kind, err := h.svc.Login(req.Password)
 	if err != nil {
 		response.Error(w, http.StatusUnauthorized, err.Error())
 		return
 	}
 
-	response.JSON(w, http.StatusOK, map[string]string{"token": token})
+	response.JSON(w, http.StatusOK, map[string]string{"token": token, "kind": kind})
 }
 
 func (h *Handler) Login2FA(w http.ResponseWriter, r *http.Request) {

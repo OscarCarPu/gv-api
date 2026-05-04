@@ -27,16 +27,36 @@ func TestHandler_Login(t *testing.T) {
 	svc := setupTestService(nil)
 	h := NewHandler(svc)
 
-	t.Run("returns token on valid password", func(t *testing.T) {
-		body, _ := json.Marshal(map[string]string{"password": "Abc123.."})
-		req := httptest.NewRequest(http.MethodPost, "/login", bytes.NewBuffer(body))
-		rr := httptest.NewRecorder()
+	successCases := []struct {
+		name     string
+		password string
+		wantKind string
+	}{
+		{"main password returns tmp kind", "Abc123..", "tmp"},
+		{"semiprivate password returns semi kind", "semi-pass", "semi"},
+	}
+	for _, tc := range successCases {
+		t.Run(tc.name, func(t *testing.T) {
+			body, _ := json.Marshal(map[string]string{"password": tc.password})
+			req := httptest.NewRequest(http.MethodPost, "/login", bytes.NewBuffer(body))
+			rr := httptest.NewRecorder()
 
-		h.Login(rr, req)
+			h.Login(rr, req)
 
-		assertStatus(t, rr.Code, http.StatusOK)
-		assertBodyContains(t, rr.Body.String(), "token")
-	})
+			assertStatus(t, rr.Code, http.StatusOK)
+
+			var resp map[string]string
+			if err := json.NewDecoder(rr.Body).Decode(&resp); err != nil {
+				t.Fatalf("decode response: %v", err)
+			}
+			if resp["token"] == "" {
+				t.Error("expected non-empty token")
+			}
+			if resp["kind"] != tc.wantKind {
+				t.Errorf("kind = %q, want %q", resp["kind"], tc.wantKind)
+			}
+		})
+	}
 
 	errorCases := []struct {
 		name       string
@@ -76,7 +96,7 @@ func TestHandler_Login2FA(t *testing.T) {
 	h := NewHandler(svc)
 
 	t.Run("returns full token on valid tmp token and code", func(t *testing.T) {
-		tmpToken, _ := svc.Login("Abc123..")
+		tmpToken, _, _ := svc.Login("Abc123..")
 
 		body, _ := json.Marshal(map[string]string{"token": tmpToken, "code": "123456"})
 		req := httptest.NewRequest(http.MethodPost, "/login/2fa", bytes.NewBuffer(body))

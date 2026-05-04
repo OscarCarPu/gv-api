@@ -30,7 +30,7 @@ func TestAuthMiddleware(t *testing.T) {
 		},
 	}
 
-	middleware := NewMiddleware(mockSvc)
+	middleware := NewMiddleware(mockSvc, "full")
 
 	tests := []struct {
 		name           string
@@ -71,6 +71,48 @@ func TestAuthMiddleware(t *testing.T) {
 				if body["error"] != "Unauthorized" {
 					t.Errorf("expected error message 'Unauthorized', got %v", body["error"])
 				}
+			}
+		})
+	}
+}
+
+func TestAuthMiddleware_MultipleKinds(t *testing.T) {
+	fakeHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	})
+
+	mockSvc := &MockAuthService{
+		mockValidateFunc: func(token, kind string) error {
+			if token == "semi-token" && kind == "semi" {
+				return nil
+			}
+			if token == "full-token" && kind == "full" {
+				return nil
+			}
+			return errors.New("invalid token")
+		},
+	}
+
+	middleware := NewMiddleware(mockSvc, "semi", "full")
+
+	tests := []struct {
+		name           string
+		token          string
+		expectedStatus int
+	}{
+		{"AcceptsSemi", "semi-token", http.StatusOK},
+		{"AcceptsFull", "full-token", http.StatusOK},
+		{"RejectsUnknown", "tmp-token", http.StatusUnauthorized},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			req := httptest.NewRequest("GET", "/", nil)
+			req.Header.Set("Authorization", "Bearer "+test.token)
+			rr := httptest.NewRecorder()
+			middleware.Handle(fakeHandler).ServeHTTP(rr, req)
+			if rr.Code != test.expectedStatus {
+				t.Errorf("got %d, want %d", rr.Code, test.expectedStatus)
 			}
 		})
 	}
