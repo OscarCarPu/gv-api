@@ -10,9 +10,9 @@ import (
 )
 
 const createVariety = `-- name: CreateVariety :one
-INSERT INTO weed_varieties (name, scent, flavor, power, quality, price, comments)
-VALUES ($1, $2, $3, $4, $5, $6, $7)
-RETURNING id, name, scent, flavor, power, quality, score, price, comments
+INSERT INTO weed_varieties (name, scent, flavor, power, quality, price, comments, judge)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+RETURNING id, name, scent, flavor, power, quality, score, price, comments, judge, deleted_at
 `
 
 type CreateVarietyParams struct {
@@ -23,6 +23,7 @@ type CreateVarietyParams struct {
 	Quality  float32 `db:"quality" json:"quality"`
 	Price    float32 `db:"price" json:"price"`
 	Comments *string `db:"comments" json:"comments"`
+	Judge    string  `db:"judge" json:"judge"`
 }
 
 func (q *Queries) CreateVariety(ctx context.Context, arg CreateVarietyParams) (WeedVariety, error) {
@@ -34,6 +35,7 @@ func (q *Queries) CreateVariety(ctx context.Context, arg CreateVarietyParams) (W
 		arg.Quality,
 		arg.Price,
 		arg.Comments,
+		arg.Judge,
 	)
 	var i WeedVariety
 	err := row.Scan(
@@ -46,12 +48,16 @@ func (q *Queries) CreateVariety(ctx context.Context, arg CreateVarietyParams) (W
 		&i.Score,
 		&i.Price,
 		&i.Comments,
+		&i.Judge,
+		&i.DeletedAt,
 	)
 	return i, err
 }
 
 const deleteVariety = `-- name: DeleteVariety :exec
-DELETE FROM weed_varieties WHERE id = $1
+UPDATE weed_varieties
+SET deleted_at = now()
+WHERE id = $1 AND deleted_at IS NULL
 `
 
 func (q *Queries) DeleteVariety(ctx context.Context, id int32) error {
@@ -60,8 +66,9 @@ func (q *Queries) DeleteVariety(ctx context.Context, id int32) error {
 }
 
 const getVariety = `-- name: GetVariety :one
-SELECT id, name, scent, flavor, power, quality, score, price, comments
-FROM weed_varieties WHERE id = $1
+SELECT id, name, scent, flavor, power, quality, score, price, comments, judge, deleted_at
+FROM weed_varieties
+WHERE id = $1 AND deleted_at IS NULL
 `
 
 func (q *Queries) GetVariety(ctx context.Context, id int32) (WeedVariety, error) {
@@ -77,13 +84,16 @@ func (q *Queries) GetVariety(ctx context.Context, id int32) (WeedVariety, error)
 		&i.Score,
 		&i.Price,
 		&i.Comments,
+		&i.Judge,
+		&i.DeletedAt,
 	)
 	return i, err
 }
 
 const listVarieties = `-- name: ListVarieties :many
-SELECT id, name, scent, flavor, power, quality, score, price, comments
+SELECT id, name, scent, flavor, power, quality, score, price, comments, judge, deleted_at
 FROM weed_varieties
+WHERE deleted_at IS NULL
 ORDER BY score DESC, price ASC
 `
 
@@ -106,6 +116,8 @@ func (q *Queries) ListVarieties(ctx context.Context) ([]WeedVariety, error) {
 			&i.Score,
 			&i.Price,
 			&i.Comments,
+			&i.Judge,
+			&i.DeletedAt,
 		); err != nil {
 			return nil, err
 		}
@@ -119,9 +131,9 @@ func (q *Queries) ListVarieties(ctx context.Context) ([]WeedVariety, error) {
 
 const updateVariety = `-- name: UpdateVariety :one
 UPDATE weed_varieties
-SET name = $2, scent = $3, flavor = $4, power = $5, quality = $6, price = $7, comments = $8
-WHERE id = $1
-RETURNING id, name, scent, flavor, power, quality, score, price, comments
+SET name = $2, scent = $3, flavor = $4, power = $5, quality = $6, price = $7, comments = $8, judge = $9
+WHERE id = $1 AND deleted_at IS NULL
+RETURNING id, name, scent, flavor, power, quality, score, price, comments, judge, deleted_at
 `
 
 type UpdateVarietyParams struct {
@@ -133,6 +145,7 @@ type UpdateVarietyParams struct {
 	Quality  float32 `db:"quality" json:"quality"`
 	Price    float32 `db:"price" json:"price"`
 	Comments *string `db:"comments" json:"comments"`
+	Judge    string  `db:"judge" json:"judge"`
 }
 
 func (q *Queries) UpdateVariety(ctx context.Context, arg UpdateVarietyParams) (WeedVariety, error) {
@@ -145,6 +158,7 @@ func (q *Queries) UpdateVariety(ctx context.Context, arg UpdateVarietyParams) (W
 		arg.Quality,
 		arg.Price,
 		arg.Comments,
+		arg.Judge,
 	)
 	var i WeedVariety
 	err := row.Scan(
@@ -157,6 +171,8 @@ func (q *Queries) UpdateVariety(ctx context.Context, arg UpdateVarietyParams) (W
 		&i.Score,
 		&i.Price,
 		&i.Comments,
+		&i.Judge,
+		&i.DeletedAt,
 	)
 	return i, err
 }

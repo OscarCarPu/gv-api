@@ -5,7 +5,7 @@
 -- CLEAN SLATE
 -- =============================================================================
 -- Delete in dependency order (children before parents)
-TRUNCATE time_entries, todos, task_dependencies, tasks, projects, habit_logs, habits, weed_varieties RESTART IDENTITY CASCADE;
+TRUNCATE time_entries, todos, task_dependencies, tasks, projects, habit_logs, habits, weed_varieties, weed_varieties_history RESTART IDENTITY CASCADE;
 
 -- =============================================================================
 -- HABITS
@@ -1019,14 +1019,14 @@ INSERT INTO time_entries (task_id, started_at, finished_at, comment) VALUES
 -- =============================================================================
 -- WEED VARIETIES
 -- =============================================================================
-INSERT INTO weed_varieties (name, scent, flavor, power, quality, price, comments) VALUES
-    ('Northern Lights',  8.5, 8.0, 9.0, 9.5, 12.00, 'Classic indica, deeply relaxing'),
-    ('Sour Diesel',      9.0, 7.5, 9.0, 8.5, 14.00, 'Pungent, energetic sativa'),
-    ('Blue Dream',       8.0, 8.5, 7.5, 8.5, 10.50, 'Balanced hybrid, all-day favorite'),
-    ('Gorilla Glue',     7.5, 7.0, 9.5, 8.0, 13.00, 'Heavy hitter, sticky resin'),
-    ('Wedding Cake',     8.5, 9.0, 8.5, 9.0, 15.00, 'Sweet, dessert-like flavor'),
-    ('OG Kush',          9.0, 8.5, 9.0, 9.0, 14.50, 'Skunky earth, west-coast staple'),
-    ('Amnesia Haze',     8.0, 7.5, 8.5, 8.0, 11.00, 'Citrusy sativa, cerebral'),
-    ('Bubba Kush',       7.0, 7.5, 8.0, 8.0,  9.50, 'Sleep-inducing indica'),
-    ('Pineapple Express',8.5, 9.0, 7.0, 8.0, 11.50, 'Tropical, mood-lifting'),
-    ('Mystery Bag',      4.0, 4.5, 5.0, 3.5,  6.00, NULL);
+INSERT INTO weed_varieties (name, scent, flavor, power, quality, price, comments, judge) VALUES
+    ('Northern Lights',  8.5, 8.0, 9.0, 9.5, 12.00, 'Classic indica, deeply relaxing',   'Oscar'),
+    ('Sour Diesel',      9.0, 7.5, 9.0, 8.5, 14.00, 'Pungent, energetic sativa',         'Pepe'),
+    ('Blue Dream',       8.0, 8.5, 7.5, 8.5, 10.50, 'Balanced hybrid, all-day favorite', 'Oscar'),
+    ('Gorilla Glue',     7.5, 7.0, 9.5, 8.0, 13.00, 'Heavy hitter, sticky resin',        'Marta'),
+    ('Wedding Cake',     8.5, 9.0, 8.5, 9.0, 15.00, 'Sweet, dessert-like flavor',        'Oscar'),
+    ('OG Kush',          9.0, 8.5, 9.0, 9.0, 14.50, 'Skunky earth, west-coast staple',   'Pepe'),
+    ('Amnesia Haze',     8.0, 7.5, 8.5, 8.0, 11.00, 'Citrusy sativa, cerebral',          'Marta'),
+    ('Bubba Kush',       7.0, 7.5, 8.0, 8.0,  9.50, 'Sleep-inducing indica',             'Oscar'),
+    ('Pineapple Express',8.5, 9.0, 7.0, 8.0, 11.50, 'Tropical, mood-lifting',            'Pepe'),
+    ('Mystery Bag',      4.0, 4.5, 5.0, 3.5,  6.00, NULL,                                'Oscar');

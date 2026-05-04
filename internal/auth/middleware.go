@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"strings"
 
+	"gv-api/internal/actor"
 	"gv-api/internal/response"
 )
 
@@ -36,7 +37,8 @@ func (m *Middleware) Handle(next http.Handler) http.Handler {
 
 		for _, kind := range m.kinds {
 			if m.authService.ValidateToken(token, kind) == nil {
-				next.ServeHTTP(w, r)
+				ctx := actor.WithTokenKind(r.Context(), kind)
+				next.ServeHTTP(w, r.WithContext(ctx))
 				return
 			}
 		}

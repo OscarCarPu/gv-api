@@ -10,6 +10,7 @@ type Variety struct {
 	Score    float32 `json:"score"`
 	Price    float32 `json:"price"`
 	Comments *string `json:"comments"`
+	Judge    string  `json:"judge"`
 }
 
 type CreateVarietyRequest struct {
@@ -20,6 +21,7 @@ type CreateVarietyRequest struct {
 	Quality  float32 `json:"quality"`
 	Price    float32 `json:"price"`
 	Comments *string `json:"comments"`
+	Judge    string  `json:"judge"`
 }
 
 type UpdateVarietyRequest struct {
@@ -31,4 +33,5 @@ type UpdateVarietyRequest struct {
 	Quality  float32 `json:"quality"`
 	Price    float32 `json:"price"`
 	Comments *string `json:"comments"`
+	Judge    string  `json:"judge"`
 }

@@ -166,6 +166,21 @@ func (q *Queries) DeleteProject(ctx context.Context, id int32) error {
 	return err
 }
 
+const deleteRemovedTaskBlocks = `-- name: DeleteRemovedTaskBlocks :exec
+DELETE FROM task_dependencies
+WHERE depends_on = $1 AND NOT (task_id = ANY($2::int[]))
+`
+
+type DeleteRemovedTaskBlocksParams struct {
+	DependsOn int32   `db:"depends_on" json:"depends_on"`
+	Keep      []int32 `db:"keep" json:"keep"`
+}
+
+func (q *Queries) DeleteRemovedTaskBlocks(ctx context.Context, arg DeleteRemovedTaskBlocksParams) error {
+	_, err := q.db.Exec(ctx, deleteRemovedTaskBlocks, arg.DependsOn, arg.Keep)
+	return err
+}
+
 const deleteRemovedTaskDependencies = `-- name: DeleteRemovedTaskDependencies :exec
 DELETE FROM task_dependencies
 WHERE task_id = $1 AND NOT (depends_on = ANY($2::int[]))
@@ -1149,25 +1164,6 @@ func (q *Queries) ListTasksFast(ctx context.Context) ([]ListTasksFastRow, error)
 	return items, nil
 }
 
-const taskDependencyWouldCycle = `-- name: TaskDependencyWouldCycle :one
-SELECT task_dependency_would_cycle($1::int, $2::int[]) AS has_cycle
-`
-
-type TaskDependencyWouldCycleParams struct {
-	TaskID  int32   `db:"task_id" json:"task_id"`
-	NewDeps []int32 `db:"new_deps" json:"new_deps"`
-}
-
-// Wraps the task_dependency_would_cycle SQL function (see migration 011).
-// Returns true if replacing @task_id's outgoing dep edges with @new_deps
-// would create a cycle.
-func (q *Queries) TaskDependencyWouldCycle(ctx context.Context, arg TaskDependencyWouldCycleParams) (bool, error) {
-	row := q.db.QueryRow(ctx, taskDependencyWouldCycle, arg.TaskID, arg.NewDeps)
-	var has_cycle bool
-	err := row.Scan(&has_cycle)
-	return has_cycle, err
-}
-
 const taskBlocksWouldCycle = `-- name: TaskBlocksWouldCycle :one
 SELECT EXISTS(
     SELECT 1 FROM unnest($1::int[]) AS b(id)
@@ -1190,38 +1186,23 @@ func (q *Queries) TaskBlocksWouldCycle(ctx context.Context, arg TaskBlocksWouldC
 	return has_cycle, err
 }
 
-const deleteRemovedTaskBlocks = `-- name: DeleteRemovedTaskBlocks :exec
-DELETE FROM task_dependencies
-WHERE depends_on = $1 AND NOT (task_id = ANY($2::int[]))
+const taskDependencyWouldCycle = `-- name: TaskDependencyWouldCycle :one
+SELECT task_dependency_would_cycle($1::int, $2::int[]) AS has_cycle
 `
 
-type DeleteRemovedTaskBlocksParams struct {
-	DependsOn int32   `db:"depends_on" json:"depends_on"`
-	Keep      []int32 `db:"keep" json:"keep"`
+type TaskDependencyWouldCycleParams struct {
+	TaskID  int32   `db:"task_id" json:"task_id"`
+	NewDeps []int32 `db:"new_deps" json:"new_deps"`
 }
 
-func (q *Queries) DeleteRemovedTaskBlocks(ctx context.Context, arg DeleteRemovedTaskBlocksParams) error {
-	_, err := q.db.Exec(ctx, deleteRemovedTaskBlocks, arg.DependsOn, arg.Keep)
-	return err
-}
-
-const upsertTaskBlocks = `-- name: UpsertTaskBlocks :exec
-INSERT INTO task_dependencies (task_id, depends_on)
-SELECT t.id, $1
-FROM unnest($2::int[]) AS block_id
-JOIN tasks t ON t.id = block_id AND t.finished_at IS NULL
-WHERE array_length($2::int[], 1) IS NOT NULL
-ON CONFLICT (task_id, depends_on) DO NOTHING
-`
-
-type UpsertTaskBlocksParams struct {
-	DependsOn int32   `db:"depends_on" json:"depends_on"`
-	Blocks    []int32 `db:"blocks" json:"blocks"`
-}
-
-func (q *Queries) UpsertTaskBlocks(ctx context.Context, arg UpsertTaskBlocksParams) error {
-	_, err := q.db.Exec(ctx, upsertTaskBlocks, arg.DependsOn, arg.Blocks)
-	return err
+// Wraps the task_dependency_would_cycle SQL function (see migration 011).
+// Returns true if replacing @task_id's outgoing dep edges with @new_deps
+// would create a cycle.
+func (q *Queries) TaskDependencyWouldCycle(ctx context.Context, arg TaskDependencyWouldCycleParams) (bool, error) {
+	row := q.db.QueryRow(ctx, taskDependencyWouldCycle, arg.TaskID, arg.NewDeps)
+	var has_cycle bool
+	err := row.Scan(&has_cycle)
+	return has_cycle, err
 }
 
 const updateProject = `-- name: UpdateProject :one
@@ -1444,6 +1425,25 @@ func (q *Queries) UpdateTodo(ctx context.Context, arg UpdateTodoParams) (Todo, e
 		&i.IsDone,
 	)
 	return i, err
+}
+
+const upsertTaskBlocks = `-- name: UpsertTaskBlocks :exec
+INSERT INTO task_dependencies (task_id, depends_on)
+SELECT t.id, $1
+FROM unnest($2::int[]) AS block_id
+JOIN tasks t ON t.id = block_id AND t.finished_at IS NULL
+WHERE array_length($2::int[], 1) IS NOT NULL
+ON CONFLICT (task_id, depends_on) DO NOTHING
+`
+
+type UpsertTaskBlocksParams struct {
+	DependsOn int32   `db:"depends_on" json:"depends_on"`
+	Blocks    []int32 `db:"blocks" json:"blocks"`
+}
+
+func (q *Queries) UpsertTaskBlocks(ctx context.Context, arg UpsertTaskBlocksParams) error {
+	_, err := q.db.Exec(ctx, upsertTaskBlocks, arg.DependsOn, arg.Blocks)
+	return err
 }
 
 const upsertTaskDependencies = `-- name: UpsertTaskDependencies :exec

@@ -71,14 +71,37 @@ type Todo struct {
 	IsDone bool   `db:"is_done" json:"is_done"`
 }
 
+type WeedVarietiesHistory struct {
+	HistoryID      int64              `db:"history_id" json:"history_id"`
+	VarietyID      int32              `db:"variety_id" json:"variety_id"`
+	Op             string             `db:"op" json:"op"`
+	ChangedAt      pgtype.Timestamptz `db:"changed_at" json:"changed_at"`
+	Name           *string            `db:"name" json:"name"`
+	Scent          *float32           `db:"scent" json:"scent"`
+	Flavor         *float32           `db:"flavor" json:"flavor"`
+	Power          *float32           `db:"power" json:"power"`
+	Quality        *float32           `db:"quality" json:"quality"`
+	Score          *float32           `db:"score" json:"score"`
+	Price          *float32           `db:"price" json:"price"`
+	Comments       *string            `db:"comments" json:"comments"`
+	Judge          *string            `db:"judge" json:"judge"`
+	DeletedAt      pgtype.Timestamptz `db:"deleted_at" json:"deleted_at"`
+	ActorIp        *string            `db:"actor_ip" json:"actor_ip"`
+	ActorUserAgent *string            `db:"actor_user_agent" json:"actor_user_agent"`
+	ActorDeviceID  *string            `db:"actor_device_id" json:"actor_device_id"`
+	ActorTokenKind *string            `db:"actor_token_kind" json:"actor_token_kind"`
+}
+
 type WeedVariety struct {
-	ID       int32   `db:"id" json:"id"`
-	Name     string  `db:"name" json:"name"`
-	Scent    float32 `db:"scent" json:"scent"`
-	Flavor   float32 `db:"flavor" json:"flavor"`
-	Power    float32 `db:"power" json:"power"`
-	Quality  float32 `db:"quality" json:"quality"`
-	Score    float32 `db:"score" json:"score"`
-	Price    float32 `db:"price" json:"price"`
-	Comments *string `db:"comments" json:"comments"`
+	ID        int32              `db:"id" json:"id"`
+	Name      string             `db:"name" json:"name"`
+	Scent     float32            `db:"scent" json:"scent"`
+	Flavor    float32            `db:"flavor" json:"flavor"`
+	Power     float32            `db:"power" json:"power"`
+	Quality   float32            `db:"quality" json:"quality"`
+	Score     float32            `db:"score" json:"score"`
+	Price     float32            `db:"price" json:"price"`
+	Comments  *string            `db:"comments" json:"comments"`
+	Judge     string             `db:"judge" json:"judge"`
+	DeletedAt pgtype.Timestamptz `db:"deleted_at" json:"deleted_at"`
 }

@@ -6,6 +6,7 @@ import (
 	"errors"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"gv-api/internal/response"
 
@@ -94,6 +95,15 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 		response.Error(w, http.StatusBadRequest, "name must be at most 40 characters")
 		return
 	}
+	req.Judge = strings.TrimSpace(req.Judge)
+	if req.Judge == "" {
+		response.Error(w, http.StatusBadRequest, "judge is required")
+		return
+	}
+	if len(req.Judge) > 40 {
+		response.Error(w, http.StatusBadRequest, "judge must be at most 40 characters")
+		return
+	}
 	if msg := validateScores(req.Scent, req.Flavor, req.Power, req.Quality); msg != "" {
 		response.Error(w, http.StatusBadRequest, msg)
 		return
@@ -129,6 +139,15 @@ func (h *Handler) Update(w http.ResponseWriter, r *http.Request) {
 	}
 	if len(req.Name) > 40 {
 		response.Error(w, http.StatusBadRequest, "name must be at most 40 characters")
+		return
+	}
+	req.Judge = strings.TrimSpace(req.Judge)
+	if req.Judge == "" {
+		response.Error(w, http.StatusBadRequest, "judge is required")
+		return
+	}
+	if len(req.Judge) > 40 {
+		response.Error(w, http.StatusBadRequest, "judge must be at most 40 characters")
 		return
 	}
 	if msg := validateScores(req.Scent, req.Flavor, req.Power, req.Quality); msg != "" {

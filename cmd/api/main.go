@@ -7,12 +7,12 @@ import (
 	"time"
 	_ "time/tzdata"
 
+	"gv-api/internal/actor"
 	"gv-api/internal/auth"
 	"gv-api/internal/config"
 	"gv-api/internal/database"
 	"gv-api/internal/database/habitsdb"
 	"gv-api/internal/database/tasksdb"
-	"gv-api/internal/database/varietiesdb"
 	"gv-api/internal/habits"
 	"gv-api/internal/tasks"
 	"gv-api/internal/varieties"
@@ -57,8 +57,7 @@ func main() {
 	taskHandler := tasks.NewHandler(taskService)
 
 	// Varieties Setup
-	varietyQueries := varietiesdb.New(db)
-	varietyRepo := varieties.NewRepository(varietyQueries)
+	varietyRepo := varieties.NewRepository(db)
 	varietyService := varieties.NewService(varietyRepo)
 	varietyHandler := varieties.NewHandler(varietyService)
 
@@ -72,11 +71,12 @@ func main() {
 	r.Use(cors.Handler(cors.Options{
 		AllowedOrigins:   []string{"*"},
 		AllowedMethods:   []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS", "HEAD"},
-		AllowedHeaders:   []string{"Content-Type", "Authorization"},
+		AllowedHeaders:   []string{"Content-Type", "Authorization", "X-Device-ID"},
 		ExposedHeaders:   []string{"Content-Length"},
 		AllowCredentials: false,
 		MaxAge:           300,
 	}))
+	r.Use(actor.Middleware)
 
 	// Public
 	r.Post("/login", authHandler.Login)
