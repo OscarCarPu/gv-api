@@ -5,7 +5,7 @@
 -- CLEAN SLATE
 -- =============================================================================
 -- Delete in dependency order (children before parents)
-TRUNCATE time_entries, todos, task_dependencies, tasks, projects, habit_logs, habits, weed_varieties, weed_varieties_history RESTART IDENTITY CASCADE;
+TRUNCATE time_entries, todos, task_dependencies, tasks, projects, habit_logs, habits, weed_varieties, weed_varieties_history, transactions, accounts, categories RESTART IDENTITY CASCADE;
 
 -- =============================================================================
 -- HABITS
@@ -1030,3 +1030,161 @@ INSERT INTO weed_varieties (name, scent, flavor, power, quality, price, comments
     ('Bubba Kush',       7.0, 7.5, 8.0, 8.0,  9.50, 'Sleep-inducing indica',             'Oscar'),
     ('Pineapple Express',8.5, 9.0, 7.0, 8.0, 11.50, 'Tropical, mood-lifting',            'Pepe'),
     ('Mystery Bag',      4.0, 4.5, 5.0, 3.5,  6.00, NULL,                                'Oscar');
+
+-- =============================================================================
+-- FINANCE: ACCOUNTS
+-- =============================================================================
+-- `total` is left at the default 0 here; the trigger on `transactions` will
+-- recompute it as the rows below are inserted.
+INSERT INTO accounts (name) VALUES
+    ('Wallet'),   -- id=1  cash on hand
+    ('Bank'),     -- id=2  primary checking
+    ('Savings'),  -- id=3  rainy-day fund
+    ('Crypto');   -- id=4  brokerage
+
+-- =============================================================================
+-- FINANCE: CATEGORIES (mix of flat roots, two-level trees, and three-level trees)
+-- =============================================================================
+-- IDs are deterministic because we TRUNCATE ... RESTART IDENTITY above;
+-- children below reference parent IDs by integer literal.
+--
+-- Income and transfer don't get synthetic "Income" / "Internal transfer"
+-- root categories — that classification lives on the transaction.type enum.
+-- They are flat: each is a root category.
+-- Expense uses the multi-level shape: e.g. Food -> Groceries -> Supermarket.
+INSERT INTO categories (name, parent_id, type) VALUES
+    -- ===== income (flat: each is a root) =====
+    ('Salary',              NULL, 'income'),    -- 1
+    ('Freelance',           NULL, 'income'),    -- 2
+    ('Refunds',             NULL, 'income'),    -- 3
+    ('Investment returns',  NULL, 'income'),    -- 4
+    ('Opening balance',     NULL, 'income'),    -- 5
+
+    -- ===== expense roots =====
+    ('Food',                NULL, 'expense'),   -- 6
+    ('Bills',               NULL, 'expense'),   -- 7
+    ('Shopping',            NULL, 'expense'),   -- 8
+    ('Health',              NULL, 'expense'),   -- 9
+    ('Transport',           NULL, 'expense'),   -- 10  flat: no children
+
+    -- ===== expense level 2 under Food =====
+    ('Groceries',           6,    'expense'),   -- 11
+    ('Eating out',          6,    'expense'),   -- 12
+    ('Bakery',              6,    'expense'),   -- 13
+    ('Snacks',              6,    'expense'),   -- 14
+
+    -- ===== expense level 3 under Groceries =====
+    ('Supermarket',         11,   'expense'),   -- 15
+    ('Farmers market',      11,   'expense'),   -- 16
+
+    -- ===== expense level 3 under Eating out =====
+    ('Coffee',              12,   'expense'),   -- 17
+    ('Lunch',               12,   'expense'),   -- 18
+    ('Dinner',              12,   'expense'),   -- 19
+
+    -- ===== expense level 2 under Bills =====
+    ('Rent',                7,    'expense'),   -- 20
+    ('Utilities',           7,    'expense'),   -- 21
+    ('Subscriptions',       7,    'expense'),   -- 22
+
+    -- ===== expense level 2 under Shopping =====
+    ('Clothing',            8,    'expense'),   -- 23
+    ('Entertainment',       8,    'expense'),   -- 24
+
+    -- ===== expense level 2 under Health =====
+    ('Pharmacy',            9,    'expense'),   -- 25
+    ('Doctor',              9,    'expense'),   -- 26
+
+    -- ===== transfer (flat: each is a root) =====
+    ('Savings deposit',     NULL, 'transfer'),  -- 27
+    ('Cash withdrawal',     NULL, 'transfer'),  -- 28
+    ('Investment transfer', NULL, 'transfer');  -- 29
+
+-- =============================================================================
+-- FINANCE: TRANSACTIONS (~90 days of activity)
+-- =============================================================================
+-- Inserts trigger `transactions_apply_total`, which keeps `accounts.total`
+-- consistent for income (+), expense (-), and transfer (source -, dest +).
+-- Each transaction's category_id type matches its transaction type.
+INSERT INTO transactions (type, amount, account_id, to_account_id, category_id, description, occurred_at) VALUES
+    -- ---- ~90 days ago: opening balances ----
+    ('income',   1500.00, 2, NULL,  5, 'Opening balance',         now() - INTERVAL '90 days'),
+    ('income',   3000.00, 3, NULL,  5, 'Opening balance',         now() - INTERVAL '90 days'),
+    ('income',    150.00, 1, NULL,  5, 'Opening cash',            now() - INTERVAL '90 days'),
+    ('income',    800.00, 4, NULL,  5, 'Opening crypto position', now() - INTERVAL '90 days'),
+    ('income',    120.00, 4, NULL,  4, 'Crypto staking rewards',  now() - INTERVAL '85 days'),
+
+    -- ---- ~65 days ago: March payday + fixed costs ----
+    ('income',   2400.00, 2, NULL,  1, 'Salary - March',          now() - INTERVAL '65 days'),
+    ('expense',   850.00, 2, NULL, 20, 'Rent - March',            now() - INTERVAL '64 days'),
+    ('expense',    68.40, 2, NULL, 21, 'Electricity bill',        now() - INTERVAL '62 days'),
+    ('expense',    35.00, 2, NULL, 21, 'Internet',                now() - INTERVAL '62 days'),
+    ('expense',    18.99, 2, NULL, 22, 'Streaming subscription',  now() - INTERVAL '60 days'),
+    ('expense',     9.99, 2, NULL, 22, 'Music subscription',      now() - INTERVAL '60 days'),
+    ('transfer',  500.00, 2, 3,    27, 'Monthly savings',         now() - INTERVAL '58 days'),
+    ('transfer',  200.00, 2, 1,    28, 'Cash withdrawal',         now() - INTERVAL '57 days'),
+
+    -- ---- ~56-46 days ago: spring spending ----
+    ('expense',    54.30, 1, NULL, 15, 'Weekly groceries',        now() - INTERVAL '56 days'),
+    ('expense',     4.20, 1, NULL, 17, 'Coffee',                  now() - INTERVAL '55 days'),
+    ('expense',    12.80, 1, NULL, 18, 'Lunch',                   now() - INTERVAL '55 days'),
+    ('expense',    28.00, 1, NULL, 16, 'Farmers market produce',  now() - INTERVAL '54 days'),
+    ('expense',    61.40, 1, NULL, 15, 'Weekly groceries',        now() - INTERVAL '52 days'),
+    ('expense',     3.80, 1, NULL, 17, 'Coffee',                  now() - INTERVAL '51 days'),
+    ('income',    180.00, 2, NULL,  2, 'Freelance invoice',       now() - INTERVAL '50 days'),
+    ('expense',    89.50, 2, NULL, 24, 'Concert tickets',         now() - INTERVAL '48 days'),
+    ('expense',    44.10, 1, NULL, 18, 'Lunch with friends',      now() - INTERVAL '47 days'),
+    ('expense',    73.20, 1, NULL, 15, 'Weekly groceries',        now() - INTERVAL '45 days'),
+    ('transfer',  300.00, 4, 2,    29, 'Crypto profit-taking',    now() - INTERVAL '44 days'),
+    ('expense',    22.00, 2, NULL, 25, 'Pharmacy',                now() - INTERVAL '43 days'),
+    ('expense',     6.50, 1, NULL, 13, 'Bakery',                  now() - INTERVAL '42 days'),
+    ('expense',    65.00, 2, NULL, 19, 'Dinner with team',        now() - INTERVAL '41 days'),
+    ('expense',    38.00, 2, NULL, 10, 'Train tickets',           now() - INTERVAL '40 days'),
+    ('expense',    85.00, 2, NULL, 26, 'Doctor visit',            now() - INTERVAL '38 days'),
+    ('expense',    58.90, 1, NULL, 15, 'Weekly groceries',        now() - INTERVAL '37 days'),
+    ('income',     45.00, 2, NULL,  3, 'Refund - returned item',  now() - INTERVAL '35 days'),
+    ('expense',    18.50, 1, NULL, 18, 'Lunch',                   now() - INTERVAL '34 days'),
+    ('expense',     7.20, 1, NULL, 13, 'Bakery',                  now() - INTERVAL '33 days'),
+    ('expense',    11.30, 1, NULL, 14, 'Snacks',                  now() - INTERVAL '32 days'),
+
+    -- ---- ~30 days ago: April payday + fixed costs ----
+    ('income',   2500.00, 2, NULL,  1, 'Salary - April',          now() - INTERVAL '30 days'),
+    ('expense',   850.00, 2, NULL, 20, 'Rent - April',            now() - INTERVAL '29 days'),
+    ('expense',    72.50, 2, NULL, 21, 'Electricity bill',        now() - INTERVAL '28 days'),
+    ('expense',    35.00, 2, NULL, 21, 'Internet',                now() - INTERVAL '28 days'),
+    ('expense',    18.99, 2, NULL, 22, 'Streaming subscription',  now() - INTERVAL '27 days'),
+    ('expense',     9.99, 2, NULL, 22, 'Music subscription',      now() - INTERVAL '27 days'),
+    ('transfer',  500.00, 2, 3,    27, 'Monthly savings',         now() - INTERVAL '26 days'),
+    ('transfer',  200.00, 2, 1,    28, 'Cash withdrawal',         now() - INTERVAL '25 days'),
+
+    -- ---- ~24-6 days ago: April spending ----
+    ('expense',   249.00, 2, NULL, 23, 'New running shoes',       now() - INTERVAL '24 days'),
+    ('expense',    52.30, 1, NULL, 15, 'Weekly groceries',        now() - INTERVAL '23 days'),
+    ('expense',     4.20, 1, NULL, 17, 'Coffee',                  now() - INTERVAL '22 days'),
+    ('expense',    16.00, 1, NULL, 18, 'Lunch',                   now() - INTERVAL '22 days'),
+    ('expense',    32.50, 1, NULL, 16, 'Farmers market produce',  now() - INTERVAL '21 days'),
+    ('expense',    14.50, 1, NULL, 25, 'Pharmacy',                now() - INTERVAL '20 days'),
+    ('expense',    55.00, 2, NULL, 10, 'Monthly bus pass',        now() - INTERVAL '18 days'),
+    ('expense',    64.50, 1, NULL, 15, 'Weekly groceries',        now() - INTERVAL '17 days'),
+    ('expense',     4.20, 1, NULL, 17, 'Coffee',                  now() - INTERVAL '16 days'),
+    ('expense',    42.00, 2, NULL, 19, 'Dinner out',              now() - INTERVAL '15 days'),
+    ('income',     65.00, 4, NULL,  4, 'Crypto staking rewards',  now() - INTERVAL '14 days'),
+    ('expense',    45.00, 2, NULL, 23, 'New shirt',               now() - INTERVAL '12 days'),
+    ('expense',     7.50, 1, NULL, 13, 'Bakery',                  now() - INTERVAL '11 days'),
+    ('expense',    58.90, 1, NULL, 15, 'Weekly groceries',        now() - INTERVAL '10 days'),
+    ('expense',     8.00, 1, NULL, 14, 'Snacks',                  now() - INTERVAL '9 days'),
+    ('transfer',  150.00, 2, 3,    27, 'Extra savings push',      now() - INTERVAL '8 days'),
+    ('expense',    18.50, 1, NULL, 18, 'Lunch',                   now() - INTERVAL '6 days'),
+
+    -- ---- this month (May): payday rituals + early-month spending ----
+    ('income',   2500.00, 2, NULL,  1, 'Salary - May',            date_trunc('month', now()) + INTERVAL '0 days 9 hours'),
+    ('expense',   850.00, 2, NULL, 20, 'Rent - May',              date_trunc('month', now()) + INTERVAL '0 days 10 hours'),
+    ('expense',    74.00, 2, NULL, 21, 'Electricity bill',        date_trunc('month', now()) + INTERVAL '1 days'),
+    ('expense',    35.00, 2, NULL, 21, 'Internet',                date_trunc('month', now()) + INTERVAL '1 days'),
+    ('expense',    18.99, 2, NULL, 22, 'Streaming subscription',  date_trunc('month', now()) + INTERVAL '2 days'),
+    ('transfer',  500.00, 2, 3,    27, 'Monthly savings',         date_trunc('month', now()) + INTERVAL '2 days 12 hours'),
+    ('transfer',  250.00, 2, 1,    28, 'Cash withdrawal',         date_trunc('month', now()) + INTERVAL '3 days'),
+    ('expense',    48.20, 1, NULL, 15, 'Weekly groceries',        date_trunc('month', now()) + INTERVAL '3 days 18 hours'),
+    ('expense',     4.20, 1, NULL, 17, 'Coffee',                  date_trunc('month', now()) + INTERVAL '4 days 8 hours'),
+    ('expense',    14.50, 1, NULL, 18, 'Lunch',                   date_trunc('month', now()) + INTERVAL '4 days 13 hours'),
+    ('expense',    11.30, 1, NULL, 14, 'Snacks',                  now() - INTERVAL '6 hours');

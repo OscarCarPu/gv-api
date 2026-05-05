@@ -10,6 +10,7 @@ require (
 	github.com/golang-migrate/migrate/v4 v4.19.1
 	github.com/jackc/pgx/v5 v5.8.0
 	github.com/pquerna/otp v1.5.0
+	github.com/shopspring/decimal v1.2.0
 	github.com/stretchr/testify v1.11.1
 )
 

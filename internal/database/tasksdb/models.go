@@ -10,6 +10,21 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+type Account struct {
+	ID        int32              `db:"id" json:"id"`
+	Name      string             `db:"name" json:"name"`
+	Total     pgtype.Numeric     `db:"total" json:"total"`
+	CreatedAt pgtype.Timestamptz `db:"created_at" json:"created_at"`
+}
+
+type Category struct {
+	ID        int32              `db:"id" json:"id"`
+	Name      string             `db:"name" json:"name"`
+	ParentID  *int32             `db:"parent_id" json:"parent_id"`
+	Type      interface{}        `db:"type" json:"type"`
+	CreatedAt pgtype.Timestamptz `db:"created_at" json:"created_at"`
+}
+
 type Habit struct {
 	ID                int32    `db:"id" json:"id"`
 	Name              string   `db:"name" json:"name"`
@@ -69,6 +84,18 @@ type Todo struct {
 	TaskID int32  `db:"task_id" json:"task_id"`
 	Name   string `db:"name" json:"name"`
 	IsDone bool   `db:"is_done" json:"is_done"`
+}
+
+type Transaction struct {
+	ID          int32              `db:"id" json:"id"`
+	Type        interface{}        `db:"type" json:"type"`
+	Amount      pgtype.Numeric     `db:"amount" json:"amount"`
+	AccountID   int32              `db:"account_id" json:"account_id"`
+	ToAccountID *int32             `db:"to_account_id" json:"to_account_id"`
+	Description *string            `db:"description" json:"description"`
+	OccurredAt  pgtype.Timestamptz `db:"occurred_at" json:"occurred_at"`
+	CreatedAt   pgtype.Timestamptz `db:"created_at" json:"created_at"`
+	CategoryID  *int32             `db:"category_id" json:"category_id"`
 }
 
 type WeedVarietiesHistory struct {

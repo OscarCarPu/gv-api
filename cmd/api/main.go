@@ -13,6 +13,7 @@ import (
 	"gv-api/internal/database"
 	"gv-api/internal/database/habitsdb"
 	"gv-api/internal/database/tasksdb"
+	"gv-api/internal/finance"
 	"gv-api/internal/habits"
 	"gv-api/internal/tasks"
 	"gv-api/internal/varieties"
@@ -60,6 +61,11 @@ func main() {
 	varietyRepo := varieties.NewRepository(db)
 	varietyService := varieties.NewService(varietyRepo)
 	varietyHandler := varieties.NewHandler(varietyService)
+
+	// Finance Setup
+	financeRepo := finance.NewRepository(db)
+	financeService := finance.NewService(financeRepo, loc)
+	financeHandler := finance.NewHandler(financeService)
 
 	// Auth Setup
 	authService := auth.NewService(cfg, nil)
@@ -125,6 +131,26 @@ func main() {
 		r.Delete("/tasks/time-entries/{id}", taskHandler.DeleteTimeEntry)
 		r.Get("/habits/{id}/history", habitHandler.GetHistory)
 		r.Delete("/habits/{id}", habitHandler.DeleteHabit)
+
+		r.Get("/finance/accounts", financeHandler.ListAccounts)
+		r.Get("/finance/accounts/{id}", financeHandler.GetAccount)
+		r.Post("/finance/accounts", financeHandler.CreateAccount)
+		r.Put("/finance/accounts/{id}", financeHandler.UpdateAccount)
+		r.Delete("/finance/accounts/{id}", financeHandler.DeleteAccount)
+
+		r.Get("/finance/overview", financeHandler.GetOverview)
+
+		r.Get("/finance/categories", financeHandler.ListCategories)
+		r.Get("/finance/categories/{id}", financeHandler.GetCategory)
+		r.Post("/finance/categories", financeHandler.CreateCategory)
+		r.Put("/finance/categories/{id}", financeHandler.UpdateCategory)
+		r.Delete("/finance/categories/{id}", financeHandler.DeleteCategory)
+
+		r.Get("/finance/transactions", financeHandler.ListTransactions)
+		r.Get("/finance/transactions/{id}", financeHandler.GetTransaction)
+		r.Post("/finance/transactions", financeHandler.CreateTransaction)
+		r.Put("/finance/transactions/{id}", financeHandler.UpdateTransaction)
+		r.Delete("/finance/transactions/{id}", financeHandler.DeleteTransaction)
 	})
 
 	log.Printf("Starting server on port %s", cfg.Port)

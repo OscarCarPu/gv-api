@@ -53,3 +53,37 @@ sql:
         overrides:
           - db_type: "date"
             go_type: "time.Time"
+
+  - schema: "db/migrations"
+    queries: "db/queries/finance.sql"
+    engine: "postgresql"
+    gen:
+      go:
+        package: "financedb"
+        sql_package: "pgx/v5"
+        out: "internal/database/financedb"
+        emit_json_tags: true
+        emit_db_tags: true
+        emit_empty_slices: true
+        emit_pointers_for_null_types: true
+        emit_interface: true
+
+        overrides:
+          - db_type: "date"
+            go_type: "time.Time"
+          - db_type: "pg_catalog.numeric"
+            go_type:
+              import: "github.com/shopspring/decimal"
+              type: "Decimal"
+            nullable: false
+          - db_type: "pg_catalog.numeric"
+            go_type:
+              import: "github.com/shopspring/decimal"
+              type: "Decimal"
+              pointer: true
+            nullable: true
+          - db_type: "transaction_type"
+            go_type:
+              import: "gv-api/internal/finance/txtype"
+              package: "txtype"
+              type: "Type"
