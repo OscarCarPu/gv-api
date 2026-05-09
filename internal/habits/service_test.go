@@ -133,6 +133,48 @@ func TestService_CreateHabit_InvalidFrequency_ReturnsError(t *testing.T) {
 	assert.Contains(t, err.Error(), "invalid frequency")
 }
 
+// --- UpdateHabit ---
+
+func TestService_UpdateHabit_PassesThroughToRepo(t *testing.T) {
+	repo := mocks.NewMockRepository(t)
+	svc := habits.NewService(repo, time.UTC)
+	ctx := context.Background()
+
+	tmin := float32(2)
+	repo.EXPECT().UpdateHabit(mock.Anything, int32(7), "Run", (*string)(nil), "weekly", &tmin, (*float32)(nil), false).
+		Return(habits.CreateHabitResponse{ID: 7, Name: "Run", Frequency: "weekly", TargetMin: &tmin}, nil)
+
+	resp, err := svc.UpdateHabit(ctx, habits.UpdateHabitRequest{
+		ID: 7, Name: "Run", Frequency: "weekly", TargetMin: &tmin, RecordingRequired: false,
+	})
+	require.NoError(t, err)
+	assert.Equal(t, int32(7), resp.ID)
+}
+
+func TestService_UpdateHabit_InvalidFrequency_ReturnsError(t *testing.T) {
+	repo := mocks.NewMockRepository(t)
+	svc := habits.NewService(repo, time.UTC)
+
+	_, err := svc.UpdateHabit(context.Background(), habits.UpdateHabitRequest{
+		ID: 1, Name: "Bad", Frequency: "yearly",
+	})
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "invalid frequency")
+}
+
+func TestService_UpdateHabit_NotFound_PropagatesError(t *testing.T) {
+	repo := mocks.NewMockRepository(t)
+	svc := habits.NewService(repo, time.UTC)
+
+	repo.EXPECT().UpdateHabit(mock.Anything, int32(99), "X", (*string)(nil), "daily", (*float32)(nil), (*float32)(nil), true).
+		Return(habits.CreateHabitResponse{}, habits.ErrNotFound)
+
+	_, err := svc.UpdateHabit(context.Background(), habits.UpdateHabitRequest{
+		ID: 99, Name: "X", Frequency: "daily", RecordingRequired: true,
+	})
+	assert.ErrorIs(t, err, habits.ErrNotFound)
+}
+
 // --- GetDailyView ---
 
 func TestService_GetDailyView_DefaultsToToday(t *testing.T) {

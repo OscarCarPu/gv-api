@@ -3,6 +3,7 @@ package habits
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"strconv"
@@ -16,6 +17,7 @@ type ServiceInterface interface {
 	GetDailyView(ctx context.Context, dateStr string) ([]HabitWithLog, error)
 	LogHabit(ctx context.Context, req LogUpsertRequest) error
 	CreateHabit(ctx context.Context, req CreateHabitRequest) (CreateHabitResponse, error)
+	UpdateHabit(ctx context.Context, req UpdateHabitRequest) (CreateHabitResponse, error)
 	DeleteHabit(ctx context.Context, id int32) error
 	GetHistory(ctx context.Context, habitID int32, frequency, startAt, endAt string) (HistoryResponse, error)
 }
@@ -152,4 +154,64 @@ func (h *Handler) CreateHabit(w http.ResponseWriter, r *http.Request) {
 	}
 
 	response.JSON(w, http.StatusCreated, habit)
+}
+
+// UpdateHabit -> PUT /habits/{id}
+func (h *Handler) UpdateHabit(w http.ResponseWriter, r *http.Request) {
+	idStr := chi.URLParam(r, "id")
+	id, err := strconv.Atoi(idStr)
+	if err != nil {
+		response.Error(w, http.StatusBadRequest, fmt.Sprintf("invalid %s id", "habit"))
+		return
+	}
+
+	var req UpdateHabitRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		response.Error(w, http.StatusBadRequest, "Invalid Body")
+		return
+	}
+	req.ID = int32(id)
+
+	if req.Name == "" {
+		response.Error(w, http.StatusBadRequest, "name is required")
+		return
+	}
+
+	if len(req.Name) > 40 {
+		response.Error(w, http.StatusBadRequest, "name must be at most 40 characters")
+		return
+	}
+
+	valid := map[string]bool{"daily": true, "weekly": true, "monthly": true}
+	if !valid[req.Frequency] {
+		response.Error(w, http.StatusBadRequest, "frequency must be daily, weekly, or monthly")
+		return
+	}
+
+	if req.TargetMin != nil && *req.TargetMin < 0 {
+		response.Error(w, http.StatusBadRequest, "target_min must be >= 0")
+		return
+	}
+
+	if req.TargetMax != nil && *req.TargetMax < 0 {
+		response.Error(w, http.StatusBadRequest, "target_max must be >= 0")
+		return
+	}
+
+	if req.TargetMin != nil && req.TargetMax != nil && *req.TargetMin > *req.TargetMax {
+		response.Error(w, http.StatusBadRequest, "target_min must be <= target_max")
+		return
+	}
+
+	habit, err := h.service.UpdateHabit(r.Context(), req)
+	if err != nil {
+		if errors.Is(err, ErrNotFound) {
+			response.Error(w, http.StatusNotFound, "habit not found")
+			return
+		}
+		response.Error(w, http.StatusInternalServerError, "Failed to update habit")
+		return
+	}
+
+	response.JSON(w, http.StatusOK, habit)
 }

@@ -425,6 +425,69 @@ func (_c *MockRepository_RecalculateStreak_Call) RunAndReturn(run func(context.C
 	return _c
 }
 
+// UpdateHabit provides a mock function with given fields: ctx, id, name, description, frequency, targetMin, targetMax, recordingRequired
+func (_m *MockRepository) UpdateHabit(ctx context.Context, id int32, name string, description *string, frequency string, targetMin *float32, targetMax *float32, recordingRequired bool) (habits.CreateHabitResponse, error) {
+	ret := _m.Called(ctx, id, name, description, frequency, targetMin, targetMax, recordingRequired)
+
+	if len(ret) == 0 {
+		panic("no return value specified for UpdateHabit")
+	}
+
+	var r0 habits.CreateHabitResponse
+	var r1 error
+	if rf, ok := ret.Get(0).(func(context.Context, int32, string, *string, string, *float32, *float32, bool) (habits.CreateHabitResponse, error)); ok {
+		return rf(ctx, id, name, description, frequency, targetMin, targetMax, recordingRequired)
+	}
+	if rf, ok := ret.Get(0).(func(context.Context, int32, string, *string, string, *float32, *float32, bool) habits.CreateHabitResponse); ok {
+		r0 = rf(ctx, id, name, description, frequency, targetMin, targetMax, recordingRequired)
+	} else {
+		r0 = ret.Get(0).(habits.CreateHabitResponse)
+	}
+
+	if rf, ok := ret.Get(1).(func(context.Context, int32, string, *string, string, *float32, *float32, bool) error); ok {
+		r1 = rf(ctx, id, name, description, frequency, targetMin, targetMax, recordingRequired)
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
+}
+
+// MockRepository_UpdateHabit_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'UpdateHabit'
+type MockRepository_UpdateHabit_Call struct {
+	*mock.Call
+}
+
+// UpdateHabit is a helper method to define mock.On call
+//   - ctx context.Context
+//   - id int32
+//   - name string
+//   - description *string
+//   - frequency string
+//   - targetMin *float32
+//   - targetMax *float32
+//   - recordingRequired bool
+func (_e *MockRepository_Expecter) UpdateHabit(ctx interface{}, id interface{}, name interface{}, description interface{}, frequency interface{}, targetMin interface{}, targetMax interface{}, recordingRequired interface{}) *MockRepository_UpdateHabit_Call {
+	return &MockRepository_UpdateHabit_Call{Call: _e.mock.On("UpdateHabit", ctx, id, name, description, frequency, targetMin, targetMax, recordingRequired)}
+}
+
+func (_c *MockRepository_UpdateHabit_Call) Run(run func(ctx context.Context, id int32, name string, description *string, frequency string, targetMin *float32, targetMax *float32, recordingRequired bool)) *MockRepository_UpdateHabit_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].(context.Context), args[1].(int32), args[2].(string), args[3].(*string), args[4].(string), args[5].(*float32), args[6].(*float32), args[7].(bool))
+	})
+	return _c
+}
+
+func (_c *MockRepository_UpdateHabit_Call) Return(_a0 habits.CreateHabitResponse, _a1 error) *MockRepository_UpdateHabit_Call {
+	_c.Call.Return(_a0, _a1)
+	return _c
+}
+
+func (_c *MockRepository_UpdateHabit_Call) RunAndReturn(run func(context.Context, int32, string, *string, string, *float32, *float32, bool) (habits.CreateHabitResponse, error)) *MockRepository_UpdateHabit_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // UpsertLog provides a mock function with given fields: ctx, habitID, date, value
 func (_m *MockRepository) UpsertLog(ctx context.Context, habitID int32, date time.Time, value float32) error {
 	ret := _m.Called(ctx, habitID, date, value)

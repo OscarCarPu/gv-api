@@ -108,6 +108,66 @@ func TestHandler_CreateHabit(t *testing.T) {
 	})
 }
 
+func TestHandler_UpdateHabit(t *testing.T) {
+	body := `{"name": "Exercise", "description": null, "frequency": "daily", "target_min": 1, "target_max": null, "recording_required": true}`
+
+	t.Run("200 on success", func(t *testing.T) {
+		svc := mocks.NewMockServiceInterface(t)
+		svc.EXPECT().UpdateHabit(mock.Anything, mock.MatchedBy(func(req habits.UpdateHabitRequest) bool {
+			return req.ID == 7 && req.Name == "Exercise" && req.Frequency == "daily" && req.RecordingRequired
+		})).Return(habits.CreateHabitResponse{ID: 7, Name: "Exercise"}, nil)
+		rec := httptest.NewRecorder()
+		habits.NewHandler(svc).UpdateHabit(rec, withIDParam(newReq(http.MethodPut, "/", body), "7"))
+		assert.Equal(t, http.StatusOK, rec.Code)
+	})
+
+	t.Run("400 on invalid id", func(t *testing.T) {
+		rec := httptest.NewRecorder()
+		habits.NewHandler(mocks.NewMockServiceInterface(t)).UpdateHabit(rec, withIDParam(newReq(http.MethodPut, "/", body), "abc"))
+		assert.Equal(t, http.StatusBadRequest, rec.Code)
+	})
+
+	t.Run("400 on invalid JSON", func(t *testing.T) {
+		rec := httptest.NewRecorder()
+		habits.NewHandler(mocks.NewMockServiceInterface(t)).UpdateHabit(rec, withIDParam(newReq(http.MethodPut, "/", "not json"), "1"))
+		assert.Equal(t, http.StatusBadRequest, rec.Code)
+	})
+
+	t.Run("400 when name is empty", func(t *testing.T) {
+		rec := httptest.NewRecorder()
+		habits.NewHandler(mocks.NewMockServiceInterface(t)).UpdateHabit(rec, withIDParam(newReq(http.MethodPut, "/", `{"name": "", "frequency": "daily"}`), "1"))
+		assert.Equal(t, http.StatusBadRequest, rec.Code)
+	})
+
+	t.Run("400 on invalid frequency", func(t *testing.T) {
+		rec := httptest.NewRecorder()
+		habits.NewHandler(mocks.NewMockServiceInterface(t)).UpdateHabit(rec, withIDParam(newReq(http.MethodPut, "/", `{"name": "E", "frequency": "yearly"}`), "1"))
+		assert.Equal(t, http.StatusBadRequest, rec.Code)
+	})
+
+	t.Run("400 when target_min > target_max", func(t *testing.T) {
+		rec := httptest.NewRecorder()
+		habits.NewHandler(mocks.NewMockServiceInterface(t)).UpdateHabit(rec, withIDParam(newReq(http.MethodPut, "/", `{"name": "E", "frequency": "daily", "target_min": 10, "target_max": 5}`), "1"))
+		assert.Equal(t, http.StatusBadRequest, rec.Code)
+	})
+
+	t.Run("404 when habit not found", func(t *testing.T) {
+		svc := mocks.NewMockServiceInterface(t)
+		svc.EXPECT().UpdateHabit(mock.Anything, mock.Anything).Return(habits.CreateHabitResponse{}, habits.ErrNotFound)
+		rec := httptest.NewRecorder()
+		habits.NewHandler(svc).UpdateHabit(rec, withIDParam(newReq(http.MethodPut, "/", body), "7"))
+		assert.Equal(t, http.StatusNotFound, rec.Code)
+	})
+
+	t.Run("500 on service error", func(t *testing.T) {
+		svc := mocks.NewMockServiceInterface(t)
+		svc.EXPECT().UpdateHabit(mock.Anything, mock.Anything).Return(habits.CreateHabitResponse{}, errors.New("db error"))
+		rec := httptest.NewRecorder()
+		habits.NewHandler(svc).UpdateHabit(rec, withIDParam(newReq(http.MethodPut, "/", body), "7"))
+		assert.Equal(t, http.StatusInternalServerError, rec.Code)
+	})
+}
+
 func TestHandler_DeleteHabit(t *testing.T) {
 	t.Run("204 on success", func(t *testing.T) {
 		svc := mocks.NewMockServiceInterface(t)

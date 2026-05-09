@@ -325,6 +325,65 @@ func (q *Queries) RecalculateHabitStreak(ctx context.Context, arg RecalculateHab
 	return err
 }
 
+const updateHabit = `-- name: UpdateHabit :one
+UPDATE habits
+SET name = $2,
+    description = $3,
+    frequency = $4,
+    target_min = $5,
+    target_max = $6,
+    recording_required = $7
+WHERE id = $1
+RETURNING id, name, description, frequency, target_min, target_max, recording_required, current_streak, longest_streak
+`
+
+type UpdateHabitParams struct {
+	ID                int32    `db:"id" json:"id"`
+	Name              string   `db:"name" json:"name"`
+	Description       *string  `db:"description" json:"description"`
+	Frequency         string   `db:"frequency" json:"frequency"`
+	TargetMin         *float32 `db:"target_min" json:"target_min"`
+	TargetMax         *float32 `db:"target_max" json:"target_max"`
+	RecordingRequired bool     `db:"recording_required" json:"recording_required"`
+}
+
+type UpdateHabitRow struct {
+	ID                int32    `db:"id" json:"id"`
+	Name              string   `db:"name" json:"name"`
+	Description       *string  `db:"description" json:"description"`
+	Frequency         string   `db:"frequency" json:"frequency"`
+	TargetMin         *float32 `db:"target_min" json:"target_min"`
+	TargetMax         *float32 `db:"target_max" json:"target_max"`
+	RecordingRequired bool     `db:"recording_required" json:"recording_required"`
+	CurrentStreak     int32    `db:"current_streak" json:"current_streak"`
+	LongestStreak     int32    `db:"longest_streak" json:"longest_streak"`
+}
+
+func (q *Queries) UpdateHabit(ctx context.Context, arg UpdateHabitParams) (UpdateHabitRow, error) {
+	row := q.db.QueryRow(ctx, updateHabit,
+		arg.ID,
+		arg.Name,
+		arg.Description,
+		arg.Frequency,
+		arg.TargetMin,
+		arg.TargetMax,
+		arg.RecordingRequired,
+	)
+	var i UpdateHabitRow
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.Description,
+		&i.Frequency,
+		&i.TargetMin,
+		&i.TargetMax,
+		&i.RecordingRequired,
+		&i.CurrentStreak,
+		&i.LongestStreak,
+	)
+	return i, err
+}
+
 const upsertLog = `-- name: UpsertLog :exec
 INSERT INTO habit_logs (habit_id, log_date, value)
 VALUES ($1, $2, $3)

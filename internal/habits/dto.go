@@ -31,6 +31,16 @@ type CreateHabitRequest struct {
 	RecordingRequired *bool    `json:"recording_required"`
 }
 
+type UpdateHabitRequest struct {
+	ID                int32    `json:"-"`
+	Name              string   `json:"name"`
+	Description       *string  `json:"description"`
+	Frequency         string   `json:"frequency"`
+	TargetMin         *float32 `json:"target_min"`
+	TargetMax         *float32 `json:"target_max"`
+	RecordingRequired bool     `json:"recording_required"`
+}
+
 type HistoryPoint struct {
 	Date  string  `json:"date"`
 	Value float32 `json:"value"`

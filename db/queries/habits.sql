@@ -40,6 +40,17 @@ INSERT INTO habits (name, description, frequency, target_min, target_max, record
 VALUES ($1, $2, $3, $4, $5, $6)
 RETURNING id, name, description, frequency, target_min, target_max, recording_required, current_streak, longest_streak;
 
+-- name: UpdateHabit :one
+UPDATE habits
+SET name = $2,
+    description = $3,
+    frequency = $4,
+    target_min = $5,
+    target_max = $6,
+    recording_required = $7
+WHERE id = $1
+RETURNING id, name, description, frequency, target_min, target_max, recording_required, current_streak, longest_streak;
+
 -- name: GetHabitByID :one
 SELECT id, name, description, frequency, target_min, target_max, recording_required, current_streak, longest_streak
 FROM habits WHERE id = $1;

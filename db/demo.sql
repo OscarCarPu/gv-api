@@ -17,7 +17,9 @@ INSERT INTO habits (name, description, frequency, target_min, target_max, record
     ('Water intake', 'Drink 2L of water daily', 'daily', 2, NULL, true, 7, 14),          -- id=4  daily, target: 2L
     ('Sleep', 'Hours of sleep', 'daily', NULL, NULL, true, 0, 0),                        -- id=5  daily, no target (pure tracking)
     ('Weight', 'Body weight in kg', 'daily', 60, 80, false, 0, 0),                       -- id=6  daily, range target, carry-forward
-    ('Running', 'Kilometers run', 'monthly', 50, NULL, true, 2, 2);                      -- id=7  monthly, target: 50km/month
+    ('Running', 'Kilometers run', 'monthly', 50, NULL, true, 2, 2),                      -- id=7  monthly, target: 50km/month
+    ('Cafeína', 'Tazas al día (máximo 3)', 'daily', NULL, 3, true, 0, 0),                -- id=8  daily, max-only target
+    ('Lectura semanal', 'Horas leídas por semana', 'weekly', 5, 10, true, 0, 0);         -- id=9  weekly, range target
 
 -- =============================================================================
 -- HABIT LOGS (last 30 days for meaningful history and streak data)
@@ -323,7 +325,35 @@ INSERT INTO habit_logs (habit_id, log_date, value) VALUES
     -- This month (in progress, ~23km so far)
     (7, CURRENT_DATE - INTERVAL '2 days', 8),
     (7, CURRENT_DATE - INTERVAL '1 day', 10),
-    (7, CURRENT_DATE, 5);
+    (7, CURRENT_DATE, 5),
+
+    -- Cafeína (daily, max=3): mostly within limit, occasional overshoot
+    (8, CURRENT_DATE - INTERVAL '13 days', 2),
+    (8, CURRENT_DATE - INTERVAL '12 days', 3),
+    (8, CURRENT_DATE - INTERVAL '11 days', 4),  -- exceeded
+    (8, CURRENT_DATE - INTERVAL '10 days', 2),
+    (8, CURRENT_DATE - INTERVAL '9 days', 1),
+    (8, CURRENT_DATE - INTERVAL '8 days', 2),
+    (8, CURRENT_DATE - INTERVAL '7 days', 3),
+    (8, CURRENT_DATE - INTERVAL '6 days', 2),
+    (8, CURRENT_DATE - INTERVAL '5 days', 2),
+    (8, CURRENT_DATE - INTERVAL '4 days', 5),  -- exceeded
+    (8, CURRENT_DATE - INTERVAL '3 days', 2),
+    (8, CURRENT_DATE - INTERVAL '2 days', 1),
+    (8, CURRENT_DATE - INTERVAL '1 day', 2),
+    (8, CURRENT_DATE, 1),
+
+    -- Lectura semanal (weekly, min=5 max=10): a few weeks of hours
+    (9, CURRENT_DATE - INTERVAL '20 days', 2),
+    (9, CURRENT_DATE - INTERVAL '18 days', 3),
+    (9, CURRENT_DATE - INTERVAL '15 days', 2),  -- prev week total: 7
+    (9, CURRENT_DATE - INTERVAL '13 days', 1),
+    (9, CURRENT_DATE - INTERVAL '11 days', 4),
+    (9, CURRENT_DATE - INTERVAL '8 days', 3),   -- prev week total: 8
+    (9, CURRENT_DATE - INTERVAL '6 days', 2),
+    (9, CURRENT_DATE - INTERVAL '4 days', 2),
+    (9, CURRENT_DATE - INTERVAL '2 days', 1),
+    (9, CURRENT_DATE, 2);                        -- this week total: 7 so far
 
 -- =============================================================================
 -- PROJECTS

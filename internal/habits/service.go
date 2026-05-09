@@ -64,6 +64,13 @@ func (s *Service) CreateHabit(ctx context.Context, req CreateHabitRequest) (Crea
 	return s.repo.CreateHabit(ctx, req.Name, req.Description, frequency, req.TargetMin, req.TargetMax, recordingRequired)
 }
 
+func (s *Service) UpdateHabit(ctx context.Context, req UpdateHabitRequest) (CreateHabitResponse, error) {
+	if req.Frequency != "daily" && req.Frequency != "weekly" && req.Frequency != "monthly" {
+		return CreateHabitResponse{}, fmt.Errorf("invalid frequency: %s", req.Frequency)
+	}
+	return s.repo.UpdateHabit(ctx, req.ID, req.Name, req.Description, req.Frequency, req.TargetMin, req.TargetMax, req.RecordingRequired)
+}
+
 func (s *Service) DeleteHabit(ctx context.Context, id int32) error {
 	return s.repo.DeleteHabit(ctx, id)
 }

@@ -24,6 +24,7 @@ type Querier interface {
 	// @today_in is the user's "today" snapped to UTC midnight (caller decides
 	// the location), used to determine the current period.
 	RecalculateHabitStreak(ctx context.Context, arg RecalculateHabitStreakParams) error
+	UpdateHabit(ctx context.Context, arg UpdateHabitParams) (UpdateHabitRow, error)
 	UpsertLog(ctx context.Context, arg UpsertLogParams) error
 }
 

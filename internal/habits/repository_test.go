@@ -231,3 +231,37 @@ func TestIntegration_GetHabitHistory_FillZeros(t *testing.T) {
 	})
 }
 
+func TestIntegration_UpdateHabit_RoundTrip(t *testing.T) {
+	ctx := context.Background()
+	repo, pool := newRepo(t)
+
+	h, err := repo.CreateHabit(ctx, "Original", nil, "daily", ptr(float32(1)), nil, true)
+	require.NoError(t, err)
+
+	desc := "Updated desc"
+	tmin := float32(2)
+	tmax := float32(5)
+	updated, err := repo.UpdateHabit(ctx, h.ID, "Renamed", &desc, "weekly", &tmin, &tmax, false)
+	require.NoError(t, err)
+	require.Equal(t, "Renamed", updated.Name)
+	require.Equal(t, "weekly", updated.Frequency)
+	require.Equal(t, &tmin, updated.TargetMin)
+	require.Equal(t, &tmax, updated.TargetMax)
+	require.False(t, updated.RecordingRequired)
+
+	// Verify persisted
+	var name, freq string
+	err = pool.QueryRow(ctx, "SELECT name, frequency FROM habits WHERE id = $1", h.ID).Scan(&name, &freq)
+	require.NoError(t, err)
+	require.Equal(t, "Renamed", name)
+	require.Equal(t, "weekly", freq)
+}
+
+func TestIntegration_UpdateHabit_NotFound(t *testing.T) {
+	ctx := context.Background()
+	repo, _ := newRepo(t)
+
+	_, err := repo.UpdateHabit(ctx, 99999, "X", nil, "daily", nil, nil, true)
+	require.ErrorIs(t, err, habits.ErrNotFound)
+}
+

@@ -2,15 +2,21 @@ package habits
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	"gv-api/internal/database/habitsdb"
+
+	"github.com/jackc/pgx/v5"
 )
+
+var ErrNotFound = errors.New("not found")
 
 type Repository interface {
 	GetHabitsWithLogs(ctx context.Context, date time.Time) ([]HabitWithLog, error)
 	UpsertLog(ctx context.Context, habitID int32, date time.Time, value float32) error
 	CreateHabit(ctx context.Context, name string, description *string, frequency string, targetMin, targetMax *float32, recordingRequired bool) (CreateHabitResponse, error)
+	UpdateHabit(ctx context.Context, id int32, name string, description *string, frequency string, targetMin, targetMax *float32, recordingRequired bool) (CreateHabitResponse, error)
 	DeleteHabit(ctx context.Context, id int32) error
 	GetHabitByID(ctx context.Context, id int32) (habitsdb.GetHabitByIDRow, error)
 	RecalculateStreak(ctx context.Context, habitID int32, today time.Time) error
@@ -76,6 +82,35 @@ func (r *PostgresRepository) CreateHabit(ctx context.Context, name string, descr
 		RecordingRequired: recordingRequired,
 	})
 	if err != nil {
+		return CreateHabitResponse{}, err
+	}
+	return CreateHabitResponse{
+		ID:                habit.ID,
+		Name:              habit.Name,
+		Description:       habit.Description,
+		Frequency:         habit.Frequency,
+		TargetMin:         habit.TargetMin,
+		TargetMax:         habit.TargetMax,
+		RecordingRequired: habit.RecordingRequired,
+		CurrentStreak:     habit.CurrentStreak,
+		LongestStreak:     habit.LongestStreak,
+	}, nil
+}
+
+func (r *PostgresRepository) UpdateHabit(ctx context.Context, id int32, name string, description *string, frequency string, targetMin, targetMax *float32, recordingRequired bool) (CreateHabitResponse, error) {
+	habit, err := r.q.UpdateHabit(ctx, habitsdb.UpdateHabitParams{
+		ID:                id,
+		Name:              name,
+		Description:       description,
+		Frequency:         frequency,
+		TargetMin:         targetMin,
+		TargetMax:         targetMax,
+		RecordingRequired: recordingRequired,
+	})
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return CreateHabitResponse{}, ErrNotFound
+		}
 		return CreateHabitResponse{}, err
 	}
 	return CreateHabitResponse{

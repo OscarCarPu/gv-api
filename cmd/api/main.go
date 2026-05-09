@@ -103,6 +103,7 @@ func main() {
 		r.Use(fullMiddleware.Handle)
 		r.Get("/habits", habitHandler.GetDaily)
 		r.Post("/habits", habitHandler.CreateHabit)
+		r.Put("/habits/{id}", habitHandler.UpdateHabit)
 		r.Post("/habits/log", habitHandler.UpsertLog)
 		r.Get("/tasks/tree", taskHandler.GetActiveTree)
 		r.Get("/tasks/projects", taskHandler.GetRootProjects)

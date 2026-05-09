@@ -129,6 +129,56 @@
 
 ---
 
+## Update Habit
+
+- **Method:** `PUT`
+- **Endpoint:** `/habits/{id}`
+- **Description:** Replaces all editable fields of an existing habit. Streaks are preserved (and will be recomputed on the next log entry).
+- **Path Parameters:**
+  - `id` (required): The habit ID.
+- **Request Body:** All fields are part of a full replacement; required fields must be present.
+  ```json
+  {
+    "name": "Exercise",
+    "description": "Go for a 30-minute run.",
+    "frequency": "weekly",
+    "target_min": 5,
+    "target_max": null,
+    "recording_required": true
+  }
+  ```
+  - `name` (required): The name of the habit (max 40 characters).
+  - `description` (required, nullable): A description of the habit, or `null`.
+  - `frequency` (required): `daily`, `weekly`, or `monthly`.
+  - `target_min` (required, nullable): Minimum target value per period (must be >= 0), or `null`.
+  - `target_max` (required, nullable): Maximum target value per period (must be >= 0, >= target_min if both set), or `null`.
+  - `recording_required` (required): Whether missing days break the streak.
+- **Success Response:**
+  - **Code:** `200 OK`
+  - **Content:**
+    ```json
+    {
+      "id": 1,
+      "name": "Exercise",
+      "description": "Go for a 30-minute run.",
+      "frequency": "weekly",
+      "target_min": 5,
+      "target_max": null,
+      "recording_required": true,
+      "current_streak": 4,
+      "longest_streak": 12
+    }
+    ```
+- **Error Responses:**
+  - **Code:** `400 Bad Request`
+    - **Content:** `invalid habit id`, `Invalid Body`, `name is required`, `name must be at most 40 characters`, `frequency must be daily, weekly, or monthly`, `target_min must be >= 0`, `target_max must be >= 0`, or `target_min must be <= target_max`
+  - **Code:** `404 Not Found`
+    - **Content:** `habit not found`
+  - **Code:** `500 Internal Server Error`
+    - **Content:** `Failed to update habit`
+
+---
+
 ## Get Habit History
 
 - **Method:** `GET`
