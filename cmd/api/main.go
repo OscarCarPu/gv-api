@@ -157,6 +157,7 @@ func main() {
 
 		r.Get("/plan/today", planHandler.GetToday)
 		r.Post("/plan/blocks", planHandler.Create)
+		r.Delete("/plan/blocks/future", planHandler.DeleteFuture)
 		r.Put("/plan/blocks/{id}", planHandler.Update)
 		r.Delete("/plan/blocks/{id}", planHandler.Delete)
 

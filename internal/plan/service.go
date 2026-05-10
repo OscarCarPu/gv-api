@@ -146,6 +146,10 @@ func (s *Service) Delete(ctx context.Context, id int32) error {
 	return s.repo.Delete(ctx, id)
 }
 
+func (s *Service) DeleteFuture(ctx context.Context) error {
+	return s.repo.DeleteEndingAfter(ctx, time.Now())
+}
+
 // resolveLabel produces the effective label for a block. If the caller
 // supplied one, trim and validate it. Otherwise, fetch the linked task name.
 // When neither is available, ErrLabelRequired.

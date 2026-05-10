@@ -65,3 +65,6 @@ WHERE plan_date = @plan_date
 
 -- name: DeletePlanBlock :exec
 DELETE FROM plan_blocks WHERE id = $1;
+
+-- name: DeletePlanBlocksEndingAfter :exec
+DELETE FROM plan_blocks WHERE ended_at >= $1;

@@ -97,6 +97,15 @@ func (q *Queries) DeletePlanBlock(ctx context.Context, id int32) error {
 	return err
 }
 
+const deletePlanBlocksEndingAfter = `-- name: DeletePlanBlocksEndingAfter :exec
+DELETE FROM plan_blocks WHERE ended_at >= $1
+`
+
+func (q *Queries) DeletePlanBlocksEndingAfter(ctx context.Context, endedAt pgtype.Timestamptz) error {
+	_, err := q.db.Exec(ctx, deletePlanBlocksEndingAfter, endedAt)
+	return err
+}
+
 const getPlanBlock = `-- name: GetPlanBlock :one
 SELECT
     pb.id,

@@ -22,6 +22,7 @@ type Repository interface {
 	Create(ctx context.Context, planDate time.Time, startedAt, endedAt time.Time, taskID *int32, label string, note *string) (PlanBlockResponse, error)
 	Update(ctx context.Context, req UpdatePlanBlockRequest) (PlanBlockResponse, error)
 	Delete(ctx context.Context, id int32) error
+	DeleteEndingAfter(ctx context.Context, t time.Time) error
 }
 
 type PostgresRepository struct {
@@ -183,4 +184,8 @@ func (r *PostgresRepository) Update(ctx context.Context, req UpdatePlanBlockRequ
 
 func (r *PostgresRepository) Delete(ctx context.Context, id int32) error {
 	return r.q.DeletePlanBlock(ctx, id)
+}
+
+func (r *PostgresRepository) DeleteEndingAfter(ctx context.Context, t time.Time) error {
+	return r.q.DeletePlanBlocksEndingAfter(ctx, pgtype.Timestamptz{Time: t, Valid: true})
 }

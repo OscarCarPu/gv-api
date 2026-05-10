@@ -7,12 +7,15 @@ package plandb
 import (
 	"context"
 	"time"
+
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 type Querier interface {
 	CountOverlappingPlanBlocks(ctx context.Context, arg CountOverlappingPlanBlocksParams) (int64, error)
 	CreatePlanBlock(ctx context.Context, arg CreatePlanBlockParams) (CreatePlanBlockRow, error)
 	DeletePlanBlock(ctx context.Context, id int32) error
+	DeletePlanBlocksEndingAfter(ctx context.Context, endedAt pgtype.Timestamptz) error
 	GetPlanBlock(ctx context.Context, id int32) (GetPlanBlockRow, error)
 	GetTaskName(ctx context.Context, id int32) (string, error)
 	ListPlanBlocksByDate(ctx context.Context, planDate time.Time) ([]ListPlanBlocksByDateRow, error)

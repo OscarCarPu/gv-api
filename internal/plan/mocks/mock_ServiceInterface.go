@@ -126,6 +126,52 @@ func (_c *MockServiceInterface_Delete_Call) RunAndReturn(run func(context.Contex
 	return _c
 }
 
+// DeleteFuture provides a mock function with given fields: ctx
+func (_m *MockServiceInterface) DeleteFuture(ctx context.Context) error {
+	ret := _m.Called(ctx)
+
+	if len(ret) == 0 {
+		panic("no return value specified for DeleteFuture")
+	}
+
+	var r0 error
+	if rf, ok := ret.Get(0).(func(context.Context) error); ok {
+		r0 = rf(ctx)
+	} else {
+		r0 = ret.Error(0)
+	}
+
+	return r0
+}
+
+// MockServiceInterface_DeleteFuture_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'DeleteFuture'
+type MockServiceInterface_DeleteFuture_Call struct {
+	*mock.Call
+}
+
+// DeleteFuture is a helper method to define mock.On call
+//   - ctx context.Context
+func (_e *MockServiceInterface_Expecter) DeleteFuture(ctx interface{}) *MockServiceInterface_DeleteFuture_Call {
+	return &MockServiceInterface_DeleteFuture_Call{Call: _e.mock.On("DeleteFuture", ctx)}
+}
+
+func (_c *MockServiceInterface_DeleteFuture_Call) Run(run func(ctx context.Context)) *MockServiceInterface_DeleteFuture_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].(context.Context))
+	})
+	return _c
+}
+
+func (_c *MockServiceInterface_DeleteFuture_Call) Return(_a0 error) *MockServiceInterface_DeleteFuture_Call {
+	_c.Call.Return(_a0)
+	return _c
+}
+
+func (_c *MockServiceInterface_DeleteFuture_Call) RunAndReturn(run func(context.Context) error) *MockServiceInterface_DeleteFuture_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // GetToday provides a mock function with given fields: ctx
 func (_m *MockServiceInterface) GetToday(ctx context.Context) (plan.PlanTodayResponse, error) {
 	ret := _m.Called(ctx)

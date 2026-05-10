@@ -18,6 +18,7 @@ type ServiceInterface interface {
 	Create(ctx context.Context, req CreatePlanBlockRequest) (PlanBlockResponse, error)
 	Update(ctx context.Context, req UpdatePlanBlockRequest) (PlanBlockResponse, error)
 	Delete(ctx context.Context, id int32) error
+	DeleteFuture(ctx context.Context) error
 }
 
 type Handler struct {
@@ -117,5 +118,13 @@ func (h *Handler) Delete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (h *Handler) DeleteFuture(w http.ResponseWriter, r *http.Request) {
+	if err := h.service.DeleteFuture(r.Context()); err != nil {
+		response.Error(w, http.StatusInternalServerError, "Failed to delete future plan blocks")
+		return
+	}
 	w.WriteHeader(http.StatusNoContent)
 }

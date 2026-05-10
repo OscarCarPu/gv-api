@@ -156,3 +156,25 @@ func TestHandler_Delete(t *testing.T) {
 		assert.Equal(t, http.StatusInternalServerError, rec.Code)
 	})
 }
+
+func TestHandler_DeleteFuture(t *testing.T) {
+	t.Run("204 on success", func(t *testing.T) {
+		svc := mocks.NewMockServiceInterface(t)
+		svc.EXPECT().DeleteFuture(mock.Anything).Return(nil)
+
+		rec := httptest.NewRecorder()
+		req := newReq(http.MethodDelete, "/plan/blocks/future", "")
+		plan.NewHandler(svc).DeleteFuture(rec, req)
+		assert.Equal(t, http.StatusNoContent, rec.Code)
+	})
+
+	t.Run("500 on service error", func(t *testing.T) {
+		svc := mocks.NewMockServiceInterface(t)
+		svc.EXPECT().DeleteFuture(mock.Anything).Return(errors.New("db error"))
+
+		rec := httptest.NewRecorder()
+		req := newReq(http.MethodDelete, "/plan/blocks/future", "")
+		plan.NewHandler(svc).DeleteFuture(rec, req)
+		assert.Equal(t, http.StatusInternalServerError, rec.Code)
+	})
+}

@@ -133,6 +133,53 @@ func (_c *MockRepository_Delete_Call) RunAndReturn(run func(context.Context, int
 	return _c
 }
 
+// DeleteEndingAfter provides a mock function with given fields: ctx, t
+func (_m *MockRepository) DeleteEndingAfter(ctx context.Context, t time.Time) error {
+	ret := _m.Called(ctx, t)
+
+	if len(ret) == 0 {
+		panic("no return value specified for DeleteEndingAfter")
+	}
+
+	var r0 error
+	if rf, ok := ret.Get(0).(func(context.Context, time.Time) error); ok {
+		r0 = rf(ctx, t)
+	} else {
+		r0 = ret.Error(0)
+	}
+
+	return r0
+}
+
+// MockRepository_DeleteEndingAfter_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'DeleteEndingAfter'
+type MockRepository_DeleteEndingAfter_Call struct {
+	*mock.Call
+}
+
+// DeleteEndingAfter is a helper method to define mock.On call
+//   - ctx context.Context
+//   - t time.Time
+func (_e *MockRepository_Expecter) DeleteEndingAfter(ctx interface{}, t interface{}) *MockRepository_DeleteEndingAfter_Call {
+	return &MockRepository_DeleteEndingAfter_Call{Call: _e.mock.On("DeleteEndingAfter", ctx, t)}
+}
+
+func (_c *MockRepository_DeleteEndingAfter_Call) Run(run func(ctx context.Context, t time.Time)) *MockRepository_DeleteEndingAfter_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].(context.Context), args[1].(time.Time))
+	})
+	return _c
+}
+
+func (_c *MockRepository_DeleteEndingAfter_Call) Return(_a0 error) *MockRepository_DeleteEndingAfter_Call {
+	_c.Call.Return(_a0)
+	return _c
+}
+
+func (_c *MockRepository_DeleteEndingAfter_Call) RunAndReturn(run func(context.Context, time.Time) error) *MockRepository_DeleteEndingAfter_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // Get provides a mock function with given fields: ctx, id
 func (_m *MockRepository) Get(ctx context.Context, id int32) (plan.PlanBlockResponse, error) {
 	ret := _m.Called(ctx, id)
