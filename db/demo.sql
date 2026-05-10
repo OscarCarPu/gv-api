@@ -5,7 +5,7 @@
 -- CLEAN SLATE
 -- =============================================================================
 -- Delete in dependency order (children before parents)
-TRUNCATE time_entries, todos, task_dependencies, tasks, projects, habit_logs, habits, weed_varieties, weed_varieties_history, transactions, accounts, categories RESTART IDENTITY CASCADE;
+TRUNCATE plan_blocks, time_entries, todos, task_dependencies, tasks, projects, habit_logs, habits, weed_varieties, weed_varieties_history, transactions, accounts, categories RESTART IDENTITY CASCADE;
 
 -- =============================================================================
 -- HABITS
@@ -1046,6 +1046,22 @@ INSERT INTO time_entries (task_id, started_at, finished_at, comment) VALUES
     (30, CURRENT_DATE - INTERVAL '3 days' + INTERVAL '10 hours', CURRENT_DATE - INTERVAL '3 days' + INTERVAL '10 hours 30 minutes', 'Investigated 500 on /users endpoint'),
     (30, CURRENT_DATE - INTERVAL '1 day' + INTERVAL '11 hours', CURRENT_DATE - INTERVAL '1 day' + INTERVAL '11 hours 20 minutes', 'Fixed null pointer in pagination');
 
+-- Drop any seeded time entry that hasn't happened yet relative to the moment
+-- the demo is loaded. Keeps "today" totals consistent with what the user
+-- could have actually tracked so far.
+DELETE FROM time_entries WHERE started_at >= now();
+
+-- An entry that started before now() but was seeded with a future finished_at
+-- becomes the currently-running timer. Only one active entry is allowed by
+-- idx_time_entries_one_active, so pick the most-recently-started one.
+UPDATE time_entries SET finished_at = NULL
+WHERE id = (
+    SELECT id FROM time_entries
+    WHERE finished_at > now()
+    ORDER BY started_at DESC
+    LIMIT 1
+);
+
 -- =============================================================================
 -- WEED VARIETIES
 -- =============================================================================
@@ -1218,3 +1234,18 @@ INSERT INTO transactions (type, amount, account_id, to_account_id, category_id, 
     ('expense',     4.20, 1, NULL, 17, 'Coffee',                  date_trunc('month', now()) + INTERVAL '4 days 8 hours'),
     ('expense',    14.50, 1, NULL, 18, 'Lunch',                   date_trunc('month', now()) + INTERVAL '4 days 13 hours'),
     ('expense',    11.30, 1, NULL, 14, 'Snacks',                  now() - INTERVAL '6 hours');
+
+-- =============================================================================
+-- PLAN BLOCKS (today)
+-- A realistic day plan: linked task blocks (with auto-filled labels from the
+-- task name) interleaved with free-time blocks ("comer", "paseo", "café").
+-- =============================================================================
+INSERT INTO plan_blocks (plan_date, started_at, ended_at, task_id, label, note) VALUES
+    (CURRENT_DATE, CURRENT_DATE + INTERVAL  '9 hours',                CURRENT_DATE + INTERVAL '10 hours 30 minutes', 18,   'Fix server logs',         NULL),
+    (CURRENT_DATE, CURRENT_DATE + INTERVAL '10 hours 30 minutes',     CURRENT_DATE + INTERVAL '11 hours',            NULL, 'café',                    NULL),
+    (CURRENT_DATE, CURRENT_DATE + INTERVAL '11 hours',                CURRENT_DATE + INTERVAL '12 hours 30 minutes',  7,   'Design API schema',       NULL),
+    (CURRENT_DATE, CURRENT_DATE + INTERVAL '12 hours 30 minutes',     CURRENT_DATE + INTERVAL '14 hours',            NULL, 'comer',                   NULL),
+    (CURRENT_DATE, CURRENT_DATE + INTERVAL '14 hours',                CURRENT_DATE + INTERVAL '16 hours',            13,   'Set up data ingestion',   NULL),
+    (CURRENT_DATE, CURRENT_DATE + INTERVAL '16 hours',                CURRENT_DATE + INTERVAL '16 hours 30 minutes', NULL, 'paseo',                   NULL),
+    (CURRENT_DATE, CURRENT_DATE + INTERVAL '16 hours 30 minutes',     CURRENT_DATE + INTERVAL '18 hours',            14,   'Build transformation layer', NULL),
+    (CURRENT_DATE, CURRENT_DATE + INTERVAL '18 hours',                CURRENT_DATE + INTERVAL '19 hours',            22,   'Review PR backlog',       'Focus on the API v2 PRs');

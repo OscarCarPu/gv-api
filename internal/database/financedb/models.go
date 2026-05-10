@@ -45,6 +45,18 @@ type HabitLog struct {
 	Value   float32   `db:"value" json:"value"`
 }
 
+type PlanBlock struct {
+	ID        int32              `db:"id" json:"id"`
+	PlanDate  time.Time          `db:"plan_date" json:"plan_date"`
+	StartedAt pgtype.Timestamptz `db:"started_at" json:"started_at"`
+	EndedAt   pgtype.Timestamptz `db:"ended_at" json:"ended_at"`
+	TaskID    *int32             `db:"task_id" json:"task_id"`
+	Label     string             `db:"label" json:"label"`
+	Note      *string            `db:"note" json:"note"`
+	CreatedAt pgtype.Timestamptz `db:"created_at" json:"created_at"`
+	UpdatedAt pgtype.Timestamptz `db:"updated_at" json:"updated_at"`
+}
+
 type Project struct {
 	ID          int32              `db:"id" json:"id"`
 	ParentID    *int32             `db:"parent_id" json:"parent_id"`

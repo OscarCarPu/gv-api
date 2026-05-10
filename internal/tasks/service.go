@@ -293,7 +293,15 @@ func (s *Service) GetTimeEntrySummary(ctx context.Context) (TimeEntrySummaryResp
 	daysSinceMonday := (int(weekday) + 6) % 7 // Monday=0, Sunday=6
 	weekStart := time.Date(now.Year(), now.Month(), now.Day()-daysSinceMonday, 0, 0, 0, 0, s.location)
 
-	return s.repo.GetTimeEntrySummary(ctx, todayStart, weekStart)
+	summary, err := s.repo.GetTimeEntrySummary(ctx, todayStart, weekStart)
+	if err != nil {
+		return summary, err
+	}
+
+	summary.WeeklyTargetSeconds = WeeklyTaskTargetSeconds
+	summary.Pace = CalcPace(now, summary.Week)
+	summary.DailyTargetSeconds = CalcDailyTargetSeconds(now, summary.Week)
+	return summary, nil
 }
 
 func (s *Service) ListProjectsFast(ctx context.Context) ([]ProjectFastResponse, error) {

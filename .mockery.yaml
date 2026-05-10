@@ -15,3 +15,10 @@ packages:
     interfaces:
       Repository:
       ServiceInterface:
+  gv-api/internal/plan:
+    config:
+      dir: internal/plan/mocks
+      outpkg: mocks
+    interfaces:
+      Repository:
+      ServiceInterface:

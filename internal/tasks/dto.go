@@ -288,8 +288,11 @@ type TaskByDueDateResponse struct {
 }
 
 type TimeEntrySummaryResponse struct {
-	Today int64 `json:"today"`
-	Week  int64 `json:"week"`
+	Today               int64         `json:"today"`
+	Week                int64         `json:"week"`
+	DailyTargetSeconds  int64         `json:"daily_target_seconds"`
+	WeeklyTargetSeconds int64         `json:"weekly_target_seconds"`
+	Pace                PaceBreakdown `json:"pace"`
 }
 
 type ActiveProject struct {

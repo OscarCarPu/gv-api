@@ -124,8 +124,12 @@ Environment variables loaded via `os.Getenv` with sensible defaults. No `.env` f
 | PATCH | `/tasks/time-entries/{id}` | Update a time entry |
 | DELETE | `/tasks/time-entries/{id}` | Delete a time entry |
 | GET | `/tasks/time-entries/history` | Aggregated time entry history |
-| GET | `/tasks/time-entries/summary` | Today + week totals |
+| GET | `/tasks/time-entries/summary` | Today + week totals + daily/weekly target + pace |
 | GET | `/tasks/time-entries/active` | Currently running time entry |
+| GET | `/plan/today` | Today's plan blocks + totals + budget |
+| POST | `/plan/blocks` | Create a plan block |
+| PUT | `/plan/blocks/{id}` | Update a plan block |
+| DELETE | `/plan/blocks/{id}` | Delete a plan block |
 
 ## Database Schema
 

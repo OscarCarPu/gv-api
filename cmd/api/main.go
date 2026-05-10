@@ -12,9 +12,11 @@ import (
 	"gv-api/internal/config"
 	"gv-api/internal/database"
 	"gv-api/internal/database/habitsdb"
+	"gv-api/internal/database/plandb"
 	"gv-api/internal/database/tasksdb"
 	"gv-api/internal/finance"
 	"gv-api/internal/habits"
+	"gv-api/internal/plan"
 	"gv-api/internal/tasks"
 	"gv-api/internal/varieties"
 
@@ -56,6 +58,12 @@ func main() {
 	taskRepo := tasks.NewRepository(taskQueries)
 	taskService := tasks.NewService(taskRepo, loc)
 	taskHandler := tasks.NewHandler(taskService)
+
+	// Plan Setup
+	planQueries := plandb.New(db)
+	planRepo := plan.NewRepository(planQueries)
+	planService := plan.NewService(planRepo, taskService, loc)
+	planHandler := plan.NewHandler(planService)
 
 	// Varieties Setup
 	varietyRepo := varieties.NewRepository(db)
@@ -146,6 +154,11 @@ func main() {
 		r.Post("/finance/categories", financeHandler.CreateCategory)
 		r.Put("/finance/categories/{id}", financeHandler.UpdateCategory)
 		r.Delete("/finance/categories/{id}", financeHandler.DeleteCategory)
+
+		r.Get("/plan/today", planHandler.GetToday)
+		r.Post("/plan/blocks", planHandler.Create)
+		r.Put("/plan/blocks/{id}", planHandler.Update)
+		r.Delete("/plan/blocks/{id}", planHandler.Delete)
 
 		r.Get("/finance/transactions", financeHandler.ListTransactions)
 		r.Get("/finance/transactions/{id}", financeHandler.GetTransaction)

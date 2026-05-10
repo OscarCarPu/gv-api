@@ -173,18 +173,40 @@
 
 - **Method:** `GET`
 - **Endpoint:** `/tasks/time-entries/summary`
-- **Description:** Returns total seconds worked today and over the current week. Only completed (finished) time entries contribute. Time spent before the period start is excluded — for an entry that started yesterday and finished today, only the portion after midnight counts toward `today`. The week starts on Monday in the server's configured timezone.
+- **Description:** Returns total seconds worked today and over the current week, plus the rolling daily/weekly target derived from the 80h/week goal. Only completed (finished) time entries contribute to `today` / `week`. Time spent before the period start is excluded — for an entry that started yesterday and finished today, only the portion after midnight counts toward `today`. The week starts on Monday in the server's configured timezone.
 - **Success Response:**
   - **Code:** `200 OK`
   - **Content:**
     ```json
     {
       "today": 5400,
-      "week": 36000
+      "week": 36000,
+      "daily_target_seconds": 42666,
+      "weekly_target_seconds": 288000,
+      "pace": {
+        "uniform_per_day_seconds": 41492,
+        "uniform_today_share_seconds": 39056,
+        "weighted_weekday_seconds": 45333,
+        "weighted_weekend_seconds": 32000,
+        "weighted_today_share_seconds": 42666,
+        "remaining_full_days": 6,
+        "goal_reached": false
+      }
     }
     ```
-  - `today`: Total seconds worked since today's midnight (server timezone).
-  - `week`: Total seconds worked since the current week's Monday (server timezone).
+  - **Fields:**
+    - `today`: Total seconds worked since today's midnight (server timezone).
+    - `week`: Total seconds worked since the current week's Monday (server timezone).
+    - `weekly_target_seconds`: Constant `288000` (80h). Source of truth for the weekly goal.
+    - `daily_target_seconds`: Today's share of the **remaining** weekly seconds (`weekly_target_seconds - week`), weighted by the waking hours still left today vs. the waking hours of the rest of the week. Weekdays are 17 waking hours, weekends are 12. Same value as `pace.weighted_today_share_seconds`. Returns `0` once the weekly goal is reached.
+    - `pace`: Detailed pacing numbers used by the UI tooltip.
+      - `uniform_per_day_seconds`: Remaining seconds divided evenly across the remaining days, treating every day as 17 waking hours.
+      - `uniform_today_share_seconds`: `uniform_per_day_seconds` × today's remaining waking-hour fraction.
+      - `weighted_weekday_seconds`: Per-weekday share when remaining seconds are distributed weighted by waking hours (weekday=17h, weekend=12h).
+      - `weighted_weekend_seconds`: Per-weekend share under the same weighted distribution.
+      - `weighted_today_share_seconds`: Today's specific share under the weighted distribution. Equal to `daily_target_seconds`.
+      - `remaining_full_days`: Number of whole days left in the week after today (Monday=6, Sunday=0).
+      - `goal_reached`: `true` when `week >= weekly_target_seconds`. When `true`, all `*_seconds` pace fields are `0`.
 - **Error Responses:**
   - **Code:** `500 Internal Server Error`
     - **Content:** `Failed to get time entry summary`
