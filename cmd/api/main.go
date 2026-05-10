@@ -165,6 +165,10 @@ func main() {
 		r.Post("/finance/transactions", financeHandler.CreateTransaction)
 		r.Put("/finance/transactions/{id}", financeHandler.UpdateTransaction)
 		r.Delete("/finance/transactions/{id}", financeHandler.DeleteTransaction)
+
+		r.Get("/finance/stats/networth", financeHandler.GetNetWorthStats)
+		r.Get("/finance/stats/by-category", financeHandler.GetCategoryStats)
+		r.Get("/finance/stats/monthly", financeHandler.GetMonthlyStats)
 	})
 
 	log.Printf("Starting server on port %s", cfg.Port)

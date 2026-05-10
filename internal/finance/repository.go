@@ -47,6 +47,11 @@ type Repository interface {
 	GetAccountsTotal(ctx context.Context) (decimal.Decimal, error)
 	GetMonthlyTotals(ctx context.Context, since time.Time) (decimal.Decimal, decimal.Decimal, error)
 	ListRecentTransactions(ctx context.Context, since time.Time) ([]OverviewTransaction, error)
+
+	GetNetWorthSeries(ctx context.Context, q NetWorthQuery) ([]NetWorthPoint, error)
+	GetCategoryStats(ctx context.Context, q CategoryStatsQuery) ([]CategoryStat, error)
+	GetMonthlyStats(ctx context.Context, q MonthlyStatsQuery) ([]MonthlyStat, error)
+	GetEarliestTransactionDate(ctx context.Context) (time.Time, bool, error)
 }
 
 type PostgresRepository struct {
@@ -363,4 +368,81 @@ func mapTxError(err error) error {
 		return ErrInvalidInput
 	}
 	return err
+}
+
+// --- Stats ---
+
+func (r *PostgresRepository) GetNetWorthSeries(ctx context.Context, q NetWorthQuery) ([]NetWorthPoint, error) {
+	rows, err := r.q.GetNetWorthSeries(ctx, financedb.GetNetWorthSeriesParams{
+		Granularity: string(q.Granularity),
+		FromAt:      pgtype.Timestamptz{Time: q.From, Valid: true},
+		ToAt:        pgtype.Timestamptz{Time: q.To, Valid: true},
+	})
+	if err != nil {
+		return nil, err
+	}
+	out := make([]NetWorthPoint, len(rows))
+	for i, row := range rows {
+		out[i] = NetWorthPoint{
+			Date:  row.BucketAt.Time.Format("2006-01-02"),
+			Total: row.Total,
+		}
+	}
+	return out, nil
+}
+
+func (r *PostgresRepository) GetCategoryStats(ctx context.Context, q CategoryStatsQuery) ([]CategoryStat, error) {
+	rows, err := r.q.GetCategoryStats(ctx, financedb.GetCategoryStatsParams{
+		Type:      q.Type,
+		FromAt:    pgtype.Timestamptz{Time: q.From, Valid: true},
+		ToAt:      pgtype.Timestamptz{Time: q.To, Valid: true},
+		AccountID: q.AccountID,
+	})
+	if err != nil {
+		return nil, err
+	}
+	out := make([]CategoryStat, len(rows))
+	for i, row := range rows {
+		out[i] = CategoryStat{
+			CategoryID: row.CategoryID,
+			Name:       row.Name,
+			Amount:     row.Amount,
+			Share:      row.Share,
+			TxCount:    row.TxCount,
+		}
+	}
+	return out, nil
+}
+
+func (r *PostgresRepository) GetEarliestTransactionDate(ctx context.Context) (time.Time, bool, error) {
+	row, err := r.q.GetEarliestTransactionDate(ctx)
+	if err != nil {
+		return time.Time{}, false, err
+	}
+	if !row.Valid {
+		return time.Time{}, false, nil
+	}
+	return row.Time, true, nil
+}
+
+func (r *PostgresRepository) GetMonthlyStats(ctx context.Context, q MonthlyStatsQuery) ([]MonthlyStat, error) {
+	rows, err := r.q.GetMonthlyStats(ctx, financedb.GetMonthlyStatsParams{
+		FromAt:     pgtype.Timestamptz{Time: q.From, Valid: true},
+		ToAt:       pgtype.Timestamptz{Time: q.To, Valid: true},
+		AccountID:  q.AccountID,
+		CategoryID: q.CategoryID,
+	})
+	if err != nil {
+		return nil, err
+	}
+	out := make([]MonthlyStat, len(rows))
+	for i, row := range rows {
+		out[i] = MonthlyStat{
+			Month:   row.Month,
+			Income:  row.Income,
+			Expense: row.Expense,
+			Balance: row.Income.Sub(row.Expense),
+		}
+	}
+	return out, nil
 }

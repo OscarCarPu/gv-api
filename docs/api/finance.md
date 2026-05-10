@@ -48,10 +48,11 @@ CRUD for personal accounts, the categories that classify money flows, and the tr
 
 - **Method:** `GET`
 - **Endpoint:** `/finance/overview`
-- **Description:** Single roll-up used by dashboards. Returns the sum of every account's balance, this-month income/expense/balance (computed in the server's configured timezone, starting at midnight on the 1st), and every transaction from the last 30 days joined with account and category names.
+- **Description:** Single roll-up used by dashboards. Returns the sum of every account's balance, this-month income/expense/balance (computed in the server's configured timezone, starting at midnight on the 1st), the equivalent figures for the previous calendar month, and every transaction from the last 30 days joined with account and category names.
 - **Notes:**
   - `accounts_total` sums `accounts.total` directly. If accounts use multiple currencies the sum is naive — clients must show the breakdown themselves if that matters.
   - `month.balance = month.income - month.expense`. Transfers are excluded because they net out across accounts.
+  - `previous_month` has the same shape as `month`. It is computed by summing transactions from the start of last month to the start of this month and lets clients render savings rate / month-over-month deltas without a second request.
   - `to_account_name` and `category_name` are nullable: the former is `null` for `income` / `expense`, the latter is `null` for legacy rows where the schema column is unset.
 - **Success Response:**
   - **Code:** `200 OK`
@@ -63,6 +64,11 @@ CRUD for personal accounts, the categories that classify money flows, and the tr
         "income": "45.00",
         "expense": "34.00",
         "balance": "11.00"
+      },
+      "previous_month": {
+        "income": "3650.00",
+        "expense": "1920.00",
+        "balance": "1730.00"
       },
       "recent_transactions": [
         {
@@ -221,3 +227,83 @@ CRUD for personal accounts, the categories that classify money flows, and the tr
 - **Description:** Hard delete. The trigger reverses the row's effect on account totals.
 - **Success Response:** `204 No Content`
 - **Error Responses:** `400` `invalid transaction id` · `500` `Failed to delete transaction`
+
+---
+
+## Stats
+
+Three read-only endpoints power the chart sheets in the web client (`/money` page). They share the same date-range conventions:
+
+- `from` and `to` are optional `YYYY-MM-DD` (or RFC3339) strings interpreted in the server's timezone.
+- `to` defaults to *now*.
+- `from` defaults to **the date of the earliest transaction** (`MIN(occurred_at)`), or, when there are no transactions yet, *now − 6 months*. Clients use this to implement an "All time" range simply by omitting `from`.
+- All money values are returned as JSON strings (`NUMERIC(15,2)`).
+
+### Net-worth series
+
+- **Method:** `GET`
+- **Endpoint:** `/finance/stats/networth`
+- **Query Parameters:**
+  - `from`, `to` — date range (see conventions above).
+  - `granularity` — one of `day` | `week` | `month`. Defaults to `day`.
+- **Description:** Reconstructs net worth at the end of each period in the range. The current `SUM(accounts.total)` snapshot is the anchor; the value for each bucket is computed by walking back through transaction deltas (`+income`, `-expense`, `0` for transfers because they net within the user's portfolio). Buckets are aligned to `date_trunc(granularity, from)` and emitted by `generate_series(...)`.
+- **Notes:**
+  - The trigger-maintained `accounts.total` is the source of truth, so opening balances seeded directly on `accounts.total` (not as `income` rows) are correctly reflected as the starting net worth, while monthly income/expense aggregations stay clean.
+  - Granularities other than `day` use the chart axis's "data points are already period-aligned" rule on the client side.
+- **Success Response:**
+  - **Code:** `200 OK`
+  - **Content:**
+    ```json
+    [
+      { "date": "2024-05-01", "total": "5450.00" },
+      { "date": "2024-06-01", "total": "5876.32" }
+    ]
+    ```
+- **Error Responses:** `400` (`invalid from`, `invalid to`, `granularity must be day, week, or month`) · `500` `Failed to compute net worth`
+
+### Stats by category
+
+- **Method:** `GET`
+- **Endpoint:** `/finance/stats/by-category`
+- **Query Parameters:**
+  - `type` (**required**) — one of `income` | `expense` | `transfer`.
+  - `from`, `to` — date range (see conventions above).
+  - `account_id` (optional) — filter to transactions where this account is the source *or* destination.
+- **Description:** Sums `amount` and counts transactions of the given `type` in the date range, grouped by `category_id`. Returns one row per leaf category with that type. Clients render the parent/child tree client-side using `/finance/categories`; this endpoint never aggregates up the parent chain.
+- **Notes:**
+  - `share` is each row's amount divided by the sum across all rows in the response (range-relative, not all-time). It is `0` when the range total is `0`.
+  - `category_id` is `null` for transactions whose category was deleted before the schema required it; `name` falls back to `"Sin categoría"` in that case.
+  - Sorting: `SUM(amount) DESC, name ASC`.
+- **Success Response:**
+  - **Code:** `200 OK`
+  - **Content:**
+    ```json
+    [
+      { "category_id": 20, "name": "Rent",    "amount": "1750.00", "tx_count": 2,  "share": 0.469 },
+      { "category_id": 19, "name": "Dinner",  "amount": "485.50",  "tx_count": 11, "share": 0.130 }
+    ]
+    ```
+- **Error Responses:** `400` (`type must be income, expense, or transfer`, `invalid from`, `invalid to`, `invalid account_id`) · `500` `Failed to compute category stats`
+
+### Monthly stats
+
+- **Method:** `GET`
+- **Endpoint:** `/finance/stats/monthly`
+- **Query Parameters:**
+  - `from`, `to` — date range.
+  - `account_id` (optional) — filter to transactions touching this account.
+  - `category_id` (optional) — filter to transactions tagged with this exact category id.
+- **Description:** Returns one row per calendar month in the range with summed `income`, `expense`, and computed `balance = income - expense`. Transfers are excluded by the `type IN ('income','expense')` filter — they net out across the user's accounts.
+- **Notes:**
+  - The `month` field is the `YYYY-MM` form of `date_trunc('month', occurred_at)`.
+  - Sorting: `month ASC`.
+- **Success Response:**
+  - **Code:** `200 OK`
+  - **Content:**
+    ```json
+    [
+      { "month": "2024-05", "income": "0",       "expense": "716.86",  "balance": "-716.86" },
+      { "month": "2024-06", "income": "2459.44", "expense": "2016.33", "balance": "443.11" }
+    ]
+    ```
+- **Error Responses:** `400` (`invalid from`, `invalid to`, `invalid account_id`, `invalid category_id`) · `500` `Failed to compute monthly stats`

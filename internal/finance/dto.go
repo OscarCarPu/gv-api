@@ -81,6 +81,7 @@ type UpdateTransactionRequest struct {
 type Overview struct {
 	AccountsTotal decimal.Decimal       `json:"accounts_total"`
 	Month         OverviewMonth         `json:"month"`
+	PreviousMonth OverviewMonth         `json:"previous_month"`
 	Recent        []OverviewTransaction `json:"recent_transactions"`
 }
 
@@ -99,4 +100,62 @@ type OverviewTransaction struct {
 	CategoryName  *string         `json:"category_name"`
 	Description   *string         `json:"description"`
 	OccurredAt    time.Time       `json:"occurred_at"`
+}
+
+// --- Stats ---
+
+type StatsGranularity string
+
+const (
+	GranularityDay   StatsGranularity = "day"
+	GranularityWeek  StatsGranularity = "week"
+	GranularityMonth StatsGranularity = "month"
+)
+
+func (g StatsGranularity) Valid() bool {
+	switch g {
+	case GranularityDay, GranularityWeek, GranularityMonth:
+		return true
+	}
+	return false
+}
+
+type NetWorthPoint struct {
+	Date  string          `json:"date"`
+	Total decimal.Decimal `json:"total"`
+}
+
+type CategoryStat struct {
+	CategoryID *int32          `json:"category_id"`
+	Name       string          `json:"name"`
+	Amount     decimal.Decimal `json:"amount"`
+	Share      float64         `json:"share"`
+	TxCount    int64           `json:"tx_count"`
+}
+
+type MonthlyStat struct {
+	Month   string          `json:"month"`
+	Income  decimal.Decimal `json:"income"`
+	Expense decimal.Decimal `json:"expense"`
+	Balance decimal.Decimal `json:"balance"`
+}
+
+type NetWorthQuery struct {
+	From        time.Time
+	To          time.Time
+	Granularity StatsGranularity
+}
+
+type CategoryStatsQuery struct {
+	Type      txtype.Type
+	From      time.Time
+	To        time.Time
+	AccountID *int32
+}
+
+type MonthlyStatsQuery struct {
+	From       time.Time
+	To         time.Time
+	AccountID  *int32
+	CategoryID *int32
 }

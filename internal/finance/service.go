@@ -99,6 +99,7 @@ func (s *Service) DeleteTransaction(ctx context.Context, id int32) error {
 func (s *Service) GetOverview(ctx context.Context) (Overview, error) {
 	now := time.Now().In(s.loc)
 	monthStart := time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, s.loc)
+	prevMonthStart := monthStart.AddDate(0, -1, 0)
 	last30 := now.Add(-30 * 24 * time.Hour)
 
 	accountsTotal, err := s.repo.GetAccountsTotal(ctx)
@@ -109,6 +110,14 @@ func (s *Service) GetOverview(ctx context.Context) (Overview, error) {
 	if err != nil {
 		return Overview{}, err
 	}
+	// GetMonthlyTotals only takes a lower bound, so summing from prevMonthStart
+	// gives prev-month + current-month combined; subtract current to isolate prev.
+	prevPlusCurIncome, prevPlusCurExpense, err := s.repo.GetMonthlyTotals(ctx, prevMonthStart)
+	if err != nil {
+		return Overview{}, err
+	}
+	prevIncome := prevPlusCurIncome.Sub(income)
+	prevExpense := prevPlusCurExpense.Sub(expense)
 	recent, err := s.repo.ListRecentTransactions(ctx, last30)
 	if err != nil {
 		return Overview{}, err
@@ -120,8 +129,67 @@ func (s *Service) GetOverview(ctx context.Context) (Overview, error) {
 			Expense: expense,
 			Balance: income.Sub(expense),
 		},
+		PreviousMonth: OverviewMonth{
+			Income:  prevIncome,
+			Expense: prevExpense,
+			Balance: prevIncome.Sub(prevExpense),
+		},
 		Recent: recent,
 	}, nil
+}
+
+// --- Stats ---
+
+func (s *Service) GetNetWorthSeries(ctx context.Context, q NetWorthQuery) ([]NetWorthPoint, error) {
+	from, to, g, err := s.normalizeStatsRange(ctx, q.From, q.To, q.Granularity)
+	if err != nil {
+		return nil, err
+	}
+	q.From, q.To, q.Granularity = from, to, g
+	return s.repo.GetNetWorthSeries(ctx, q)
+}
+
+func (s *Service) GetCategoryStats(ctx context.Context, q CategoryStatsQuery) ([]CategoryStat, error) {
+	from, to, _, err := s.normalizeStatsRange(ctx, q.From, q.To, GranularityDay)
+	if err != nil {
+		return nil, err
+	}
+	q.From, q.To = from, to
+	return s.repo.GetCategoryStats(ctx, q)
+}
+
+func (s *Service) GetMonthlyStats(ctx context.Context, q MonthlyStatsQuery) ([]MonthlyStat, error) {
+	from, to, _, err := s.normalizeStatsRange(ctx, q.From, q.To, GranularityMonth)
+	if err != nil {
+		return nil, err
+	}
+	q.From, q.To = from, to
+	return s.repo.GetMonthlyStats(ctx, q)
+}
+
+// normalizeStatsRange fills missing to with now and missing from with the
+// earliest transaction date (or now - 6 months if there are no transactions),
+// and validates granularity (defaults to day).
+func (s *Service) normalizeStatsRange(ctx context.Context, from, to time.Time, g StatsGranularity) (time.Time, time.Time, StatsGranularity, error) {
+	now := time.Now().In(s.loc)
+	if to.IsZero() {
+		to = now
+	}
+	if from.IsZero() {
+		earliest, ok, err := s.repo.GetEarliestTransactionDate(ctx)
+		if err != nil {
+			return time.Time{}, time.Time{}, "", err
+		}
+		if ok {
+			from = earliest.In(s.loc)
+		} else {
+			from = now.AddDate(0, -6, 0)
+		}
+	}
+	if !g.Valid() {
+		g = GranularityDay
+	}
+	return from, to, g, nil
 }
 
 // assertCategoryMatchesType returns ErrCategoryMismatch if the category's

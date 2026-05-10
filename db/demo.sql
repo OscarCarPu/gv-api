@@ -1080,13 +1080,20 @@ INSERT INTO weed_varieties (name, scent, flavor, power, quality, price, comments
 -- =============================================================================
 -- FINANCE: ACCOUNTS
 -- =============================================================================
--- `total` is left at the default 0 here; the trigger on `transactions` will
--- recompute it as the rows below are inserted.
+-- Opening balances are seeded directly on accounts.total — they are *not*
+-- modeled as income transactions, so they don't pollute monthly income or
+-- by-category aggregations. The net-worth chart still walks back from this
+-- starting value via the transaction-delta query.
 INSERT INTO accounts (name) VALUES
     ('Wallet'),   -- id=1  cash on hand
     ('Bank'),     -- id=2  primary checking
     ('Savings'),  -- id=3  rainy-day fund
     ('Crypto');   -- id=4  brokerage
+
+UPDATE accounts SET total =  150.00 WHERE id = 1;
+UPDATE accounts SET total = 1500.00 WHERE id = 2;
+UPDATE accounts SET total = 3000.00 WHERE id = 3;
+UPDATE accounts SET total =  800.00 WHERE id = 4;
 
 -- =============================================================================
 -- FINANCE: CATEGORIES (mix of flat roots, two-level trees, and three-level trees)
@@ -1147,93 +1154,218 @@ INSERT INTO categories (name, parent_id, type) VALUES
     ('Investment transfer', NULL, 'transfer');  -- 29
 
 -- =============================================================================
--- FINANCE: TRANSACTIONS (~90 days of activity)
+-- FINANCE: TRANSACTIONS (~24 months of procedurally generated activity)
 -- =============================================================================
 -- Inserts trigger `transactions_apply_total`, which keeps `accounts.total`
 -- consistent for income (+), expense (-), and transfer (source -, dest +).
--- Each transaction's category_id type matches its transaction type.
-INSERT INTO transactions (type, amount, account_id, to_account_id, category_id, description, occurred_at) VALUES
-    -- ---- ~90 days ago: opening balances ----
-    ('income',   1500.00, 2, NULL,  5, 'Opening balance',         now() - INTERVAL '90 days'),
-    ('income',   3000.00, 3, NULL,  5, 'Opening balance',         now() - INTERVAL '90 days'),
-    ('income',    150.00, 1, NULL,  5, 'Opening cash',            now() - INTERVAL '90 days'),
-    ('income',    800.00, 4, NULL,  5, 'Opening crypto position', now() - INTERVAL '90 days'),
-    ('income',    120.00, 4, NULL,  4, 'Crypto staking rewards',  now() - INTERVAL '85 days'),
+-- A fixed seed (setseed) makes runs reproducible.
+SELECT setseed(0.42);
 
-    -- ---- ~65 days ago: March payday + fixed costs ----
-    ('income',   2400.00, 2, NULL,  1, 'Salary - March',          now() - INTERVAL '65 days'),
-    ('expense',   850.00, 2, NULL, 20, 'Rent - March',            now() - INTERVAL '64 days'),
-    ('expense',    68.40, 2, NULL, 21, 'Electricity bill',        now() - INTERVAL '62 days'),
-    ('expense',    35.00, 2, NULL, 21, 'Internet',                now() - INTERVAL '62 days'),
-    ('expense',    18.99, 2, NULL, 22, 'Streaming subscription',  now() - INTERVAL '60 days'),
-    ('expense',     9.99, 2, NULL, 22, 'Music subscription',      now() - INTERVAL '60 days'),
-    ('transfer',  500.00, 2, 3,    27, 'Monthly savings',         now() - INTERVAL '58 days'),
-    ('transfer',  200.00, 2, 1,    28, 'Cash withdrawal',         now() - INTERVAL '57 days'),
+-- (No opening-balance transactions: those are seeded directly on
+-- accounts.total above. They would otherwise show up as a fake May-of-2-years-
+-- ago income spike in monthly/by-category aggregations.)
 
-    -- ---- ~56-46 days ago: spring spending ----
-    ('expense',    54.30, 1, NULL, 15, 'Weekly groceries',        now() - INTERVAL '56 days'),
-    ('expense',     4.20, 1, NULL, 17, 'Coffee',                  now() - INTERVAL '55 days'),
-    ('expense',    12.80, 1, NULL, 18, 'Lunch',                   now() - INTERVAL '55 days'),
-    ('expense',    28.00, 1, NULL, 16, 'Farmers market produce',  now() - INTERVAL '54 days'),
-    ('expense',    61.40, 1, NULL, 15, 'Weekly groceries',        now() - INTERVAL '52 days'),
-    ('expense',     3.80, 1, NULL, 17, 'Coffee',                  now() - INTERVAL '51 days'),
-    ('income',    180.00, 2, NULL,  2, 'Freelance invoice',       now() - INTERVAL '50 days'),
-    ('expense',    89.50, 2, NULL, 24, 'Concert tickets',         now() - INTERVAL '48 days'),
-    ('expense',    44.10, 1, NULL, 18, 'Lunch with friends',      now() - INTERVAL '47 days'),
-    ('expense',    73.20, 1, NULL, 15, 'Weekly groceries',        now() - INTERVAL '45 days'),
-    ('transfer',  300.00, 4, 2,    29, 'Crypto profit-taking',    now() - INTERVAL '44 days'),
-    ('expense',    22.00, 2, NULL, 25, 'Pharmacy',                now() - INTERVAL '43 days'),
-    ('expense',     6.50, 1, NULL, 13, 'Bakery',                  now() - INTERVAL '42 days'),
-    ('expense',    65.00, 2, NULL, 19, 'Dinner with team',        now() - INTERVAL '41 days'),
-    ('expense',    38.00, 2, NULL, 10, 'Train tickets',           now() - INTERVAL '40 days'),
-    ('expense',    85.00, 2, NULL, 26, 'Doctor visit',            now() - INTERVAL '38 days'),
-    ('expense',    58.90, 1, NULL, 15, 'Weekly groceries',        now() - INTERVAL '37 days'),
-    ('income',     45.00, 2, NULL,  3, 'Refund - returned item',  now() - INTERVAL '35 days'),
-    ('expense',    18.50, 1, NULL, 18, 'Lunch',                   now() - INTERVAL '34 days'),
-    ('expense',     7.20, 1, NULL, 13, 'Bakery',                  now() - INTERVAL '33 days'),
-    ('expense',    11.30, 1, NULL, 14, 'Snacks',                  now() - INTERVAL '32 days'),
+-- ---- monthly recurring patterns (24 months) ----
+WITH months AS (
+    SELECT
+        date_trunc('month', now()) - ((23 - n) || ' months')::interval AS m,
+        n AS i
+    FROM generate_series(0, 23) AS n
+)
+INSERT INTO transactions (type, amount, account_id, to_account_id, category_id, description, occurred_at)
+-- salary: gradual raise + small variance per month
+SELECT 'income'::transaction_type,
+       round((2750 + i * 8 + random() * 100)::numeric, 2),
+       2, NULL::int, 1, 'Salario',
+       m + INTERVAL '1 day' + INTERVAL '9 hours'
+FROM months
+UNION ALL
+-- rent: stable with annual bump
+SELECT 'expense',
+       round((850 + (i / 12) * 25)::numeric, 2),
+       2, NULL::int, 20, 'Alquiler',
+       m + INTERVAL '1 day' + INTERVAL '10 hours'
+FROM months
+UNION ALL
+-- electricity (varies seasonally)
+SELECT 'expense',
+       round((55 + 25 * abs(sin(2 * pi() * i / 12)) + random() * 15)::numeric, 2),
+       2, NULL::int, 21, 'Electricidad',
+       m + INTERVAL '3 days'
+FROM months
+UNION ALL
+-- internet (fixed)
+SELECT 'expense', 35.00::numeric, 2, NULL::int, 21, 'Internet', m + INTERVAL '3 days 6 hours'
+FROM months
+UNION ALL
+-- streaming (slight bump after 12 months)
+SELECT 'expense',
+       (CASE WHEN i < 12 THEN 14.99 ELSE 18.99 END)::numeric,
+       2, NULL::int, 22, 'Suscripción streaming',
+       m + INTERVAL '5 days'
+FROM months
+UNION ALL
+-- music sub
+SELECT 'expense', 9.99::numeric, 2, NULL::int, 22, 'Suscripción música', m + INTERVAL '5 days 4 hours'
+FROM months
+UNION ALL
+-- monthly savings
+SELECT 'transfer',
+       round((250 + random() * 200)::numeric, 2),
+       2, 3::int, 27, 'Ahorro mensual',
+       m + INTERVAL '6 days 12 hours'
+FROM months
+UNION ALL
+-- cash withdrawal
+SELECT 'transfer',
+       round((150 + random() * 150)::numeric, 2),
+       2, 1::int, 28, 'Retirada efectivo',
+       m + INTERVAL '7 days'
+FROM months
+UNION ALL
+-- transport monthly pass
+SELECT 'expense',
+       round((45 + random() * 25)::numeric, 2),
+       2, NULL::int, 10, 'Abono transporte',
+       m + INTERVAL '4 days'
+FROM months
+UNION ALL
+-- freelance (~50% of months)
+SELECT 'income',
+       round((150 + random() * 450)::numeric, 2),
+       2, NULL::int, 2, 'Freelance',
+       m + INTERVAL '15 days'
+FROM months WHERE random() < 0.5
+UNION ALL
+-- crypto rewards (~60% of months)
+SELECT 'income',
+       round((60 + random() * 140)::numeric, 2),
+       4, NULL::int, 4, 'Crypto staking',
+       m + INTERVAL '20 days'
+FROM months WHERE random() < 0.6
+UNION ALL
+-- crypto -> bank profit-taking (~10% of months, smaller cuts)
+SELECT 'transfer',
+       round((50 + random() * 150)::numeric, 2),
+       4, 2::int, 29, 'Crypto a banco',
+       m + INTERVAL '21 days'
+FROM months WHERE random() < 0.1
+UNION ALL
+-- refunds (~30% of months)
+SELECT 'income',
+       round((10 + random() * 80)::numeric, 2),
+       2, NULL::int, 3, 'Reembolso',
+       m + INTERVAL '11 days'
+FROM months WHERE random() < 0.3;
 
-    -- ---- ~30 days ago: April payday + fixed costs ----
-    ('income',   2500.00, 2, NULL,  1, 'Salary - April',          now() - INTERVAL '30 days'),
-    ('expense',   850.00, 2, NULL, 20, 'Rent - April',            now() - INTERVAL '29 days'),
-    ('expense',    72.50, 2, NULL, 21, 'Electricity bill',        now() - INTERVAL '28 days'),
-    ('expense',    35.00, 2, NULL, 21, 'Internet',                now() - INTERVAL '28 days'),
-    ('expense',    18.99, 2, NULL, 22, 'Streaming subscription',  now() - INTERVAL '27 days'),
-    ('expense',     9.99, 2, NULL, 22, 'Music subscription',      now() - INTERVAL '27 days'),
-    ('transfer',  500.00, 2, 3,    27, 'Monthly savings',         now() - INTERVAL '26 days'),
-    ('transfer',  200.00, 2, 1,    28, 'Cash withdrawal',         now() - INTERVAL '25 days'),
+-- ---- weekly groceries (~104 weeks, paid by card from Bank) ----
+INSERT INTO transactions (type, amount, account_id, to_account_id, category_id, description, occurred_at)
+SELECT 'expense',
+       round((45 + random() * 45)::numeric, 2),
+       2, NULL, 15, 'Compra semanal',
+       d + INTERVAL '11 hours'
+FROM (SELECT generate_series(now() - INTERVAL '24 months', now(), INTERVAL '7 days')::timestamptz AS d) days
+WHERE random() < 0.95;
 
-    -- ---- ~24-6 days ago: April spending ----
-    ('expense',   249.00, 2, NULL, 23, 'New running shoes',       now() - INTERVAL '24 days'),
-    ('expense',    52.30, 1, NULL, 15, 'Weekly groceries',        now() - INTERVAL '23 days'),
-    ('expense',     4.20, 1, NULL, 17, 'Coffee',                  now() - INTERVAL '22 days'),
-    ('expense',    16.00, 1, NULL, 18, 'Lunch',                   now() - INTERVAL '22 days'),
-    ('expense',    32.50, 1, NULL, 16, 'Farmers market produce',  now() - INTERVAL '21 days'),
-    ('expense',    14.50, 1, NULL, 25, 'Pharmacy',                now() - INTERVAL '20 days'),
-    ('expense',    55.00, 2, NULL, 10, 'Monthly bus pass',        now() - INTERVAL '18 days'),
-    ('expense',    64.50, 1, NULL, 15, 'Weekly groceries',        now() - INTERVAL '17 days'),
-    ('expense',     4.20, 1, NULL, 17, 'Coffee',                  now() - INTERVAL '16 days'),
-    ('expense',    42.00, 2, NULL, 19, 'Dinner out',              now() - INTERVAL '15 days'),
-    ('income',     65.00, 4, NULL,  4, 'Crypto staking rewards',  now() - INTERVAL '14 days'),
-    ('expense',    45.00, 2, NULL, 23, 'New shirt',               now() - INTERVAL '12 days'),
-    ('expense',     7.50, 1, NULL, 13, 'Bakery',                  now() - INTERVAL '11 days'),
-    ('expense',    58.90, 1, NULL, 15, 'Weekly groceries',        now() - INTERVAL '10 days'),
-    ('expense',     8.00, 1, NULL, 14, 'Snacks',                  now() - INTERVAL '9 days'),
-    ('transfer',  150.00, 2, 3,    27, 'Extra savings push',      now() - INTERVAL '8 days'),
-    ('expense',    18.50, 1, NULL, 18, 'Lunch',                   now() - INTERVAL '6 days'),
+-- ---- farmers market (occasional, by card) ----
+INSERT INTO transactions (type, amount, account_id, to_account_id, category_id, description, occurred_at)
+SELECT 'expense',
+       round((18 + random() * 25)::numeric, 2),
+       2, NULL, 16, 'Mercado',
+       d + INTERVAL '9 hours'
+FROM (SELECT generate_series(now() - INTERVAL '24 months', now(), INTERVAL '14 days')::timestamptz AS d) days
+WHERE random() < 0.55;
 
-    -- ---- this month (May): payday rituals + early-month spending ----
-    ('income',   2500.00, 2, NULL,  1, 'Salary - May',            date_trunc('month', now()) + INTERVAL '0 days 9 hours'),
-    ('expense',   850.00, 2, NULL, 20, 'Rent - May',              date_trunc('month', now()) + INTERVAL '0 days 10 hours'),
-    ('expense',    74.00, 2, NULL, 21, 'Electricity bill',        date_trunc('month', now()) + INTERVAL '1 days'),
-    ('expense',    35.00, 2, NULL, 21, 'Internet',                date_trunc('month', now()) + INTERVAL '1 days'),
-    ('expense',    18.99, 2, NULL, 22, 'Streaming subscription',  date_trunc('month', now()) + INTERVAL '2 days'),
-    ('transfer',  500.00, 2, 3,    27, 'Monthly savings',         date_trunc('month', now()) + INTERVAL '2 days 12 hours'),
-    ('transfer',  250.00, 2, 1,    28, 'Cash withdrawal',         date_trunc('month', now()) + INTERVAL '3 days'),
-    ('expense',    48.20, 1, NULL, 15, 'Weekly groceries',        date_trunc('month', now()) + INTERVAL '3 days 18 hours'),
-    ('expense',     4.20, 1, NULL, 17, 'Coffee',                  date_trunc('month', now()) + INTERVAL '4 days 8 hours'),
-    ('expense',    14.50, 1, NULL, 18, 'Lunch',                   date_trunc('month', now()) + INTERVAL '4 days 13 hours'),
-    ('expense',    11.30, 1, NULL, 14, 'Snacks',                  now() - INTERVAL '6 hours');
+-- ---- coffees (~3-4 per week) ----
+INSERT INTO transactions (type, amount, account_id, to_account_id, category_id, description, occurred_at)
+SELECT 'expense',
+       round((3.2 + random() * 1.8)::numeric, 2),
+       1, NULL, 17, 'Café',
+       d + INTERVAL '8 hours' + (random() * 2 || ' hours')::interval
+FROM (SELECT generate_series(now() - INTERVAL '24 months', now(), INTERVAL '1 day')::timestamptz AS d) days
+WHERE random() < 0.5;
+
+-- ---- lunches (~2-3 per week, mix of card and cash) ----
+INSERT INTO transactions (type, amount, account_id, to_account_id, category_id, description, occurred_at)
+SELECT 'expense',
+       round((9 + random() * 14)::numeric, 2),
+       CASE WHEN random() < 0.6 THEN 2 ELSE 1 END,
+       NULL, 18, 'Comida',
+       d + INTERVAL '13 hours'
+FROM (SELECT generate_series(now() - INTERVAL '24 months', now(), INTERVAL '1 day')::timestamptz AS d) days
+WHERE random() < 0.35;
+
+-- ---- dinners out (~1 per week) ----
+INSERT INTO transactions (type, amount, account_id, to_account_id, category_id, description, occurred_at)
+SELECT 'expense',
+       round((25 + random() * 55)::numeric, 2),
+       2, NULL, 19, 'Cena fuera',
+       d + INTERVAL '20 hours'
+FROM (SELECT generate_series(now() - INTERVAL '24 months', now(), INTERVAL '1 day')::timestamptz AS d) days
+WHERE random() < 0.18;
+
+-- ---- bakery (occasional) ----
+INSERT INTO transactions (type, amount, account_id, to_account_id, category_id, description, occurred_at)
+SELECT 'expense',
+       round((3 + random() * 7)::numeric, 2),
+       1, NULL, 13, 'Panadería',
+       d + INTERVAL '8 hours'
+FROM (SELECT generate_series(now() - INTERVAL '24 months', now(), INTERVAL '1 day')::timestamptz AS d) days
+WHERE random() < 0.18;
+
+-- ---- snacks ----
+INSERT INTO transactions (type, amount, account_id, to_account_id, category_id, description, occurred_at)
+SELECT 'expense',
+       round((4 + random() * 9)::numeric, 2),
+       1, NULL, 14, 'Snacks',
+       d + INTERVAL '17 hours'
+FROM (SELECT generate_series(now() - INTERVAL '24 months', now(), INTERVAL '1 day')::timestamptz AS d) days
+WHERE random() < 0.12;
+
+-- ---- pharmacy (~weekly chance) ----
+INSERT INTO transactions (type, amount, account_id, to_account_id, category_id, description, occurred_at)
+SELECT 'expense',
+       round((8 + random() * 28)::numeric, 2),
+       2, NULL, 25, 'Farmacia',
+       d + INTERVAL '12 hours'
+FROM (SELECT generate_series(now() - INTERVAL '24 months', now(), INTERVAL '7 days')::timestamptz AS d) days
+WHERE random() < 0.4;
+
+-- ---- doctor visits (~once every 2-3 months) ----
+INSERT INTO transactions (type, amount, account_id, to_account_id, category_id, description, occurred_at)
+SELECT 'expense',
+       round((45 + random() * 90)::numeric, 2),
+       2, NULL, 26, 'Visita médica',
+       d + INTERVAL '11 hours'
+FROM (SELECT generate_series(now() - INTERVAL '24 months', now(), INTERVAL '1 month')::timestamptz AS d) days
+WHERE random() < 0.45;
+
+-- ---- clothing (every couple of weeks) ----
+INSERT INTO transactions (type, amount, account_id, to_account_id, category_id, description, occurred_at)
+SELECT 'expense',
+       round((25 + random() * 180)::numeric, 2),
+       2, NULL, 23, 'Ropa',
+       d + INTERVAL '17 hours'
+FROM (SELECT generate_series(now() - INTERVAL '24 months', now(), INTERVAL '14 days')::timestamptz AS d) days
+WHERE random() < 0.35;
+
+-- ---- entertainment (concerts, cinema, etc.) ----
+INSERT INTO transactions (type, amount, account_id, to_account_id, category_id, description, occurred_at)
+SELECT 'expense',
+       round((15 + random() * 75)::numeric, 2),
+       2, NULL, 24, 'Ocio',
+       d + INTERVAL '19 hours'
+FROM (SELECT generate_series(now() - INTERVAL '24 months', now(), INTERVAL '14 days')::timestamptz AS d) days
+WHERE random() < 0.5;
+
+-- ---- additional savings push (occasional) ----
+INSERT INTO transactions (type, amount, account_id, to_account_id, category_id, description, occurred_at)
+SELECT 'transfer',
+       round((50 + random() * 200)::numeric, 2),
+       2, 3, 27, 'Ahorro extra',
+       d + INTERVAL '16 hours'
+FROM (SELECT generate_series(now() - INTERVAL '24 months', now(), INTERVAL '1 month')::timestamptz AS d) days
+WHERE random() < 0.4;
 
 -- =============================================================================
 -- PLAN BLOCKS (today)

@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 
 	"gv-api/internal/finance/txtype"
 	"gv-api/internal/response"
@@ -35,6 +36,10 @@ type ServiceInterface interface {
 	DeleteTransaction(ctx context.Context, id int32) error
 
 	GetOverview(ctx context.Context) (Overview, error)
+
+	GetNetWorthSeries(ctx context.Context, q NetWorthQuery) ([]NetWorthPoint, error)
+	GetCategoryStats(ctx context.Context, q CategoryStatsQuery) ([]CategoryStat, error)
+	GetMonthlyStats(ctx context.Context, q MonthlyStatsQuery) ([]MonthlyStat, error)
 }
 
 type Handler struct {
@@ -425,6 +430,119 @@ func (h *Handler) GetOverview(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	response.JSON(w, http.StatusOK, o)
+}
+
+// --- Stats ---
+
+func parseDateParam(s string) (time.Time, error) {
+	if s == "" {
+		return time.Time{}, nil
+	}
+	if t, err := time.Parse(time.RFC3339, s); err == nil {
+		return t, nil
+	}
+	if t, err := time.Parse("2006-01-02", s); err == nil {
+		return t, nil
+	}
+	return time.Time{}, errors.New("invalid date")
+}
+
+func parseOptionalIntParam(s string) (*int32, error) {
+	if s == "" {
+		return nil, nil
+	}
+	n, err := strconv.Atoi(s)
+	if err != nil || n <= 0 {
+		return nil, errors.New("invalid")
+	}
+	v := int32(n)
+	return &v, nil
+}
+
+func (h *Handler) GetNetWorthStats(w http.ResponseWriter, r *http.Request) {
+	from, err := parseDateParam(r.URL.Query().Get("from"))
+	if err != nil {
+		response.Error(w, http.StatusBadRequest, "invalid from")
+		return
+	}
+	to, err := parseDateParam(r.URL.Query().Get("to"))
+	if err != nil {
+		response.Error(w, http.StatusBadRequest, "invalid to")
+		return
+	}
+	g := StatsGranularity(r.URL.Query().Get("granularity"))
+	if g != "" && !g.Valid() {
+		response.Error(w, http.StatusBadRequest, "granularity must be day, week, or month")
+		return
+	}
+	out, err := h.service.GetNetWorthSeries(r.Context(), NetWorthQuery{From: from, To: to, Granularity: g})
+	if err != nil {
+		response.Error(w, http.StatusInternalServerError, "Failed to compute net worth")
+		return
+	}
+	response.JSON(w, http.StatusOK, out)
+}
+
+func (h *Handler) GetCategoryStats(w http.ResponseWriter, r *http.Request) {
+	t := txtype.Type(r.URL.Query().Get("type"))
+	if !t.Valid() {
+		response.Error(w, http.StatusBadRequest, "type must be income, expense, or transfer")
+		return
+	}
+	from, err := parseDateParam(r.URL.Query().Get("from"))
+	if err != nil {
+		response.Error(w, http.StatusBadRequest, "invalid from")
+		return
+	}
+	to, err := parseDateParam(r.URL.Query().Get("to"))
+	if err != nil {
+		response.Error(w, http.StatusBadRequest, "invalid to")
+		return
+	}
+	accountID, err := parseOptionalIntParam(r.URL.Query().Get("account_id"))
+	if err != nil {
+		response.Error(w, http.StatusBadRequest, "invalid account_id")
+		return
+	}
+	out, err := h.service.GetCategoryStats(r.Context(), CategoryStatsQuery{
+		Type: t, From: from, To: to, AccountID: accountID,
+	})
+	if err != nil {
+		response.Error(w, http.StatusInternalServerError, "Failed to compute category stats")
+		return
+	}
+	response.JSON(w, http.StatusOK, out)
+}
+
+func (h *Handler) GetMonthlyStats(w http.ResponseWriter, r *http.Request) {
+	from, err := parseDateParam(r.URL.Query().Get("from"))
+	if err != nil {
+		response.Error(w, http.StatusBadRequest, "invalid from")
+		return
+	}
+	to, err := parseDateParam(r.URL.Query().Get("to"))
+	if err != nil {
+		response.Error(w, http.StatusBadRequest, "invalid to")
+		return
+	}
+	accountID, err := parseOptionalIntParam(r.URL.Query().Get("account_id"))
+	if err != nil {
+		response.Error(w, http.StatusBadRequest, "invalid account_id")
+		return
+	}
+	categoryID, err := parseOptionalIntParam(r.URL.Query().Get("category_id"))
+	if err != nil {
+		response.Error(w, http.StatusBadRequest, "invalid category_id")
+		return
+	}
+	out, err := h.service.GetMonthlyStats(r.Context(), MonthlyStatsQuery{
+		From: from, To: to, AccountID: accountID, CategoryID: categoryID,
+	})
+	if err != nil {
+		response.Error(w, http.StatusInternalServerError, "Failed to compute monthly stats")
+		return
+	}
+	response.JSON(w, http.StatusOK, out)
 }
 
 func writeTxErr(w http.ResponseWriter, err error, op string) {

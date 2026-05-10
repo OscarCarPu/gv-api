@@ -22,8 +22,21 @@ type Querier interface {
 	GetAccount(ctx context.Context, id int32) (Account, error)
 	GetAccountsTotal(ctx context.Context) (decimal.Decimal, error)
 	GetCategory(ctx context.Context, id int32) (Category, error)
+	// Sums and counts transactions of a given type per category in a date range,
+	// optionally filtered by account_id (matches account_id OR to_account_id for
+	// transfers).
+	GetCategoryStats(ctx context.Context, arg GetCategoryStatsParams) ([]GetCategoryStatsRow, error)
 	GetCategoryType(ctx context.Context, id int32) (txtype.Type, error)
+	GetEarliestTransactionDate(ctx context.Context) (pgtype.Timestamptz, error)
+	// Returns one row per calendar month with summed income, expense in the date
+	// range. Optional account_id (matches source or destination) and category_id
+	// filters.
+	GetMonthlyStats(ctx context.Context, arg GetMonthlyStatsParams) ([]GetMonthlyStatsRow, error)
 	GetMonthlyTotals(ctx context.Context, occurredAt pgtype.Timestamptz) (GetMonthlyTotalsRow, error)
+	// Reconstructs net worth at the end of each period (day/week/month) by walking
+	// back from the current accounts.total snapshot.
+	// Granularity must be one of 'day' | 'week' | 'month'.
+	GetNetWorthSeries(ctx context.Context, arg GetNetWorthSeriesParams) ([]GetNetWorthSeriesRow, error)
 	GetTransaction(ctx context.Context, id int32) (Transaction, error)
 	ListAccounts(ctx context.Context) ([]Account, error)
 	ListCategories(ctx context.Context) ([]Category, error)

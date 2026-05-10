@@ -21,7 +21,9 @@ Used by both `transactions.type` and `categories.type`. The API rejects any tran
 | total      | NUMERIC(15,2)   | NOT NULL, DEFAULT `0`. Maintained by trigger on `transactions`.   |
 | created_at | TIMESTAMPTZ     | NOT NULL, DEFAULT `now()`                                         |
 
-`total` is denormalized but write-protected: the API never accepts it as input, and the only writes come from the `transactions_apply_total` trigger.
+`total` is denormalized but write-protected at the API level: the HTTP layer never accepts it as input. The only writes from the application come from the `transactions_apply_total` trigger.
+
+**Opening balances**: there is no separate `initial_balance` column. To seed an account with a non-zero starting value, write `total` directly via SQL (`UPDATE accounts SET total = …`); the trigger then maintains the running delta from transactions. Demo data uses this pattern instead of inserting fake `income` "Opening balance" transactions, so monthly income / by-category aggregations are not contaminated, while `GetNetWorthSeries` still anchors on the seeded value (it walks back from `SUM(accounts.total)` via transaction deltas).
 
 ### categories
 
@@ -85,6 +87,17 @@ Per type:
 | transfer | `accounts[account_id].total -= amount; accounts[to_account_id].total += amount` |
 
 Since the trigger fires per row inside the same transaction as the write, account totals can never desync from the transaction history. Concurrent writers serialize on the row-level lock taken by the `UPDATE accounts ...` statement.
+
+## Stats queries
+
+Three sqlc queries in `db/queries/finance.sql` back the `/finance/stats/*` endpoints; they are all read-only and do not touch `accounts.total`:
+
+- **`GetNetWorthSeries(from, to, granularity)`** — `generate_series` builds period buckets aligned to `date_trunc(granularity, from)`. For each bucket the value is `(SELECT SUM(total) FROM accounts) - SUM_AFTER(t.occurred_at > end_of_bucket)` where the inner sum applies `+amount` for income, `-amount` for expense, and `0` for transfer. This makes opening balances seeded on `accounts.total` show up as the chart's anchor without polluting flow aggregations.
+- **`GetCategoryStats(type, from, to, account_id?)`** — filtered CTE → `GROUP BY category_id` with `SUM(amount)`, `COUNT(*)`, and a precomputed `share` (each row's amount over the range total). The `account_id` filter matches `account_id OR to_account_id` so transfers can be filtered by either end.
+- **`GetMonthlyStats(from, to, account_id?, category_id?)`** — `GROUP BY date_trunc('month', occurred_at)` with `FILTER (WHERE type = 'income')` / `FILTER (WHERE type = 'expense')`. Transfers are excluded by an `IN ('income','expense')` filter on `type`. `month` is emitted as the `YYYY-MM` text form.
+- **`GetEarliestTransactionDate()`** — `SELECT MIN(occurred_at)` used by the service layer to default `from` when the client omits it (the "All time" range).
+
+The service layer (`internal/finance/service.go`) normalizes optional `from` / `to` / `granularity` parameters before dispatching: missing `to` → *now*; missing `from` → earliest transaction date (or *now − 6 months* if the table is empty); invalid granularity → `day`.
 
 ## Notes
 

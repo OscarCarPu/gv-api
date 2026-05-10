@@ -176,6 +176,87 @@ func (q *Queries) GetCategory(ctx context.Context, id int32) (Category, error) {
 	return i, err
 }
 
+const getCategoryStats = `-- name: GetCategoryStats :many
+WITH filtered AS (
+    SELECT t.category_id, t.amount
+    FROM transactions t
+    WHERE t.type = $1::transaction_type
+      AND t.occurred_at >= $2::timestamptz
+      AND t.occurred_at <= $3::timestamptz
+      AND (
+          $4::int IS NULL
+          OR t.account_id    = $4::int
+          OR t.to_account_id = $4::int
+      )
+),
+totals AS (
+    SELECT COALESCE(SUM(amount), 0)::numeric AS total_amount FROM filtered
+)
+SELECT
+    f.category_id,
+    COALESCE(c.name, 'Sin categoría')::text AS name,
+    SUM(f.amount)::numeric AS amount,
+    COUNT(*)::bigint AS tx_count,
+    CASE
+        WHEN (SELECT total_amount FROM totals) > 0
+        THEN (SUM(f.amount) / (SELECT total_amount FROM totals))::float8
+        ELSE 0::float8
+    END AS share
+FROM filtered f
+LEFT JOIN categories c ON c.id = f.category_id
+GROUP BY f.category_id, c.name
+ORDER BY SUM(f.amount) DESC, name ASC
+`
+
+type GetCategoryStatsParams struct {
+	Type      txtype.Type        `db:"type" json:"type"`
+	FromAt    pgtype.Timestamptz `db:"from_at" json:"from_at"`
+	ToAt      pgtype.Timestamptz `db:"to_at" json:"to_at"`
+	AccountID *int32             `db:"account_id" json:"account_id"`
+}
+
+type GetCategoryStatsRow struct {
+	CategoryID *int32          `db:"category_id" json:"category_id"`
+	Name       string          `db:"name" json:"name"`
+	Amount     decimal.Decimal `db:"amount" json:"amount"`
+	TxCount    int64           `db:"tx_count" json:"tx_count"`
+	Share      float64         `db:"share" json:"share"`
+}
+
+// Sums and counts transactions of a given type per category in a date range,
+// optionally filtered by account_id (matches account_id OR to_account_id for
+// transfers).
+func (q *Queries) GetCategoryStats(ctx context.Context, arg GetCategoryStatsParams) ([]GetCategoryStatsRow, error) {
+	rows, err := q.db.Query(ctx, getCategoryStats,
+		arg.Type,
+		arg.FromAt,
+		arg.ToAt,
+		arg.AccountID,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []GetCategoryStatsRow{}
+	for rows.Next() {
+		var i GetCategoryStatsRow
+		if err := rows.Scan(
+			&i.CategoryID,
+			&i.Name,
+			&i.Amount,
+			&i.TxCount,
+			&i.Share,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getCategoryType = `-- name: GetCategoryType :one
 SELECT type
 FROM categories
@@ -187,6 +268,80 @@ func (q *Queries) GetCategoryType(ctx context.Context, id int32) (txtype.Type, e
 	var type_ txtype.Type
 	err := row.Scan(&type_)
 	return type_, err
+}
+
+const getEarliestTransactionDate = `-- name: GetEarliestTransactionDate :one
+SELECT MIN(occurred_at)::timestamptz AS earliest FROM transactions
+`
+
+func (q *Queries) GetEarliestTransactionDate(ctx context.Context) (pgtype.Timestamptz, error) {
+	row := q.db.QueryRow(ctx, getEarliestTransactionDate)
+	var earliest pgtype.Timestamptz
+	err := row.Scan(&earliest)
+	return earliest, err
+}
+
+const getMonthlyStats = `-- name: GetMonthlyStats :many
+SELECT
+    to_char(date_trunc('month', occurred_at), 'YYYY-MM')::text AS month,
+    COALESCE(SUM(amount) FILTER (WHERE type = 'income'::transaction_type),  0::numeric)::numeric AS income,
+    COALESCE(SUM(amount) FILTER (WHERE type = 'expense'::transaction_type), 0::numeric)::numeric AS expense
+FROM transactions
+WHERE occurred_at >= $1::timestamptz
+  AND occurred_at <= $2::timestamptz
+  AND type IN ('income'::transaction_type, 'expense'::transaction_type)
+  AND (
+      $3::int IS NULL
+      OR account_id    = $3::int
+      OR to_account_id = $3::int
+  )
+  AND (
+      $4::int IS NULL
+      OR category_id = $4::int
+  )
+GROUP BY date_trunc('month', occurred_at)
+ORDER BY date_trunc('month', occurred_at)
+`
+
+type GetMonthlyStatsParams struct {
+	FromAt     pgtype.Timestamptz `db:"from_at" json:"from_at"`
+	ToAt       pgtype.Timestamptz `db:"to_at" json:"to_at"`
+	AccountID  *int32             `db:"account_id" json:"account_id"`
+	CategoryID *int32             `db:"category_id" json:"category_id"`
+}
+
+type GetMonthlyStatsRow struct {
+	Month   string          `db:"month" json:"month"`
+	Income  decimal.Decimal `db:"income" json:"income"`
+	Expense decimal.Decimal `db:"expense" json:"expense"`
+}
+
+// Returns one row per calendar month with summed income, expense in the date
+// range. Optional account_id (matches source or destination) and category_id
+// filters.
+func (q *Queries) GetMonthlyStats(ctx context.Context, arg GetMonthlyStatsParams) ([]GetMonthlyStatsRow, error) {
+	rows, err := q.db.Query(ctx, getMonthlyStats,
+		arg.FromAt,
+		arg.ToAt,
+		arg.AccountID,
+		arg.CategoryID,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []GetMonthlyStatsRow{}
+	for rows.Next() {
+		var i GetMonthlyStatsRow
+		if err := rows.Scan(&i.Month, &i.Income, &i.Expense); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const getMonthlyTotals = `-- name: GetMonthlyTotals :one
@@ -207,6 +362,74 @@ func (q *Queries) GetMonthlyTotals(ctx context.Context, occurredAt pgtype.Timest
 	var i GetMonthlyTotalsRow
 	err := row.Scan(&i.Income, &i.Expense)
 	return i, err
+}
+
+const getNetWorthSeries = `-- name: GetNetWorthSeries :many
+WITH
+current_total AS (
+    SELECT COALESCE(SUM(total), 0)::numeric AS total FROM accounts
+),
+buckets AS (
+    SELECT generate_series(
+        date_trunc($1::text, $3::timestamptz),
+        $2::timestamptz,
+        ('1 ' || $1::text)::interval
+    ) AS bucket_start
+)
+SELECT
+    b.bucket_start::timestamptz AS bucket_at,
+    (
+        (SELECT total FROM current_total) - COALESCE((
+            SELECT SUM(
+                CASE t.type
+                    WHEN 'income'::transaction_type  THEN  t.amount
+                    WHEN 'expense'::transaction_type THEN -t.amount
+                    ELSE 0::numeric
+                END
+            )
+            FROM transactions t
+            WHERE t.occurred_at > LEAST(
+                b.bucket_start + ('1 ' || $1::text)::interval - interval '1 microsecond',
+                $2::timestamptz
+            )
+        ), 0::numeric)
+    )::numeric AS total
+FROM buckets b
+ORDER BY b.bucket_start
+`
+
+type GetNetWorthSeriesParams struct {
+	Granularity string             `db:"granularity" json:"granularity"`
+	ToAt        pgtype.Timestamptz `db:"to_at" json:"to_at"`
+	FromAt      pgtype.Timestamptz `db:"from_at" json:"from_at"`
+}
+
+type GetNetWorthSeriesRow struct {
+	BucketAt pgtype.Timestamptz `db:"bucket_at" json:"bucket_at"`
+	Total    decimal.Decimal    `db:"total" json:"total"`
+}
+
+// Reconstructs net worth at the end of each period (day/week/month) by walking
+// back from the current accounts.total snapshot.
+// Granularity must be one of 'day' | 'week' | 'month'.
+func (q *Queries) GetNetWorthSeries(ctx context.Context, arg GetNetWorthSeriesParams) ([]GetNetWorthSeriesRow, error) {
+	rows, err := q.db.Query(ctx, getNetWorthSeries, arg.Granularity, arg.ToAt, arg.FromAt)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []GetNetWorthSeriesRow{}
+	for rows.Next() {
+		var i GetNetWorthSeriesRow
+		if err := rows.Scan(&i.BucketAt, &i.Total); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const getTransaction = `-- name: GetTransaction :one
