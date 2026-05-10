@@ -580,7 +580,7 @@ LEFT JOIN projects p ON p.id = t.project_id
 LEFT JOIN time_entries te ON te.task_id = t.id AND te.finished_at IS NOT NULL
 WHERE t.finished_at IS NULL
   AND ($1::int IS NULL OR t.priority <= $1::int)
-  AND NOT th.hidden
+  AND (NOT th.hidden OR e.effective_due_at <= CURRENT_DATE)
   AND (e.effective_due_at IS NOT NULL OR p.due_at IS NOT NULL)
 GROUP BY t.id, p.id, e.effective_due_at, tb.blocked
 ORDER BY e.effective_due_at ASC NULLS LAST, p.due_at ASC NULLS LAST, t.name

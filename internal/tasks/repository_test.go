@@ -326,6 +326,49 @@ func TestIntegration_GetTasksByDueDate_HiddenFilteredAndOrderedByEffective(t *te
 	_ = posB
 }
 
+func TestIntegration_GetTasksByDueDate_OverdueShownDespiteMultiLevelBlock(t *testing.T) {
+	ctx := context.Background()
+	repo := NewRepo(t)
+
+	now := time.Now().UTC()
+	dayDate := func(d int) time.Time {
+		return time.Date(now.Year(), now.Month(), now.Day()+d, 0, 0, 0, 0, time.UTC)
+	}
+	yesterday := dayDate(-1)
+	today := dayDate(0)
+	future := dayDate(30)
+
+	// Chain prefix-a → prefix-b → prefix-c (c depends on b, b depends on a).
+	// a is unblocked; b is blocked at one level (visible); c is hidden by multi-level
+	// blocking (its only dep b is itself blocked).
+	mkChain := func(prefix string, cDue *time.Time) int32 {
+		a, err := repo.CreateTask(ctx, nil, prefix+"-a", nil, &future, "standard", nil, 4)
+		require.NoError(t, err)
+		b, err := repo.CreateTask(ctx, nil, prefix+"-b", nil, &future, "standard", nil, 4)
+		require.NoError(t, err)
+		require.NoError(t, repo.ReplaceTaskDependencies(ctx, b.ID, []int32{a.ID}))
+		c, err := repo.CreateTask(ctx, nil, prefix+"-c", nil, cDue, "standard", nil, 4)
+		require.NoError(t, err)
+		require.NoError(t, repo.ReplaceTaskDependencies(ctx, c.ID, []int32{b.ID}))
+		return c.ID
+	}
+
+	cOverdue := mkChain("ovd", &yesterday)
+	cToday := mkChain("tdy", &today)
+	cFuture := mkChain("fut", &future)
+
+	rows, err := repo.GetTasksByDueDate(ctx, nil)
+	require.NoError(t, err)
+	ids := make([]int32, len(rows))
+	for i, r := range rows {
+		ids[i] = r.ID
+	}
+
+	require.Contains(t, ids, cOverdue, "c with due_at = yesterday must appear despite multi-level blocking")
+	require.Contains(t, ids, cToday, "c with due_at = today must appear despite multi-level blocking")
+	require.NotContains(t, ids, cFuture, "c with future due_at stays hidden by multi-level blocking")
+}
+
 func indexOf(ids []int32, target int32) int {
 	for i, id := range ids {
 		if id == target {
