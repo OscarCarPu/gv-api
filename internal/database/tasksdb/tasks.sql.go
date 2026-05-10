@@ -296,7 +296,8 @@ func (q *Queries) GetActiveProjects(ctx context.Context) ([]GetActiveProjectsRow
 
 const getActiveTimeEntry = `-- name: GetActiveTimeEntry :one
 SELECT te.id, te.task_id, te.started_at, te.finished_at, te.comment,
-       t.name AS task_name, t.task_type, t.recurrence, t.priority, p.name AS project_name
+       t.name AS task_name, t.description AS task_description,
+       t.task_type, t.recurrence, t.priority, p.name AS project_name
 FROM time_entries te
 JOIN tasks t ON t.id = te.task_id
 LEFT JOIN projects p ON p.id = t.project_id
@@ -304,16 +305,17 @@ WHERE te.finished_at IS NULL
 `
 
 type GetActiveTimeEntryRow struct {
-	ID          int32              `db:"id" json:"id"`
-	TaskID      int32              `db:"task_id" json:"task_id"`
-	StartedAt   pgtype.Timestamptz `db:"started_at" json:"started_at"`
-	FinishedAt  pgtype.Timestamptz `db:"finished_at" json:"finished_at"`
-	Comment     *string            `db:"comment" json:"comment"`
-	TaskName    string             `db:"task_name" json:"task_name"`
-	TaskType    string             `db:"task_type" json:"task_type"`
-	Recurrence  *int32             `db:"recurrence" json:"recurrence"`
-	Priority    int32              `db:"priority" json:"priority"`
-	ProjectName *string            `db:"project_name" json:"project_name"`
+	ID              int32              `db:"id" json:"id"`
+	TaskID          int32              `db:"task_id" json:"task_id"`
+	StartedAt       pgtype.Timestamptz `db:"started_at" json:"started_at"`
+	FinishedAt      pgtype.Timestamptz `db:"finished_at" json:"finished_at"`
+	Comment         *string            `db:"comment" json:"comment"`
+	TaskName        string             `db:"task_name" json:"task_name"`
+	TaskDescription *string            `db:"task_description" json:"task_description"`
+	TaskType        string             `db:"task_type" json:"task_type"`
+	Recurrence      *int32             `db:"recurrence" json:"recurrence"`
+	Priority        int32              `db:"priority" json:"priority"`
+	ProjectName     *string            `db:"project_name" json:"project_name"`
 }
 
 func (q *Queries) GetActiveTimeEntry(ctx context.Context) (GetActiveTimeEntryRow, error) {
@@ -326,6 +328,7 @@ func (q *Queries) GetActiveTimeEntry(ctx context.Context) (GetActiveTimeEntryRow
 		&i.FinishedAt,
 		&i.Comment,
 		&i.TaskName,
+		&i.TaskDescription,
 		&i.TaskType,
 		&i.Recurrence,
 		&i.Priority,

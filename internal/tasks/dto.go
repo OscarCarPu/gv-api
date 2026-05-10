@@ -139,16 +139,17 @@ type TimeEntryResponse struct {
 }
 
 type ActiveTimeEntryResponse struct {
-	ID          int32      `json:"id"`
-	TaskID      int32      `json:"task_id"`
-	StartedAt   time.Time  `json:"started_at"`
-	FinishedAt  *time.Time `json:"finished_at"`
-	Comment     *string    `json:"comment"`
-	TaskName    string     `json:"task_name"`
-	TaskType    string     `json:"task_type"`
-	Recurrence  *int32     `json:"recurrence,omitempty"`
-	Priority    int32      `json:"priority"`
-	ProjectName *string    `json:"project_name"`
+	ID              int32      `json:"id"`
+	TaskID          int32      `json:"task_id"`
+	StartedAt       time.Time  `json:"started_at"`
+	FinishedAt      *time.Time `json:"finished_at"`
+	Comment         *string    `json:"comment"`
+	TaskName        string     `json:"task_name"`
+	TaskDescription *string    `json:"task_description"`
+	TaskType        string     `json:"task_type"`
+	Recurrence      *int32     `json:"recurrence,omitempty"`
+	Priority        int32      `json:"priority"`
+	ProjectName     *string    `json:"project_name"`
 }
 
 type TimeEntryWithTaskResponse struct {

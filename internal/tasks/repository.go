@@ -714,16 +714,17 @@ func (r *PostgresRepository) GetActiveTimeEntry(ctx context.Context) (ActiveTime
 	}
 
 	return ActiveTimeEntryResponse{
-		ID:          row.ID,
-		TaskID:      row.TaskID,
-		StartedAt:   row.StartedAt.Time,
-		FinishedAt:  pgTimestamptzToPtr(row.FinishedAt),
-		Comment:     row.Comment,
-		TaskName:    row.TaskName,
-		TaskType:    row.TaskType,
-		Recurrence:  row.Recurrence,
-		Priority:    row.Priority,
-		ProjectName: row.ProjectName,
+		ID:              row.ID,
+		TaskID:          row.TaskID,
+		StartedAt:       row.StartedAt.Time,
+		FinishedAt:      pgTimestamptzToPtr(row.FinishedAt),
+		Comment:         row.Comment,
+		TaskName:        row.TaskName,
+		TaskDescription: row.TaskDescription,
+		TaskType:        row.TaskType,
+		Recurrence:      row.Recurrence,
+		Priority:        row.Priority,
+		ProjectName:     row.ProjectName,
 	}, nil
 }
 

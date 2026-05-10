@@ -295,7 +295,8 @@ WHERE t.project_id = pt.id AND t.finished_at IS NULL;
 
 -- name: GetActiveTimeEntry :one
 SELECT te.id, te.task_id, te.started_at, te.finished_at, te.comment,
-       t.name AS task_name, t.task_type, t.recurrence, t.priority, p.name AS project_name
+       t.name AS task_name, t.description AS task_description,
+       t.task_type, t.recurrence, t.priority, p.name AS project_name
 FROM time_entries te
 JOIN tasks t ON t.id = te.task_id
 LEFT JOIN projects p ON p.id = t.project_id
