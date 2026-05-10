@@ -167,13 +167,17 @@ func (s *Service) GetMonthlyStats(ctx context.Context, q MonthlyStatsQuery) ([]M
 	return s.repo.GetMonthlyStats(ctx, q)
 }
 
-// normalizeStatsRange fills missing to with now and missing from with the
-// earliest transaction date (or now - 6 months if there are no transactions),
-// and validates granularity (defaults to day).
+// normalizeStatsRange fills missing to with now and missing from with one
+// granularity period before the earliest transaction date (so the net-worth
+// baseline before the first tx is visible), or now - 6 months if there are no
+// transactions. Validates granularity (defaults to day).
 func (s *Service) normalizeStatsRange(ctx context.Context, from, to time.Time, g StatsGranularity) (time.Time, time.Time, StatsGranularity, error) {
 	now := time.Now().In(s.loc)
 	if to.IsZero() {
 		to = now
+	}
+	if !g.Valid() {
+		g = GranularityDay
 	}
 	if from.IsZero() {
 		earliest, ok, err := s.repo.GetEarliestTransactionDate(ctx)
@@ -181,15 +185,23 @@ func (s *Service) normalizeStatsRange(ctx context.Context, from, to time.Time, g
 			return time.Time{}, time.Time{}, "", err
 		}
 		if ok {
-			from = earliest.In(s.loc)
+			from = shiftBackOnePeriod(earliest.In(s.loc), g)
 		} else {
 			from = now.AddDate(0, -6, 0)
 		}
 	}
-	if !g.Valid() {
-		g = GranularityDay
-	}
 	return from, to, g, nil
+}
+
+func shiftBackOnePeriod(t time.Time, g StatsGranularity) time.Time {
+	switch g {
+	case GranularityWeek:
+		return t.AddDate(0, 0, -7)
+	case GranularityMonth:
+		return t.AddDate(0, -1, 0)
+	default:
+		return t.AddDate(0, 0, -1)
+	}
 }
 
 // assertCategoryMatchesType returns ErrCategoryMismatch if the category's
