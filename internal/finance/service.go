@@ -176,6 +176,23 @@ func (s *Service) GetEstimation(ctx context.Context, q EstimationQuery) (Estimat
 	startMonth := time.Date(q.StartMonth.Year(), q.StartMonth.Month(), 1, 0, 0, 0, 0, s.loc)
 	endMonth := time.Date(q.EndMonth.Year(), q.EndMonth.Month(), 1, 0, 0, 0, 0, s.loc)
 
+	// Clamp startMonth to the month of the earliest transaction so the actuals
+	// series doesn't include flat pre-data buckets that would otherwise pin
+	// firstTotal to the current accounts.total and yield a near-zero rate.
+	// Mirrors the "missing from → earliest tx date" rule in normalizeStatsRange,
+	// applied as a lower bound rather than a default.
+	earliest, hasTx, err := s.repo.GetEarliestTransactionDate(ctx)
+	if err != nil {
+		return EstimationResult{}, err
+	}
+	if hasTx {
+		e := earliest.In(s.loc)
+		earliestMonth := time.Date(e.Year(), e.Month(), 1, 0, 0, 0, 0, s.loc)
+		if startMonth.Before(earliestMonth) {
+			startMonth = earliestMonth
+		}
+	}
+
 	actualTo := lastCompletedEnd
 	if startMonth.After(currentMonthStart) {
 		actualTo = startMonth.Add(-time.Nanosecond)

@@ -313,7 +313,7 @@ Four read-only endpoints power the chart sheets in the web client (`/money` page
 - **Method:** `GET`
 - **Endpoint:** `/finance/stats/estimation`
 - **Query Parameters:**
-  - `start_month` (**required**) — `YYYY-MM` (or `YYYY-MM-DD`). The first month included in the historical (actual) series.
+  - `start_month` (**required**) — `YYYY-MM` (or `YYYY-MM-DD`). Lower bound for the historical (actual) series. **Clamped server-side to the month of the earliest transaction** when there is data, so passing an earlier month is harmless (and equivalent to "all available history"). Without this clamp, the underlying `generate_series` in `/finance/stats/networth` would emit flat pre-data buckets equal to `SUM(accounts.total)`, pinning `firstTotal` to the present value and yielding a near-zero rate.
   - `end_month` (**required**) — `YYYY-MM` (or `YYYY-MM-DD`). The last month included in the projected series. Must be on or after `start_month`.
   - `mode` (**required**) — one of `rate` | `saving`. Selects how the projection factor is derived and applied.
 - **Description:** Returns a monthly time series from `start_month` through `end_month`, split into actual and projected points. Actuals come from the same net-worth reconstruction used by `/finance/stats/networth` with `granularity=month`, covering `start_month` through the end of the **previous** calendar month (the most recent fully-completed month relative to the server's clock). Estimated points start from the current month and extend through `end_month`. The projection factor is derived from the actuals, **not** taken from a query parameter:
