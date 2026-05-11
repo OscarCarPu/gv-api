@@ -299,8 +299,8 @@ func (s *Service) GetTimeEntrySummary(ctx context.Context) (TimeEntrySummaryResp
 	}
 
 	summary.WeeklyTargetSeconds = WeeklyTaskTargetSeconds
-	summary.Pace = CalcPace(now, summary.Week)
-	summary.DailyTargetSeconds = CalcDailyTargetSeconds(now, summary.Week)
+	summary.Pace = CalcPace(now, summary.Week, summary.Today)
+	summary.DailyTargetSeconds = CalcDailyTargetSeconds(now, summary.Week, summary.Today)
 	return summary, nil
 }
 
