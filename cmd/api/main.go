@@ -170,6 +170,7 @@ func main() {
 		r.Get("/finance/stats/networth", financeHandler.GetNetWorthStats)
 		r.Get("/finance/stats/by-category", financeHandler.GetCategoryStats)
 		r.Get("/finance/stats/monthly", financeHandler.GetMonthlyStats)
+		r.Get("/finance/stats/estimation", financeHandler.GetEstimation)
 	})
 
 	log.Printf("Starting server on port %s", cfg.Port)

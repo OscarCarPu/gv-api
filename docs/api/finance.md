@@ -232,7 +232,7 @@ CRUD for personal accounts, the categories that classify money flows, and the tr
 
 ## Stats
 
-Three read-only endpoints power the chart sheets in the web client (`/money` page). They share the same date-range conventions:
+Four read-only endpoints power the chart sheets in the web client (`/money` page). The first three share the same date-range conventions:
 
 - `from` and `to` are optional `YYYY-MM-DD` (or RFC3339) strings interpreted in the server's timezone.
 - `to` defaults to *now*.
@@ -307,3 +307,39 @@ Three read-only endpoints power the chart sheets in the web client (`/money` pag
     ]
     ```
 - **Error Responses:** `400` (`invalid from`, `invalid to`, `invalid account_id`, `invalid category_id`) · `500` `Failed to compute monthly stats`
+
+### Estimation
+
+- **Method:** `GET`
+- **Endpoint:** `/finance/stats/estimation`
+- **Query Parameters:**
+  - `start_month` (**required**) — `YYYY-MM` (or `YYYY-MM-DD`). The first month included in the historical (actual) series.
+  - `end_month` (**required**) — `YYYY-MM` (or `YYYY-MM-DD`). The last month included in the projected series. Must be on or after `start_month`.
+  - `mode` (**required**) — one of `rate` | `saving`. Selects how the projection factor is derived and applied.
+- **Description:** Returns a monthly time series from `start_month` through `end_month`, split into actual and projected points. Actuals come from the same net-worth reconstruction used by `/finance/stats/networth` with `granularity=month`, covering `start_month` through the end of the **previous** calendar month (the most recent fully-completed month relative to the server's clock). Estimated points start from the current month and extend through `end_month`. The projection factor is derived from the actuals, **not** taken from a query parameter:
+  - `mode=rate`: the implied compound monthly rate `r` such that `last_actual = first_actual × (1 + r)^n`, where `n` is the number of monthly steps between the first and last actual points. Returned as a percentage (e.g. `1.25` = 1.25%/month). Each projected month is computed as `prev × (1 + r/100)`.
+  - `mode=saving`: the implied average monthly delta `(last_actual − first_actual) / n`, returned in the same currency unit as account totals. Each projected month is computed as `prev + saving`.
+  - When there is fewer than two actual points (e.g. `start_month` ≥ current month, or no transactions in the window so the reconstruction yields a single bucket), `rate` and `saving` are `0` and projections stay flat at the last known total.
+- **Notes:**
+  - The response object — not a bare array — carries `points`, `rate`, and `saving` so clients can label the projection with the derived factor without recomputing it. `rate` and `saving` are *always* present; the field that doesn't correspond to the requested `mode` is `0`.
+  - Each point's `date` is the first day of the bucket month (same convention as `/finance/stats/networth` with `granularity=month`).
+  - `estimated` is `false` for actual buckets and `true` for projected ones. The two segments are contiguous: if the current month is May, the last actual point is April and the first estimated point is May.
+- **Success Response:**
+  - **Code:** `200 OK`
+  - **Content:**
+    ```json
+    {
+      "points": [
+        { "date": "2025-12-01", "total": "8000.00", "estimated": false },
+        { "date": "2026-01-01", "total": "8200.00", "estimated": false },
+        { "date": "2026-02-01", "total": "8350.00", "estimated": false },
+        { "date": "2026-03-01", "total": "8500.00", "estimated": false },
+        { "date": "2026-04-01", "total": "8700.00", "estimated": false },
+        { "date": "2026-05-01", "total": "8852.46", "estimated": true },
+        { "date": "2026-06-01", "total": "9007.55", "estimated": true }
+      ],
+      "rate": "1.7521",
+      "saving": "0"
+    }
+    ```
+- **Error Responses:** `400` (`start_month is required (YYYY-MM)`, `end_month is required (YYYY-MM)`, `end_month must be on or after start_month`, `mode must be rate or saving`) · `500` `Failed to compute estimation`

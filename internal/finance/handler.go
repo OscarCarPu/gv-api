@@ -40,6 +40,7 @@ type ServiceInterface interface {
 	GetNetWorthSeries(ctx context.Context, q NetWorthQuery) ([]NetWorthPoint, error)
 	GetCategoryStats(ctx context.Context, q CategoryStatsQuery) ([]CategoryStat, error)
 	GetMonthlyStats(ctx context.Context, q MonthlyStatsQuery) ([]MonthlyStat, error)
+	GetEstimation(ctx context.Context, q EstimationQuery) (EstimationResult, error)
 }
 
 type Handler struct {
@@ -540,6 +541,49 @@ func (h *Handler) GetMonthlyStats(w http.ResponseWriter, r *http.Request) {
 	})
 	if err != nil {
 		response.Error(w, http.StatusInternalServerError, "Failed to compute monthly stats")
+		return
+	}
+	response.JSON(w, http.StatusOK, out)
+}
+
+func parseMonthParam(s string) (time.Time, error) {
+	if s == "" {
+		return time.Time{}, errors.New("required")
+	}
+	if t, err := time.Parse("2006-01", s); err == nil {
+		return t, nil
+	}
+	if t, err := time.Parse("2006-01-02", s); err == nil {
+		return t, nil
+	}
+	return time.Time{}, errors.New("invalid")
+}
+
+func (h *Handler) GetEstimation(w http.ResponseWriter, r *http.Request) {
+	start, err := parseMonthParam(r.URL.Query().Get("start_month"))
+	if err != nil {
+		response.Error(w, http.StatusBadRequest, "start_month is required (YYYY-MM)")
+		return
+	}
+	end, err := parseMonthParam(r.URL.Query().Get("end_month"))
+	if err != nil {
+		response.Error(w, http.StatusBadRequest, "end_month is required (YYYY-MM)")
+		return
+	}
+	if end.Before(start) {
+		response.Error(w, http.StatusBadRequest, "end_month must be on or after start_month")
+		return
+	}
+	mode := EstimationMode(r.URL.Query().Get("mode"))
+	if !mode.Valid() {
+		response.Error(w, http.StatusBadRequest, "mode must be rate or saving")
+		return
+	}
+	out, err := h.service.GetEstimation(r.Context(), EstimationQuery{
+		StartMonth: start, EndMonth: end, Mode: mode,
+	})
+	if err != nil {
+		response.Error(w, http.StatusInternalServerError, "Failed to compute estimation")
 		return
 	}
 	response.JSON(w, http.StatusOK, out)

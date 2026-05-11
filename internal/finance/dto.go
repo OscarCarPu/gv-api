@@ -159,3 +159,38 @@ type MonthlyStatsQuery struct {
 	AccountID  *int32
 	CategoryID *int32
 }
+
+type EstimationMode string
+
+const (
+	EstimationModeRate   EstimationMode = "rate"
+	EstimationModeSaving EstimationMode = "saving"
+)
+
+func (m EstimationMode) Valid() bool {
+	switch m {
+	case EstimationModeRate, EstimationModeSaving:
+		return true
+	}
+	return false
+}
+
+type EstimationQuery struct {
+	StartMonth time.Time
+	EndMonth   time.Time
+	Mode       EstimationMode
+}
+
+type EstimationPoint struct {
+	Date      string          `json:"date"`
+	Total     decimal.Decimal `json:"total"`
+	Estimated bool            `json:"estimated"`
+}
+
+type EstimationResult struct {
+	Points []EstimationPoint `json:"points"`
+	// Rate is the monthly compound rate (percent) when Mode=rate, otherwise 0.
+	Rate decimal.Decimal `json:"rate"`
+	// Saving is the average monthly delta (currency) when Mode=saving, otherwise 0.
+	Saving decimal.Decimal `json:"saving"`
+}

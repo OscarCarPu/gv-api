@@ -2,9 +2,12 @@ package finance
 
 import (
 	"context"
+	"math"
 	"time"
 
 	"gv-api/internal/finance/txtype"
+
+	"github.com/shopspring/decimal"
 )
 
 type Service struct {
@@ -156,6 +159,94 @@ func (s *Service) GetCategoryStats(ctx context.Context, q CategoryStatsQuery) ([
 	}
 	q.From, q.To = from, to
 	return s.repo.GetCategoryStats(ctx, q)
+}
+
+// GetEstimation returns a monthly series from start_month through end_month.
+// Actual points cover start_month..lastCompletedMonth (end of previous month
+// relative to now). The projection factor is derived from those actuals:
+// - rate: compound monthly rate r such that last = first * (1+r)^n
+// - saving: average monthly delta (last - first) / n
+// Estimated points are then projected forward from the last actual total to
+// end_month using that factor.
+func (s *Service) GetEstimation(ctx context.Context, q EstimationQuery) (EstimationResult, error) {
+	now := time.Now().In(s.loc)
+	currentMonthStart := time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, s.loc)
+	lastCompletedEnd := currentMonthStart.Add(-time.Nanosecond)
+
+	startMonth := time.Date(q.StartMonth.Year(), q.StartMonth.Month(), 1, 0, 0, 0, 0, s.loc)
+	endMonth := time.Date(q.EndMonth.Year(), q.EndMonth.Month(), 1, 0, 0, 0, 0, s.loc)
+
+	actualTo := lastCompletedEnd
+	if startMonth.After(currentMonthStart) {
+		actualTo = startMonth.Add(-time.Nanosecond)
+	}
+
+	points := []EstimationPoint{}
+	var firstTotal, lastTotal decimal.Decimal
+	haveLast := false
+
+	if !startMonth.After(lastCompletedEnd) {
+		actualPts, err := s.repo.GetNetWorthSeries(ctx, NetWorthQuery{
+			From:        startMonth,
+			To:          actualTo,
+			Granularity: GranularityMonth,
+		})
+		if err != nil {
+			return EstimationResult{}, err
+		}
+		for i, p := range actualPts {
+			points = append(points, EstimationPoint{Date: p.Date, Total: p.Total, Estimated: false})
+			if i == 0 {
+				firstTotal = p.Total
+			}
+			lastTotal = p.Total
+			haveLast = true
+		}
+	}
+
+	// Derive projection factor from the actuals. n = number of monthly steps.
+	n := len(points) - 1
+	var rate, saving decimal.Decimal
+	if n > 0 {
+		switch q.Mode {
+		case EstimationModeRate:
+			first, _ := firstTotal.Float64()
+			last, _ := lastTotal.Float64()
+			if first > 0 && last > 0 {
+				r := math.Pow(last/first, 1.0/float64(n)) - 1
+				rate = decimal.NewFromFloat(r * 100).Round(4)
+			}
+		case EstimationModeSaving:
+			diff := lastTotal.Sub(firstTotal)
+			saving = diff.Div(decimal.NewFromInt(int64(n))).Round(2)
+		}
+	}
+
+	if !haveLast {
+		lastTotal = decimal.Zero
+	}
+
+	projStart := currentMonthStart
+	if startMonth.After(projStart) {
+		projStart = startMonth
+	}
+	hundred := decimal.NewFromInt(100)
+	rateFactor := decimal.NewFromInt(1).Add(rate.Div(hundred))
+	for m := projStart; !m.After(endMonth); m = m.AddDate(0, 1, 0) {
+		switch q.Mode {
+		case EstimationModeRate:
+			lastTotal = lastTotal.Mul(rateFactor)
+		case EstimationModeSaving:
+			lastTotal = lastTotal.Add(saving)
+		}
+		points = append(points, EstimationPoint{
+			Date:      m.Format("2006-01-02"),
+			Total:     lastTotal.Round(2),
+			Estimated: true,
+		})
+	}
+
+	return EstimationResult{Points: points, Rate: rate, Saving: saving}, nil
 }
 
 func (s *Service) GetMonthlyStats(ctx context.Context, q MonthlyStatsQuery) ([]MonthlyStat, error) {
