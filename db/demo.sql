@@ -19,7 +19,8 @@ INSERT INTO habits (name, description, frequency, target_min, target_max, record
     ('Weight', 'Body weight in kg', 'daily', 60, 80, false, 0, 0),                       -- id=6  daily, range target, carry-forward
     ('Running', 'Kilometers run', 'monthly', 50, NULL, true, 2, 2),                      -- id=7  monthly, target: 50km/month
     ('Cafeína', 'Tazas al día (máximo 3)', 'daily', NULL, 3, true, 0, 0),                -- id=8  daily, max-only target
-    ('Lectura semanal', 'Horas leídas por semana', 'weekly', 5, 10, true, 0, 0);         -- id=9  weekly, range target
+    ('Lectura semanal', 'Horas leídas por semana', 'weekly', 5, 10, true, 0, 0),         -- id=9  weekly, range target
+    ('Massage', 'Sessions per month', 'monthly', NULL, NULL, true, 0, 0);                -- id=10 monthly, no target (pure tracking)
 
 -- =============================================================================
 -- HABIT LOGS (last 30 days for meaningful history and streak data)
@@ -353,7 +354,14 @@ INSERT INTO habit_logs (habit_id, log_date, value) VALUES
     (9, CURRENT_DATE - INTERVAL '6 days', 2),
     (9, CURRENT_DATE - INTERVAL '4 days', 2),
     (9, CURRENT_DATE - INTERVAL '2 days', 1),
-    (9, CURRENT_DATE, 2);                        -- this week total: 7 so far
+    (9, CURRENT_DATE, 2),                        -- this week total: 7 so far
+
+    -- Massage (monthly, no target): pure tracking, sporadic sessions
+    (10, CURRENT_DATE - INTERVAL '150 days', 1),
+    (10, CURRENT_DATE - INTERVAL '95 days', 2),
+    (10, CURRENT_DATE - INTERVAL '60 days', 1),
+    (10, CURRENT_DATE - INTERVAL '20 days', 1),
+    (10, CURRENT_DATE - INTERVAL '5 days', 1);
 
 -- =============================================================================
 -- PROJECTS

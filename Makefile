@@ -1,4 +1,4 @@
-.PHONY: sqlc run build docker-build up setup-project pgcli-db test demo
+.PHONY: sqlc run build docker-build up setup-project pgcli-db test demo auth code
 
 # Colors
 RED=\033[0;31m
@@ -134,3 +134,7 @@ test:
 # Authenticate and print a JWT token for manual testing
 auth:
 	@python scripts/auth.py
+
+# Print just the current TOTP 2FA code
+code:
+	@python scripts/auth.py --code

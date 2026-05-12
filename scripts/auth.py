@@ -19,7 +19,16 @@ def load_env():
 
 
 def main():
+    code_only = "--code" in sys.argv[1:]
+
     env = load_env()
+    if code_only:
+        if "TOTP_SECRET" not in env:
+            print("Missing TOTP_SECRET in .env", file=sys.stderr)
+            sys.exit(1)
+        print(pyotp.TOTP(env["TOTP_SECRET"]).now())
+        return
+
     for key in ("PORT", "PASSWORD", "TOTP_SECRET"):
         if key not in env:
             print(f"Missing {key} in .env", file=sys.stderr)
