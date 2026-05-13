@@ -217,7 +217,7 @@ func TestService_UpdateProject(t *testing.T) {
 		repo.EXPECT().FinishTasksByProjectTree(mock.Anything, int32(1)).Return(nil)
 
 		svc := tasks.NewService(repo, nil)
-		_, err := svc.UpdateProject(context.Background(), tasks.UpdateProjectRequest{ID: 1, FinishedAt: &now})
+		_, err := svc.UpdateProject(context.Background(), tasks.UpdateProjectRequest{ID: 1, FinishedAt: tasks.NullableTime{Value: &now, Set: true}})
 		require.NoError(t, err)
 	})
 
@@ -247,7 +247,7 @@ func TestService_UpdateProject(t *testing.T) {
 		repo.EXPECT().FinishDescendantProjects(mock.Anything, int32(1)).Return(errors.New("cascade error"))
 
 		svc := tasks.NewService(repo, nil)
-		_, err := svc.UpdateProject(context.Background(), tasks.UpdateProjectRequest{ID: 1, FinishedAt: &now})
+		_, err := svc.UpdateProject(context.Background(), tasks.UpdateProjectRequest{ID: 1, FinishedAt: tasks.NullableTime{Value: &now, Set: true}})
 		require.Error(t, err)
 	})
 }

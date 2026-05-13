@@ -1214,27 +1214,29 @@ UPDATE projects SET
     description = CASE WHEN $3::bool  THEN $4::text      ELSE description END,
     due_at      = CASE WHEN $5::bool THEN NULL WHEN $6::bool THEN $7::date ELSE due_at END,
     parent_id   = CASE WHEN $8::bool    THEN $9::int         ELSE parent_id END,
-    started_at  = CASE WHEN $10::bool   THEN $11::timestamptz  ELSE started_at END,
-    finished_at = CASE WHEN $12::bool  THEN $13::timestamptz ELSE finished_at END
-WHERE id = $14
+    started_at  = CASE WHEN $10::bool THEN NULL WHEN $11::bool THEN $12::timestamptz ELSE started_at END,
+    finished_at = CASE WHEN $13::bool THEN NULL WHEN $14::bool THEN $15::timestamptz ELSE finished_at END
+WHERE id = $16
 RETURNING id, parent_id, name, description, due_at, started_at, finished_at
 `
 
 type UpdateProjectParams struct {
-	SetName        bool               `db:"set_name" json:"set_name"`
-	Name           string             `db:"name" json:"name"`
-	SetDescription bool               `db:"set_description" json:"set_description"`
-	Description    string             `db:"description" json:"description"`
-	ClearDueAt     bool               `db:"clear_due_at" json:"clear_due_at"`
-	SetDueAt       bool               `db:"set_due_at" json:"set_due_at"`
-	DueAt          time.Time          `db:"due_at" json:"due_at"`
-	SetParentID    bool               `db:"set_parent_id" json:"set_parent_id"`
-	ParentID       int32              `db:"parent_id" json:"parent_id"`
-	SetStartedAt   bool               `db:"set_started_at" json:"set_started_at"`
-	StartedAt      pgtype.Timestamptz `db:"started_at" json:"started_at"`
-	SetFinishedAt  bool               `db:"set_finished_at" json:"set_finished_at"`
-	FinishedAt     pgtype.Timestamptz `db:"finished_at" json:"finished_at"`
-	ID             int32              `db:"id" json:"id"`
+	SetName         bool               `db:"set_name" json:"set_name"`
+	Name            string             `db:"name" json:"name"`
+	SetDescription  bool               `db:"set_description" json:"set_description"`
+	Description     string             `db:"description" json:"description"`
+	ClearDueAt      bool               `db:"clear_due_at" json:"clear_due_at"`
+	SetDueAt        bool               `db:"set_due_at" json:"set_due_at"`
+	DueAt           time.Time          `db:"due_at" json:"due_at"`
+	SetParentID     bool               `db:"set_parent_id" json:"set_parent_id"`
+	ParentID        int32              `db:"parent_id" json:"parent_id"`
+	ClearStartedAt  bool               `db:"clear_started_at" json:"clear_started_at"`
+	SetStartedAt    bool               `db:"set_started_at" json:"set_started_at"`
+	StartedAt       pgtype.Timestamptz `db:"started_at" json:"started_at"`
+	ClearFinishedAt bool               `db:"clear_finished_at" json:"clear_finished_at"`
+	SetFinishedAt   bool               `db:"set_finished_at" json:"set_finished_at"`
+	FinishedAt      pgtype.Timestamptz `db:"finished_at" json:"finished_at"`
+	ID              int32              `db:"id" json:"id"`
 }
 
 func (q *Queries) UpdateProject(ctx context.Context, arg UpdateProjectParams) (Project, error) {
@@ -1248,8 +1250,10 @@ func (q *Queries) UpdateProject(ctx context.Context, arg UpdateProjectParams) (P
 		arg.DueAt,
 		arg.SetParentID,
 		arg.ParentID,
+		arg.ClearStartedAt,
 		arg.SetStartedAt,
 		arg.StartedAt,
+		arg.ClearFinishedAt,
 		arg.SetFinishedAt,
 		arg.FinishedAt,
 		arg.ID,

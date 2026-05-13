@@ -70,7 +70,7 @@ func (s *Service) UpdateProject(ctx context.Context, req UpdateProjectRequest) (
 		return resp, err
 	}
 
-	if req.FinishedAt != nil {
+	if req.FinishedAt.Set && req.FinishedAt.Value != nil {
 		if err := s.repo.FinishDescendantProjects(ctx, req.ID); err != nil {
 			return resp, err
 		}

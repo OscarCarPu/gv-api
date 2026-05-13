@@ -174,8 +174,8 @@ type UpdateProjectRequest struct {
 	Description *string      `json:"description"`
 	DueAt       NullableTime `json:"due_at"`
 	ParentID    *int32       `json:"parent_id"`
-	StartedAt   *time.Time   `json:"started_at"`
-	FinishedAt  *time.Time   `json:"finished_at"`
+	StartedAt   NullableTime `json:"started_at"`
+	FinishedAt  NullableTime `json:"finished_at"`
 }
 
 // NullableTime distinguishes between an absent JSON field and an explicit null.

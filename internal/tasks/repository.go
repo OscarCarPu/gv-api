@@ -183,13 +183,21 @@ func (r *PostgresRepository) UpdateProject(ctx context.Context, req UpdateProjec
 		params.SetParentID = true
 		params.ParentID = *req.ParentID
 	}
-	if req.StartedAt != nil {
-		params.SetStartedAt = true
-		params.StartedAt = pgtype.Timestamptz{Time: *req.StartedAt, Valid: true}
+	if req.StartedAt.Set {
+		if req.StartedAt.Value == nil {
+			params.ClearStartedAt = true
+		} else {
+			params.SetStartedAt = true
+			params.StartedAt = pgtype.Timestamptz{Time: *req.StartedAt.Value, Valid: true}
+		}
 	}
-	if req.FinishedAt != nil {
-		params.SetFinishedAt = true
-		params.FinishedAt = pgtype.Timestamptz{Time: *req.FinishedAt, Valid: true}
+	if req.FinishedAt.Set {
+		if req.FinishedAt.Value == nil {
+			params.ClearFinishedAt = true
+		} else {
+			params.SetFinishedAt = true
+			params.FinishedAt = pgtype.Timestamptz{Time: *req.FinishedAt.Value, Valid: true}
+		}
 	}
 
 	row, err := r.q.UpdateProject(ctx, params)
