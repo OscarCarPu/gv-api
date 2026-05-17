@@ -146,6 +146,14 @@ type NetWorthQuery struct {
 	Granularity StatsGranularity
 }
 
+type ListTransactionsQuery struct {
+	AccountID  *int32
+	CategoryID *int32
+	Type       *txtype.Type
+	From       time.Time
+	To         time.Time
+}
+
 type CategoryStatsQuery struct {
 	Type      txtype.Type
 	From      time.Time

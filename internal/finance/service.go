@@ -69,12 +69,8 @@ func (s *Service) GetTransaction(ctx context.Context, id int32) (Transaction, er
 	return s.repo.GetTransaction(ctx, id)
 }
 
-func (s *Service) ListTransactions(ctx context.Context) ([]Transaction, error) {
-	return s.repo.ListTransactions(ctx)
-}
-
-func (s *Service) ListTransactionsByAccount(ctx context.Context, accountID int32) ([]Transaction, error) {
-	return s.repo.ListTransactionsByAccount(ctx, accountID)
+func (s *Service) ListTransactions(ctx context.Context, q ListTransactionsQuery) ([]Transaction, error) {
+	return s.repo.ListTransactions(ctx, q)
 }
 
 func (s *Service) CreateTransaction(ctx context.Context, req CreateTransactionRequest) (Transaction, error) {

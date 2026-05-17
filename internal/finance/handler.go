@@ -29,8 +29,7 @@ type ServiceInterface interface {
 	DeleteCategory(ctx context.Context, id int32) error
 
 	GetTransaction(ctx context.Context, id int32) (Transaction, error)
-	ListTransactions(ctx context.Context) ([]Transaction, error)
-	ListTransactionsByAccount(ctx context.Context, accountID int32) ([]Transaction, error)
+	ListTransactions(ctx context.Context, q ListTransactionsQuery) ([]Transaction, error)
 	CreateTransaction(ctx context.Context, req CreateTransactionRequest) (Transaction, error)
 	UpdateTransaction(ctx context.Context, req UpdateTransactionRequest) (Transaction, error)
 	DeleteTransaction(ctx context.Context, id int32) error
@@ -324,21 +323,46 @@ func (h *Handler) DeleteCategory(w http.ResponseWriter, r *http.Request) {
 // --- Transactions ---
 
 func (h *Handler) ListTransactions(w http.ResponseWriter, r *http.Request) {
-	if accStr := r.URL.Query().Get("account_id"); accStr != "" {
-		acc, err := strconv.Atoi(accStr)
-		if err != nil || acc <= 0 {
-			response.Error(w, http.StatusBadRequest, "invalid account_id")
-			return
-		}
-		out, err := h.service.ListTransactionsByAccount(r.Context(), int32(acc))
-		if err != nil {
-			response.Error(w, http.StatusInternalServerError, "Failed to list transactions")
-			return
-		}
-		response.JSON(w, http.StatusOK, out)
+	q := r.URL.Query()
+	accountID, err := parseOptionalIntParam(q.Get("account_id"))
+	if err != nil {
+		response.Error(w, http.StatusBadRequest, "invalid account_id")
 		return
 	}
-	out, err := h.service.ListTransactions(r.Context())
+	categoryID, err := parseOptionalIntParam(q.Get("category_id"))
+	if err != nil {
+		response.Error(w, http.StatusBadRequest, "invalid category_id")
+		return
+	}
+	var typePtr *txtype.Type
+	if v := q.Get("type"); v != "" {
+		t := txtype.Type(v)
+		if !t.Valid() {
+			response.Error(w, http.StatusBadRequest, "type must be income, expense, or transfer")
+			return
+		}
+		typePtr = &t
+	}
+	from, err := parseDateParam(q.Get("from"))
+	if err != nil {
+		response.Error(w, http.StatusBadRequest, "invalid from")
+		return
+	}
+	to, err := parseDateParam(q.Get("to"))
+	if err != nil {
+		response.Error(w, http.StatusBadRequest, "invalid to")
+		return
+	}
+	if !to.IsZero() && to.Equal(time.Date(to.Year(), to.Month(), to.Day(), 0, 0, 0, 0, to.Location())) {
+		to = to.Add(24*time.Hour - time.Nanosecond)
+	}
+	out, err := h.service.ListTransactions(r.Context(), ListTransactionsQuery{
+		AccountID:  accountID,
+		CategoryID: categoryID,
+		Type:       typePtr,
+		From:       from,
+		To:         to,
+	})
 	if err != nil {
 		response.Error(w, http.StatusInternalServerError, "Failed to list transactions")
 		return

@@ -59,14 +59,20 @@ FROM transactions
 WHERE id = $1;
 
 -- name: ListTransactions :many
+-- Returns transactions ordered by most recent first, with optional filters.
+-- account_id matches source or destination (transfers).
 SELECT id, type, amount, account_id, to_account_id, description, occurred_at, created_at, category_id
 FROM transactions
-ORDER BY occurred_at DESC, id DESC;
-
--- name: ListTransactionsByAccount :many
-SELECT id, type, amount, account_id, to_account_id, description, occurred_at, created_at, category_id
-FROM transactions
-WHERE account_id = $1 OR to_account_id = $1
+WHERE
+    (
+        sqlc.narg('account_id')::int IS NULL
+        OR account_id    = sqlc.narg('account_id')::int
+        OR to_account_id = sqlc.narg('account_id')::int
+    )
+    AND (sqlc.narg('category_id')::int IS NULL OR category_id = sqlc.narg('category_id')::int)
+    AND (sqlc.narg('tx_type')::transaction_type IS NULL OR type = sqlc.narg('tx_type')::transaction_type)
+    AND (sqlc.narg('from_at')::timestamptz IS NULL OR occurred_at >= sqlc.narg('from_at')::timestamptz)
+    AND (sqlc.narg('to_at')::timestamptz   IS NULL OR occurred_at <= sqlc.narg('to_at')::timestamptz)
 ORDER BY occurred_at DESC, id DESC;
 
 -- name: CreateTransaction :one

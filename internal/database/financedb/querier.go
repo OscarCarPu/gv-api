@@ -41,8 +41,9 @@ type Querier interface {
 	ListAccounts(ctx context.Context) ([]Account, error)
 	ListCategories(ctx context.Context) ([]Category, error)
 	ListRecentTransactions(ctx context.Context, occurredAt pgtype.Timestamptz) ([]ListRecentTransactionsRow, error)
-	ListTransactions(ctx context.Context) ([]Transaction, error)
-	ListTransactionsByAccount(ctx context.Context, accountID int32) ([]Transaction, error)
+	// Returns transactions ordered by most recent first, with optional filters.
+	// account_id matches source or destination (transfers).
+	ListTransactions(ctx context.Context, arg ListTransactionsParams) ([]Transaction, error)
 	UpdateAccount(ctx context.Context, arg UpdateAccountParams) (Account, error)
 	UpdateCategory(ctx context.Context, arg UpdateCategoryParams) (Category, error)
 	UpdateTransaction(ctx context.Context, arg UpdateTransactionParams) (Transaction, error)

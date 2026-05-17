@@ -38,8 +38,7 @@ type Repository interface {
 	DeleteCategory(ctx context.Context, id int32) error
 
 	GetTransaction(ctx context.Context, id int32) (Transaction, error)
-	ListTransactions(ctx context.Context) ([]Transaction, error)
-	ListTransactionsByAccount(ctx context.Context, accountID int32) ([]Transaction, error)
+	ListTransactions(ctx context.Context, q ListTransactionsQuery) ([]Transaction, error)
 	CreateTransaction(ctx context.Context, req CreateTransactionRequest) (Transaction, error)
 	UpdateTransaction(ctx context.Context, req UpdateTransactionRequest) (Transaction, error)
 	DeleteTransaction(ctx context.Context, id int32) error
@@ -256,20 +255,21 @@ func (r *PostgresRepository) GetTransaction(ctx context.Context, id int32) (Tran
 	return transactionToDTO(row), nil
 }
 
-func (r *PostgresRepository) ListTransactions(ctx context.Context) ([]Transaction, error) {
-	rows, err := r.q.ListTransactions(ctx)
-	if err != nil {
-		return nil, err
+func (r *PostgresRepository) ListTransactions(ctx context.Context, q ListTransactionsQuery) ([]Transaction, error) {
+	params := financedb.ListTransactionsParams{
+		AccountID:  q.AccountID,
+		CategoryID: q.CategoryID,
 	}
-	out := make([]Transaction, len(rows))
-	for i, row := range rows {
-		out[i] = transactionToDTO(row)
+	if q.Type != nil {
+		params.TxType = *q.Type
 	}
-	return out, nil
-}
-
-func (r *PostgresRepository) ListTransactionsByAccount(ctx context.Context, accountID int32) ([]Transaction, error) {
-	rows, err := r.q.ListTransactionsByAccount(ctx, accountID)
+	if !q.From.IsZero() {
+		params.FromAt = pgtype.Timestamptz{Time: q.From, Valid: true}
+	}
+	if !q.To.IsZero() {
+		params.ToAt = pgtype.Timestamptz{Time: q.To, Valid: true}
+	}
+	rows, err := r.q.ListTransactions(ctx, params)
 	if err != nil {
 		return nil, err
 	}

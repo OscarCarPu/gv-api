@@ -579,48 +579,37 @@ func (q *Queries) ListRecentTransactions(ctx context.Context, occurredAt pgtype.
 const listTransactions = `-- name: ListTransactions :many
 SELECT id, type, amount, account_id, to_account_id, description, occurred_at, created_at, category_id
 FROM transactions
+WHERE
+    (
+        $1::int IS NULL
+        OR account_id    = $1::int
+        OR to_account_id = $1::int
+    )
+    AND ($2::int IS NULL OR category_id = $2::int)
+    AND ($3::transaction_type IS NULL OR type = $3::transaction_type)
+    AND ($4::timestamptz IS NULL OR occurred_at >= $4::timestamptz)
+    AND ($5::timestamptz   IS NULL OR occurred_at <= $5::timestamptz)
 ORDER BY occurred_at DESC, id DESC
 `
 
-func (q *Queries) ListTransactions(ctx context.Context) ([]Transaction, error) {
-	rows, err := q.db.Query(ctx, listTransactions)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	items := []Transaction{}
-	for rows.Next() {
-		var i Transaction
-		if err := rows.Scan(
-			&i.ID,
-			&i.Type,
-			&i.Amount,
-			&i.AccountID,
-			&i.ToAccountID,
-			&i.Description,
-			&i.OccurredAt,
-			&i.CreatedAt,
-			&i.CategoryID,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
+type ListTransactionsParams struct {
+	AccountID  *int32             `db:"account_id" json:"account_id"`
+	CategoryID *int32             `db:"category_id" json:"category_id"`
+	TxType     interface{}        `db:"tx_type" json:"tx_type"`
+	FromAt     pgtype.Timestamptz `db:"from_at" json:"from_at"`
+	ToAt       pgtype.Timestamptz `db:"to_at" json:"to_at"`
 }
 
-const listTransactionsByAccount = `-- name: ListTransactionsByAccount :many
-SELECT id, type, amount, account_id, to_account_id, description, occurred_at, created_at, category_id
-FROM transactions
-WHERE account_id = $1 OR to_account_id = $1
-ORDER BY occurred_at DESC, id DESC
-`
-
-func (q *Queries) ListTransactionsByAccount(ctx context.Context, accountID int32) ([]Transaction, error) {
-	rows, err := q.db.Query(ctx, listTransactionsByAccount, accountID)
+// Returns transactions ordered by most recent first, with optional filters.
+// account_id matches source or destination (transfers).
+func (q *Queries) ListTransactions(ctx context.Context, arg ListTransactionsParams) ([]Transaction, error) {
+	rows, err := q.db.Query(ctx, listTransactions,
+		arg.AccountID,
+		arg.CategoryID,
+		arg.TxType,
+		arg.FromAt,
+		arg.ToAt,
+	)
 	if err != nil {
 		return nil, err
 	}
