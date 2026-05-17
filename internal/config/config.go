@@ -1,7 +1,10 @@
 // Package config provides the config
 package config
 
-import "os"
+import (
+	"errors"
+	"os"
+)
 
 type Config struct {
 	DBUrl               string
@@ -14,7 +17,7 @@ type Config struct {
 }
 
 func Load() (*Config, error) {
-	return &Config{
+	cfg := &Config{
 		DBUrl:               os.Getenv("DATABASE_URL"),
 		Port:                getEnv("PORT", "8080"),
 		Password:            getEnv("PASSWORD", "Abc123.."),
@@ -22,7 +25,11 @@ func Load() (*Config, error) {
 		JwtSecret:           getEnv("JWT_SECRET", "secret"),
 		TotpSecret:          getEnv("TOTP_SECRET", "secret"),
 		Timezone:            getEnv("TIMEZONE", "Europe/Madrid"),
-	}, nil
+	}
+	if cfg.DBUrl == "" {
+		return nil, errors.New("DATABASE_URL is required")
+	}
+	return cfg, nil
 }
 
 func getEnv(key, fallback string) string {

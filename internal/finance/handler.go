@@ -121,7 +121,7 @@ func validateTransaction(t txtype.Type, amount interface{ IsPositive() bool }, a
 func (h *Handler) ListAccounts(w http.ResponseWriter, r *http.Request) {
 	out, err := h.service.ListAccounts(r.Context())
 	if err != nil {
-		response.Error(w, http.StatusInternalServerError, "Failed to list accounts")
+		response.InternalError(w, r, err, "Failed to list accounts")
 		return
 	}
 	response.JSON(w, http.StatusOK, out)
@@ -139,7 +139,7 @@ func (h *Handler) GetAccount(w http.ResponseWriter, r *http.Request) {
 			response.Error(w, http.StatusNotFound, "account not found")
 			return
 		}
-		response.Error(w, http.StatusInternalServerError, "Failed to get account")
+		response.InternalError(w, r, err, "Failed to get account")
 		return
 	}
 	response.JSON(w, http.StatusOK, a)
@@ -160,7 +160,7 @@ func (h *Handler) CreateAccount(w http.ResponseWriter, r *http.Request) {
 
 	a, err := h.service.CreateAccount(r.Context(), req)
 	if err != nil {
-		response.Error(w, http.StatusInternalServerError, "Failed to create account")
+		response.InternalError(w, r, err, "Failed to create account")
 		return
 	}
 	response.JSON(w, http.StatusCreated, a)
@@ -191,7 +191,7 @@ func (h *Handler) UpdateAccount(w http.ResponseWriter, r *http.Request) {
 			response.Error(w, http.StatusNotFound, "account not found")
 			return
 		}
-		response.Error(w, http.StatusInternalServerError, "Failed to update account")
+		response.InternalError(w, r, err, "Failed to update account")
 		return
 	}
 	response.JSON(w, http.StatusOK, a)
@@ -208,7 +208,7 @@ func (h *Handler) DeleteAccount(w http.ResponseWriter, r *http.Request) {
 			response.Error(w, http.StatusConflict, "account has transactions; delete them first")
 			return
 		}
-		response.Error(w, http.StatusInternalServerError, "Failed to delete account")
+		response.InternalError(w, r, err, "Failed to delete account")
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
@@ -219,7 +219,7 @@ func (h *Handler) DeleteAccount(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) ListCategories(w http.ResponseWriter, r *http.Request) {
 	out, err := h.service.ListCategories(r.Context())
 	if err != nil {
-		response.Error(w, http.StatusInternalServerError, "Failed to list categories")
+		response.InternalError(w, r, err, "Failed to list categories")
 		return
 	}
 	response.JSON(w, http.StatusOK, out)
@@ -237,7 +237,7 @@ func (h *Handler) GetCategory(w http.ResponseWriter, r *http.Request) {
 			response.Error(w, http.StatusNotFound, "category not found")
 			return
 		}
-		response.Error(w, http.StatusInternalServerError, "Failed to get category")
+		response.InternalError(w, r, err, "Failed to get category")
 		return
 	}
 	response.JSON(w, http.StatusOK, c)
@@ -262,7 +262,7 @@ func (h *Handler) CreateCategory(w http.ResponseWriter, r *http.Request) {
 			response.Error(w, http.StatusBadRequest, "parent_id is invalid")
 			return
 		}
-		response.Error(w, http.StatusInternalServerError, "Failed to create category")
+		response.InternalError(w, r, err, "Failed to create category")
 		return
 	}
 	response.JSON(w, http.StatusCreated, c)
@@ -297,7 +297,7 @@ func (h *Handler) UpdateCategory(w http.ResponseWriter, r *http.Request) {
 			response.Error(w, http.StatusBadRequest, "parent_id is invalid")
 			return
 		}
-		response.Error(w, http.StatusInternalServerError, "Failed to update category")
+		response.InternalError(w, r, err, "Failed to update category")
 		return
 	}
 	response.JSON(w, http.StatusOK, c)
@@ -314,7 +314,7 @@ func (h *Handler) DeleteCategory(w http.ResponseWriter, r *http.Request) {
 			response.Error(w, http.StatusConflict, "category is referenced by transactions or other categories")
 			return
 		}
-		response.Error(w, http.StatusInternalServerError, "Failed to delete category")
+		response.InternalError(w, r, err, "Failed to delete category")
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
@@ -364,7 +364,7 @@ func (h *Handler) ListTransactions(w http.ResponseWriter, r *http.Request) {
 		To:         to,
 	})
 	if err != nil {
-		response.Error(w, http.StatusInternalServerError, "Failed to list transactions")
+		response.InternalError(w, r, err, "Failed to list transactions")
 		return
 	}
 	response.JSON(w, http.StatusOK, out)
@@ -382,7 +382,7 @@ func (h *Handler) GetTransaction(w http.ResponseWriter, r *http.Request) {
 			response.Error(w, http.StatusNotFound, "transaction not found")
 			return
 		}
-		response.Error(w, http.StatusInternalServerError, "Failed to get transaction")
+		response.InternalError(w, r, err, "Failed to get transaction")
 		return
 	}
 	response.JSON(w, http.StatusOK, t)
@@ -400,7 +400,7 @@ func (h *Handler) CreateTransaction(w http.ResponseWriter, r *http.Request) {
 	}
 	t, err := h.service.CreateTransaction(r.Context(), req)
 	if err != nil {
-		writeTxErr(w, err, "create")
+		writeTxErr(w, r, err, "create")
 		return
 	}
 	response.JSON(w, http.StatusCreated, t)
@@ -428,7 +428,7 @@ func (h *Handler) UpdateTransaction(w http.ResponseWriter, r *http.Request) {
 	}
 	t, err := h.service.UpdateTransaction(r.Context(), req)
 	if err != nil {
-		writeTxErr(w, err, "update")
+		writeTxErr(w, r, err, "update")
 		return
 	}
 	response.JSON(w, http.StatusOK, t)
@@ -441,7 +441,7 @@ func (h *Handler) DeleteTransaction(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := h.service.DeleteTransaction(r.Context(), id); err != nil {
-		response.Error(w, http.StatusInternalServerError, "Failed to delete transaction")
+		response.InternalError(w, r, err, "Failed to delete transaction")
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
@@ -451,7 +451,7 @@ func (h *Handler) DeleteTransaction(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) GetOverview(w http.ResponseWriter, r *http.Request) {
 	o, err := h.service.GetOverview(r.Context())
 	if err != nil {
-		response.Error(w, http.StatusInternalServerError, "Failed to get overview")
+		response.InternalError(w, r, err, "Failed to get overview")
 		return
 	}
 	response.JSON(w, http.StatusOK, o)
@@ -502,7 +502,7 @@ func (h *Handler) GetNetWorthStats(w http.ResponseWriter, r *http.Request) {
 	}
 	out, err := h.service.GetNetWorthSeries(r.Context(), NetWorthQuery{From: from, To: to, Granularity: g})
 	if err != nil {
-		response.Error(w, http.StatusInternalServerError, "Failed to compute net worth")
+		response.InternalError(w, r, err, "Failed to compute net worth")
 		return
 	}
 	response.JSON(w, http.StatusOK, out)
@@ -533,7 +533,7 @@ func (h *Handler) GetCategoryStats(w http.ResponseWriter, r *http.Request) {
 		Type: t, From: from, To: to, AccountID: accountID,
 	})
 	if err != nil {
-		response.Error(w, http.StatusInternalServerError, "Failed to compute category stats")
+		response.InternalError(w, r, err, "Failed to compute category stats")
 		return
 	}
 	response.JSON(w, http.StatusOK, out)
@@ -564,7 +564,7 @@ func (h *Handler) GetMonthlyStats(w http.ResponseWriter, r *http.Request) {
 		From: from, To: to, AccountID: accountID, CategoryID: categoryID,
 	})
 	if err != nil {
-		response.Error(w, http.StatusInternalServerError, "Failed to compute monthly stats")
+		response.InternalError(w, r, err, "Failed to compute monthly stats")
 		return
 	}
 	response.JSON(w, http.StatusOK, out)
@@ -607,13 +607,13 @@ func (h *Handler) GetEstimation(w http.ResponseWriter, r *http.Request) {
 		StartMonth: start, EndMonth: end, Mode: mode,
 	})
 	if err != nil {
-		response.Error(w, http.StatusInternalServerError, "Failed to compute estimation")
+		response.InternalError(w, r, err, "Failed to compute estimation")
 		return
 	}
 	response.JSON(w, http.StatusOK, out)
 }
 
-func writeTxErr(w http.ResponseWriter, err error, op string) {
+func writeTxErr(w http.ResponseWriter, r *http.Request, err error, op string) {
 	switch {
 	case errors.Is(err, ErrNotFound):
 		response.Error(w, http.StatusNotFound, "transaction not found")
@@ -622,6 +622,6 @@ func writeTxErr(w http.ResponseWriter, err error, op string) {
 	case errors.Is(err, ErrInvalidInput):
 		response.Error(w, http.StatusBadRequest, "referenced account or category does not exist")
 	default:
-		response.Error(w, http.StatusInternalServerError, "Failed to "+op+" transaction")
+		response.InternalError(w, r, err, "Failed to "+op+" transaction")
 	}
 }

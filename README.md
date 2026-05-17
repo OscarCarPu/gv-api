@@ -34,6 +34,32 @@ A comprehensive life orchestrator built in Go, designed to centralize data from 
    make run
    ```
 
+## Environment Variables
+
+| Variable | Required | Default | Description |
+|---|---|---|---|
+| `DATABASE_URL` | **Yes** | — | PostgreSQL connection string. The server will not start without this. |
+| `PORT` | No | `8080` | HTTP listen port. |
+| `TIMEZONE` | No | `Europe/Madrid` | IANA timezone for date arithmetic. |
+| `PASSWORD` | No | `Abc123..` | Login password for full-access tokens. |
+| `SEMIPRIVATE_PASSWORD` | No | `Abc123..` | Login password for read-only tokens. |
+| `JWT_SECRET` | No | `secret` | Secret used to sign JWTs. **Change in production.** |
+| `TOTP_SECRET` | No | `secret` | Base32 secret for TOTP 2FA. **Change in production.** |
+
+## API
+
+### Infrastructure
+
+| Method | Path | Auth | Description |
+|---|---|---|---|
+| `GET` | `/health` | None | Returns `200 OK`. Use for liveness probes. |
+
+### Request / Response Headers
+
+| Header | Direction | Description |
+|---|---|---|
+| `X-Request-ID` | Request & Response | Optional on request; auto-generated (random 8-byte hex) if absent. Echoed back in the response and propagated through logs for correlation. |
+
 ## Code Generation
 
 ### sqlc

@@ -54,7 +54,7 @@ func NewHandler(s ServiceInterface) *Handler {
 func parseIDParam(r *http.Request, entity string) (int32, error) {
 	idStr := chi.URLParam(r, "id")
 	id, err := strconv.Atoi(idStr)
-	if err != nil {
+	if err != nil || id <= 0 {
 		return 0, fmt.Errorf("invalid %s id", entity)
 	}
 	return int32(id), nil
@@ -79,7 +79,7 @@ func (h *Handler) CreateProject(w http.ResponseWriter, r *http.Request) {
 
 	project, err := h.service.CreateProject(r.Context(), req)
 	if err != nil {
-		response.Error(w, http.StatusInternalServerError, "Failed to create project")
+		response.InternalError(w, r, err, "Failed to create project")
 		return
 	}
 
@@ -134,7 +134,7 @@ func (h *Handler) CreateTask(w http.ResponseWriter, r *http.Request) {
 
 	task, err := h.service.CreateTask(r.Context(), req)
 	if err != nil {
-		response.Error(w, http.StatusInternalServerError, "Failed to create task")
+		response.InternalError(w, r, err, "Failed to create task")
 		return
 	}
 
@@ -165,7 +165,7 @@ func (h *Handler) CreateTodo(w http.ResponseWriter, r *http.Request) {
 
 	todo, err := h.service.CreateTodo(r.Context(), req)
 	if err != nil {
-		response.Error(w, http.StatusInternalServerError, "Failed to create todo")
+		response.InternalError(w, r, err, "Failed to create todo")
 		return
 	}
 
@@ -195,7 +195,7 @@ func (h *Handler) CreateTimeEntry(w http.ResponseWriter, r *http.Request) {
 			response.Error(w, http.StatusConflict, "an active time entry already exists")
 			return
 		}
-		response.Error(w, http.StatusInternalServerError, "Failed to create time entry")
+		response.InternalError(w, r, err, "Failed to create time entry")
 		return
 	}
 
@@ -227,7 +227,7 @@ func (h *Handler) UpdateProject(w http.ResponseWriter, r *http.Request) {
 			response.Error(w, http.StatusNotFound, "project not found")
 			return
 		}
-		response.Error(w, http.StatusInternalServerError, "Failed to update project")
+		response.InternalError(w, r, err, "Failed to update project")
 		return
 	}
 
@@ -286,7 +286,7 @@ func (h *Handler) UpdateTask(w http.ResponseWriter, r *http.Request) {
 			response.Error(w, http.StatusNotFound, "task not found")
 			return
 		}
-		response.Error(w, http.StatusInternalServerError, "Failed to update task")
+		response.InternalError(w, r, err, "Failed to update task")
 		return
 	}
 
@@ -318,7 +318,7 @@ func (h *Handler) UpdateTodo(w http.ResponseWriter, r *http.Request) {
 			response.Error(w, http.StatusNotFound, "todo not found")
 			return
 		}
-		response.Error(w, http.StatusInternalServerError, "Failed to update todo")
+		response.InternalError(w, r, err, "Failed to update todo")
 		return
 	}
 
@@ -345,7 +345,7 @@ func (h *Handler) UpdateTimeEntry(w http.ResponseWriter, r *http.Request) {
 			response.Error(w, http.StatusNotFound, "time entry not found")
 			return
 		}
-		response.Error(w, http.StatusInternalServerError, "Failed to update time entry")
+		response.InternalError(w, r, err, "Failed to update time entry")
 		return
 	}
 
@@ -361,7 +361,7 @@ func (h *Handler) GetActiveTree(w http.ResponseWriter, r *http.Request) {
 
 	tree, err := h.service.GetActiveTree(r.Context(), minPriority)
 	if err != nil {
-		response.Error(w, http.StatusInternalServerError, "Failed to get active tree")
+		response.InternalError(w, r, err, "Failed to get active tree")
 		return
 	}
 
@@ -381,7 +381,7 @@ func (h *Handler) GetProjectChildren(w http.ResponseWriter, r *http.Request) {
 			response.Error(w, http.StatusNotFound, "project not found")
 			return
 		}
-		response.Error(w, http.StatusInternalServerError, "Failed to get project children")
+		response.InternalError(w, r, err, "Failed to get project children")
 		return
 	}
 
@@ -401,7 +401,7 @@ func (h *Handler) GetProject(w http.ResponseWriter, r *http.Request) {
 			response.Error(w, http.StatusNotFound, "project not found")
 			return
 		}
-		response.Error(w, http.StatusInternalServerError, "Failed to get project")
+		response.InternalError(w, r, err, "Failed to get project")
 		return
 	}
 
@@ -421,7 +421,7 @@ func (h *Handler) GetTask(w http.ResponseWriter, r *http.Request) {
 			response.Error(w, http.StatusNotFound, "task not found")
 			return
 		}
-		response.Error(w, http.StatusInternalServerError, "Failed to get task")
+		response.InternalError(w, r, err, "Failed to get task")
 		return
 	}
 
@@ -441,7 +441,7 @@ func (h *Handler) GetTaskTimeEntries(w http.ResponseWriter, r *http.Request) {
 			response.Error(w, http.StatusNotFound, "task not found")
 			return
 		}
-		response.Error(w, http.StatusInternalServerError, "Failed to get task time entries")
+		response.InternalError(w, r, err, "Failed to get task time entries")
 		return
 	}
 
@@ -457,7 +457,7 @@ func (h *Handler) GetTasksByDueDate(w http.ResponseWriter, r *http.Request) {
 
 	tasks, err := h.service.GetTasksByDueDate(r.Context(), minPriority)
 	if err != nil {
-		response.Error(w, http.StatusInternalServerError, "Failed to get tasks by due date")
+		response.InternalError(w, r, err, "Failed to get tasks by due date")
 		return
 	}
 	response.JSON(w, http.StatusOK, tasks)
@@ -484,7 +484,7 @@ func (h *Handler) DeleteProject(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := h.service.DeleteProject(r.Context(), id); err != nil {
-		response.Error(w, http.StatusInternalServerError, "Failed to delete project")
+		response.InternalError(w, r, err, "Failed to delete project")
 		return
 	}
 
@@ -499,7 +499,7 @@ func (h *Handler) DeleteTask(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := h.service.DeleteTask(r.Context(), id); err != nil {
-		response.Error(w, http.StatusInternalServerError, "Failed to delete task")
+		response.InternalError(w, r, err, "Failed to delete task")
 		return
 	}
 
@@ -514,7 +514,7 @@ func (h *Handler) DeleteTodo(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := h.service.DeleteTodo(r.Context(), id); err != nil {
-		response.Error(w, http.StatusInternalServerError, "Failed to delete todo")
+		response.InternalError(w, r, err, "Failed to delete todo")
 		return
 	}
 
@@ -529,7 +529,7 @@ func (h *Handler) DeleteTimeEntry(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := h.service.DeleteTimeEntry(r.Context(), id); err != nil {
-		response.Error(w, http.StatusInternalServerError, "Failed to delete time entry")
+		response.InternalError(w, r, err, "Failed to delete time entry")
 		return
 	}
 
@@ -543,7 +543,7 @@ func (h *Handler) GetActiveTimeEntry(w http.ResponseWriter, r *http.Request) {
 			response.Error(w, http.StatusNotFound, "no active time entry")
 			return
 		}
-		response.Error(w, http.StatusInternalServerError, "Failed to get active time entry")
+		response.InternalError(w, r, err, "Failed to get active time entry")
 		return
 	}
 
@@ -553,7 +553,7 @@ func (h *Handler) GetActiveTimeEntry(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) GetTimeEntrySummary(w http.ResponseWriter, r *http.Request) {
 	summary, err := h.service.GetTimeEntrySummary(r.Context())
 	if err != nil {
-		response.Error(w, http.StatusInternalServerError, "Failed to get time entry summary")
+		response.InternalError(w, r, err, "Failed to get time entry summary")
 		return
 	}
 
@@ -577,7 +577,7 @@ func (h *Handler) GetTimeEntryHistory(w http.ResponseWriter, r *http.Request) {
 
 	history, err := h.service.GetTimeEntryHistory(r.Context(), frequency, startAt, endAt)
 	if err != nil {
-		response.Error(w, http.StatusInternalServerError, "Failed to get time entry history")
+		response.InternalError(w, r, err, "Failed to get time entry history")
 		return
 	}
 
@@ -606,7 +606,7 @@ func (h *Handler) GetTimeEntriesByDateRange(w http.ResponseWriter, r *http.Reque
 
 	entries, err := h.service.GetTimeEntriesByDateRange(r.Context(), startTime, endTime)
 	if err != nil {
-		response.Error(w, http.StatusInternalServerError, "Failed to get time entries")
+		response.InternalError(w, r, err, "Failed to get time entries")
 		return
 	}
 
@@ -616,7 +616,7 @@ func (h *Handler) GetTimeEntriesByDateRange(w http.ResponseWriter, r *http.Reque
 func (h *Handler) ListTasksFast(w http.ResponseWriter, r *http.Request) {
 	tasks, err := h.service.ListTasksFast(r.Context())
 	if err != nil {
-		response.Error(w, http.StatusInternalServerError, "Failed to list tasks")
+		response.InternalError(w, r, err, "Failed to list tasks")
 		return
 	}
 
@@ -626,7 +626,7 @@ func (h *Handler) ListTasksFast(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) ListProjectsFast(w http.ResponseWriter, r *http.Request) {
 	projects, err := h.service.ListProjectsFast(r.Context())
 	if err != nil {
-		response.Error(w, http.StatusInternalServerError, "Failed to list projects")
+		response.InternalError(w, r, err, "Failed to list projects")
 		return
 	}
 
@@ -636,7 +636,7 @@ func (h *Handler) ListProjectsFast(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) GetRootProjects(w http.ResponseWriter, r *http.Request) {
 	projects, err := h.service.GetRootProjects(r.Context())
 	if err != nil {
-		response.Error(w, http.StatusInternalServerError, "Failed to get projects")
+		response.InternalError(w, r, err, "Failed to get projects")
 		return
 	}
 

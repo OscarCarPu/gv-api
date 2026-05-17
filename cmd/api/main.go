@@ -2,8 +2,12 @@ package main
 
 import (
 	"context"
-	"log"
+	"errors"
+	"log/slog"
 	"net/http"
+	"os"
+	"os/signal"
+	"syscall"
 	"time"
 	_ "time/tzdata"
 
@@ -16,27 +20,36 @@ import (
 	"gv-api/internal/database/tasksdb"
 	"gv-api/internal/finance"
 	"gv-api/internal/habits"
+	"gv-api/internal/middleware"
 	"gv-api/internal/plan"
 	"gv-api/internal/tasks"
 	"gv-api/internal/varieties"
 
 	"github.com/go-chi/chi/v5"
+	chimiddleware "github.com/go-chi/chi/v5/middleware"
 	"github.com/go-chi/cors"
 )
 
 func main() {
+	slog.SetDefault(slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
+		Level: slog.LevelInfo,
+	})))
+
 	cfg, err := config.Load()
 	if err != nil {
-		log.Fatal("Failed to load config", err)
+		slog.Error("failed to load config", "error", err)
+		os.Exit(1)
 	}
 
 	if err := database.Migrate(cfg.DBUrl, "db/migrations"); err != nil {
-		log.Fatal("Failed to run migrations: ", err)
+		slog.Error("failed to run migrations", "error", err)
+		os.Exit(1)
 	}
 
 	db, err := database.New(context.Background(), cfg.DBUrl)
 	if err != nil {
-		log.Fatal(err)
+		slog.Error("failed to connect to database", "error", err)
+		os.Exit(1)
 	}
 
 	//nolint:errcheck // if the db is closed, the program has already exited
@@ -44,7 +57,8 @@ func main() {
 
 	loc, err := time.LoadLocation(cfg.Timezone)
 	if err != nil {
-		log.Fatalf("Failed to load timezone %q: %v", cfg.Timezone, err)
+		slog.Error("failed to load timezone", "timezone", cfg.Timezone, "error", err)
+		os.Exit(1)
 	}
 
 	// Habit Setup
@@ -82,15 +96,21 @@ func main() {
 	semiMiddleware := auth.NewMiddleware(authService, "semi", "full")
 
 	r := chi.NewRouter()
+	r.Use(chimiddleware.Recoverer)
+	r.Use(middleware.RequestID)
 	r.Use(cors.Handler(cors.Options{
 		AllowedOrigins:   []string{"*"},
 		AllowedMethods:   []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS", "HEAD"},
-		AllowedHeaders:   []string{"Content-Type", "Authorization", "X-Device-ID"},
-		ExposedHeaders:   []string{"Content-Length"},
+		AllowedHeaders:   []string{"Content-Type", "Authorization", "X-Device-ID", "X-Request-ID"},
+		ExposedHeaders:   []string{"Content-Length", "X-Request-ID"},
 		AllowCredentials: false,
 		MaxAge:           300,
 	}))
 	r.Use(actor.Middleware)
+
+	r.Get("/health", func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	})
 
 	// Public
 	r.Post("/login", authHandler.Login)
@@ -173,6 +193,29 @@ func main() {
 		r.Get("/finance/stats/estimation", financeHandler.GetEstimation)
 	})
 
-	log.Printf("Starting server on port %s", cfg.Port)
-	log.Fatal(http.ListenAndServe(":"+cfg.Port, r))
+	server := &http.Server{
+		Addr:    ":" + cfg.Port,
+		Handler: r,
+	}
+
+	quit := make(chan os.Signal, 1)
+	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
+
+	go func() {
+		slog.Info("server starting", "port", cfg.Port)
+		if err := server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			slog.Error("server error", "error", err)
+			os.Exit(1)
+		}
+	}()
+
+	<-quit
+	slog.Info("shutting down server")
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	if err := server.Shutdown(shutdownCtx); err != nil {
+		slog.Error("shutdown error", "error", err)
+		os.Exit(1)
+	}
+	slog.Info("server stopped")
 }

@@ -30,13 +30,22 @@ func NewHandler(s ServiceInterface) *Handler {
 	return &Handler{service: s}
 }
 
+func parseIDParam(r *http.Request) (int32, error) {
+	idStr := chi.URLParam(r, "id")
+	id, err := strconv.Atoi(idStr)
+	if err != nil || id <= 0 {
+		return 0, fmt.Errorf("invalid habit id")
+	}
+	return int32(id), nil
+}
+
 // GetDaily -> GET /habits?date=2023-10-27
 func (h *Handler) GetDaily(w http.ResponseWriter, r *http.Request) {
 	dateParam := r.URL.Query().Get("date")
 
 	habits, err := h.service.GetDailyView(r.Context(), dateParam)
 	if err != nil {
-		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		response.InternalError(w, r, err, "Failed to get daily habits")
 		return
 	}
 
@@ -52,7 +61,7 @@ func (h *Handler) UpsertLog(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := h.service.LogHabit(r.Context(), req); err != nil {
-		response.Error(w, http.StatusInternalServerError, "Failed to log")
+		response.InternalError(w, r, err, "Failed to log habit")
 		return
 	}
 
@@ -61,15 +70,14 @@ func (h *Handler) UpsertLog(w http.ResponseWriter, r *http.Request) {
 
 // DeleteHabit -> DELETE /habits/{id}
 func (h *Handler) DeleteHabit(w http.ResponseWriter, r *http.Request) {
-	idStr := chi.URLParam(r, "id")
-	id, err := strconv.Atoi(idStr)
+	id, err := parseIDParam(r)
 	if err != nil {
-		response.Error(w, http.StatusBadRequest, fmt.Sprintf("invalid %s id", "habit"))
+		response.Error(w, http.StatusBadRequest, err.Error())
 		return
 	}
 
-	if err := h.service.DeleteHabit(r.Context(), int32(id)); err != nil {
-		response.Error(w, http.StatusInternalServerError, "Failed to delete habit")
+	if err := h.service.DeleteHabit(r.Context(), id); err != nil {
+		response.InternalError(w, r, err, "Failed to delete habit")
 		return
 	}
 
@@ -78,10 +86,9 @@ func (h *Handler) DeleteHabit(w http.ResponseWriter, r *http.Request) {
 
 // GetHistory -> GET /habits/{id}/history
 func (h *Handler) GetHistory(w http.ResponseWriter, r *http.Request) {
-	idStr := chi.URLParam(r, "id")
-	id, err := strconv.Atoi(idStr)
+	id, err := parseIDParam(r)
 	if err != nil {
-		response.Error(w, http.StatusBadRequest, "invalid habit id")
+		response.Error(w, http.StatusBadRequest, err.Error())
 		return
 	}
 
@@ -97,9 +104,9 @@ func (h *Handler) GetHistory(w http.ResponseWriter, r *http.Request) {
 	startAt := r.URL.Query().Get("start_at")
 	endAt := r.URL.Query().Get("end_at")
 
-	history, err := h.service.GetHistory(r.Context(), int32(id), frequency, startAt, endAt)
+	history, err := h.service.GetHistory(r.Context(), id, frequency, startAt, endAt)
 	if err != nil {
-		response.Error(w, http.StatusInternalServerError, "Failed to get history")
+		response.InternalError(w, r, err, "Failed to get habit history")
 		return
 	}
 
@@ -149,7 +156,7 @@ func (h *Handler) CreateHabit(w http.ResponseWriter, r *http.Request) {
 
 	habit, err := h.service.CreateHabit(r.Context(), req)
 	if err != nil {
-		response.Error(w, http.StatusInternalServerError, "Failed to create habit")
+		response.InternalError(w, r, err, "Failed to create habit")
 		return
 	}
 
@@ -158,10 +165,9 @@ func (h *Handler) CreateHabit(w http.ResponseWriter, r *http.Request) {
 
 // UpdateHabit -> PUT /habits/{id}
 func (h *Handler) UpdateHabit(w http.ResponseWriter, r *http.Request) {
-	idStr := chi.URLParam(r, "id")
-	id, err := strconv.Atoi(idStr)
+	id, err := parseIDParam(r)
 	if err != nil {
-		response.Error(w, http.StatusBadRequest, fmt.Sprintf("invalid %s id", "habit"))
+		response.Error(w, http.StatusBadRequest, err.Error())
 		return
 	}
 
@@ -170,7 +176,7 @@ func (h *Handler) UpdateHabit(w http.ResponseWriter, r *http.Request) {
 		response.Error(w, http.StatusBadRequest, "Invalid Body")
 		return
 	}
-	req.ID = int32(id)
+	req.ID = id
 
 	if req.Name == "" {
 		response.Error(w, http.StatusBadRequest, "name is required")
@@ -209,7 +215,7 @@ func (h *Handler) UpdateHabit(w http.ResponseWriter, r *http.Request) {
 			response.Error(w, http.StatusNotFound, "habit not found")
 			return
 		}
-		response.Error(w, http.StatusInternalServerError, "Failed to update habit")
+		response.InternalError(w, r, err, "Failed to update habit")
 		return
 	}
 

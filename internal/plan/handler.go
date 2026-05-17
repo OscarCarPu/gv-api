@@ -32,7 +32,7 @@ func NewHandler(s ServiceInterface) *Handler {
 func parseIDParam(r *http.Request) (int32, error) {
 	idStr := chi.URLParam(r, "id")
 	id, err := strconv.Atoi(idStr)
-	if err != nil {
+	if err != nil || id <= 0 {
 		return 0, fmt.Errorf("invalid plan block id")
 	}
 	return int32(id), nil
@@ -41,7 +41,7 @@ func parseIDParam(r *http.Request) (int32, error) {
 func (h *Handler) GetToday(w http.ResponseWriter, r *http.Request) {
 	resp, err := h.service.GetToday(r.Context())
 	if err != nil {
-		response.Error(w, http.StatusInternalServerError, "Failed to get today's plan")
+		response.InternalError(w, r, err, "Failed to get today's plan")
 		return
 	}
 	response.JSON(w, http.StatusOK, resp)
@@ -65,7 +65,7 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 		case errors.Is(err, ErrTaskNotFound):
 			response.Error(w, http.StatusBadRequest, "task not found")
 		default:
-			response.Error(w, http.StatusInternalServerError, "Failed to create plan block")
+			response.InternalError(w, r, err, "Failed to create plan block")
 		}
 		return
 	}
@@ -98,7 +98,7 @@ func (h *Handler) Update(w http.ResponseWriter, r *http.Request) {
 			errors.Is(err, ErrOverlap):
 			response.Error(w, http.StatusBadRequest, err.Error())
 		default:
-			response.Error(w, http.StatusInternalServerError, "Failed to update plan block")
+			response.InternalError(w, r, err, "Failed to update plan block")
 		}
 		return
 	}
@@ -114,7 +114,7 @@ func (h *Handler) Delete(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := h.service.Delete(r.Context(), id); err != nil {
-		response.Error(w, http.StatusInternalServerError, "Failed to delete plan block")
+		response.InternalError(w, r, err, "Failed to delete plan block")
 		return
 	}
 
@@ -123,7 +123,7 @@ func (h *Handler) Delete(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) DeleteFuture(w http.ResponseWriter, r *http.Request) {
 	if err := h.service.DeleteFuture(r.Context()); err != nil {
-		response.Error(w, http.StatusInternalServerError, "Failed to delete future plan blocks")
+		response.InternalError(w, r, err, "Failed to delete future plan blocks")
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)

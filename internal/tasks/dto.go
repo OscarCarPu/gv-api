@@ -2,6 +2,7 @@ package tasks
 
 import (
 	"encoding/json"
+	"log/slog"
 	"time"
 )
 
@@ -17,6 +18,7 @@ func unmarshalDepRefs(data []byte) []TaskDepRef {
 	}
 	var refs []TaskDepRef
 	if err := json.Unmarshal(data, &refs); err != nil {
+		slog.Error("unmarshal task dep_refs failed", "error", err)
 		return []TaskDepRef{}
 	}
 	if refs == nil {
@@ -35,6 +37,7 @@ func unmarshalTodos(data []byte, taskID int32) []TodoResponse {
 		IsDone bool   `json:"is_done"`
 	}
 	if err := json.Unmarshal(data, &raw); err != nil {
+		slog.Error("unmarshal task todos failed", "task_id", taskID, "error", err)
 		return []TodoResponse{}
 	}
 	todos := make([]TodoResponse, len(raw))

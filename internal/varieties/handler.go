@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"strconv"
 	"strings"
@@ -32,19 +33,19 @@ func NewHandler(s ServiceInterface) *Handler {
 func parseID(r *http.Request) (int32, error) {
 	idStr := chi.URLParam(r, "id")
 	id, err := strconv.Atoi(idStr)
-	if err != nil {
+	if err != nil || id <= 0 {
 		return 0, errors.New("invalid variety id")
 	}
 	return int32(id), nil
 }
 
-func validateScores(scent, flavor, power, quality float32) string {
+func validateScores(scent, flavor, power, quality float32) error {
 	for name, v := range map[string]float32{"scent": scent, "flavor": flavor, "power": power, "quality": quality} {
 		if v < 0 || v > 10 {
-			return name + " must be between 0 and 10"
+			return fmt.Errorf("%s must be between 0 and 10", name)
 		}
 	}
-	return ""
+	return nil
 }
 
 // Get -> GET /varieties/{id}
@@ -61,7 +62,7 @@ func (h *Handler) Get(w http.ResponseWriter, r *http.Request) {
 			response.Error(w, http.StatusNotFound, "variety not found")
 			return
 		}
-		response.Error(w, http.StatusInternalServerError, "Failed to get variety")
+		response.InternalError(w, r, err, "Failed to get variety")
 		return
 	}
 
@@ -72,7 +73,7 @@ func (h *Handler) Get(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 	vs, err := h.service.List(r.Context())
 	if err != nil {
-		response.Error(w, http.StatusInternalServerError, "Failed to list varieties")
+		response.InternalError(w, r, err, "Failed to list varieties")
 		return
 	}
 
@@ -104,14 +105,14 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 		response.Error(w, http.StatusBadRequest, "judge must be at most 40 characters")
 		return
 	}
-	if msg := validateScores(req.Scent, req.Flavor, req.Power, req.Quality); msg != "" {
-		response.Error(w, http.StatusBadRequest, msg)
+	if err := validateScores(req.Scent, req.Flavor, req.Power, req.Quality); err != nil {
+		response.Error(w, http.StatusBadRequest, err.Error())
 		return
 	}
 
 	v, err := h.service.Create(r.Context(), req)
 	if err != nil {
-		response.Error(w, http.StatusInternalServerError, "Failed to create variety")
+		response.InternalError(w, r, err, "Failed to create variety")
 		return
 	}
 
@@ -150,8 +151,8 @@ func (h *Handler) Update(w http.ResponseWriter, r *http.Request) {
 		response.Error(w, http.StatusBadRequest, "judge must be at most 40 characters")
 		return
 	}
-	if msg := validateScores(req.Scent, req.Flavor, req.Power, req.Quality); msg != "" {
-		response.Error(w, http.StatusBadRequest, msg)
+	if err := validateScores(req.Scent, req.Flavor, req.Power, req.Quality); err != nil {
+		response.Error(w, http.StatusBadRequest, err.Error())
 		return
 	}
 
@@ -161,7 +162,7 @@ func (h *Handler) Update(w http.ResponseWriter, r *http.Request) {
 			response.Error(w, http.StatusNotFound, "variety not found")
 			return
 		}
-		response.Error(w, http.StatusInternalServerError, "Failed to update variety")
+		response.InternalError(w, r, err, "Failed to update variety")
 		return
 	}
 
@@ -177,7 +178,7 @@ func (h *Handler) Delete(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := h.service.Delete(r.Context(), id); err != nil {
-		response.Error(w, http.StatusInternalServerError, "Failed to delete variety")
+		response.InternalError(w, r, err, "Failed to delete variety")
 		return
 	}
 
