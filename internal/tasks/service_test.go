@@ -382,11 +382,12 @@ func TestService_GetActiveTree(t *testing.T) {
 		repo.EXPECT().GetActiveProjects(mock.Anything).Return([]tasks.ActiveProject{
 			{ID: 1, Name: "Project"},
 		}, nil)
+		// Mock returns tasks in the order SQL would: started standard → unstarted standard
 		repo.EXPECT().GetUnfinishedTasks(mock.Anything, mock.Anything).Return([]tasks.UnfinishedTask{
-			{ID: 1, Name: "Unstarted Orphan"},
-			{ID: 2, Name: "Started Orphan", Started: true},
-			{ID: 3, ProjectID: &projectID1, Name: "Unstarted Child"},
-			{ID: 4, ProjectID: &projectID1, Name: "Started Child", Started: true},
+			{ID: 4, ProjectID: &projectID1, Name: "Started Child", Started: true, TaskType: "standard"},
+			{ID: 2, Name: "Started Orphan", Started: true, TaskType: "standard"},
+			{ID: 3, ProjectID: &projectID1, Name: "Unstarted Child", TaskType: "standard"},
+			{ID: 1, Name: "Unstarted Orphan", TaskType: "standard"},
 		}, nil)
 
 		svc := tasks.NewService(repo, nil)

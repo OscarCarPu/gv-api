@@ -1026,7 +1026,14 @@ JOIN task_hidden th ON th.id = t.id
 WHERE t.finished_at IS NULL
   AND ($1::int IS NULL OR t.priority <= $1::int)
   AND NOT th.hidden
-ORDER BY t.name
+ORDER BY
+  CASE
+    WHEN t.task_type = 'standard' AND t.started_at IS NOT NULL THEN 0
+    WHEN t.task_type = 'continuous' THEN 1
+    WHEN t.task_type = 'recurring' THEN 2
+    ELSE 3
+  END,
+  t.name
 `
 
 type GetUnfinishedTasksRow struct {

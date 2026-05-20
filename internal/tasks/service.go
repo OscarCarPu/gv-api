@@ -141,11 +141,9 @@ func (s *Service) GetActiveTree(ctx context.Context, minPriority *int32) ([]Acti
 		}
 	}
 
-	// Group tasks by project ID, separating started vs unstarted
-	startedTasks := make(map[int32][]ActiveTreeNode)
-	unstartedTasks := make(map[int32][]ActiveTreeNode)
-	var orphanStarted []ActiveTreeNode
-	var orphanUnstarted []ActiveTreeNode
+	// Group tasks by project ID
+	projectTasks := make(map[int32][]ActiveTreeNode)
+	var orphanTasks []ActiveTreeNode
 
 	for _, t := range tasks {
 		taskType := t.TaskType
@@ -167,25 +165,16 @@ func (s *Service) GetActiveTree(ctx context.Context, minPriority *int32) ([]Acti
 
 		if t.ProjectID != nil {
 			if _, ok := projectNodes[*t.ProjectID]; ok {
-				if t.Started {
-					startedTasks[*t.ProjectID] = append(startedTasks[*t.ProjectID], node)
-				} else {
-					unstartedTasks[*t.ProjectID] = append(unstartedTasks[*t.ProjectID], node)
-				}
+				projectTasks[*t.ProjectID] = append(projectTasks[*t.ProjectID], node)
 			}
 			continue
 		}
-		if t.Started {
-			orphanStarted = append(orphanStarted, node)
-		} else {
-			orphanUnstarted = append(orphanUnstarted, node)
-		}
+		orphanTasks = append(orphanTasks, node)
 	}
 
-	// Attach tasks to each project node
+	// Attach tasks to each project node (SQL already orders: en progreso → continua → recurrente → pendiente)
 	for id, node := range projectNodes {
-		node.Children = append(node.Children, startedTasks[id]...)
-		node.Children = append(node.Children, unstartedTasks[id]...)
+		node.Children = append(node.Children, projectTasks[id]...)
 	}
 
 	// Compute depth for each project so we attach deepest children first.
@@ -243,8 +232,8 @@ func (s *Service) GetActiveTree(ctx context.Context, minPriority *int32) ([]Acti
 			root = append(root, *projectNodes[p.ID])
 		}
 	}
-	root = append(root, orphanStarted...)
-	root = append(root, orphanUnstarted...)
+	root = append(root, orphanTasks...)
+
 
 	if root == nil {
 		root = []ActiveTreeNode{}

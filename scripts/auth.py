@@ -47,6 +47,7 @@ def main():
 
     # Step 2: Generate TOTP code and do 2FA
     code = pyotp.TOTP(env["TOTP_SECRET"]).now()
+    print(f"Code TOTP: {code}")
     req = urllib.request.Request(
         f"{base_url}/login/2fa",
         data=json.dumps({"token": tmp_token, "code": code}).encode(),
@@ -55,7 +56,7 @@ def main():
     with urllib.request.urlopen(req) as resp:
         token = json.loads(resp.read())["token"]
 
-    print(token)
+    print(f"Token: {token}")
 
 
 if __name__ == "__main__":
