@@ -53,7 +53,7 @@ WHERE id = @id
 RETURNING id, parent_id, name, description, due_at, started_at, finished_at;
 
 -- name: ListProjectsFast :many
-SELECT id, name FROM projects WHERE finished_at IS NULL ORDER BY name;
+SELECT id, name FROM projects WHERE started_at IS NOT NULL AND finished_at IS NULL ORDER BY name;
 
 -- name: ListTasksFast :many
 WITH RECURSIVE project_tree AS (
