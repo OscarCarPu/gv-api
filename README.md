@@ -15,7 +15,7 @@ A comprehensive life orchestrator built in Go, designed to centralize data from 
 - Git, Docker & Docker Compose
 - Go (v1.25.6+)
 - sqlc
-- mockery
+- mockery (`go install github.com/vektra/mockery/v2@latest`)
 
 ### Getting Started
 
@@ -47,6 +47,17 @@ A comprehensive life orchestrator built in Go, designed to centralize data from 
 | `TOTP_SECRET` | No | `secret` | Base32 secret for TOTP 2FA. **Change in production.** |
 
 ## API
+
+### Domains
+
+| Domain | Description | Docs |
+|---|---|---|
+| **Auth** | JWT login with optional TOTP 2FA. Two token tiers: full-access and semiprivate (read-only). | [auth](docs/api/auth.md) |
+| **Habits** | Daily habit definitions with per-day logging and history. | [habits](docs/api/habits.md) |
+| **Tasks** | Hierarchical project/task tree with todos, due dates, and Pomodoro time entries. | [tasks](docs/api/tasks/README.md) |
+| **Plan** | Daily time-block planner that schedules tasks from the task tree. | [plan](docs/api/plan.md) |
+| **Finance** | Accounts, categories, transactions, and spending stats (net worth, by-category, monthly, estimation). | [finance](docs/api/finance.md) |
+| **Varieties** | Shared lookup tables used across modules. | [varieties](docs/api/varieties.md) |
 
 ### Infrastructure
 
