@@ -472,12 +472,14 @@ func (h *Handler) DeleteProject(w http.ResponseWriter, r *http.Request) {
 		response.Error(w, http.StatusBadRequest, err.Error())
 		return
 	}
-
 	if err := h.service.DeleteProject(r.Context(), id); err != nil {
+		if errors.Is(err, ErrNotFound) {
+			response.Error(w, http.StatusNotFound, "project not found")
+			return
+		}
 		response.InternalError(w, r, err, "Failed to delete project")
 		return
 	}
-
 	w.WriteHeader(http.StatusNoContent)
 }
 
@@ -487,12 +489,14 @@ func (h *Handler) DeleteTask(w http.ResponseWriter, r *http.Request) {
 		response.Error(w, http.StatusBadRequest, err.Error())
 		return
 	}
-
 	if err := h.service.DeleteTask(r.Context(), id); err != nil {
+		if errors.Is(err, ErrNotFound) {
+			response.Error(w, http.StatusNotFound, "task not found")
+			return
+		}
 		response.InternalError(w, r, err, "Failed to delete task")
 		return
 	}
-
 	w.WriteHeader(http.StatusNoContent)
 }
 
@@ -502,12 +506,14 @@ func (h *Handler) DeleteTodo(w http.ResponseWriter, r *http.Request) {
 		response.Error(w, http.StatusBadRequest, err.Error())
 		return
 	}
-
 	if err := h.service.DeleteTodo(r.Context(), id); err != nil {
+		if errors.Is(err, ErrNotFound) {
+			response.Error(w, http.StatusNotFound, "todo not found")
+			return
+		}
 		response.InternalError(w, r, err, "Failed to delete todo")
 		return
 	}
-
 	w.WriteHeader(http.StatusNoContent)
 }
 
@@ -517,12 +523,14 @@ func (h *Handler) DeleteTimeEntry(w http.ResponseWriter, r *http.Request) {
 		response.Error(w, http.StatusBadRequest, err.Error())
 		return
 	}
-
 	if err := h.service.DeleteTimeEntry(r.Context(), id); err != nil {
+		if errors.Is(err, ErrNotFound) {
+			response.Error(w, http.StatusNotFound, "time entry not found")
+			return
+		}
 		response.InternalError(w, r, err, "Failed to delete time entry")
 		return
 	}
-
 	w.WriteHeader(http.StatusNoContent)
 }
 

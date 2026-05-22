@@ -165,8 +165,9 @@ func (s *Service) GetActiveTree(ctx context.Context, minPriority *int32) ([]Acti
 		if t.ProjectID != nil {
 			if _, ok := projectNodes[*t.ProjectID]; ok {
 				projectTasks[*t.ProjectID] = append(projectTasks[*t.ProjectID], node)
+				continue
 			}
-			continue
+			// project_id set but project not active — surface as orphan
 		}
 		orphanTasks = append(orphanTasks, node)
 	}

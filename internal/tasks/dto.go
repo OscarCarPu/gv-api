@@ -2,6 +2,7 @@ package tasks
 
 import (
 	"encoding/json"
+	"fmt"
 	"log/slog"
 	"time"
 )
@@ -12,19 +13,18 @@ type TaskDepRef struct {
 	DueAt *string `json:"due_at"`
 }
 
-func unmarshalDepRefs(data []byte) []TaskDepRef {
+func unmarshalDepRefs(data []byte) ([]TaskDepRef, error) {
 	if len(data) == 0 {
-		return []TaskDepRef{}
+		return []TaskDepRef{}, nil
 	}
 	var refs []TaskDepRef
 	if err := json.Unmarshal(data, &refs); err != nil {
-		slog.Error("unmarshal task dep_refs failed", "error", err)
-		return []TaskDepRef{}
+		return nil, fmt.Errorf("unmarshal dep refs: %w", err)
 	}
 	if refs == nil {
-		return []TaskDepRef{}
+		return []TaskDepRef{}, nil
 	}
-	return refs
+	return refs, nil
 }
 
 func unmarshalTodos(data []byte, taskID int32) []TodoResponse {

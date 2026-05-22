@@ -519,35 +519,71 @@ func TestHandler_GetTasksByDueDate(t *testing.T) {
 // --- Delete (uniform shape — one happy + one bad-id + one error per endpoint) ---
 
 func TestHandler_DeleteProject(t *testing.T) {
-	svc := mocks.NewMockServiceInterface(t)
-	svc.EXPECT().DeleteProject(mock.Anything, int32(5)).Return(nil)
-	rec := httptest.NewRecorder()
-	tasks.NewHandler(svc).DeleteProject(rec, withIDParam(newReq(http.MethodDelete, "/", ""), "5"))
-	assert.Equal(t, http.StatusNoContent, rec.Code)
+	t.Run("204 on success", func(t *testing.T) {
+		svc := mocks.NewMockServiceInterface(t)
+		svc.EXPECT().DeleteProject(mock.Anything, int32(5)).Return(nil)
+		rec := httptest.NewRecorder()
+		tasks.NewHandler(svc).DeleteProject(rec, withIDParam(newReq(http.MethodDelete, "/", ""), "5"))
+		assert.Equal(t, http.StatusNoContent, rec.Code)
+	})
+	t.Run("404 when not found", func(t *testing.T) {
+		svc := mocks.NewMockServiceInterface(t)
+		svc.EXPECT().DeleteProject(mock.Anything, int32(1)).Return(tasks.ErrNotFound)
+		rec := httptest.NewRecorder()
+		tasks.NewHandler(svc).DeleteProject(rec, withIDParam(newReq(http.MethodDelete, "/", ""), "1"))
+		assert.Equal(t, http.StatusNotFound, rec.Code)
+	})
 }
 
 func TestHandler_DeleteTask(t *testing.T) {
-	svc := mocks.NewMockServiceInterface(t)
-	svc.EXPECT().DeleteTask(mock.Anything, int32(3)).Return(nil)
-	rec := httptest.NewRecorder()
-	tasks.NewHandler(svc).DeleteTask(rec, withIDParam(newReq(http.MethodDelete, "/", ""), "3"))
-	assert.Equal(t, http.StatusNoContent, rec.Code)
+	t.Run("204 on success", func(t *testing.T) {
+		svc := mocks.NewMockServiceInterface(t)
+		svc.EXPECT().DeleteTask(mock.Anything, int32(3)).Return(nil)
+		rec := httptest.NewRecorder()
+		tasks.NewHandler(svc).DeleteTask(rec, withIDParam(newReq(http.MethodDelete, "/", ""), "3"))
+		assert.Equal(t, http.StatusNoContent, rec.Code)
+	})
+	t.Run("404 when not found", func(t *testing.T) {
+		svc := mocks.NewMockServiceInterface(t)
+		svc.EXPECT().DeleteTask(mock.Anything, int32(3)).Return(tasks.ErrNotFound)
+		rec := httptest.NewRecorder()
+		tasks.NewHandler(svc).DeleteTask(rec, withIDParam(newReq(http.MethodDelete, "/", ""), "3"))
+		assert.Equal(t, http.StatusNotFound, rec.Code)
+	})
 }
 
 func TestHandler_DeleteTodo(t *testing.T) {
-	svc := mocks.NewMockServiceInterface(t)
-	svc.EXPECT().DeleteTodo(mock.Anything, int32(7)).Return(nil)
-	rec := httptest.NewRecorder()
-	tasks.NewHandler(svc).DeleteTodo(rec, withIDParam(newReq(http.MethodDelete, "/", ""), "7"))
-	assert.Equal(t, http.StatusNoContent, rec.Code)
+	t.Run("204 on success", func(t *testing.T) {
+		svc := mocks.NewMockServiceInterface(t)
+		svc.EXPECT().DeleteTodo(mock.Anything, int32(7)).Return(nil)
+		rec := httptest.NewRecorder()
+		tasks.NewHandler(svc).DeleteTodo(rec, withIDParam(newReq(http.MethodDelete, "/", ""), "7"))
+		assert.Equal(t, http.StatusNoContent, rec.Code)
+	})
+	t.Run("404 when not found", func(t *testing.T) {
+		svc := mocks.NewMockServiceInterface(t)
+		svc.EXPECT().DeleteTodo(mock.Anything, int32(7)).Return(tasks.ErrNotFound)
+		rec := httptest.NewRecorder()
+		tasks.NewHandler(svc).DeleteTodo(rec, withIDParam(newReq(http.MethodDelete, "/", ""), "7"))
+		assert.Equal(t, http.StatusNotFound, rec.Code)
+	})
 }
 
 func TestHandler_DeleteTimeEntry(t *testing.T) {
-	svc := mocks.NewMockServiceInterface(t)
-	svc.EXPECT().DeleteTimeEntry(mock.Anything, int32(9)).Return(nil)
-	rec := httptest.NewRecorder()
-	tasks.NewHandler(svc).DeleteTimeEntry(rec, withIDParam(newReq(http.MethodDelete, "/", ""), "9"))
-	assert.Equal(t, http.StatusNoContent, rec.Code)
+	t.Run("204 on success", func(t *testing.T) {
+		svc := mocks.NewMockServiceInterface(t)
+		svc.EXPECT().DeleteTimeEntry(mock.Anything, int32(9)).Return(nil)
+		rec := httptest.NewRecorder()
+		tasks.NewHandler(svc).DeleteTimeEntry(rec, withIDParam(newReq(http.MethodDelete, "/", ""), "9"))
+		assert.Equal(t, http.StatusNoContent, rec.Code)
+	})
+	t.Run("404 when not found", func(t *testing.T) {
+		svc := mocks.NewMockServiceInterface(t)
+		svc.EXPECT().DeleteTimeEntry(mock.Anything, int32(9)).Return(tasks.ErrNotFound)
+		rec := httptest.NewRecorder()
+		tasks.NewHandler(svc).DeleteTimeEntry(rec, withIDParam(newReq(http.MethodDelete, "/", ""), "9"))
+		assert.Equal(t, http.StatusNotFound, rec.Code)
+	})
 }
 
 // One representative bad-id and service-error case for the delete shape — the

@@ -28,3 +28,4 @@ packages:
       outpkg: mocks
     interfaces:
       Repository:
+      ServiceInterface:

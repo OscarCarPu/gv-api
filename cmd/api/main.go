@@ -97,7 +97,7 @@ func main() {
 	r.Use(chimiddleware.Recoverer)
 	r.Use(middleware.RequestID)
 	r.Use(cors.Handler(cors.Options{
-		AllowedOrigins:   []string{"*"},
+		AllowedOrigins:   cfg.AllowedOrigins,
 		AllowedMethods:   []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS", "HEAD"},
 		AllowedHeaders:   []string{"Content-Type", "Authorization", "X-Device-ID", "X-Request-ID"},
 		ExposedHeaders:   []string{"Content-Length", "X-Request-ID"},

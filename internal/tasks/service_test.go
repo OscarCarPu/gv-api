@@ -348,7 +348,7 @@ func TestService_GetActiveTree(t *testing.T) {
 		assert.Equal(t, "Orphan Unstarted", got[1].Name)
 	})
 
-	t.Run("tasks with inactive project are excluded from root", func(t *testing.T) {
+	t.Run("tasks with inactive project are surfaced as orphans", func(t *testing.T) {
 		inactiveProjectID := int32(99)
 		repo := mocks.NewMockRepository(t)
 		repo.EXPECT().GetActiveProjects(mock.Anything).Return([]tasks.ActiveProject{}, nil)
@@ -361,8 +361,10 @@ func TestService_GetActiveTree(t *testing.T) {
 		got, err := svc.GetActiveTree(context.Background(), nil)
 		require.NoError(t, err)
 
-		require.Len(t, got, 1)
-		assert.Equal(t, "Root task", got[0].Name)
+		require.Len(t, got, 2)
+		names := []string{got[0].Name, got[1].Name}
+		assert.Contains(t, names, "Task with inactive project")
+		assert.Contains(t, names, "Root task")
 	})
 
 	t.Run("empty tree", func(t *testing.T) {
@@ -492,18 +494,23 @@ func TestService_GetTimeEntryHistory_DefaultDatesDaily(t *testing.T) {
 	repo := mocks.NewMockRepository(t)
 	loc := time.UTC
 
-	// Service no longer fills missing periods (SQL does); just verify it forwards
-	// the parsed date range and returns whatever the repo returned.
+	now := time.Now().UTC()
+	expectedEnd := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC)
+	expectedStart := expectedEnd.AddDate(0, 0, -30)
+
 	repo.EXPECT().
-		GetTimeEntryHistory(mock.Anything, "day", "UTC", mock.AnythingOfType("time.Time"), mock.AnythingOfType("time.Time")).
-		Return([]history.Point{{Date: "2026-03-17", Value: 2.5}}, nil)
+		GetTimeEntryHistory(mock.Anything, "day", "UTC",
+			mock.MatchedBy(func(t time.Time) bool { return t.Equal(expectedStart) }),
+			mock.MatchedBy(func(t time.Time) bool { return t.Equal(expectedEnd) }),
+		).
+		Return([]history.Point{{Date: "2026-04-22", Value: 2.5}}, nil)
 
 	svc := tasks.NewService(repo, loc)
 	resp, err := svc.GetTimeEntryHistory(context.Background(), "daily", "", "")
 	require.NoError(t, err)
 
-	assert.NotEmpty(t, resp.StartAt)
-	assert.NotEmpty(t, resp.EndAt)
+	assert.Equal(t, expectedStart.Format("2006-01-02"), resp.StartAt)
+	assert.Equal(t, expectedEnd.Format("2006-01-02"), resp.EndAt)
 	require.Len(t, resp.Data, 1, "service is now a pass-through; repo decides fill")
 }
 
@@ -614,4 +621,43 @@ func TestService_PriorityFilter(t *testing.T) {
 		_, err := svc.GetTasksByDueDate(context.Background(), &threshold)
 		require.NoError(t, err)
 	})
+}
+
+func TestService_GetTimeEntrySummary(t *testing.T) {
+	loc := time.UTC
+	now := time.Now().In(loc)
+	expectedToday := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, loc)
+	daysSinceMonday := (int(now.Weekday()) + 6) % 7
+	expectedWeek := time.Date(now.Year(), now.Month(), now.Day()-daysSinceMonday, 0, 0, 0, 0, loc)
+
+	repo := mocks.NewMockRepository(t)
+	repo.EXPECT().
+		GetTimeEntrySummary(mock.Anything,
+			mock.MatchedBy(func(t time.Time) bool { return t.Equal(expectedToday) }),
+			mock.MatchedBy(func(t time.Time) bool { return t.Equal(expectedWeek) }),
+		).
+		Return(tasks.TimeEntrySummaryResponse{Today: 1800, Week: 7200}, nil)
+
+	svc := tasks.NewService(repo, loc)
+	got, err := svc.GetTimeEntrySummary(context.Background())
+	require.NoError(t, err)
+	assert.Equal(t, tasks.WeeklyTaskTargetSeconds, got.WeeklyTargetSeconds)
+}
+
+func TestService_UpdateTask_ReplaceBlocks(t *testing.T) {
+	blocks := []int32{5, 6}
+	repo := mocks.NewMockRepository(t)
+	repo.EXPECT().UpdateTask(mock.Anything, mock.Anything).Return(tasks.TaskResponse{ID: 1}, nil)
+	repo.EXPECT().ReplaceTaskBlocks(mock.Anything, int32(1), blocks).Return(nil)
+	repo.EXPECT().GetTaskDependencies(mock.Anything, int32(1)).
+		Return([]tasks.TaskDepRef{}, []tasks.TaskDepRef{{ID: 5, Name: "A"}, {ID: 6, Name: "B"}}, false, nil)
+
+	svc := tasks.NewService(repo, nil)
+	got, err := svc.UpdateTask(context.Background(), tasks.UpdateTaskRequest{
+		ID:     1,
+		Blocks: &blocks,
+	})
+	require.NoError(t, err)
+	require.Len(t, got.Blocks, 2)
+	assert.Equal(t, int32(5), got.Blocks[0].ID)
 }

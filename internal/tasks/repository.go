@@ -434,6 +434,14 @@ func (r *PostgresRepository) GetUnfinishedTasks(ctx context.Context, minPriority
 
 	tasks := make([]UnfinishedTask, len(rows))
 	for i, row := range rows {
+		dependsOn, err := unmarshalDepRefs(row.DependsOn)
+		if err != nil {
+			return nil, err
+		}
+		blocks, err := unmarshalDepRefs(row.Blocks)
+		if err != nil {
+			return nil, err
+		}
 		tasks[i] = UnfinishedTask{
 			ID:          row.ID,
 			ProjectID:   row.ProjectID,
@@ -445,8 +453,8 @@ func (r *PostgresRepository) GetUnfinishedTasks(ctx context.Context, minPriority
 			TaskType:    row.TaskType,
 			Recurrence:  row.Recurrence,
 			Priority:    row.Priority,
-			DependsOn:   unmarshalDepRefs(row.DependsOn),
-			Blocks:      unmarshalDepRefs(row.Blocks),
+			DependsOn:   dependsOn,
+			Blocks:      blocks,
 			Blocked:     row.Blocked,
 		}
 	}
@@ -482,6 +490,14 @@ func (r *PostgresRepository) GetTask(ctx context.Context, id int32) (TaskFullRes
 		return TaskFullResponse{}, err
 	}
 
+	dependsOn, err := unmarshalDepRefs(row.DependsOn)
+	if err != nil {
+		return TaskFullResponse{}, err
+	}
+	blocks, err := unmarshalDepRefs(row.Blocks)
+	if err != nil {
+		return TaskFullResponse{}, err
+	}
 	return TaskFullResponse{
 		ID:          row.ID,
 		ProjectID:   row.ProjectID,
@@ -495,8 +511,8 @@ func (r *PostgresRepository) GetTask(ctx context.Context, id int32) (TaskFullRes
 		Recurrence:  row.Recurrence,
 		Priority:    row.Priority,
 		TimeSpent:   row.TimeSpent,
-		DependsOn:   unmarshalDepRefs(row.DependsOn),
-		Blocks:      unmarshalDepRefs(row.Blocks),
+		DependsOn:   dependsOn,
+		Blocks:      blocks,
 		Blocked:     row.Blocked,
 		Todos:       unmarshalTodos(row.Todos, row.ID),
 	}, nil
@@ -523,6 +539,14 @@ func (r *PostgresRepository) GetProjectChildren(ctx context.Context, projectID i
 
 	projectTasks := make(map[int32][]ProjectChildNode)
 	for _, row := range taskRows {
+		dependsOn, err := unmarshalDepRefs(row.DependsOn)
+		if err != nil {
+			return ProjectChildrenResponse{}, err
+		}
+		blocks, err := unmarshalDepRefs(row.Blocks)
+		if err != nil {
+			return ProjectChildrenResponse{}, err
+		}
 		blocked := row.Blocked
 		priority := row.Priority
 		taskType := row.TaskType
@@ -539,8 +563,8 @@ func (r *PostgresRepository) GetProjectChildren(ctx context.Context, projectID i
 			TaskType:    &taskType,
 			Recurrence:  row.Recurrence,
 			Priority:    &priority,
-			DependsOn:   unmarshalDepRefs(row.DependsOn),
-			Blocks:      unmarshalDepRefs(row.Blocks),
+			DependsOn:   dependsOn,
+			Blocks:      blocks,
 			Blocked:     &blocked,
 			Todos:       unmarshalTodos(row.Todos, row.ID),
 		}
@@ -672,6 +696,14 @@ func (r *PostgresRepository) GetTaskTimeEntries(ctx context.Context, taskID int3
 		entries = []TimeEntryResponse{}
 	}
 
+	dependsOn, err := unmarshalDepRefs(first.DependsOn)
+	if err != nil {
+		return TaskTimeEntriesResponse{}, err
+	}
+	blocks, err := unmarshalDepRefs(first.Blocks)
+	if err != nil {
+		return TaskTimeEntriesResponse{}, err
+	}
 	return TaskTimeEntriesResponse{
 		Task: TaskDetailResponse{
 			ID:          first.TaskID,
@@ -685,9 +717,9 @@ func (r *PostgresRepository) GetTaskTimeEntries(ctx context.Context, taskID int3
 			Recurrence:  first.Recurrence,
 			Priority:    first.Priority,
 			TimeSpent:   first.TimeSpent,
-			DependsOn: unmarshalDepRefs(first.DependsOn),
-			Blocks:    unmarshalDepRefs(first.Blocks),
-			Blocked:   first.Blocked,
+			DependsOn:   dependsOn,
+			Blocks:      blocks,
+			Blocked:     first.Blocked,
 		},
 		TimeEntries: entries,
 	}, nil
@@ -701,6 +733,14 @@ func (r *PostgresRepository) GetTasksByDueDate(ctx context.Context, minPriority 
 
 	tasks := make([]TaskByDueDateResponse, len(rows))
 	for i, row := range rows {
+		dependsOn, err := unmarshalDepRefs(row.DependsOn)
+		if err != nil {
+			return nil, err
+		}
+		blocks, err := unmarshalDepRefs(row.Blocks)
+		if err != nil {
+			return nil, err
+		}
 		tasks[i] = TaskByDueDateResponse{
 			ID:           row.ID,
 			Name:         row.Name,
@@ -714,8 +754,8 @@ func (r *PostgresRepository) GetTasksByDueDate(ctx context.Context, minPriority 
 			ProjectID:    row.ProjectID,
 			ProjectName:  row.ProjectName,
 			ProjectDueAt: pgDateToPtr(row.ProjectDueAt),
-			DependsOn:    unmarshalDepRefs(row.DependsOn),
-			Blocks:       unmarshalDepRefs(row.Blocks),
+			DependsOn:    dependsOn,
+			Blocks:       blocks,
 			Blocked:      row.Blocked,
 		}
 	}
@@ -730,20 +770,31 @@ func (r *PostgresRepository) FinishTasksByProjectTree(ctx context.Context, proje
 	return r.q.FinishTasksByProjectTree(ctx, projectID)
 }
 
+func (r *PostgresRepository) deleteByID(ctx context.Context, table string, id int32) error {
+	tag, err := r.pool.Exec(ctx, "DELETE FROM "+table+" WHERE id = $1", id)
+	if err != nil {
+		return err
+	}
+	if tag.RowsAffected() == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
 func (r *PostgresRepository) DeleteProject(ctx context.Context, id int32) error {
-	return r.q.DeleteProject(ctx, id)
+	return r.deleteByID(ctx, "projects", id)
 }
 
 func (r *PostgresRepository) DeleteTask(ctx context.Context, id int32) error {
-	return r.q.DeleteTask(ctx, id)
+	return r.deleteByID(ctx, "tasks", id)
 }
 
 func (r *PostgresRepository) DeleteTodo(ctx context.Context, id int32) error {
-	return r.q.DeleteTodo(ctx, id)
+	return r.deleteByID(ctx, "todos", id)
 }
 
 func (r *PostgresRepository) DeleteTimeEntry(ctx context.Context, id int32) error {
-	return r.q.DeleteTimeEntry(ctx, id)
+	return r.deleteByID(ctx, "time_entries", id)
 }
 
 func (r *PostgresRepository) GetActiveTimeEntry(ctx context.Context) (ActiveTimeEntryResponse, error) {
@@ -896,7 +947,15 @@ func (r *PostgresRepository) GetTaskDependencies(ctx context.Context, taskID int
 	if err != nil {
 		return nil, nil, false, err
 	}
-	return unmarshalDepRefs(row.DependsOn), unmarshalDepRefs(row.Blocks), row.Blocked, nil
+	dependsOn, err := unmarshalDepRefs(row.DependsOn)
+	if err != nil {
+		return nil, nil, false, err
+	}
+	blocks, err := unmarshalDepRefs(row.Blocks)
+	if err != nil {
+		return nil, nil, false, err
+	}
+	return dependsOn, blocks, row.Blocked, nil
 }
 
 func (r *PostgresRepository) ListTasksFast(ctx context.Context) ([]TaskFastResponse, error) {

@@ -15,9 +15,19 @@ type Config struct {
 	JwtSecret           string
 	TotpSecret          string
 	Timezone            string
+	AllowedOrigins      []string
 }
 
 func Load() (*Config, error) {
+	var allowedOrigins []string
+	if raw := os.Getenv("ALLOWED_ORIGINS"); raw != "" {
+		for _, o := range strings.Split(raw, ",") {
+			if o = strings.TrimSpace(o); o != "" {
+				allowedOrigins = append(allowedOrigins, o)
+			}
+		}
+	}
+
 	cfg := &Config{
 		DBUrl:               os.Getenv("DATABASE_URL"),
 		Port:                getEnv("PORT", "8080"),
@@ -26,6 +36,7 @@ func Load() (*Config, error) {
 		JwtSecret:           os.Getenv("JWT_SECRET"),
 		TotpSecret:          os.Getenv("TOTP_SECRET"),
 		Timezone:            getEnv("TIMEZONE", "Europe/Madrid"),
+		AllowedOrigins:      allowedOrigins,
 	}
 
 	var missing []string
@@ -43,6 +54,9 @@ func Load() (*Config, error) {
 	}
 	if cfg.TotpSecret == "" {
 		missing = append(missing, "TOTP_SECRET")
+	}
+	if len(cfg.AllowedOrigins) == 0 {
+		missing = append(missing, "ALLOWED_ORIGINS")
 	}
 	if len(missing) > 0 {
 		return nil, fmt.Errorf("required env vars not set: %s", strings.Join(missing, ", "))
