@@ -38,13 +38,13 @@ A comprehensive life orchestrator built in Go, designed to centralize data from 
 
 | Variable | Required | Default | Description |
 |---|---|---|---|
-| `DATABASE_URL` | **Yes** | — | PostgreSQL connection string. The server will not start without this. |
+| `DATABASE_URL` | **Yes** | — | PostgreSQL connection string. |
+| `PASSWORD` | **Yes** | — | Login password for full-access tokens. |
+| `SEMIPRIVATE_PASSWORD` | **Yes** | — | Login password for read-only tokens. |
+| `JWT_SECRET` | **Yes** | — | Secret used to sign JWTs. Generate with `openssl rand -hex 32`. |
+| `TOTP_SECRET` | **Yes** | — | Base32 secret for TOTP 2FA. Generate with `openssl rand -base32 20`. |
 | `PORT` | No | `8080` | HTTP listen port. |
 | `TIMEZONE` | No | `Europe/Madrid` | IANA timezone for date arithmetic. |
-| `PASSWORD` | No | `Abc123..` | Login password for full-access tokens. |
-| `SEMIPRIVATE_PASSWORD` | No | `Abc123..` | Login password for read-only tokens. |
-| `JWT_SECRET` | No | `secret` | Secret used to sign JWTs. **Change in production.** |
-| `TOTP_SECRET` | No | `secret` | Base32 secret for TOTP 2FA. **Change in production.** |
 
 ## API
 

@@ -12,6 +12,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 var ErrNotFound = errors.New("not found")
@@ -53,11 +54,24 @@ type Repository interface {
 }
 
 type PostgresRepository struct {
-	q tasksdb.Querier
+	pool *pgxpool.Pool
+	q    *tasksdb.Queries
 }
 
-func NewRepository(q tasksdb.Querier) *PostgresRepository {
-	return &PostgresRepository{q: q}
+func NewRepository(pool *pgxpool.Pool) *PostgresRepository {
+	return &PostgresRepository{pool: pool, q: tasksdb.New(pool)}
+}
+
+func (r *PostgresRepository) withTx(ctx context.Context, fn func(*tasksdb.Queries) error) error {
+	tx, err := r.pool.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback(ctx) //nolint:errcheck
+	if err := fn(r.q.WithTx(tx)); err != nil {
+		return err
+	}
+	return tx.Commit(ctx)
 }
 
 func pgTimestamptzToPtr(ts pgtype.Timestamptz) *time.Time {
@@ -241,13 +255,21 @@ func (r *PostgresRepository) UpdateTask(ctx context.Context, req UpdateTaskReque
 		params.SetProjectID = true
 		params.ProjectID = *req.ProjectID
 	}
-	if req.StartedAt != nil {
-		params.SetStartedAt = true
-		params.StartedAt = pgtype.Timestamptz{Time: *req.StartedAt, Valid: true}
+	if req.StartedAt.Set {
+		if req.StartedAt.Value == nil {
+			params.ClearStartedAt = true
+		} else {
+			params.SetStartedAt = true
+			params.StartedAt = pgtype.Timestamptz{Time: *req.StartedAt.Value, Valid: true}
+		}
 	}
-	if req.FinishedAt != nil {
-		params.SetFinishedAt = true
-		params.FinishedAt = pgtype.Timestamptz{Time: *req.FinishedAt, Valid: true}
+	if req.FinishedAt.Set {
+		if req.FinishedAt.Value == nil {
+			params.ClearFinishedAt = true
+		} else {
+			params.SetFinishedAt = true
+			params.FinishedAt = pgtype.Timestamptz{Time: *req.FinishedAt.Value, Valid: true}
+		}
 	}
 	if req.TaskType != nil {
 		params.SetTaskType = true
@@ -432,11 +454,23 @@ func (r *PostgresRepository) GetUnfinishedTasks(ctx context.Context, minPriority
 }
 
 func (r *PostgresRepository) GetProject(ctx context.Context, id int32) (ProjectDetailResponse, error) {
-	resp, err := r.GetProjectChildren(ctx, id)
+	row, err := r.q.GetProjectByID(ctx, id)
 	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return ProjectDetailResponse{}, ErrNotFound
+		}
 		return ProjectDetailResponse{}, err
 	}
-	return resp.Project, nil
+	return ProjectDetailResponse{
+		ID:          row.ID,
+		ParentID:    row.ParentID,
+		Name:        row.Name,
+		Description: row.Description,
+		DueAt:       pgDateToPtr(row.DueAt),
+		StartedAt:   pgTimestamptzToPtr(row.StartedAt),
+		FinishedAt:  pgTimestamptzToPtr(row.FinishedAt),
+		TimeSpent:   row.TimeSpent,
+	}, nil
 }
 
 func (r *PostgresRepository) GetTask(ctx context.Context, id int32) (TaskFullResponse, error) {
@@ -804,52 +838,56 @@ func (r *PostgresRepository) GetTimeEntriesByDateRange(ctx context.Context, star
 }
 
 func (r *PostgresRepository) ReplaceTaskDependencies(ctx context.Context, taskID int32, dependsOn []int32) error {
-	if len(dependsOn) > 0 {
-		hasCycle, err := r.q.TaskDependencyWouldCycle(ctx, tasksdb.TaskDependencyWouldCycleParams{
-			TaskID:   taskID,
-			NewDeps:  dependsOn,
-		})
-		if err != nil {
+	return r.withTx(ctx, func(q *tasksdb.Queries) error {
+		if len(dependsOn) > 0 {
+			hasCycle, err := q.TaskDependencyWouldCycle(ctx, tasksdb.TaskDependencyWouldCycleParams{
+				TaskID:  taskID,
+				NewDeps: dependsOn,
+			})
+			if err != nil {
+				return err
+			}
+			if hasCycle {
+				return ErrCircularDependency
+			}
+		}
+		if err := q.DeleteRemovedTaskDependencies(ctx, tasksdb.DeleteRemovedTaskDependenciesParams{
+			TaskID: taskID,
+			Keep:   dependsOn,
+		}); err != nil {
 			return err
 		}
-		if hasCycle {
-			return ErrCircularDependency
-		}
-	}
-	if err := r.q.DeleteRemovedTaskDependencies(ctx, tasksdb.DeleteRemovedTaskDependenciesParams{
-		TaskID: taskID,
-		Keep:   dependsOn,
-	}); err != nil {
-		return err
-	}
-	return r.q.UpsertTaskDependencies(ctx, tasksdb.UpsertTaskDependenciesParams{
-		TaskID:    taskID,
-		DependsOn: dependsOn,
+		return q.UpsertTaskDependencies(ctx, tasksdb.UpsertTaskDependenciesParams{
+			TaskID:    taskID,
+			DependsOn: dependsOn,
+		})
 	})
 }
 
 func (r *PostgresRepository) ReplaceTaskBlocks(ctx context.Context, taskID int32, blocks []int32) error {
-	if len(blocks) > 0 {
-		hasCycle, err := r.q.TaskBlocksWouldCycle(ctx, tasksdb.TaskBlocksWouldCycleParams{
-			Blocks: blocks,
-			TaskID: taskID,
-		})
-		if err != nil {
+	return r.withTx(ctx, func(q *tasksdb.Queries) error {
+		if len(blocks) > 0 {
+			hasCycle, err := q.TaskBlocksWouldCycle(ctx, tasksdb.TaskBlocksWouldCycleParams{
+				Blocks: blocks,
+				TaskID: taskID,
+			})
+			if err != nil {
+				return err
+			}
+			if hasCycle {
+				return ErrCircularDependency
+			}
+		}
+		if err := q.DeleteRemovedTaskBlocks(ctx, tasksdb.DeleteRemovedTaskBlocksParams{
+			DependsOn: taskID,
+			Keep:      blocks,
+		}); err != nil {
 			return err
 		}
-		if hasCycle {
-			return ErrCircularDependency
-		}
-	}
-	if err := r.q.DeleteRemovedTaskBlocks(ctx, tasksdb.DeleteRemovedTaskBlocksParams{
-		DependsOn: taskID,
-		Keep:      blocks,
-	}); err != nil {
-		return err
-	}
-	return r.q.UpsertTaskBlocks(ctx, tasksdb.UpsertTaskBlocksParams{
-		DependsOn: taskID,
-		Blocks:    blocks,
+		return q.UpsertTaskBlocks(ctx, tasksdb.UpsertTaskBlocksParams{
+			DependsOn: taskID,
+			Blocks:    blocks,
+		})
 	})
 }
 

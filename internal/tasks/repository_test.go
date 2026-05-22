@@ -6,7 +6,6 @@ import (
 	"testing"
 	"time"
 
-	"gv-api/internal/database/tasksdb"
 	"gv-api/internal/tasks"
 	testutil "gv-api/internal/testutils"
 
@@ -16,7 +15,7 @@ import (
 func NewRepo(t *testing.T) *tasks.PostgresRepository {
 	pool := testutil.NewPool(t)
 	testutil.Truncate(t, pool, "task_dependencies", "time_entries", "todos", "tasks", "projects")
-	return tasks.NewRepository(tasksdb.New(pool))
+	return tasks.NewRepository(pool)
 }
 
 func TestIntegration_ActiveTimeEntryUnique(t *testing.T) {

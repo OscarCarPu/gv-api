@@ -17,7 +17,6 @@ import (
 	"gv-api/internal/database"
 	"gv-api/internal/database/habitsdb"
 	"gv-api/internal/database/plandb"
-	"gv-api/internal/database/tasksdb"
 	"gv-api/internal/finance"
 	"gv-api/internal/habits"
 	"gv-api/internal/middleware"
@@ -68,8 +67,7 @@ func main() {
 	habitHandler := habits.NewHandler(habitService)
 
 	// Tasks Setup
-	taskQueries := tasksdb.New(db)
-	taskRepo := tasks.NewRepository(taskQueries)
+	taskRepo := tasks.NewRepository(db)
 	taskService := tasks.NewService(taskRepo, loc)
 	taskHandler := tasks.NewHandler(taskService)
 

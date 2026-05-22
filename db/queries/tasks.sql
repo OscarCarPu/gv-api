@@ -33,8 +33,8 @@ UPDATE tasks SET
     description = CASE WHEN @set_description::bool  THEN @description::text      ELSE description END,
     due_at      = CASE WHEN @clear_due_at::bool THEN NULL WHEN @set_due_at::bool THEN @due_at::date ELSE due_at END,
     project_id  = CASE WHEN @set_project_id::bool   THEN @project_id::int        ELSE project_id END,
-    started_at  = CASE WHEN @set_started_at::bool   THEN @started_at::timestamptz  ELSE started_at END,
-    finished_at = CASE WHEN @set_finished_at::bool  THEN @finished_at::timestamptz ELSE finished_at END,
+    started_at  = CASE WHEN @clear_started_at::bool THEN NULL WHEN @set_started_at::bool THEN @started_at::timestamptz ELSE started_at END,
+    finished_at = CASE WHEN @clear_finished_at::bool THEN NULL WHEN @set_finished_at::bool THEN @finished_at::timestamptz ELSE finished_at END,
     task_type   = CASE WHEN @set_task_type::bool     THEN @task_type::text         ELSE task_type END,
     recurrence  = CASE WHEN @clear_recurrence::bool THEN NULL WHEN @set_recurrence::bool THEN @recurrence::int ELSE recurrence END,
     priority    = CASE WHEN @set_priority::bool      THEN @priority::int           ELSE priority END
@@ -430,6 +430,25 @@ SELECT
     COALESCE((SELECT json_agg(json_build_object('id', t2.id, 'name', t2.name, 'due_at', t2.due_at) ORDER BY t2.name) FROM task_dependencies td JOIN tasks t2 ON t2.id = td.depends_on WHERE td.task_id = $1 AND t2.finished_at IS NULL), '[]')::json AS depends_on,
     COALESCE((SELECT json_agg(json_build_object('id', t2.id, 'name', t2.name) ORDER BY t2.name) FROM task_dependencies td JOIN tasks t2 ON t2.id = td.task_id WHERE td.depends_on = $1), '[]')::json AS blocks,
     EXISTS(SELECT 1 FROM task_dependencies td3 JOIN tasks t3 ON t3.id = td3.depends_on WHERE td3.task_id = $1 AND t3.finished_at IS NULL) AS blocked;
+
+-- name: GetProjectByID :one
+WITH RECURSIVE project_tree AS (
+    SELECT id FROM projects WHERE id = $1
+    UNION ALL
+    SELECT c.id FROM projects c JOIN project_tree pt ON c.parent_id = pt.id
+),
+project_direct_time AS (
+    SELECT t.project_id,
+        COALESCE(SUM(EXTRACT(EPOCH FROM (te.finished_at - te.started_at)))::bigint, 0)::bigint AS direct_time
+    FROM tasks t
+    LEFT JOIN time_entries te ON te.task_id = t.id AND te.finished_at IS NOT NULL
+    WHERE t.project_id IN (SELECT id FROM project_tree)
+    GROUP BY t.project_id
+)
+SELECT p.id, p.parent_id, p.name, p.description, p.due_at, p.started_at, p.finished_at,
+    COALESCE((SELECT SUM(pdt.direct_time)::bigint FROM project_direct_time pdt), 0)::bigint AS time_spent
+FROM projects p
+WHERE p.id = $1;
 
 -- name: GetTimeEntriesByDateRange :many
 SELECT

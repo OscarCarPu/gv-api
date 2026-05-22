@@ -10,9 +10,8 @@ import (
 	"time"
 
 	"gv-api/internal/finance/txtype"
+	"gv-api/internal/httputil"
 	"gv-api/internal/response"
-
-	"github.com/go-chi/chi/v5"
 )
 
 type ServiceInterface interface {
@@ -48,15 +47,6 @@ type Handler struct {
 
 func NewHandler(s ServiceInterface) *Handler {
 	return &Handler{service: s}
-}
-
-func parseID(r *http.Request, label string) (int32, error) {
-	idStr := chi.URLParam(r, "id")
-	id, err := strconv.Atoi(idStr)
-	if err != nil || id <= 0 {
-		return 0, errors.New("invalid " + label + " id")
-	}
-	return int32(id), nil
 }
 
 func validateAccount(name string) (string, string) {
@@ -128,7 +118,7 @@ func (h *Handler) ListAccounts(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) GetAccount(w http.ResponseWriter, r *http.Request) {
-	id, err := parseID(r, "account")
+	id, err := httputil.ParseIDParam(r, "account")
 	if err != nil {
 		response.Error(w, http.StatusBadRequest, err.Error())
 		return
@@ -167,7 +157,7 @@ func (h *Handler) CreateAccount(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) UpdateAccount(w http.ResponseWriter, r *http.Request) {
-	id, err := parseID(r, "account")
+	id, err := httputil.ParseIDParam(r, "account")
 	if err != nil {
 		response.Error(w, http.StatusBadRequest, err.Error())
 		return
@@ -198,7 +188,7 @@ func (h *Handler) UpdateAccount(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) DeleteAccount(w http.ResponseWriter, r *http.Request) {
-	id, err := parseID(r, "account")
+	id, err := httputil.ParseIDParam(r, "account")
 	if err != nil {
 		response.Error(w, http.StatusBadRequest, err.Error())
 		return
@@ -226,7 +216,7 @@ func (h *Handler) ListCategories(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) GetCategory(w http.ResponseWriter, r *http.Request) {
-	id, err := parseID(r, "category")
+	id, err := httputil.ParseIDParam(r, "category")
 	if err != nil {
 		response.Error(w, http.StatusBadRequest, err.Error())
 		return
@@ -269,7 +259,7 @@ func (h *Handler) CreateCategory(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) UpdateCategory(w http.ResponseWriter, r *http.Request) {
-	id, err := parseID(r, "category")
+	id, err := httputil.ParseIDParam(r, "category")
 	if err != nil {
 		response.Error(w, http.StatusBadRequest, err.Error())
 		return
@@ -304,7 +294,7 @@ func (h *Handler) UpdateCategory(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) DeleteCategory(w http.ResponseWriter, r *http.Request) {
-	id, err := parseID(r, "category")
+	id, err := httputil.ParseIDParam(r, "category")
 	if err != nil {
 		response.Error(w, http.StatusBadRequest, err.Error())
 		return
@@ -371,7 +361,7 @@ func (h *Handler) ListTransactions(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) GetTransaction(w http.ResponseWriter, r *http.Request) {
-	id, err := parseID(r, "transaction")
+	id, err := httputil.ParseIDParam(r, "transaction")
 	if err != nil {
 		response.Error(w, http.StatusBadRequest, err.Error())
 		return
@@ -407,7 +397,7 @@ func (h *Handler) CreateTransaction(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) UpdateTransaction(w http.ResponseWriter, r *http.Request) {
-	id, err := parseID(r, "transaction")
+	id, err := httputil.ParseIDParam(r, "transaction")
 	if err != nil {
 		response.Error(w, http.StatusBadRequest, err.Error())
 		return
@@ -435,7 +425,7 @@ func (h *Handler) UpdateTransaction(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) DeleteTransaction(w http.ResponseWriter, r *http.Request) {
-	id, err := parseID(r, "transaction")
+	id, err := httputil.ParseIDParam(r, "transaction")
 	if err != nil {
 		response.Error(w, http.StatusBadRequest, err.Error())
 		return

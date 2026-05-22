@@ -9,9 +9,14 @@ jobs:
   deploy:
     runs-on: self-hosted
     steps:
-      - name: Deploy
+      - name: Test
         run: |
           git config --global --add safe.directory /home/ocp/docker/gv/gv-api
           cd /home/ocp/docker/gv/gv-api
           git pull
+          go test -short ./internal/...
+
+      - name: Deploy
+        run: |
+          cd /home/ocp/docker/gv/gv-api
           docker compose up --build --wait -d

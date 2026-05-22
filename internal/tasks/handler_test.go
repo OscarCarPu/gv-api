@@ -642,16 +642,20 @@ func TestHandler_GetTimeEntriesByDateRange(t *testing.T) {
 	})
 
 	t.Run("200 on success", func(t *testing.T) {
+		march1 := time.Date(2026, 3, 1, 0, 0, 0, 0, time.UTC)
+		march31 := time.Date(2026, 3, 31, 0, 0, 0, 0, time.UTC)
 		svc := mocks.NewMockServiceInterface(t)
-		svc.EXPECT().GetTimeEntriesByDateRange(mock.Anything, "2026-03-01", "2026-03-31").Return([]tasks.TimeEntryWithTaskResponse{{ID: 1}}, nil)
+		svc.EXPECT().GetTimeEntriesByDateRange(mock.Anything, march1, &march31).Return([]tasks.TimeEntryWithTaskResponse{{ID: 1}}, nil)
 		rec := httptest.NewRecorder()
 		tasks.NewHandler(svc).GetTimeEntriesByDateRange(rec, newReq(http.MethodGet, "/?start_time=2026-03-01&end_time=2026-03-31", ""))
 		assert.Equal(t, http.StatusOK, rec.Code)
 	})
 
 	t.Run("500 on service error", func(t *testing.T) {
+		march1 := time.Date(2026, 3, 1, 0, 0, 0, 0, time.UTC)
+		march31 := time.Date(2026, 3, 31, 0, 0, 0, 0, time.UTC)
 		svc := mocks.NewMockServiceInterface(t)
-		svc.EXPECT().GetTimeEntriesByDateRange(mock.Anything, "2026-03-01", "2026-03-31").Return(nil, errors.New("db error"))
+		svc.EXPECT().GetTimeEntriesByDateRange(mock.Anything, march1, &march31).Return(nil, errors.New("db error"))
 		rec := httptest.NewRecorder()
 		tasks.NewHandler(svc).GetTimeEntriesByDateRange(rec, newReq(http.MethodGet, "/?start_time=2026-03-01&end_time=2026-03-31", ""))
 		assert.Equal(t, http.StatusInternalServerError, rec.Code)

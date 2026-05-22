@@ -208,8 +208,8 @@ type UpdateTaskRequest struct {
 	Description *string      `json:"description"`
 	DueAt       NullableTime `json:"due_at"`
 	ProjectID   *int32       `json:"project_id"`
-	StartedAt   *time.Time   `json:"started_at"`
-	FinishedAt  *time.Time   `json:"finished_at"`
+	StartedAt   NullableTime `json:"started_at"`
+	FinishedAt  NullableTime `json:"finished_at"`
 	DependsOn   *[]int32     `json:"depends_on"`
 	Blocks      *[]int32     `json:"blocks"`
 	TaskType    *string      `json:"task_type"`

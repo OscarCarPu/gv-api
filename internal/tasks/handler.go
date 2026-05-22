@@ -10,9 +10,8 @@ import (
 	"time"
 
 	"gv-api/internal/history"
+	"gv-api/internal/httputil"
 	"gv-api/internal/response"
-
-	"github.com/go-chi/chi/v5"
 )
 
 type ServiceInterface interface {
@@ -40,7 +39,7 @@ type ServiceInterface interface {
 	GetActiveTimeEntry(ctx context.Context) (ActiveTimeEntryResponse, error)
 	GetTimeEntrySummary(ctx context.Context) (TimeEntrySummaryResponse, error)
 	GetTimeEntryHistory(ctx context.Context, frequency, startAt, endAt string) (history.Response, error)
-	GetTimeEntriesByDateRange(ctx context.Context, startTime, endTime string) ([]TimeEntryWithTaskResponse, error)
+	GetTimeEntriesByDateRange(ctx context.Context, start time.Time, end *time.Time) ([]TimeEntryWithTaskResponse, error)
 }
 
 type Handler struct {
@@ -49,15 +48,6 @@ type Handler struct {
 
 func NewHandler(s ServiceInterface) *Handler {
 	return &Handler{service: s}
-}
-
-func parseIDParam(r *http.Request, entity string) (int32, error) {
-	idStr := chi.URLParam(r, "id")
-	id, err := strconv.Atoi(idStr)
-	if err != nil || id <= 0 {
-		return 0, fmt.Errorf("invalid %s id", entity)
-	}
-	return int32(id), nil
 }
 
 func (h *Handler) CreateProject(w http.ResponseWriter, r *http.Request) {
@@ -203,7 +193,7 @@ func (h *Handler) CreateTimeEntry(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) UpdateProject(w http.ResponseWriter, r *http.Request) {
-	id, err := parseIDParam(r, "project")
+	id, err := httputil.ParseIDParam(r, "project")
 	if err != nil {
 		response.Error(w, http.StatusBadRequest, err.Error())
 		return
@@ -235,7 +225,7 @@ func (h *Handler) UpdateProject(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) UpdateTask(w http.ResponseWriter, r *http.Request) {
-	id, err := parseIDParam(r, "task")
+	id, err := httputil.ParseIDParam(r, "task")
 	if err != nil {
 		response.Error(w, http.StatusBadRequest, err.Error())
 		return
@@ -294,7 +284,7 @@ func (h *Handler) UpdateTask(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) UpdateTodo(w http.ResponseWriter, r *http.Request) {
-	id, err := parseIDParam(r, "todo")
+	id, err := httputil.ParseIDParam(r, "todo")
 	if err != nil {
 		response.Error(w, http.StatusBadRequest, err.Error())
 		return
@@ -326,7 +316,7 @@ func (h *Handler) UpdateTodo(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) UpdateTimeEntry(w http.ResponseWriter, r *http.Request) {
-	id, err := parseIDParam(r, "time entry")
+	id, err := httputil.ParseIDParam(r, "time entry")
 	if err != nil {
 		response.Error(w, http.StatusBadRequest, err.Error())
 		return
@@ -369,7 +359,7 @@ func (h *Handler) GetActiveTree(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) GetProjectChildren(w http.ResponseWriter, r *http.Request) {
-	id, err := parseIDParam(r, "project")
+	id, err := httputil.ParseIDParam(r, "project")
 	if err != nil {
 		response.Error(w, http.StatusBadRequest, err.Error())
 		return
@@ -389,7 +379,7 @@ func (h *Handler) GetProjectChildren(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) GetProject(w http.ResponseWriter, r *http.Request) {
-	id, err := parseIDParam(r, "project")
+	id, err := httputil.ParseIDParam(r, "project")
 	if err != nil {
 		response.Error(w, http.StatusBadRequest, err.Error())
 		return
@@ -409,7 +399,7 @@ func (h *Handler) GetProject(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) GetTask(w http.ResponseWriter, r *http.Request) {
-	id, err := parseIDParam(r, "task")
+	id, err := httputil.ParseIDParam(r, "task")
 	if err != nil {
 		response.Error(w, http.StatusBadRequest, err.Error())
 		return
@@ -429,7 +419,7 @@ func (h *Handler) GetTask(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) GetTaskTimeEntries(w http.ResponseWriter, r *http.Request) {
-	id, err := parseIDParam(r, "task")
+	id, err := httputil.ParseIDParam(r, "task")
 	if err != nil {
 		response.Error(w, http.StatusBadRequest, err.Error())
 		return
@@ -477,7 +467,7 @@ func parseMinPriority(r *http.Request) (*int32, error) {
 }
 
 func (h *Handler) DeleteProject(w http.ResponseWriter, r *http.Request) {
-	id, err := parseIDParam(r, "project")
+	id, err := httputil.ParseIDParam(r, "project")
 	if err != nil {
 		response.Error(w, http.StatusBadRequest, err.Error())
 		return
@@ -492,7 +482,7 @@ func (h *Handler) DeleteProject(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) DeleteTask(w http.ResponseWriter, r *http.Request) {
-	id, err := parseIDParam(r, "task")
+	id, err := httputil.ParseIDParam(r, "task")
 	if err != nil {
 		response.Error(w, http.StatusBadRequest, err.Error())
 		return
@@ -507,7 +497,7 @@ func (h *Handler) DeleteTask(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) DeleteTodo(w http.ResponseWriter, r *http.Request) {
-	id, err := parseIDParam(r, "todo")
+	id, err := httputil.ParseIDParam(r, "todo")
 	if err != nil {
 		response.Error(w, http.StatusBadRequest, err.Error())
 		return
@@ -522,7 +512,7 @@ func (h *Handler) DeleteTodo(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) DeleteTimeEntry(w http.ResponseWriter, r *http.Request) {
-	id, err := parseIDParam(r, "time entry")
+	id, err := httputil.ParseIDParam(r, "time entry")
 	if err != nil {
 		response.Error(w, http.StatusBadRequest, err.Error())
 		return
@@ -585,26 +575,29 @@ func (h *Handler) GetTimeEntryHistory(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) GetTimeEntriesByDateRange(w http.ResponseWriter, r *http.Request) {
-	startTime := r.URL.Query().Get("start_time")
-	if startTime == "" {
+	startStr := r.URL.Query().Get("start_time")
+	if startStr == "" {
 		response.Error(w, http.StatusBadRequest, "start_time is required")
 		return
 	}
 
-	if _, err := time.Parse("2006-01-02", startTime); err != nil {
+	start, err := time.Parse("2006-01-02", startStr)
+	if err != nil {
 		response.Error(w, http.StatusBadRequest, "invalid start_time format, expected YYYY-MM-DD")
 		return
 	}
 
-	endTime := r.URL.Query().Get("end_time")
-	if endTime != "" {
-		if _, err := time.Parse("2006-01-02", endTime); err != nil {
+	var end *time.Time
+	if endStr := r.URL.Query().Get("end_time"); endStr != "" {
+		t, err := time.Parse("2006-01-02", endStr)
+		if err != nil {
 			response.Error(w, http.StatusBadRequest, "invalid end_time format, expected YYYY-MM-DD")
 			return
 		}
+		end = &t
 	}
 
-	entries, err := h.service.GetTimeEntriesByDateRange(r.Context(), startTime, endTime)
+	entries, err := h.service.GetTimeEntriesByDateRange(r.Context(), start, end)
 	if err != nil {
 		response.InternalError(w, r, err, "Failed to get time entries")
 		return

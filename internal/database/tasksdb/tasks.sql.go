@@ -337,6 +337,53 @@ func (q *Queries) GetActiveTimeEntry(ctx context.Context) (GetActiveTimeEntryRow
 	return i, err
 }
 
+const getProjectByID = `-- name: GetProjectByID :one
+WITH RECURSIVE project_tree AS (
+    SELECT id FROM projects WHERE id = $1
+    UNION ALL
+    SELECT c.id FROM projects c JOIN project_tree pt ON c.parent_id = pt.id
+),
+project_direct_time AS (
+    SELECT t.project_id,
+        COALESCE(SUM(EXTRACT(EPOCH FROM (te.finished_at - te.started_at)))::bigint, 0)::bigint AS direct_time
+    FROM tasks t
+    LEFT JOIN time_entries te ON te.task_id = t.id AND te.finished_at IS NOT NULL
+    WHERE t.project_id IN (SELECT id FROM project_tree)
+    GROUP BY t.project_id
+)
+SELECT p.id, p.parent_id, p.name, p.description, p.due_at, p.started_at, p.finished_at,
+    COALESCE((SELECT SUM(pdt.direct_time)::bigint FROM project_direct_time pdt), 0)::bigint AS time_spent
+FROM projects p
+WHERE p.id = $1
+`
+
+type GetProjectByIDRow struct {
+	ID          int32              `db:"id" json:"id"`
+	ParentID    *int32             `db:"parent_id" json:"parent_id"`
+	Name        string             `db:"name" json:"name"`
+	Description *string            `db:"description" json:"description"`
+	DueAt       pgtype.Date        `db:"due_at" json:"due_at"`
+	StartedAt   pgtype.Timestamptz `db:"started_at" json:"started_at"`
+	FinishedAt  pgtype.Timestamptz `db:"finished_at" json:"finished_at"`
+	TimeSpent   int64              `db:"time_spent" json:"time_spent"`
+}
+
+func (q *Queries) GetProjectByID(ctx context.Context, id int32) (GetProjectByIDRow, error) {
+	row := q.db.QueryRow(ctx, getProjectByID, id)
+	var i GetProjectByIDRow
+	err := row.Scan(
+		&i.ID,
+		&i.ParentID,
+		&i.Name,
+		&i.Description,
+		&i.DueAt,
+		&i.StartedAt,
+		&i.FinishedAt,
+		&i.TimeSpent,
+	)
+	return i, err
+}
+
 const getProjectWithDescendants = `-- name: GetProjectWithDescendants :many
 WITH RECURSIVE project_tree AS (
     SELECT p.id, p.parent_id, p.name, p.description, p.due_at, p.started_at, p.finished_at,
@@ -1284,12 +1331,12 @@ UPDATE tasks SET
     description = CASE WHEN $3::bool  THEN $4::text      ELSE description END,
     due_at      = CASE WHEN $5::bool THEN NULL WHEN $6::bool THEN $7::date ELSE due_at END,
     project_id  = CASE WHEN $8::bool   THEN $9::int        ELSE project_id END,
-    started_at  = CASE WHEN $10::bool   THEN $11::timestamptz  ELSE started_at END,
-    finished_at = CASE WHEN $12::bool  THEN $13::timestamptz ELSE finished_at END,
-    task_type   = CASE WHEN $14::bool     THEN $15::text         ELSE task_type END,
-    recurrence  = CASE WHEN $16::bool THEN NULL WHEN $17::bool THEN $18::int ELSE recurrence END,
-    priority    = CASE WHEN $19::bool      THEN $20::int           ELSE priority END
-WHERE id = $21
+    started_at  = CASE WHEN $10::bool THEN NULL WHEN $11::bool THEN $12::timestamptz ELSE started_at END,
+    finished_at = CASE WHEN $13::bool THEN NULL WHEN $14::bool THEN $15::timestamptz ELSE finished_at END,
+    task_type   = CASE WHEN $16::bool     THEN $17::text         ELSE task_type END,
+    recurrence  = CASE WHEN $18::bool THEN NULL WHEN $19::bool THEN $20::int ELSE recurrence END,
+    priority    = CASE WHEN $21::bool      THEN $22::int           ELSE priority END
+WHERE id = $23
 RETURNING id, project_id, name, description, due_at, started_at, finished_at, task_type, recurrence, priority
 `
 
@@ -1303,8 +1350,10 @@ type UpdateTaskParams struct {
 	DueAt           time.Time          `db:"due_at" json:"due_at"`
 	SetProjectID    bool               `db:"set_project_id" json:"set_project_id"`
 	ProjectID       int32              `db:"project_id" json:"project_id"`
+	ClearStartedAt  bool               `db:"clear_started_at" json:"clear_started_at"`
 	SetStartedAt    bool               `db:"set_started_at" json:"set_started_at"`
 	StartedAt       pgtype.Timestamptz `db:"started_at" json:"started_at"`
+	ClearFinishedAt bool               `db:"clear_finished_at" json:"clear_finished_at"`
 	SetFinishedAt   bool               `db:"set_finished_at" json:"set_finished_at"`
 	FinishedAt      pgtype.Timestamptz `db:"finished_at" json:"finished_at"`
 	SetTaskType     bool               `db:"set_task_type" json:"set_task_type"`
@@ -1328,8 +1377,10 @@ func (q *Queries) UpdateTask(ctx context.Context, arg UpdateTaskParams) (Task, e
 		arg.DueAt,
 		arg.SetProjectID,
 		arg.ProjectID,
+		arg.ClearStartedAt,
 		arg.SetStartedAt,
 		arg.StartedAt,
+		arg.ClearFinishedAt,
 		arg.SetFinishedAt,
 		arg.FinishedAt,
 		arg.SetTaskType,

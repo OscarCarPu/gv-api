@@ -2,7 +2,6 @@ package tasks
 
 import (
 	"context"
-	"fmt"
 	"sort"
 	"time"
 
@@ -344,25 +343,17 @@ func (s *Service) GetTimeEntryHistory(ctx context.Context, frequency, startAt, e
 	}, nil
 }
 
-func (s *Service) GetTimeEntriesByDateRange(ctx context.Context, startTime, endTime string) ([]TimeEntryWithTaskResponse, error) {
-	start, err := time.Parse("2006-01-02", startTime)
-	if err != nil {
-		return nil, fmt.Errorf("invalid start_time format")
-	}
-
-	var end time.Time
-	if endTime != "" {
-		end, err = time.Parse("2006-01-02", endTime)
-		if err != nil {
-			return nil, fmt.Errorf("invalid end_time format")
-		}
+func (s *Service) GetTimeEntriesByDateRange(ctx context.Context, start time.Time, end *time.Time) ([]TimeEntryWithTaskResponse, error) {
+	var endDate time.Time
+	if end != nil {
+		endDate = *end
 	} else {
 		now := time.Now().In(s.location)
-		end = time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, s.location)
+		endDate = time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, s.location)
 	}
 
 	startTS := time.Date(start.Year(), start.Month(), start.Day(), 0, 0, 0, 0, s.location)
-	endTS := time.Date(end.Year(), end.Month(), end.Day()+1, 0, 0, 0, 0, s.location)
+	endTS := time.Date(endDate.Year(), endDate.Month(), endDate.Day()+1, 0, 0, 0, 0, s.location)
 
 	entries, err := s.repo.GetTimeEntriesByDateRange(ctx, startTS, endTS)
 	if err != nil {

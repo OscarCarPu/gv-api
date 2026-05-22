@@ -22,3 +22,9 @@ packages:
     interfaces:
       Repository:
       ServiceInterface:
+  gv-api/internal/finance:
+    config:
+      dir: internal/finance/mocks
+      outpkg: mocks
+    interfaces:
+      Repository:

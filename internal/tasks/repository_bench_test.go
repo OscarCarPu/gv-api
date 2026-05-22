@@ -6,7 +6,6 @@ import (
 	"testing"
 	"time"
 
-	"gv-api/internal/database/tasksdb"
 	"gv-api/internal/tasks"
 	testutil "gv-api/internal/testutils"
 
@@ -22,7 +21,7 @@ func benchRepo(b *testing.B) (*tasks.PostgresRepository, *pgxpool.Pool) {
 	b.Helper()
 	pool := testutil.NewPool(b)
 	testutil.Truncate(b, pool, "task_dependencies", "time_entries", "todos", "tasks", "projects")
-	return tasks.NewRepository(tasksdb.New(pool)), pool
+	return tasks.NewRepository(pool), pool
 }
 
 // seedTasks creates `n` standalone unfinished tasks. Returns their IDs in

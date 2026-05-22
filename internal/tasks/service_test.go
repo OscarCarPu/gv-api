@@ -524,15 +524,17 @@ func TestService_GetTimeEntriesByDateRange(t *testing.T) {
 				{ID: 1, TaskID: 5, TaskName: "Task A", TimeSpent: 3600},
 			}, nil)
 
+		start := time.Date(2026, 3, 1, 0, 0, 0, 0, loc)
+		end := time.Date(2026, 3, 31, 0, 0, 0, 0, loc)
 		svc := tasks.NewService(repo, loc)
-		result, err := svc.GetTimeEntriesByDateRange(context.Background(), "2026-03-01", "2026-03-31")
+		result, err := svc.GetTimeEntriesByDateRange(context.Background(), start, &end)
 		require.NoError(t, err)
 		require.Len(t, result, 1)
 		assert.Equal(t, int32(1), result[0].ID)
 		assert.Equal(t, "Task A", result[0].TaskName)
 	})
 
-	t.Run("defaults end_time to today when empty", func(t *testing.T) {
+	t.Run("defaults end_time to today when nil", func(t *testing.T) {
 		repo := mocks.NewMockRepository(t)
 		loc := time.UTC
 		now := time.Now().In(loc)
@@ -544,28 +546,11 @@ func TestService_GetTimeEntriesByDateRange(t *testing.T) {
 			).
 			Return([]tasks.TimeEntryWithTaskResponse{}, nil)
 
+		start := time.Date(2026, 3, 1, 0, 0, 0, 0, loc)
 		svc := tasks.NewService(repo, loc)
-		result, err := svc.GetTimeEntriesByDateRange(context.Background(), "2026-03-01", "")
+		result, err := svc.GetTimeEntriesByDateRange(context.Background(), start, nil)
 		require.NoError(t, err)
 		assert.Empty(t, result)
-	})
-
-	t.Run("returns error for invalid start_time format", func(t *testing.T) {
-		repo := mocks.NewMockRepository(t)
-		svc := tasks.NewService(repo, time.UTC)
-
-		_, err := svc.GetTimeEntriesByDateRange(context.Background(), "bad", "")
-		require.Error(t, err)
-		assert.Contains(t, err.Error(), "invalid start_time")
-	})
-
-	t.Run("returns error for invalid end_time format", func(t *testing.T) {
-		repo := mocks.NewMockRepository(t)
-		svc := tasks.NewService(repo, time.UTC)
-
-		_, err := svc.GetTimeEntriesByDateRange(context.Background(), "2026-03-01", "bad")
-		require.Error(t, err)
-		assert.Contains(t, err.Error(), "invalid end_time")
 	})
 
 	t.Run("returns empty slice when repo returns nil", func(t *testing.T) {
@@ -574,8 +559,10 @@ func TestService_GetTimeEntriesByDateRange(t *testing.T) {
 			GetTimeEntriesByDateRange(mock.Anything, mock.AnythingOfType("time.Time"), mock.AnythingOfType("time.Time")).
 			Return(nil, nil)
 
+		start := time.Date(2026, 3, 1, 0, 0, 0, 0, time.UTC)
+		end := time.Date(2026, 3, 31, 0, 0, 0, 0, time.UTC)
 		svc := tasks.NewService(repo, time.UTC)
-		result, err := svc.GetTimeEntriesByDateRange(context.Background(), "2026-03-01", "2026-03-31")
+		result, err := svc.GetTimeEntriesByDateRange(context.Background(), start, &end)
 		require.NoError(t, err)
 		assert.NotNil(t, result)
 		assert.Empty(t, result)
@@ -587,8 +574,10 @@ func TestService_GetTimeEntriesByDateRange(t *testing.T) {
 			GetTimeEntriesByDateRange(mock.Anything, mock.AnythingOfType("time.Time"), mock.AnythingOfType("time.Time")).
 			Return(nil, errors.New("db error"))
 
+		start := time.Date(2026, 3, 1, 0, 0, 0, 0, time.UTC)
+		end := time.Date(2026, 3, 31, 0, 0, 0, 0, time.UTC)
 		svc := tasks.NewService(repo, time.UTC)
-		_, err := svc.GetTimeEntriesByDateRange(context.Background(), "2026-03-01", "2026-03-31")
+		_, err := svc.GetTimeEntriesByDateRange(context.Background(), start, &end)
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "db error")
 	})
