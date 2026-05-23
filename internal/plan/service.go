@@ -75,7 +75,8 @@ func (s *Service) Create(ctx context.Context, req CreatePlanBlockRequest) (PlanB
 		return PlanBlockResponse{}, err
 	}
 
-	planDate := time.Date(req.StartedAt.Year(), req.StartedAt.Month(), req.StartedAt.Day(), 0, 0, 0, 0, time.UTC)
+	localStart := req.StartedAt.In(s.location)
+	planDate := time.Date(localStart.Year(), localStart.Month(), localStart.Day(), 0, 0, 0, 0, s.location)
 
 	overlap, err := s.repo.HasOverlap(ctx, planDate, req.StartedAt, req.EndedAt, nil)
 	if err != nil {
@@ -128,7 +129,8 @@ func (s *Service) Update(ctx context.Context, req UpdatePlanBlockRequest) (PlanB
 	}
 
 	if timesProvided {
-		planDate := time.Date(effStart.Year(), effStart.Month(), effStart.Day(), 0, 0, 0, 0, time.UTC)
+		localEffStart := effStart.In(s.location)
+		planDate := time.Date(localEffStart.Year(), localEffStart.Month(), localEffStart.Day(), 0, 0, 0, 0, s.location)
 		excludeID := req.ID
 		overlap, err := s.repo.HasOverlap(ctx, planDate, effStart, effEnd, &excludeID)
 		if err != nil {

@@ -321,7 +321,14 @@ func (r *PostgresRepository) UpdateTransaction(ctx context.Context, req UpdateTr
 }
 
 func (r *PostgresRepository) DeleteTransaction(ctx context.Context, id int32) error {
-	return r.q.DeleteTransaction(ctx, id)
+	tag, err := r.q.DeleteTransaction(ctx, id)
+	if err != nil {
+		return err
+	}
+	if tag.RowsAffected() == 0 {
+		return ErrNotFound
+	}
+	return nil
 }
 
 // --- Overview ---

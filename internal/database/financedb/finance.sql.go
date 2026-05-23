@@ -8,6 +8,7 @@ package financedb
 import (
 	"context"
 
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/shopspring/decimal"
 	txtype "gv-api/internal/finance/txtype"
@@ -117,14 +118,13 @@ func (q *Queries) DeleteCategory(ctx context.Context, id int32) error {
 	return err
 }
 
-const deleteTransaction = `-- name: DeleteTransaction :exec
+const deleteTransaction = `-- name: DeleteTransaction :execresult
 DELETE FROM transactions
 WHERE id = $1
 `
 
-func (q *Queries) DeleteTransaction(ctx context.Context, id int32) error {
-	_, err := q.db.Exec(ctx, deleteTransaction, id)
-	return err
+func (q *Queries) DeleteTransaction(ctx context.Context, id int32) (pgconn.CommandTag, error) {
+	return q.db.Exec(ctx, deleteTransaction, id)
 }
 
 const getAccount = `-- name: GetAccount :one

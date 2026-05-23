@@ -7,6 +7,7 @@ package financedb
 import (
 	"context"
 
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/shopspring/decimal"
 	txtype "gv-api/internal/finance/txtype"
@@ -18,7 +19,7 @@ type Querier interface {
 	CreateTransaction(ctx context.Context, arg CreateTransactionParams) (Transaction, error)
 	DeleteAccount(ctx context.Context, id int32) error
 	DeleteCategory(ctx context.Context, id int32) error
-	DeleteTransaction(ctx context.Context, id int32) error
+	DeleteTransaction(ctx context.Context, id int32) (pgconn.CommandTag, error)
 	GetAccount(ctx context.Context, id int32) (Account, error)
 	GetAccountsTotal(ctx context.Context) (decimal.Decimal, error)
 	GetCategory(ctx context.Context, id int32) (Category, error)

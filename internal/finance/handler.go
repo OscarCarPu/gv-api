@@ -431,6 +431,10 @@ func (h *Handler) DeleteTransaction(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := h.service.DeleteTransaction(r.Context(), id); err != nil {
+		if errors.Is(err, ErrNotFound) {
+			response.Error(w, http.StatusNotFound, "transaction not found")
+			return
+		}
 		response.InternalError(w, r, err, "Failed to delete transaction")
 		return
 	}

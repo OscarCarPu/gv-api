@@ -86,7 +86,7 @@ SET type = $2, amount = $3, account_id = $4, to_account_id = $5, category_id = $
 WHERE id = $1
 RETURNING id, type, amount, account_id, to_account_id, description, occurred_at, created_at, category_id;
 
--- name: DeleteTransaction :exec
+-- name: DeleteTransaction :execresult
 DELETE FROM transactions
 WHERE id = $1;
 
