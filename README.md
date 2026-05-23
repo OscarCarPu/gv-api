@@ -91,3 +91,7 @@ make generate-mocks
 
 Mocks are generated into `internal/*/mocks/` directories and used by handler and service tests.
 
+## Disclaimer
+
+[Claude Code](https://claude.ai/code) was used as a code review tool during development of this project. No LLM was used to generate any of the code.
+
