@@ -338,13 +338,10 @@ func (h *Handler) ListTransactions(w http.ResponseWriter, r *http.Request) {
 		response.Error(w, http.StatusBadRequest, "invalid from")
 		return
 	}
-	to, err := parseDateParam(q.Get("to"))
+	to, err := parseDateEndParam(q.Get("to"))
 	if err != nil {
 		response.Error(w, http.StatusBadRequest, "invalid to")
 		return
-	}
-	if !to.IsZero() && to.Equal(time.Date(to.Year(), to.Month(), to.Day(), 0, 0, 0, 0, to.Location())) {
-		to = to.Add(24*time.Hour - time.Nanosecond)
 	}
 	out, err := h.service.ListTransactions(r.Context(), ListTransactionsQuery{
 		AccountID:  accountID,
@@ -466,6 +463,22 @@ func parseDateParam(s string) (time.Time, error) {
 	return time.Time{}, errors.New("invalid date")
 }
 
+// parseDateEndParam is like parseDateParam but treats a bare YYYY-MM-DD value
+// as the end of that day (23:59:59.999999999 UTC) so that the upper-bound
+// filter includes all transactions recorded during that calendar day.
+func parseDateEndParam(s string) (time.Time, error) {
+	if s == "" {
+		return time.Time{}, nil
+	}
+	if t, err := time.Parse(time.RFC3339, s); err == nil {
+		return t, nil
+	}
+	if t, err := time.Parse("2006-01-02", s); err == nil {
+		return t.Add(24*time.Hour - time.Nanosecond), nil
+	}
+	return time.Time{}, errors.New("invalid date")
+}
+
 func parseOptionalIntParam(s string) (*int32, error) {
 	if s == "" {
 		return nil, nil
@@ -484,7 +497,7 @@ func (h *Handler) GetNetWorthStats(w http.ResponseWriter, r *http.Request) {
 		response.Error(w, http.StatusBadRequest, "invalid from")
 		return
 	}
-	to, err := parseDateParam(r.URL.Query().Get("to"))
+	to, err := parseDateEndParam(r.URL.Query().Get("to"))
 	if err != nil {
 		response.Error(w, http.StatusBadRequest, "invalid to")
 		return
@@ -513,7 +526,7 @@ func (h *Handler) GetCategoryStats(w http.ResponseWriter, r *http.Request) {
 		response.Error(w, http.StatusBadRequest, "invalid from")
 		return
 	}
-	to, err := parseDateParam(r.URL.Query().Get("to"))
+	to, err := parseDateEndParam(r.URL.Query().Get("to"))
 	if err != nil {
 		response.Error(w, http.StatusBadRequest, "invalid to")
 		return
@@ -539,7 +552,7 @@ func (h *Handler) GetMonthlyStats(w http.ResponseWriter, r *http.Request) {
 		response.Error(w, http.StatusBadRequest, "invalid from")
 		return
 	}
-	to, err := parseDateParam(r.URL.Query().Get("to"))
+	to, err := parseDateEndParam(r.URL.Query().Get("to"))
 	if err != nil {
 		response.Error(w, http.StatusBadRequest, "invalid to")
 		return
