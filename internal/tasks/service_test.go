@@ -494,7 +494,7 @@ func TestService_GetTimeEntryHistory_DefaultDatesDaily(t *testing.T) {
 
 	now := time.Now().UTC()
 	expectedEnd := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC)
-	expectedStart := expectedEnd.AddDate(0, 0, -30)
+	expectedStart := expectedEnd.AddDate(0, -1, 0)
 
 	repo.EXPECT().
 		GetTimeEntryHistory(mock.Anything, "day", "UTC",

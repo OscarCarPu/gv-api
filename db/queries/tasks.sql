@@ -138,7 +138,7 @@ JOIN task_blocked tb ON tb.id = t.id
 JOIN task_hidden th ON th.id = t.id
 WHERE t.finished_at IS NULL
   AND (sqlc.narg('min_priority')::int IS NULL OR t.priority <= sqlc.narg('min_priority')::int)
-  AND NOT th.hidden
+  AND (NOT th.hidden OR t.priority = 1)
 ORDER BY
   CASE
     WHEN t.task_type = 'standard' AND t.started_at IS NOT NULL THEN 0
