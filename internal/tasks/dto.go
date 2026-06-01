@@ -225,11 +225,11 @@ type UpdateTodoRequest struct {
 }
 
 type UpdateTimeEntryRequest struct {
-	ID         int32      `json:"-"`
-	TaskID     *int32     `json:"task_id"`
-	StartedAt  *time.Time `json:"started_at"`
-	FinishedAt *time.Time `json:"finished_at"`
-	Comment    *string    `json:"comment"`
+	ID         int32        `json:"-"`
+	TaskID     *int32       `json:"task_id"`
+	StartedAt  *time.Time   `json:"started_at"`
+	FinishedAt NullableTime `json:"finished_at"`
+	Comment    *string      `json:"comment"`
 }
 
 type TaskTimeEntriesResponse struct {

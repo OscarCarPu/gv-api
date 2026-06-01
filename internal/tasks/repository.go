@@ -350,9 +350,11 @@ func (r *PostgresRepository) UpdateTimeEntry(ctx context.Context, req UpdateTime
 		params.SetStartedAt = true
 		params.StartedAt = pgtype.Timestamptz{Time: *req.StartedAt, Valid: true}
 	}
-	if req.FinishedAt != nil {
+	if req.FinishedAt.Set {
 		params.SetFinishedAt = true
-		params.FinishedAt = pgtype.Timestamptz{Time: *req.FinishedAt, Valid: true}
+		if req.FinishedAt.Value != nil {
+			params.FinishedAt = pgtype.Timestamptz{Time: *req.FinishedAt.Value, Valid: true}
+		}
 	}
 	if req.Comment != nil {
 		params.SetComment = true
