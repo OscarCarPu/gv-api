@@ -1,0 +1,7 @@
+CREATE TABLE IF NOT EXISTS concello_marks (
+    id INTEGER PRIMARY KEY GENERATED ALWAYS AS IDENTITY,
+    name TEXT NOT NULL,
+    visited_on DATE NOT NULL,
+    description TEXT NOT NULL DEFAULT '',
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);

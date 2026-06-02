@@ -25,6 +25,14 @@ type Category struct {
 	CreatedAt pgtype.Timestamptz `db:"created_at" json:"created_at"`
 }
 
+type ConcelloMark struct {
+	ID          int32              `db:"id" json:"id"`
+	Name        string             `db:"name" json:"name"`
+	VisitedOn   time.Time          `db:"visited_on" json:"visited_on"`
+	Description string             `db:"description" json:"description"`
+	CreatedAt   pgtype.Timestamptz `db:"created_at" json:"created_at"`
+}
+
 type Habit struct {
 	ID                int32    `db:"id" json:"id"`
 	Name              string   `db:"name" json:"name"`

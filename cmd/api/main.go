@@ -21,6 +21,7 @@ import (
 	"gv-api/internal/habits"
 	"gv-api/internal/middleware"
 	"gv-api/internal/plan"
+	"gv-api/internal/rutas"
 	"gv-api/internal/tasks"
 	"gv-api/internal/varieties"
 
@@ -86,6 +87,11 @@ func main() {
 	financeRepo := finance.NewRepository(db)
 	financeService := finance.NewService(financeRepo, loc)
 	financeHandler := finance.NewHandler(financeService)
+
+	// Rutas Setup
+	rutasRepo := rutas.NewRepository(db)
+	rutasService := rutas.NewService(rutasRepo)
+	rutasHandler := rutas.NewHandler(rutasService)
 
 	// Auth Setup
 	authService := auth.NewService(cfg, nil)
@@ -189,6 +195,12 @@ func main() {
 		r.Get("/finance/stats/by-category", financeHandler.GetCategoryStats)
 		r.Get("/finance/stats/monthly", financeHandler.GetMonthlyStats)
 		r.Get("/finance/stats/estimation", financeHandler.GetEstimation)
+
+		r.Get("/rutas/marks", rutasHandler.List)
+		r.Get("/rutas/marks/{id}", rutasHandler.Get)
+		r.Post("/rutas/marks", rutasHandler.Create)
+		r.Put("/rutas/marks/{id}", rutasHandler.Update)
+		r.Delete("/rutas/marks/{id}", rutasHandler.Delete)
 	})
 
 	server := &http.Server{
