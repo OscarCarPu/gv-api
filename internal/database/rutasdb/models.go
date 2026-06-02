@@ -2,20 +2,18 @@
 // versions:
 //   sqlc v1.31.1
 
-package financedb
+package rutasdb
 
 import (
 	"time"
 
 	"github.com/jackc/pgx/v5/pgtype"
-	"github.com/shopspring/decimal"
-	txtype "gv-api/internal/finance/txtype"
 )
 
 type Account struct {
 	ID        int32              `db:"id" json:"id"`
 	Name      string             `db:"name" json:"name"`
-	Total     decimal.Decimal    `db:"total" json:"total"`
+	Total     pgtype.Numeric     `db:"total" json:"total"`
 	CreatedAt pgtype.Timestamptz `db:"created_at" json:"created_at"`
 }
 
@@ -23,7 +21,7 @@ type Category struct {
 	ID        int32              `db:"id" json:"id"`
 	Name      string             `db:"name" json:"name"`
 	ParentID  *int32             `db:"parent_id" json:"parent_id"`
-	Type      txtype.Type        `db:"type" json:"type"`
+	Type      interface{}        `db:"type" json:"type"`
 	CreatedAt pgtype.Timestamptz `db:"created_at" json:"created_at"`
 }
 
@@ -110,8 +108,8 @@ type Todo struct {
 
 type Transaction struct {
 	ID          int32              `db:"id" json:"id"`
-	Type        txtype.Type        `db:"type" json:"type"`
-	Amount      decimal.Decimal    `db:"amount" json:"amount"`
+	Type        interface{}        `db:"type" json:"type"`
+	Amount      pgtype.Numeric     `db:"amount" json:"amount"`
 	AccountID   int32              `db:"account_id" json:"account_id"`
 	ToAccountID *int32             `db:"to_account_id" json:"to_account_id"`
 	Description *string            `db:"description" json:"description"`
