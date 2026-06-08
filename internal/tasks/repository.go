@@ -605,6 +605,13 @@ func (r *PostgresRepository) GetProjectChildren(ctx context.Context, projectID i
 	}
 	children = append(children, topoSortByDeps(projectTasks[projectID])...)
 
+	// Order children by status group. Stable sort keeps the within-group
+	// ordering intact: natural order for sub-projects, dependency order
+	// (topoSortByDeps) for tasks.
+	sort.SliceStable(children, func(i, j int) bool {
+		return childStatusRank(children[i]) < childStatusRank(children[j])
+	})
+
 	if children == nil {
 		children = []ProjectChildNode{}
 	}
@@ -613,6 +620,48 @@ func (r *PostgresRepository) GetProjectChildren(ctx context.Context, projectID i
 		Project:  project,
 		Children: children,
 	}, nil
+}
+
+// childStatusRank returns the display-ordering rank of a project child by its
+// status group. Lower ranks sort first. The order is:
+//
+//	0 projects in progress   1 projects not started
+//	2 task continuous        3 task recurring        4 task in progress
+//	5 task to do             6 projects completed     7 tasks completed
+func childStatusRank(c ProjectChildNode) int {
+	completed := c.FinishedAt != nil
+	started := c.StartedAt != nil
+
+	if c.Type == "project" {
+		switch {
+		case completed:
+			return 6
+		case started:
+			return 0
+		default:
+			return 1
+		}
+	}
+
+	// task
+	switch {
+	case completed:
+		return 7
+	case !started:
+		return 5
+	}
+	taskType := ""
+	if c.TaskType != nil {
+		taskType = *c.TaskType
+	}
+	switch taskType {
+	case "continuous":
+		return 2
+	case "recurring":
+		return 3
+	default:
+		return 4
+	}
 }
 
 // topoSortByDeps reorders a project's task list so that any task whose
