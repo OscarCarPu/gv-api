@@ -12,8 +12,6 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-var ErrNotFound = errors.New("not found")
-
 type Repository interface {
 	Get(ctx context.Context, id int32) (Variety, error)
 	List(ctx context.Context) ([]Variety, error)

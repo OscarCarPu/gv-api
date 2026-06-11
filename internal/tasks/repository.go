@@ -15,10 +15,6 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-var ErrNotFound = errors.New("not found")
-var ErrActiveTimeEntryExists = errors.New("an active time entry already exists")
-var ErrCircularDependency = errors.New("circular task dependency")
-
 type Repository interface {
 	CreateProject(ctx context.Context, name string, description *string, dueAt *time.Time, parentID *int32) (ProjectResponse, error)
 	CreateTask(ctx context.Context, projectID *int32, name string, description *string, dueAt *time.Time, taskType string, recurrence *int32, priority int32) (TaskResponse, error)

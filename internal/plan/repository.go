@@ -11,9 +11,6 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-var ErrNotFound = errors.New("not found")
-var ErrTaskNotFound = errors.New("task not found")
-
 type Repository interface {
 	ListByDate(ctx context.Context, date time.Time) ([]PlanBlockResponse, error)
 	Get(ctx context.Context, id int32) (PlanBlockResponse, error)

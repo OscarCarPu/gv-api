@@ -10,8 +10,6 @@ import (
 	"github.com/jackc/pgx/v5"
 )
 
-var ErrNotFound = errors.New("not found")
-
 type Repository interface {
 	GetHabitsWithLogs(ctx context.Context, date time.Time) ([]HabitWithLog, error)
 	UpsertLog(ctx context.Context, habitID int32, date time.Time, value float32) error
