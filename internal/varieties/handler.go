@@ -39,6 +39,28 @@ func validateScores(scent, flavor, power, quality float32) error {
 	return nil
 }
 
+// validateVarietyFields covers the checks shared by Create and Update.
+// Returns the trimmed judge and "" when valid, or the client-facing error message.
+func validateVarietyFields(name, judge string, scent, flavor, power, quality float32) (string, string) {
+	if name == "" {
+		return "", "name is required"
+	}
+	if len(name) > 40 {
+		return "", "name must be at most 40 characters"
+	}
+	judge = strings.TrimSpace(judge)
+	if judge == "" {
+		return "", "judge is required"
+	}
+	if len(judge) > 40 {
+		return "", "judge must be at most 40 characters"
+	}
+	if err := validateScores(scent, flavor, power, quality); err != nil {
+		return "", err.Error()
+	}
+	return judge, ""
+}
+
 // Get -> GET /varieties/{id}
 func (h *Handler) Get(w http.ResponseWriter, r *http.Request) {
 	id, err := httputil.ParseIDParam(r, "variety")
@@ -79,27 +101,12 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if req.Name == "" {
-		response.Error(w, http.StatusBadRequest, "name is required")
+	judge, msg := validateVarietyFields(req.Name, req.Judge, req.Scent, req.Flavor, req.Power, req.Quality)
+	if msg != "" {
+		response.Error(w, http.StatusBadRequest, msg)
 		return
 	}
-	if len(req.Name) > 40 {
-		response.Error(w, http.StatusBadRequest, "name must be at most 40 characters")
-		return
-	}
-	req.Judge = strings.TrimSpace(req.Judge)
-	if req.Judge == "" {
-		response.Error(w, http.StatusBadRequest, "judge is required")
-		return
-	}
-	if len(req.Judge) > 40 {
-		response.Error(w, http.StatusBadRequest, "judge must be at most 40 characters")
-		return
-	}
-	if err := validateScores(req.Scent, req.Flavor, req.Power, req.Quality); err != nil {
-		response.Error(w, http.StatusBadRequest, err.Error())
-		return
-	}
+	req.Judge = judge
 
 	v, err := h.service.Create(r.Context(), req)
 	if err != nil {
@@ -125,27 +132,12 @@ func (h *Handler) Update(w http.ResponseWriter, r *http.Request) {
 	}
 	req.ID = id
 
-	if req.Name == "" {
-		response.Error(w, http.StatusBadRequest, "name is required")
+	judge, msg := validateVarietyFields(req.Name, req.Judge, req.Scent, req.Flavor, req.Power, req.Quality)
+	if msg != "" {
+		response.Error(w, http.StatusBadRequest, msg)
 		return
 	}
-	if len(req.Name) > 40 {
-		response.Error(w, http.StatusBadRequest, "name must be at most 40 characters")
-		return
-	}
-	req.Judge = strings.TrimSpace(req.Judge)
-	if req.Judge == "" {
-		response.Error(w, http.StatusBadRequest, "judge is required")
-		return
-	}
-	if len(req.Judge) > 40 {
-		response.Error(w, http.StatusBadRequest, "judge must be at most 40 characters")
-		return
-	}
-	if err := validateScores(req.Scent, req.Flavor, req.Power, req.Quality); err != nil {
-		response.Error(w, http.StatusBadRequest, err.Error())
-		return
-	}
+	req.Judge = judge
 
 	v, err := h.service.Update(r.Context(), req)
 	if err != nil {

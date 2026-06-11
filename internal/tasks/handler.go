@@ -57,13 +57,8 @@ func (h *Handler) CreateProject(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if req.Name == "" {
-		response.Error(w, http.StatusBadRequest, "name is required")
-		return
-	}
-
-	if len(req.Name) > 40 {
-		response.Error(w, http.StatusBadRequest, "name must be at most 40 characters")
+	if msg := validateName(req.Name); msg != "" {
+		response.Error(w, http.StatusBadRequest, msg)
 		return
 	}
 
@@ -83,23 +78,14 @@ func (h *Handler) CreateTask(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if req.Name == "" {
-		response.Error(w, http.StatusBadRequest, "name is required")
+	if msg := validateName(req.Name); msg != "" {
+		response.Error(w, http.StatusBadRequest, msg)
 		return
 	}
 
-	if len(req.Name) > 40 {
-		response.Error(w, http.StatusBadRequest, "name must be at most 40 characters")
+	if msg := validateTaskType(req.TaskType); msg != "" {
+		response.Error(w, http.StatusBadRequest, msg)
 		return
-	}
-
-	if req.TaskType != nil {
-		switch *req.TaskType {
-		case "standard", "continuous", "recurring":
-		default:
-			response.Error(w, http.StatusBadRequest, "task_type must be standard, continuous, or recurring")
-			return
-		}
 	}
 
 	isRecurring := req.TaskType != nil && *req.TaskType == "recurring"
@@ -108,8 +94,8 @@ func (h *Handler) CreateTask(w http.ResponseWriter, r *http.Request) {
 			response.Error(w, http.StatusBadRequest, "recurrence is required when task_type is recurring")
 			return
 		}
-		if *req.Recurrence <= 0 {
-			response.Error(w, http.StatusBadRequest, "recurrence must be a positive number of days")
+		if msg := validateRecurrenceValue(req.Recurrence); msg != "" {
+			response.Error(w, http.StatusBadRequest, msg)
 			return
 		}
 	} else if req.Recurrence != nil {
@@ -117,8 +103,8 @@ func (h *Handler) CreateTask(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if req.Priority != nil && (*req.Priority < 1 || *req.Priority > 5) {
-		response.Error(w, http.StatusBadRequest, "priority must be between 1 and 5")
+	if msg := validatePriority(req.Priority); msg != "" {
+		response.Error(w, http.StatusBadRequest, msg)
 		return
 	}
 
@@ -143,13 +129,8 @@ func (h *Handler) CreateTodo(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if req.Name == "" {
-		response.Error(w, http.StatusBadRequest, "name is required")
-		return
-	}
-
-	if len(req.Name) > 40 {
-		response.Error(w, http.StatusBadRequest, "name must be at most 40 characters")
+	if msg := validateName(req.Name); msg != "" {
+		response.Error(w, http.StatusBadRequest, msg)
 		return
 	}
 
@@ -206,8 +187,8 @@ func (h *Handler) UpdateProject(w http.ResponseWriter, r *http.Request) {
 	}
 	req.ID = id
 
-	if req.Name != nil && len(*req.Name) > 40 {
-		response.Error(w, http.StatusBadRequest, "name must be at most 40 characters")
+	if msg := validateOptionalName(req.Name); msg != "" {
+		response.Error(w, http.StatusBadRequest, msg)
 		return
 	}
 
@@ -238,16 +219,14 @@ func (h *Handler) UpdateTask(w http.ResponseWriter, r *http.Request) {
 	}
 	req.ID = id
 
-	if req.Name != nil && len(*req.Name) > 40 {
-		response.Error(w, http.StatusBadRequest, "name must be at most 40 characters")
+	if msg := validateOptionalName(req.Name); msg != "" {
+		response.Error(w, http.StatusBadRequest, msg)
 		return
 	}
 
 	if req.TaskType != nil {
-		switch *req.TaskType {
-		case "standard", "continuous", "recurring":
-		default:
-			response.Error(w, http.StatusBadRequest, "task_type must be standard, continuous, or recurring")
+		if msg := validateTaskType(req.TaskType); msg != "" {
+			response.Error(w, http.StatusBadRequest, msg)
 			return
 		}
 		if *req.TaskType == "recurring" && req.Recurrence == nil {
@@ -260,13 +239,13 @@ func (h *Handler) UpdateTask(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	if req.Recurrence != nil && *req.Recurrence <= 0 {
-		response.Error(w, http.StatusBadRequest, "recurrence must be a positive number of days")
+	if msg := validateRecurrenceValue(req.Recurrence); msg != "" {
+		response.Error(w, http.StatusBadRequest, msg)
 		return
 	}
 
-	if req.Priority != nil && (*req.Priority < 1 || *req.Priority > 5) {
-		response.Error(w, http.StatusBadRequest, "priority must be between 1 and 5")
+	if msg := validatePriority(req.Priority); msg != "" {
+		response.Error(w, http.StatusBadRequest, msg)
 		return
 	}
 
@@ -297,8 +276,8 @@ func (h *Handler) UpdateTodo(w http.ResponseWriter, r *http.Request) {
 	}
 	req.ID = id
 
-	if req.Name != nil && len(*req.Name) > 40 {
-		response.Error(w, http.StatusBadRequest, "name must be at most 40 characters")
+	if msg := validateOptionalName(req.Name); msg != "" {
+		response.Error(w, http.StatusBadRequest, msg)
 		return
 	}
 
