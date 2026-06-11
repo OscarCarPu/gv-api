@@ -7,7 +7,7 @@ import (
 
 	"gv-api/internal/database/habitsdb"
 	"gv-api/internal/habits"
-	testutil "gv-api/internal/testutil"
+	"gv-api/internal/testutil"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
@@ -264,4 +264,3 @@ func TestIntegration_UpdateHabit_NotFound(t *testing.T) {
 	_, err := repo.UpdateHabit(ctx, 99999, "X", nil, "daily", nil, nil, true)
 	require.ErrorIs(t, err, habits.ErrNotFound)
 }
-
