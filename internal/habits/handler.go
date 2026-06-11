@@ -4,13 +4,11 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"net/http"
-	"strconv"
 
 	"gv-api/internal/response"
 
-	"github.com/go-chi/chi/v5"
+	"gv-api/internal/httputil"
 )
 
 type ServiceInterface interface {
@@ -28,15 +26,6 @@ type Handler struct {
 
 func NewHandler(s ServiceInterface) *Handler {
 	return &Handler{service: s}
-}
-
-func parseIDParam(r *http.Request) (int32, error) {
-	idStr := chi.URLParam(r, "id")
-	id, err := strconv.Atoi(idStr)
-	if err != nil || id <= 0 {
-		return 0, fmt.Errorf("invalid habit id")
-	}
-	return int32(id), nil
 }
 
 // GetDaily -> GET /habits?date=2023-10-27
@@ -70,7 +59,7 @@ func (h *Handler) UpsertLog(w http.ResponseWriter, r *http.Request) {
 
 // DeleteHabit -> DELETE /habits/{id}
 func (h *Handler) DeleteHabit(w http.ResponseWriter, r *http.Request) {
-	id, err := parseIDParam(r)
+	id, err := httputil.ParseIDParam(r, "habit")
 	if err != nil {
 		response.Error(w, http.StatusBadRequest, err.Error())
 		return
@@ -86,7 +75,7 @@ func (h *Handler) DeleteHabit(w http.ResponseWriter, r *http.Request) {
 
 // GetHistory -> GET /habits/{id}/history
 func (h *Handler) GetHistory(w http.ResponseWriter, r *http.Request) {
-	id, err := parseIDParam(r)
+	id, err := httputil.ParseIDParam(r, "habit")
 	if err != nil {
 		response.Error(w, http.StatusBadRequest, err.Error())
 		return
@@ -165,7 +154,7 @@ func (h *Handler) CreateHabit(w http.ResponseWriter, r *http.Request) {
 
 // UpdateHabit -> PUT /habits/{id}
 func (h *Handler) UpdateHabit(w http.ResponseWriter, r *http.Request) {
-	id, err := parseIDParam(r)
+	id, err := httputil.ParseIDParam(r, "habit")
 	if err != nil {
 		response.Error(w, http.StatusBadRequest, err.Error())
 		return

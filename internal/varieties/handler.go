@@ -6,12 +6,11 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"strconv"
 	"strings"
 
 	"gv-api/internal/response"
+	"gv-api/internal/httputil"
 
-	"github.com/go-chi/chi/v5"
 )
 
 type ServiceInterface interface {
@@ -30,14 +29,6 @@ func NewHandler(s ServiceInterface) *Handler {
 	return &Handler{service: s}
 }
 
-func parseID(r *http.Request) (int32, error) {
-	idStr := chi.URLParam(r, "id")
-	id, err := strconv.Atoi(idStr)
-	if err != nil || id <= 0 {
-		return 0, errors.New("invalid variety id")
-	}
-	return int32(id), nil
-}
 
 func validateScores(scent, flavor, power, quality float32) error {
 	for name, v := range map[string]float32{"scent": scent, "flavor": flavor, "power": power, "quality": quality} {
@@ -50,7 +41,7 @@ func validateScores(scent, flavor, power, quality float32) error {
 
 // Get -> GET /varieties/{id}
 func (h *Handler) Get(w http.ResponseWriter, r *http.Request) {
-	id, err := parseID(r)
+	id, err := httputil.ParseIDParam(r, "variety")
 	if err != nil {
 		response.Error(w, http.StatusBadRequest, err.Error())
 		return
@@ -121,7 +112,7 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 
 // Update -> PUT /varieties/{id}
 func (h *Handler) Update(w http.ResponseWriter, r *http.Request) {
-	id, err := parseID(r)
+	id, err := httputil.ParseIDParam(r, "variety")
 	if err != nil {
 		response.Error(w, http.StatusBadRequest, err.Error())
 		return
@@ -171,7 +162,7 @@ func (h *Handler) Update(w http.ResponseWriter, r *http.Request) {
 
 // Delete -> DELETE /varieties/{id}
 func (h *Handler) Delete(w http.ResponseWriter, r *http.Request) {
-	id, err := parseID(r)
+	id, err := httputil.ParseIDParam(r, "variety")
 	if err != nil {
 		response.Error(w, http.StatusBadRequest, err.Error())
 		return

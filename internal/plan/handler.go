@@ -4,13 +4,11 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"net/http"
-	"strconv"
 
 	"gv-api/internal/response"
+	"gv-api/internal/httputil"
 
-	"github.com/go-chi/chi/v5"
 )
 
 type ServiceInterface interface {
@@ -27,15 +25,6 @@ type Handler struct {
 
 func NewHandler(s ServiceInterface) *Handler {
 	return &Handler{service: s}
-}
-
-func parseIDParam(r *http.Request) (int32, error) {
-	idStr := chi.URLParam(r, "id")
-	id, err := strconv.Atoi(idStr)
-	if err != nil || id <= 0 {
-		return 0, fmt.Errorf("invalid plan block id")
-	}
-	return int32(id), nil
 }
 
 func (h *Handler) GetToday(w http.ResponseWriter, r *http.Request) {
@@ -74,7 +63,7 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) Update(w http.ResponseWriter, r *http.Request) {
-	id, err := parseIDParam(r)
+	id, err := httputil.ParseIDParam(r, "plan block")
 	if err != nil {
 		response.Error(w, http.StatusBadRequest, err.Error())
 		return
@@ -107,7 +96,7 @@ func (h *Handler) Update(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) Delete(w http.ResponseWriter, r *http.Request) {
-	id, err := parseIDParam(r)
+	id, err := httputil.ParseIDParam(r, "plan block")
 	if err != nil {
 		response.Error(w, http.StatusBadRequest, err.Error())
 		return
