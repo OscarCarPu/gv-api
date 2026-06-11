@@ -6,9 +6,10 @@ import (
 	"errors"
 	"net/http"
 
+	"gv-api/internal/httputil"
 	"gv-api/internal/response"
 
-	"gv-api/internal/httputil"
+	"github.com/go-chi/chi/v5"
 )
 
 type ServiceInterface interface {
@@ -26,6 +27,16 @@ type Handler struct {
 
 func NewHandler(s ServiceInterface) *Handler {
 	return &Handler{service: s}
+}
+
+// RegisterRoutes mounts all habit endpoints. Requires full auth.
+func (h *Handler) RegisterRoutes(r chi.Router) {
+	r.Get("/habits", h.GetDaily)
+	r.Post("/habits", h.CreateHabit)
+	r.Put("/habits/{id}", h.UpdateHabit)
+	r.Delete("/habits/{id}", h.DeleteHabit)
+	r.Post("/habits/log", h.UpsertLog)
+	r.Get("/habits/{id}/history", h.GetHistory)
 }
 
 // validateHabitFields covers the checks shared by CreateHabit and UpdateHabit.

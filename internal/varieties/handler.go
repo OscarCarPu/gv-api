@@ -8,9 +8,10 @@ import (
 	"net/http"
 	"strings"
 
-	"gv-api/internal/response"
 	"gv-api/internal/httputil"
+	"gv-api/internal/response"
 
+	"github.com/go-chi/chi/v5"
 )
 
 type ServiceInterface interface {
@@ -27,6 +28,16 @@ type Handler struct {
 
 func NewHandler(s ServiceInterface) *Handler {
 	return &Handler{service: s}
+}
+
+// RegisterRoutes mounts all variety endpoints. Unlike the other domains,
+// these are mounted under the semiprivate auth group (semi or full token).
+func (h *Handler) RegisterRoutes(r chi.Router) {
+	r.Get("/varieties", h.List)
+	r.Get("/varieties/{id}", h.Get)
+	r.Post("/varieties", h.Create)
+	r.Put("/varieties/{id}", h.Update)
+	r.Delete("/varieties/{id}", h.Delete)
 }
 
 

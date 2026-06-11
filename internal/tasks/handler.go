@@ -12,6 +12,8 @@ import (
 	"gv-api/internal/history"
 	"gv-api/internal/httputil"
 	"gv-api/internal/response"
+
+	"github.com/go-chi/chi/v5"
 )
 
 type ServiceInterface interface {
@@ -48,6 +50,40 @@ type Handler struct {
 
 func NewHandler(s ServiceInterface) *Handler {
 	return &Handler{service: s}
+}
+
+// RegisterRoutes mounts all task endpoints (projects, tasks, todos and
+// time entries). Requires full auth.
+func (h *Handler) RegisterRoutes(r chi.Router) {
+	r.Get("/tasks/tree", h.GetActiveTree)
+
+	r.Get("/tasks/projects", h.GetRootProjects)
+	r.Get("/tasks/projects/list-fast", h.ListProjectsFast)
+	r.Get("/tasks/projects/{id}", h.GetProject)
+	r.Get("/tasks/projects/{id}/children", h.GetProjectChildren)
+	r.Post("/tasks/projects", h.CreateProject)
+	r.Patch("/tasks/projects/{id}", h.UpdateProject)
+	r.Delete("/tasks/projects/{id}", h.DeleteProject)
+
+	r.Get("/tasks/tasks/by-due-date", h.GetTasksByDueDate)
+	r.Get("/tasks/tasks/list-fast", h.ListTasksFast)
+	r.Get("/tasks/tasks/{id}", h.GetTask)
+	r.Get("/tasks/tasks/{id}/time-entries", h.GetTaskTimeEntries)
+	r.Post("/tasks/tasks", h.CreateTask)
+	r.Patch("/tasks/tasks/{id}", h.UpdateTask)
+	r.Delete("/tasks/tasks/{id}", h.DeleteTask)
+
+	r.Post("/tasks/todos", h.CreateTodo)
+	r.Patch("/tasks/todos/{id}", h.UpdateTodo)
+	r.Delete("/tasks/todos/{id}", h.DeleteTodo)
+
+	r.Get("/tasks/time-entries", h.GetTimeEntriesByDateRange)
+	r.Get("/tasks/time-entries/active", h.GetActiveTimeEntry)
+	r.Get("/tasks/time-entries/summary", h.GetTimeEntrySummary)
+	r.Get("/tasks/time-entries/history", h.GetTimeEntryHistory)
+	r.Post("/tasks/time-entries", h.CreateTimeEntry)
+	r.Patch("/tasks/time-entries/{id}", h.UpdateTimeEntry)
+	r.Delete("/tasks/time-entries/{id}", h.DeleteTimeEntry)
 }
 
 func (h *Handler) CreateProject(w http.ResponseWriter, r *http.Request) {

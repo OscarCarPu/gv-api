@@ -12,6 +12,8 @@ import (
 	"gv-api/internal/finance/txtype"
 	"gv-api/internal/httputil"
 	"gv-api/internal/response"
+
+	"github.com/go-chi/chi/v5"
 )
 
 type ServiceInterface interface {
@@ -47,6 +49,35 @@ type Handler struct {
 
 func NewHandler(s ServiceInterface) *Handler {
 	return &Handler{service: s}
+}
+
+// RegisterRoutes mounts all finance endpoints (accounts, categories,
+// transactions, overview and stats). Requires full auth.
+func (h *Handler) RegisterRoutes(r chi.Router) {
+	r.Get("/finance/accounts", h.ListAccounts)
+	r.Get("/finance/accounts/{id}", h.GetAccount)
+	r.Post("/finance/accounts", h.CreateAccount)
+	r.Put("/finance/accounts/{id}", h.UpdateAccount)
+	r.Delete("/finance/accounts/{id}", h.DeleteAccount)
+
+	r.Get("/finance/overview", h.GetOverview)
+
+	r.Get("/finance/categories", h.ListCategories)
+	r.Get("/finance/categories/{id}", h.GetCategory)
+	r.Post("/finance/categories", h.CreateCategory)
+	r.Put("/finance/categories/{id}", h.UpdateCategory)
+	r.Delete("/finance/categories/{id}", h.DeleteCategory)
+
+	r.Get("/finance/transactions", h.ListTransactions)
+	r.Get("/finance/transactions/{id}", h.GetTransaction)
+	r.Post("/finance/transactions", h.CreateTransaction)
+	r.Put("/finance/transactions/{id}", h.UpdateTransaction)
+	r.Delete("/finance/transactions/{id}", h.DeleteTransaction)
+
+	r.Get("/finance/stats/networth", h.GetNetWorthStats)
+	r.Get("/finance/stats/by-category", h.GetCategoryStats)
+	r.Get("/finance/stats/monthly", h.GetMonthlyStats)
+	r.Get("/finance/stats/estimation", h.GetEstimation)
 }
 
 func validateAccount(name string) (string, string) {
