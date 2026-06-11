@@ -8,6 +8,8 @@ import (
 
 	"gv-api/internal/httputil"
 	"gv-api/internal/response"
+
+	"github.com/go-chi/chi/v5"
 )
 
 type Handler struct {
@@ -16,6 +18,15 @@ type Handler struct {
 
 func NewHandler(s ServiceInterface) *Handler {
 	return &Handler{service: s}
+}
+
+// RegisterRoutes mounts all rutas endpoints. Requires full auth.
+func (h *Handler) RegisterRoutes(r chi.Router) {
+	r.Get("/rutas/marks", h.List)
+	r.Get("/rutas/marks/{id}", h.Get)
+	r.Post("/rutas/marks", h.Create)
+	r.Put("/rutas/marks/{id}", h.Update)
+	r.Delete("/rutas/marks/{id}", h.Delete)
 }
 
 // List -> GET /rutas/marks

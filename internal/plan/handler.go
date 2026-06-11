@@ -6,9 +6,10 @@ import (
 	"errors"
 	"net/http"
 
-	"gv-api/internal/response"
 	"gv-api/internal/httputil"
+	"gv-api/internal/response"
 
+	"github.com/go-chi/chi/v5"
 )
 
 type ServiceInterface interface {
@@ -25,6 +26,15 @@ type Handler struct {
 
 func NewHandler(s ServiceInterface) *Handler {
 	return &Handler{service: s}
+}
+
+// RegisterRoutes mounts all plan endpoints. Requires full auth.
+func (h *Handler) RegisterRoutes(r chi.Router) {
+	r.Get("/plan/today", h.GetToday)
+	r.Post("/plan/blocks", h.Create)
+	r.Delete("/plan/blocks/future", h.DeleteFuture)
+	r.Put("/plan/blocks/{id}", h.Update)
+	r.Delete("/plan/blocks/{id}", h.Delete)
 }
 
 func (h *Handler) GetToday(w http.ResponseWriter, r *http.Request) {
