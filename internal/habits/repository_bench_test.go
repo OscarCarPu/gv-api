@@ -8,7 +8,7 @@ import (
 
 	"gv-api/internal/database/habitsdb"
 	"gv-api/internal/habits"
-	testutil "gv-api/internal/testutils"
+	testutil "gv-api/internal/testutil"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 )
