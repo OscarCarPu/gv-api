@@ -28,6 +28,33 @@ func NewHandler(s ServiceInterface) *Handler {
 	return &Handler{service: s}
 }
 
+// validateHabitFields covers the checks shared by CreateHabit and UpdateHabit.
+// frequency may be nil (create allows omitting it); returns "" when valid.
+func validateHabitFields(name string, frequency *string, targetMin, targetMax *float32) string {
+	if name == "" {
+		return "name is required"
+	}
+	if len(name) > 40 {
+		return "name must be at most 40 characters"
+	}
+	if frequency != nil {
+		valid := map[string]bool{"daily": true, "weekly": true, "monthly": true}
+		if !valid[*frequency] {
+			return "frequency must be daily, weekly, or monthly"
+		}
+	}
+	if targetMin != nil && *targetMin < 0 {
+		return "target_min must be >= 0"
+	}
+	if targetMax != nil && *targetMax < 0 {
+		return "target_max must be >= 0"
+	}
+	if targetMin != nil && targetMax != nil && *targetMin > *targetMax {
+		return "target_min must be <= target_max"
+	}
+	return ""
+}
+
 // GetDaily -> GET /habits?date=2023-10-27
 func (h *Handler) GetDaily(w http.ResponseWriter, r *http.Request) {
 	dateParam := r.URL.Query().Get("date")
@@ -110,36 +137,8 @@ func (h *Handler) CreateHabit(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if req.Name == "" {
-		response.Error(w, http.StatusBadRequest, "name is required")
-		return
-	}
-
-	if len(req.Name) > 40 {
-		response.Error(w, http.StatusBadRequest, "name must be at most 40 characters")
-		return
-	}
-
-	if req.Frequency != nil {
-		valid := map[string]bool{"daily": true, "weekly": true, "monthly": true}
-		if !valid[*req.Frequency] {
-			response.Error(w, http.StatusBadRequest, "frequency must be daily, weekly, or monthly")
-			return
-		}
-	}
-
-	if req.TargetMin != nil && *req.TargetMin < 0 {
-		response.Error(w, http.StatusBadRequest, "target_min must be >= 0")
-		return
-	}
-
-	if req.TargetMax != nil && *req.TargetMax < 0 {
-		response.Error(w, http.StatusBadRequest, "target_max must be >= 0")
-		return
-	}
-
-	if req.TargetMin != nil && req.TargetMax != nil && *req.TargetMin > *req.TargetMax {
-		response.Error(w, http.StatusBadRequest, "target_min must be <= target_max")
+	if msg := validateHabitFields(req.Name, req.Frequency, req.TargetMin, req.TargetMax); msg != "" {
+		response.Error(w, http.StatusBadRequest, msg)
 		return
 	}
 
@@ -167,34 +166,8 @@ func (h *Handler) UpdateHabit(w http.ResponseWriter, r *http.Request) {
 	}
 	req.ID = id
 
-	if req.Name == "" {
-		response.Error(w, http.StatusBadRequest, "name is required")
-		return
-	}
-
-	if len(req.Name) > 40 {
-		response.Error(w, http.StatusBadRequest, "name must be at most 40 characters")
-		return
-	}
-
-	valid := map[string]bool{"daily": true, "weekly": true, "monthly": true}
-	if !valid[req.Frequency] {
-		response.Error(w, http.StatusBadRequest, "frequency must be daily, weekly, or monthly")
-		return
-	}
-
-	if req.TargetMin != nil && *req.TargetMin < 0 {
-		response.Error(w, http.StatusBadRequest, "target_min must be >= 0")
-		return
-	}
-
-	if req.TargetMax != nil && *req.TargetMax < 0 {
-		response.Error(w, http.StatusBadRequest, "target_max must be >= 0")
-		return
-	}
-
-	if req.TargetMin != nil && req.TargetMax != nil && *req.TargetMin > *req.TargetMax {
-		response.Error(w, http.StatusBadRequest, "target_min must be <= target_max")
+	if msg := validateHabitFields(req.Name, &req.Frequency, req.TargetMin, req.TargetMax); msg != "" {
+		response.Error(w, http.StatusBadRequest, msg)
 		return
 	}
 
