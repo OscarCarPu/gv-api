@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"gv-api/internal/tasks"
-	testutil "gv-api/internal/testutils"
+	testutil "gv-api/internal/testutil"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 )
