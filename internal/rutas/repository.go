@@ -20,8 +20,6 @@ func parseDate(s string) (time.Time, error) {
 	return t, nil
 }
 
-var ErrNotFound = errors.New("not found")
-
 type Repository interface {
 	List(ctx context.Context) ([]ConcelloMark, error)
 	Get(ctx context.Context, id int32) (ConcelloMark, error)

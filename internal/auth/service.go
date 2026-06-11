@@ -1,19 +1,12 @@
 package auth
 
 import (
-	"errors"
 	"time"
 
 	"gv-api/internal/config"
 
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/pquerna/otp/totp"
-)
-
-var (
-	ErrInvalidPassword = errors.New("invalid password")
-	ErrInvalidToken    = errors.New("invalid token")
-	ErrInvalidCode     = errors.New("invalid 2fa code")
 )
 
 type Claims struct {

@@ -2,18 +2,10 @@ package plan
 
 import (
 	"context"
-	"errors"
 	"strings"
 	"time"
 
 	"gv-api/internal/tasks"
-)
-
-var (
-	ErrInvalidTimeRange = errors.New("ended_at must be after started_at")
-	ErrLabelRequired    = errors.New("label or task_id is required")
-	ErrLabelTooLong     = errors.New("label must be at most 200 characters")
-	ErrOverlap          = errors.New("plan block overlaps with an existing one")
 )
 
 type tasksSummaryProvider interface {
