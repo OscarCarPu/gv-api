@@ -1166,17 +1166,18 @@ const listTasksFast = `-- name: ListTasksFast :many
 WITH RECURSIVE project_tree AS (
     SELECT id, name, ARRAY[name::text] AS sort_path
     FROM projects
-    WHERE parent_id IS NULL AND finished_at IS NULL
+    WHERE parent_id IS NULL AND finished_at IS NULL AND started_at IS NOT NULL
     UNION ALL
     SELECT c.id, c.name, pt.sort_path || c.name::text
     FROM projects c
     JOIN project_tree pt ON c.parent_id = pt.id
-    WHERE c.finished_at IS NULL
+    WHERE c.finished_at IS NULL AND c.started_at IS NOT NULL
 )
 SELECT t.id, t.name, t.project_id, pt.name AS project_name, t.task_type, t.recurrence, t.priority
 FROM tasks t
 LEFT JOIN project_tree pt ON t.project_id = pt.id
 WHERE t.finished_at IS NULL
+AND (t.project_id IS NULL OR pt.id IS NOT NULL)
 ORDER BY
     CASE WHEN t.project_id IS NULL THEN 1 ELSE 0 END,
     pt.sort_path,
