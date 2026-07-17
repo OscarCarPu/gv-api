@@ -26,6 +26,10 @@ type Repository interface {
 	UpdateTimeEntry(ctx context.Context, req UpdateTimeEntryRequest) (TimeEntryResponse, error)
 	ListProjectsFast(ctx context.Context) ([]ProjectFastResponse, error)
 	ListTasksFast(ctx context.Context) ([]TaskFastResponse, error)
+	// ListOpenTasks / ListOpenProjects return every unfinished task/project
+	// (id + name), regardless of project state — used to resolve names to ids.
+	ListOpenTasks(ctx context.Context) ([]TaskFastResponse, error)
+	ListOpenProjects(ctx context.Context) ([]ProjectFastResponse, error)
 	GetRootProjects(ctx context.Context) ([]ProjectResponse, error)
 	GetActiveProjects(ctx context.Context) ([]ActiveProject, error)
 	GetUnfinishedTasks(ctx context.Context, minPriority *int32) ([]UnfinishedTask, error)
@@ -404,7 +408,6 @@ func (r *PostgresRepository) CreateTimeEntry(ctx context.Context, taskID int32, 
 		Comment:    row.Comment,
 	}, nil
 }
-
 
 func (r *PostgresRepository) GetActiveProjects(ctx context.Context) ([]ActiveProject, error) {
 	rows, err := r.q.GetActiveProjects(ctx)
@@ -1025,6 +1028,42 @@ func (r *PostgresRepository) ListTasksFast(ctx context.Context) ([]TaskFastRespo
 	}
 
 	return tasks, nil
+}
+
+// ListOpenTasks returns id + name of every unfinished task (any project state).
+func (r *PostgresRepository) ListOpenTasks(ctx context.Context) ([]TaskFastResponse, error) {
+	rows, err := r.pool.Query(ctx, `SELECT id, name FROM tasks WHERE finished_at IS NULL ORDER BY name`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []TaskFastResponse
+	for rows.Next() {
+		var t TaskFastResponse
+		if err := rows.Scan(&t.ID, &t.Name); err != nil {
+			return nil, err
+		}
+		out = append(out, t)
+	}
+	return out, rows.Err()
+}
+
+// ListOpenProjects returns id + name of every unfinished project (any state).
+func (r *PostgresRepository) ListOpenProjects(ctx context.Context) ([]ProjectFastResponse, error) {
+	rows, err := r.pool.Query(ctx, `SELECT id, name FROM projects WHERE finished_at IS NULL ORDER BY name`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []ProjectFastResponse
+	for rows.Next() {
+		var p ProjectFastResponse
+		if err := rows.Scan(&p.ID, &p.Name); err != nil {
+			return nil, err
+		}
+		out = append(out, p)
+	}
+	return out, rows.Err()
 }
 
 func (r *PostgresRepository) ListProjectsFast(ctx context.Context) ([]ProjectFastResponse, error) {
