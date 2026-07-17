@@ -12,6 +12,8 @@ import (
 	_ "time/tzdata"
 
 	"gv-api/internal/actor"
+	"gv-api/internal/assistant"
+	"gv-api/internal/assistant/llm"
 	"gv-api/internal/auth"
 	"gv-api/internal/config"
 	"gv-api/internal/database"
@@ -93,6 +95,31 @@ func main() {
 	rutasService := rutas.NewService(rutasRepo)
 	rutasHandler := rutas.NewHandler(rutasService)
 
+	// Assistant ("Voz") Setup
+	var assistantProvider llm.Provider
+	switch cfg.AssistantProvider {
+	case "anthropic":
+		assistantProvider = llm.NewAnthropicProvider(cfg.AnthropicAPIKey, cfg.AssistantModel)
+	case "gemini":
+		assistantProvider = llm.NewGeminiProvider(cfg.GeminiAPIKey, cfg.AssistantModel)
+	default:
+		assistantProvider = llm.NewStubProvider()
+	}
+	assistantExecutor := assistant.NewReadExecutor(db, cfg.AssistantReadTimeoutMS, cfg.AssistantMaxRows, 40)
+	assistantRegistry := assistant.NewActionRegistry(taskService, habitService, financeService, planService, rutasService, varietyService)
+	assistantUsageRepo := assistant.NewUsageRepository(db)
+	assistantService := assistant.NewService(
+		assistantProvider,
+		assistantExecutor,
+		assistantRegistry,
+		assistantUsageRepo,
+		cfg.AssistantSigningSecret,
+		10*time.Minute,
+		cfg.Prices,
+		loc,
+	)
+	assistantHandler := assistant.NewHandler(assistantService, loc)
+
 	// Auth Setup
 	authService := auth.NewService(cfg, nil)
 	authHandler := auth.NewHandler(authService)
@@ -134,6 +161,7 @@ func main() {
 		planHandler.RegisterRoutes(r)
 		financeHandler.RegisterRoutes(r)
 		rutasHandler.RegisterRoutes(r)
+		assistantHandler.RegisterRoutes(r)
 	})
 
 	server := &http.Server{
