@@ -10,15 +10,26 @@ type SuggestRequest struct {
 	Token string `json:"token,omitempty"`
 }
 
+// SuggestStep is one internal read-only query the assistant ran on its own
+// while building the proposal — to find an exact name, see what data exists, or
+// check its final query. These need no approval (a read cannot modify data) and
+// are reported only so the user can see what informed the proposal.
+type SuggestStep struct {
+	SQL      string `json:"sql"`
+	RowCount int    `json:"row_count"`
+	Error    string `json:"error,omitempty"`
+}
+
 // SuggestResponse is the proposal shown to the user for approval. Token is the
 // opaque, signed representation the client echoes back to /execute; it is empty
 // when Kind is "reject".
 type SuggestResponse struct {
-	Kind        string `json:"kind"` // read | write | reject
-	Explanation string `json:"explanation"`
-	Query       string `json:"query"`             // read: the SELECT; write: a human description
-	Warning     string `json:"warning,omitempty"` // e.g. destructive-write notice
-	Token       string `json:"token,omitempty"`
+	Kind        string        `json:"kind"` // read | write | reject
+	Explanation string        `json:"explanation"`
+	Query       string        `json:"query"`             // read: the SELECT; write: a human description
+	Warning     string        `json:"warning,omitempty"` // e.g. destructive-write notice
+	Token       string        `json:"token,omitempty"`
+	Steps       []SuggestStep `json:"steps,omitempty"` // internal reads run while deciding
 }
 
 // ExecuteRequest is the body of POST /assistant/execute.

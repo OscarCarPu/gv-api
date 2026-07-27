@@ -71,6 +71,9 @@ func (e *ReadExecutor) Run(ctx context.Context, sql string) (ReadResult, error) 
 	if err != nil {
 		return ReadResult{}, err
 	}
+	if e.pool == nil {
+		return ReadResult{}, fmt.Errorf("read executor: no database pool")
+	}
 
 	tx, err := e.pool.BeginTx(ctx, pgx.TxOptions{AccessMode: pgx.ReadOnly})
 	if err != nil {
