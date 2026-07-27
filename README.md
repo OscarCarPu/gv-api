@@ -58,6 +58,7 @@ A comprehensive life orchestrator built in Go, designed to centralize data from 
 | **Plan** | Daily time-block planner that schedules tasks from the task tree. | [plan](docs/api/plan.md) |
 | **Finance** | Accounts, categories, transactions, and spending stats (net worth, by-category, monthly, estimation). | [finance](docs/api/finance.md) |
 | **Varieties** | Shared lookup tables used across modules. | [varieties](docs/api/varieties.md) |
+| **Assistant** | Natural-language requests turned into an approvable read query or write action, with self-directed read-only lookups and cost metering. | [assistant](docs/api/assistant.md) |
 
 ### Infrastructure
 
