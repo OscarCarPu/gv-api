@@ -28,6 +28,12 @@ services:
       - .env
     ports:
       - "8080:8080"
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://localhost:8080/health"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
     networks:
       - gv
     restart: unless-stopped
