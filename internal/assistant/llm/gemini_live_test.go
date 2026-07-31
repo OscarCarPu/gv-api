@@ -30,47 +30,14 @@ Tablas (PostgreSQL): habits(id, name), transactions(id, type, amount, occurred_a
 Campos: kind, sql, action, explanation (español), needs_summary, reject.`
 
 	t.Run("decide read", func(t *testing.T) {
-		res, err := p.Decide(ctx, DecideInput{SystemPrompt: sys, UserText: "¿cuántos hábitos tengo?"})
+		d, u, err := p.Decide(ctx, DecideInput{SystemPrompt: sys, UserText: "¿cuántos hábitos tengo?"})
 		require.NoError(t, err)
-		d := res.Decision
-		require.Len(t, res.Usages, 1, "no runner: exactly one model call")
-		u := res.Usages[0]
 		t.Logf("kind=%q sql=%q explanation=%q", d.Kind, d.SQL, d.Explanation)
 		t.Logf("usage: in=%d out=%d cacheRead=%d model=%s", u.InputTokens, u.OutputTokens, u.CacheReadTokens, u.Model)
 		require.NotEmpty(t, d.Kind)
 		require.Greater(t, u.InputTokens, int64(0))
 		require.Greater(t, u.OutputTokens, int64(0))
 		require.Equal(t, PhaseDecide, u.Phase)
-	})
-
-	t.Run("decide with exploration", func(t *testing.T) {
-		runner := &recordingRunner{result: QueryResult{
-			Columns: []string{"id", "name"},
-			Rows:    [][]any{{1, "gimnasio"}, {2, "leer"}},
-		}}
-		res, err := p.Decide(ctx, DecideInput{
-			SystemPrompt: sys,
-			UserText:     "registra que hoy hice el hábito de ir al gimnasio",
-			Runner:       runner,
-			MaxQueries:   3,
-		})
-		require.NoError(t, err)
-		t.Logf("internal queries: %v", runner.queries)
-		t.Logf("decision: kind=%q action=%+v explanation=%q", res.Decision.Kind, res.Decision.Action, res.Decision.Explanation)
-
-		// Exploring is the model's choice, so don't require it — but the loop must
-		// terminate with a decision, respect the budget, and meter every round
-		// with only the last one as "decide".
-		require.NotEmpty(t, res.Decision.Kind)
-		require.LessOrEqual(t, len(runner.queries), 3)
-		require.NotEmpty(t, res.Usages)
-		for i, u := range res.Usages {
-			want := PhaseExplore
-			if i == len(res.Usages)-1 {
-				want = PhaseDecide
-			}
-			require.Equal(t, want, u.Phase, "usage %d", i)
-		}
 	})
 
 	t.Run("summarize", func(t *testing.T) {

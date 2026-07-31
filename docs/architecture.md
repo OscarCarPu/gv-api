@@ -130,9 +130,6 @@ Environment variables loaded via `os.Getenv` with sensible defaults. No `.env` f
 | POST | `/plan/blocks` | Create a plan block |
 | PUT | `/plan/blocks/{id}` | Update a plan block |
 | DELETE | `/plan/blocks/{id}` | Delete a plan block |
-| POST | `/assistant/suggest` | Turn natural language into an approvable read query or write action ([docs](api/assistant.md)) |
-| POST | `/assistant/execute` | Run an approved suggestion |
-| GET | `/assistant/usage?month=YYYY-MM` | LLM spend for a month |
 
 ## Database Schema
 

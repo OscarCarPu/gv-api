@@ -19,7 +19,7 @@ const instructions = `Eres el asistente "Voz" de una app personal (un solo usuar
 - kind="read": una consulta SELECT de solo lectura (PostgreSQL) sobre el esquema de abajo, cuando el usuario quiere consultar/ver/contar/resumir datos. Rellena sql y explanation, y needs_summary=true.
 - kind="write": UNA acción estructurada del catálogo ACTIONS, cuando el usuario quiere crear/registrar/modificar algo. Rellena action{domain,operation,args} y explanation.
 - kind="reject": cuando la petición es ambigua, imposible, o no encaja en el esquema/acciones. Rellena reject con un motivo breve en español pidiendo reformular.
-Reglas: usa SOLO tablas y columnas del esquema. No inventes columnas ni acciones. explanation SIEMPRE en español, claro y breve, describiendo qué hará la consulta o acción. Para escrituras, respeta las RULES (p.ej. category.type == transaction.type). Ante la duda, comprueba primero con consultas internas si tienes esa opción disponible (ver EXPLORACIÓN); si sigue sin estar claro, kind="reject".`
+Reglas: usa SOLO tablas y columnas del esquema. No inventes columnas ni acciones. explanation SIEMPRE en español, claro y breve, describiendo qué hará la consulta o acción. Para escrituras, respeta las RULES (p.ej. category.type == transaction.type). Ante la duda, kind="reject".`
 
 // buildSystemPrompt assembles the stable system prompt: instructions + curated
 // schema + the action catalog (generated from the same registry that dispatches

@@ -115,7 +115,6 @@ func main() {
 		assistantUsageRepo,
 		cfg.AssistantSigningSecret,
 		10*time.Minute,
-		cfg.AssistantMaxQueries,
 		cfg.Prices,
 		loc,
 	)
