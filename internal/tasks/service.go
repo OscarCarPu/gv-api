@@ -234,6 +234,7 @@ func (s *Service) GetActiveTree(ctx context.Context, minPriority *int32) ([]Acti
 	}
 	root = append(root, orphanTasks...)
 
+
 	if root == nil {
 		root = []ActiveTreeNode{}
 	}
@@ -294,14 +295,6 @@ func (s *Service) GetTimeEntrySummary(ctx context.Context) (TimeEntrySummaryResp
 
 func (s *Service) ListProjectsFast(ctx context.Context) ([]ProjectFastResponse, error) {
 	return s.repo.ListProjectsFast(ctx)
-}
-
-func (s *Service) ListOpenTasks(ctx context.Context) ([]TaskFastResponse, error) {
-	return s.repo.ListOpenTasks(ctx)
-}
-
-func (s *Service) ListOpenProjects(ctx context.Context) ([]ProjectFastResponse, error) {
-	return s.repo.ListOpenProjects(ctx)
 }
 
 func (s *Service) ListTasksFast(ctx context.Context) ([]TaskFastResponse, error) {
