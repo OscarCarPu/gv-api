@@ -19,4 +19,11 @@ jobs:
       - name: Deploy
         run: |
           cd /home/ocp/docker/gv/gv-api
-          docker compose up --build --wait -d
+          # --wait-timeout bounds the restart-backoff loop; without it a
+          # crash-looping container just hangs the job instead of failing it.
+          if ! docker compose up --build --wait --wait-timeout 90 -d; then
+            echo "::error::gv_api did not become healthy - deploy failed"
+            docker compose ps
+            docker compose logs --tail 50 gv-api
+            exit 1
+          fi
