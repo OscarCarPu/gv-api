@@ -37,9 +37,6 @@ type Config struct {
 	AssistantSigningSecret string
 	AssistantReadTimeoutMS int
 	AssistantMaxRows       int
-	// AssistantMaxQueries caps the read-only queries the model may run on its
-	// own while deciding (0 disables that exploration).
-	AssistantMaxQueries int
 	// Prices maps model id -> per-MTok USD pricing (configurable, defaulted).
 	Prices map[string]ModelPrice
 }
@@ -71,7 +68,6 @@ func Load() (*Config, error) {
 		AssistantSigningSecret: os.Getenv("ASSISTANT_SIGNING_SECRET"),
 		AssistantReadTimeoutMS: getEnvInt("ASSISTANT_READ_TIMEOUT_MS", 3000),
 		AssistantMaxRows:       getEnvInt("ASSISTANT_MAX_ROWS", 200),
-		AssistantMaxQueries:    getEnvInt("ASSISTANT_MAX_QUERIES", 5),
 	}
 
 	// Default the model to the provider's cheapest/recommended when unset.

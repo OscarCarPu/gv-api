@@ -18,10 +18,9 @@ type AnthropicProvider struct {
 }
 
 // NewAnthropicProvider builds a provider for the given API key and model id.
-// opts are extra SDK request options (tests point the client at a stub server).
-func NewAnthropicProvider(apiKey, model string, opts ...option.RequestOption) *AnthropicProvider {
+func NewAnthropicProvider(apiKey, model string) *AnthropicProvider {
 	return &AnthropicProvider{
-		client: anthropic.NewClient(append([]option.RequestOption{option.WithAPIKey(apiKey)}, opts...)...),
+		client: anthropic.NewClient(option.WithAPIKey(apiKey)),
 		model:  model,
 	}
 }
@@ -53,134 +52,50 @@ func decisionToolSchema() anthropic.ToolInputSchemaParam {
 	}
 }
 
-// queryToolSchema is the input schema for the run_read_query tool the model uses
-// to look things up before deciding.
-func queryToolSchema() anthropic.ToolInputSchemaParam {
-	return anthropic.ToolInputSchemaParam{
-		Properties: map[string]any{
-			"sql":    map[string]any{"type": "string", "description": "Una única consulta SELECT/WITH de solo lectura (PostgreSQL)"},
-			"reason": map[string]any{"type": "string", "description": "Qué quieres averiguar con ella, en español"},
-		},
-		Required: []string{"sql"},
-	}
-}
-
-// Decide runs the tool loop: the model may call run_read_query as many times as
-// its budget allows (results are fed straight back, no user approval — reads
-// cannot modify data) and finishes by calling emit_decision.
-func (p *AnthropicProvider) Decide(ctx context.Context, in DecideInput) (DecideResult, error) {
-	var out DecideResult
-
+func (p *AnthropicProvider) Decide(ctx context.Context, in DecideInput) (Decision, Usage, error) {
 	userText := in.UserText
 	if in.Prior != nil {
 		priorJSON, _ := json.Marshal(in.Prior)
 		userText = fmt.Sprintf("Propuesta anterior: %s\n\nEl usuario da feedback para corregirla: %s", string(priorJSON), in.Feedback)
 	}
-	if in.Today != "" {
-		userText = fmt.Sprintf("Hoy es %s.\n\n%s", in.Today, userText)
-	}
 
-	decisionTool := anthropic.ToolParam{
+	tool := anthropic.ToolParam{
 		Name:        "emit_decision",
 		Description: anthropic.String("Devuelve la decisión estructurada (read/write/reject) para la petición del usuario."),
 		InputSchema: decisionToolSchema(),
 	}
-	queryTool := anthropic.ToolParam{
-		Name:        "run_read_query",
-		Description: anthropic.String("Ejecuta una consulta interna de solo lectura y devuelve sus filas. Úsala para informarte antes de decidir."),
-		InputSchema: queryToolSchema(),
+
+	msg, err := p.client.Messages.New(ctx, anthropic.MessageNewParams{
+		Model:     anthropic.Model(p.model),
+		MaxTokens: maxDecideTokens,
+		System: []anthropic.TextBlockParam{{
+			Text:         in.SystemPrompt,
+			CacheControl: anthropic.NewCacheControlEphemeralParam(),
+		}},
+		Messages: []anthropic.MessageParam{
+			anthropic.NewUserMessage(anthropic.NewTextBlock(userText)),
+		},
+		Tools: []anthropic.ToolUnionParam{{OfTool: &tool}},
+		ToolChoice: anthropic.ToolChoiceUnionParam{
+			OfTool: &anthropic.ToolChoiceToolParam{Name: "emit_decision"},
+		},
+	})
+	if err != nil {
+		return Decision{}, Usage{}, err
 	}
 
-	system := in.SystemPrompt
-	tools := []anthropic.ToolUnionParam{{OfTool: &decisionTool}}
-	remaining := 0
-	if in.Runner != nil && in.MaxQueries > 0 {
-		remaining = in.MaxQueries
-		tools = append(tools, anthropic.ToolUnionParam{OfTool: &queryTool})
-		system += "\n\n" + fmt.Sprintf(exploreSystemNote, in.MaxQueries)
+	usage := p.usage(msg, PhaseDecide)
+
+	for _, block := range msg.Content {
+		if tu, ok := block.AsAny().(anthropic.ToolUseBlock); ok && tu.Name == "emit_decision" {
+			var d Decision
+			if err := json.Unmarshal([]byte(tu.JSON.Input.Raw()), &d); err != nil {
+				return Decision{}, usage, fmt.Errorf("decode decision: %w", err)
+			}
+			return d, usage, nil
+		}
 	}
-
-	messages := []anthropic.MessageParam{anthropic.NewUserMessage(anthropic.NewTextBlock(userText))}
-
-	for {
-		// Once the budget is spent, force emit_decision so the loop always
-		// terminates with an answer instead of more questions.
-		choice := anthropic.ToolChoiceUnionParam{OfTool: &anthropic.ToolChoiceToolParam{Name: "emit_decision"}}
-		if remaining > 0 {
-			choice = anthropic.ToolChoiceUnionParam{OfAny: &anthropic.ToolChoiceAnyParam{}}
-		}
-
-		msg, err := p.client.Messages.New(ctx, anthropic.MessageNewParams{
-			Model:     anthropic.Model(p.model),
-			MaxTokens: maxDecideTokens,
-			System: []anthropic.TextBlockParam{{
-				Text:         system,
-				CacheControl: anthropic.NewCacheControlEphemeralParam(),
-			}},
-			Messages:   messages,
-			Tools:      tools,
-			ToolChoice: choice,
-		})
-		if err != nil {
-			return out, err
-		}
-		// Provisionally an exploratory round; relabelled below if this call is
-		// the one that produced the decision.
-		usage := p.usage(msg, PhaseExplore)
-
-		var queries []anthropic.ToolUseBlock
-		for _, block := range msg.Content {
-			tu, ok := block.AsAny().(anthropic.ToolUseBlock)
-			if !ok {
-				continue
-			}
-			switch tu.Name {
-			case "emit_decision":
-				usage.Phase = PhaseDecide
-				out.Usages = append(out.Usages, usage)
-				var d Decision
-				if err := json.Unmarshal([]byte(tu.JSON.Input.Raw()), &d); err != nil {
-					return out, fmt.Errorf("decode decision: %w", err)
-				}
-				out.Decision = d
-				return out, nil
-			case "run_read_query":
-				queries = append(queries, tu)
-			}
-		}
-
-		out.Usages = append(out.Usages, usage)
-		if len(queries) == 0 {
-			// No decision and nothing to look up: give up rather than loop.
-			out.Decision = Decision{Kind: KindReject, Reject: "No pude interpretar la petición. Reformula, por favor."}
-			return out, nil
-		}
-
-		// The model may ask for several queries at once; every tool_use needs a
-		// matching tool_result in a single user message.
-		messages = append(messages, msg.ToParam())
-		results := make([]anthropic.ContentBlockParamUnion, 0, len(queries))
-		for _, q := range queries {
-			var args struct {
-				SQL string `json:"sql"`
-			}
-			if err := json.Unmarshal([]byte(q.JSON.Input.Raw()), &args); err != nil {
-				results = append(results, anthropic.NewToolResultBlock(q.ID, "ERROR: argumentos ilegibles", true))
-				continue
-			}
-			if remaining <= 0 {
-				results = append(results, anthropic.NewToolResultBlock(q.ID, budgetExhaustedNote, true))
-				continue
-			}
-			remaining--
-			res, err := in.Runner.RunQuery(ctx, args.SQL)
-			if err != nil {
-				return out, err
-			}
-			results = append(results, anthropic.NewToolResultBlock(q.ID, renderQueryResult(res), res.Err != ""))
-		}
-		messages = append(messages, anthropic.NewUserMessage(results...))
-	}
+	return Decision{Kind: KindReject, Reject: "No pude interpretar la petición. Reformula, por favor."}, usage, nil
 }
 
 func (p *AnthropicProvider) Summarize(ctx context.Context, in SummarizeInput) (string, Usage, error) {
