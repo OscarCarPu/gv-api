@@ -146,7 +146,7 @@ func TestMockDriverDoesNotInferPowerFromBrightness(t *testing.T) {
 func TestServiceCachesReadsAndForceBypasses(t *testing.T) {
 	reg := mustRegistry(t, oneBulb)
 	driver := &countingDriver{inner: NewMockDriver()}
-	svc := NewService(reg, driver, 5*time.Second)
+	svc := NewService(reg, driver, 5*time.Second, 0, 0)
 	ctx := context.Background()
 
 	svc.States(ctx, false)
@@ -166,7 +166,7 @@ func TestServiceCollapsesConcurrentReadsOfOneBulb(t *testing.T) {
 	// while a read is open must wait on it rather than start a second.
 	reg := mustRegistry(t, oneBulb)
 	driver := &countingDriver{inner: NewMockDriver(), delay: 50 * time.Millisecond}
-	svc := NewService(reg, driver, 0) // no cache, so only the in-flight join can dedupe
+	svc := NewService(reg, driver, 0, 0, 0) // no cache, so only the in-flight join can dedupe
 	ctx := context.Background()
 
 	var wg sync.WaitGroup
@@ -181,7 +181,7 @@ func TestServiceCollapsesConcurrentReadsOfOneBulb(t *testing.T) {
 }
 
 func TestServiceUnknownIDIsNotFound(t *testing.T) {
-	svc := NewService(mustRegistry(t, oneBulb), NewMockDriver(), 0)
+	svc := NewService(mustRegistry(t, oneBulb), NewMockDriver(), 0, 0, 0)
 	if _, err := svc.State(context.Background(), "nope", false); err != ErrNotFound {
 		t.Errorf("want ErrNotFound, got %v", err)
 	}
@@ -291,4 +291,142 @@ func contains(haystack, needle string) bool {
 			}
 			return false
 		})()
+}
+
+// --- settling -------------------------------------------------------------------------
+
+// driftingDriver accepts a value but reports back something a little off, for the first
+// driftUntil applications — the behaviour the real bulbs show.
+type driftingDriver struct {
+	inner      *MockDriver
+	drift      float64
+	driftUntil int
+	applies    atomic.Int32
+	reads      atomic.Int32
+}
+
+func (d *driftingDriver) Kind() string { return "drifting" }
+
+func (d *driftingDriver) GetState(ctx context.Context, light Config) State {
+	d.reads.Add(1)
+	state := d.inner.GetState(ctx, light)
+	if int(d.applies.Load()) <= d.driftUntil {
+		state.Brightness += d.drift
+		state.ColorTemp += d.drift
+	}
+	return state
+}
+
+func (d *driftingDriver) Apply(ctx context.Context, light Config, cmd Command) State {
+	d.applies.Add(1)
+	return d.inner.Apply(ctx, light, cmd)
+}
+
+func TestServiceReAppliesWhenTheBulbDrifts(t *testing.T) {
+	// The point of settling: the client asked for 50, the lamp sat on 60, and nobody should
+	// have to nudge it by hand.
+	reg := mustRegistry(t, oneBulb)
+	driver := &driftingDriver{inner: NewMockDriver(), drift: 10, driftUntil: 1}
+	svc := NewService(reg, driver, 0, 2, time.Millisecond)
+
+	value := 50
+	state, err := svc.Send(context.Background(), "bedroom", Command{Type: CommandBrightness, Value: &value})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if driver.applies.Load() < 2 {
+		t.Errorf("expected a re-apply after the drift, got %d applies", driver.applies.Load())
+	}
+	if state.Brightness != 50 {
+		t.Errorf("want the bulb settled on 50, got %v", state.Brightness)
+	}
+}
+
+func TestServiceDoesNotReApplyWhenTheValueHolds(t *testing.T) {
+	// No drift means no extra BLE traffic: settling must be free when nothing is wrong.
+	reg := mustRegistry(t, oneBulb)
+	driver := &driftingDriver{inner: NewMockDriver(), drift: 0}
+	svc := NewService(reg, driver, 0, 2, time.Millisecond)
+
+	value := 50
+	if _, err := svc.Send(context.Background(), "bedroom", Command{Type: CommandBrightness, Value: &value}); err != nil {
+		t.Fatal(err)
+	}
+	if got := driver.applies.Load(); got != 1 {
+		t.Errorf("want exactly 1 apply when the value holds, got %d", got)
+	}
+}
+
+func TestServiceGivesUpOnAStubbornBulb(t *testing.T) {
+	// A lamp that never takes the value must not spin forever — bounded attempts, then report
+	// whatever it is actually doing.
+	reg := mustRegistry(t, oneBulb)
+	driver := &driftingDriver{inner: NewMockDriver(), drift: 25, driftUntil: 999}
+	svc := NewService(reg, driver, 0, 2, time.Millisecond)
+
+	value := 50
+	if _, err := svc.Send(context.Background(), "bedroom", Command{Type: CommandBrightness, Value: &value}); err != nil {
+		t.Fatal(err)
+	}
+	// One initial apply plus at most the configured retries.
+	if got := driver.applies.Load(); got > 3 {
+		t.Errorf("settling should be bounded, got %d applies", got)
+	}
+}
+
+func TestServiceDoesNotSettlePower(t *testing.T) {
+	// Power is a boolean the bulb either took or did not; there is no "near enough" to chase,
+	// so it must cost no extra reads.
+	reg := mustRegistry(t, oneBulb)
+	driver := &driftingDriver{inner: NewMockDriver(), drift: 10, driftUntil: 999}
+	svc := NewService(reg, driver, 0, 2, time.Millisecond)
+
+	on := true
+	if _, err := svc.Send(context.Background(), "bedroom", Command{Type: CommandPower, On: &on}); err != nil {
+		t.Fatal(err)
+	}
+	if got := driver.reads.Load(); got != 0 {
+		t.Errorf("power should not trigger a verification read, got %d reads", got)
+	}
+}
+
+func TestServiceSettlingDisabled(t *testing.T) {
+	reg := mustRegistry(t, oneBulb)
+	driver := &driftingDriver{inner: NewMockDriver(), drift: 25, driftUntil: 999}
+	svc := NewService(reg, driver, 0, 0, time.Millisecond)
+
+	value := 50
+	if _, err := svc.Send(context.Background(), "bedroom", Command{Type: CommandBrightness, Value: &value}); err != nil {
+		t.Fatal(err)
+	}
+	if got := driver.applies.Load(); got != 1 {
+		t.Errorf("with settling off, want 1 apply, got %d", got)
+	}
+}
+
+func TestServiceStopsSettlingIfTheBulbGoesOffline(t *testing.T) {
+	// Losing the bulb mid-correction must surface as offline, not as the value we hoped for.
+	reg := mustRegistry(t, oneBulb)
+	svc := NewService(reg, &offlineOnReadDriver{inner: NewMockDriver()}, 0, 2, time.Millisecond)
+
+	value := 50
+	state, err := svc.Send(context.Background(), "bedroom", Command{Type: CommandBrightness, Value: &value})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if state.Online {
+		t.Error("want the offline read reported")
+	}
+}
+
+type offlineOnReadDriver struct{ inner *MockDriver }
+
+func (d *offlineOnReadDriver) Kind() string { return "offline-on-read" }
+
+func (d *offlineOnReadDriver) GetState(_ context.Context, light Config) State {
+	return offlineState(light, "gone", time.Now().UnixMilli())
+}
+
+func (d *offlineOnReadDriver) Apply(ctx context.Context, light Config, cmd Command) State {
+	return d.inner.Apply(ctx, light, cmd)
 }

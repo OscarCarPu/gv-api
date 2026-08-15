@@ -3,6 +3,8 @@ package lights
 import (
 	"context"
 	"errors"
+	"log/slog"
+	"math"
 	"sync"
 	"time"
 )
@@ -30,6 +32,11 @@ type Service struct {
 	driver   Driver
 	ttl      time.Duration
 
+	// How many times a write is re-applied when the bulb drifts off the requested value,
+	// and how long to let it transition before checking. Zero attempts disables settling.
+	settleAttempts int
+	settleDelay    time.Duration
+
 	mu     sync.Mutex
 	cache  map[string]cacheEntry
 	flight map[string]*inflight
@@ -46,16 +53,24 @@ type inflight struct {
 	state State
 }
 
-func NewService(registry *Registry, driver Driver, ttl time.Duration) *Service {
+func NewService(registry *Registry, driver Driver, ttl time.Duration, settleAttempts int, settleDelay time.Duration) *Service {
 	if ttl < 0 {
 		ttl = 0
 	}
+	if settleAttempts < 0 {
+		settleAttempts = 0
+	}
+	if settleDelay <= 0 {
+		settleDelay = 400 * time.Millisecond
+	}
 	return &Service{
-		registry: registry,
-		driver:   driver,
-		ttl:      ttl,
-		cache:    map[string]cacheEntry{},
-		flight:   map[string]*inflight{},
+		registry:       registry,
+		driver:         driver,
+		ttl:            ttl,
+		settleAttempts: settleAttempts,
+		settleDelay:    settleDelay,
+		cache:          map[string]cacheEntry{},
+		flight:         map[string]*inflight{},
 	}
 }
 
@@ -97,8 +112,84 @@ func (s *Service) Send(ctx context.Context, id string, cmd Command) (State, erro
 	}
 
 	state := s.driver.Apply(ctx, light, cmd)
+	state = s.settle(ctx, light, cmd, state)
 	s.store(state)
 	return state, nil
+}
+
+/*
+settle re-applies a command until the bulb actually holds the requested value.
+
+These bulbs do not always land where they are told: a value arrives a little late, or the
+lamp settles on a neighbouring step and stays there. Correcting that by hand is not the
+client's job — and doing it in each client would mean three implementations of the same
+retry. So the API closes the loop: write, wait for the lamp to transition, read back, and
+write again if it drifted.
+
+Only continuous values are settled. Power is a boolean the bulb either took or did not, and
+colour is not supported by the hardware in use. A bulb that cannot be read back is left
+alone — there is nothing to compare against, and re-writing blind would just be noise.
+*/
+func (s *Service) settle(ctx context.Context, light Config, cmd Command, state State) State {
+	target, tolerance, ok := settleTarget(cmd)
+	if !ok || !state.Online || s.settleAttempts <= 0 {
+		return state
+	}
+
+	for range s.settleAttempts {
+		select {
+		case <-ctx.Done():
+			return state
+		case <-time.After(s.settleDelay):
+		}
+
+		fresh := s.driver.GetState(ctx, light)
+		if !fresh.Online {
+			// Lost the bulb mid-correction; report that rather than the value we hoped for.
+			return fresh
+		}
+
+		actual, ok := settleActual(cmd, fresh)
+		if !ok || math.Abs(actual-target) <= tolerance {
+			return fresh
+		}
+
+		slog.Debug("light drifted, re-applying",
+			"light", light.ID, "command", cmd.Type, "want", target, "got", actual)
+		state = s.driver.Apply(ctx, light, cmd)
+		if !state.Online {
+			return state
+		}
+	}
+	return state
+}
+
+// settleTarget returns the value a command asked for and how far off is close enough.
+// ok is false for commands that cannot meaningfully be verified.
+func settleTarget(cmd Command) (target, tolerance float64, ok bool) {
+	switch cmd.Type {
+	case CommandBrightness:
+		// The bulbs' own scale is 0-254 against our 0-100, so a clean round-trip can still
+		// differ by one after rounding in both directions. Anything more is real drift.
+		return float64(*cmd.Value), 1, true
+	case CommandColorTemp:
+		// One mired step is ~13K and readback snaps to 10K, so ~2 steps of slack.
+		return float64(*cmd.Kelvin), 30, true
+	default:
+		return 0, 0, false
+	}
+}
+
+// settleActual pulls the comparable field out of a freshly read state.
+func settleActual(cmd Command, state State) (float64, bool) {
+	switch cmd.Type {
+	case CommandBrightness:
+		return state.Brightness, true
+	case CommandColorTemp:
+		return state.ColorTemp, true
+	default:
+		return 0, false
+	}
 }
 
 func (s *Service) read(ctx context.Context, light Config, force bool) State {
