@@ -191,6 +191,29 @@ func TestServiceUnknownIDIsNotFound(t *testing.T) {
 	}
 }
 
+func TestBridgeDriverDoesNotLeakTheBridgeAddress(t *testing.T) {
+	// Go's dial errors embed the URL, so the raw text would hand every client the LAN address
+	// of the house's bridge — confusing on a phone that only talks to a public domain, and
+	// needless exposure. The meaning is kept; the address is not.
+	reg := mustRegistry(t, oneBulb)
+	light, _ := reg.Get("bedroom")
+
+	driver := NewBridgeDriver("http://192.168.1.160:9", "", 500*time.Millisecond)
+	state := driver.GetState(context.Background(), light)
+
+	if state.Online {
+		t.Fatal("want offline")
+	}
+	for _, leak := range []string{"192.168.1.160", ":9", "http://", "dial tcp"} {
+		if contains(state.Error, leak) {
+			t.Errorf("error leaked %q: %s", leak, state.Error)
+		}
+	}
+	if state.Error == "" {
+		t.Error("want some explanation of what went wrong")
+	}
+}
+
 func TestBridgeDriverReportsUnreachableAsOfflineNotError(t *testing.T) {
 	// A dead bridge must degrade to "every bulb offline", never to a failed request — one
 	// unreachable bulb cannot be allowed to blank a page covering several.
