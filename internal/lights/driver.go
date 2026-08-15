@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"strings"
 	"sync"
@@ -109,11 +110,15 @@ func (d *BridgeDriver) call(ctx context.Context, light Config, path string, cmd 
 	resp, err := d.client.Do(req)
 	if err != nil {
 		// Never propagate: an unreachable bridge means every bulb reads offline, not a 500.
+		// The full error (with the bridge URL) goes to the log, not to the client.
+		slog.Warn("light bridge call failed", "light", light.ID, "path", path, "error", err)
 		return offlineState(light, bridgeErrorMessage(err), now)
 	}
 	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
+		// The body is the bridge's own JSON error, which is ours and safe to pass on; the
+		// status alone would not say why.
 		detail, _ := io.ReadAll(io.LimitReader(resp.Body, 200))
 		msg := fmt.Sprintf("bridge %d", resp.StatusCode)
 		if len(detail) > 0 {
@@ -144,12 +149,30 @@ func (d *BridgeDriver) call(ctx context.Context, light Config, path string, cmd 
 	return state
 }
 
+/*
+bridgeErrorMessage turns a transport failure into something worth showing a user.
+
+Go's dial errors embed the URL they were dialling, so the raw text reads
+
+	Post "http://192.168.1.160:8477/state": dial tcp 192.168.1.160:8477: connect: connection refused
+
+and this string is handed to every client. That is both confusing — a phone talking only to
+a public domain suddenly shows a LAN address — and needless exposure of where the house's
+bridge lives. Clients get the meaning; the address stays in the server's logs.
+*/
 func bridgeErrorMessage(err error) string {
 	msg := err.Error()
-	if strings.Contains(msg, "context deadline exceeded") || strings.Contains(msg, "Client.Timeout") {
+	switch {
+	case strings.Contains(msg, "context deadline exceeded"), strings.Contains(msg, "Client.Timeout"):
 		return "bridge timed out"
+	case strings.Contains(msg, "connection refused"):
+		return "bridge unreachable — is the daemon running?"
+	case strings.Contains(msg, "no such host"), strings.Contains(msg, "no route to host"),
+		strings.Contains(msg, "network is unreachable"), strings.Contains(msg, "i/o timeout"):
+		return "bridge unreachable"
+	default:
+		return "bridge error"
 	}
-	return msg
 }
 
 // --- mock driver ---------------------------------------------------------------------
