@@ -90,6 +90,17 @@ Apply one command; the response is the resulting state.
 
 `400` for a malformed command, `404` for an unknown bulb.
 
+**A write is verified and corrected.** These bulbs do not always land where they are told —
+a value arrives late, or the lamp settles on a neighbouring step and stays there. Rather than
+leave each client to notice and nudge it, the API closes the loop: it writes, waits
+`LIGHTS_SETTLE_DELAY_MS` for the lamp to transition, reads back, and re-applies if the value
+drifted, up to `LIGHTS_SETTLE_ATTEMPTS` times. The state you get back is therefore what the
+bulb actually holds, not what was requested.
+
+Only brightness and colour temperature are settled — power is a boolean with no "near enough"
+to chase, so it costs no extra read. A bulb that goes offline mid-correction is reported as
+offline rather than as the value we hoped for.
+
 **Commands are independent.** Setting brightness or colour does *not* switch a bulb on: on the
 real hardware those are separate frames, so dimming a bulb that is off only changes how it will
 look when switched on. Do not infer power from them — a client that did reported "on" over a
@@ -109,6 +120,8 @@ LIGHTS_BRIDGE_URL=http://host:8477
 LIGHTS_BRIDGE_TOKEN=<shared secret>
 LIGHTS_BRIDGE_TIMEOUT_MS=20000     # a cold BLE connect measures ~11s; don't go much below
 LIGHTS_CACHE_MS=2000
+LIGHTS_SETTLE_ATTEMPTS=2           # re-apply a drifting write this many times (0 = off)
+LIGHTS_SETTLE_DELAY_MS=400         # let the lamp transition before checking
 LIGHTS=[{"id":"bedroom","address":"AA:BB:..","protocol":"lexman", ...}]
 ```
 

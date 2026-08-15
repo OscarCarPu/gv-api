@@ -27,6 +27,10 @@ type Config struct {
 	LightsBridgeToken   string
 	LightsBridgeTimeout time.Duration
 	LightsCacheTTL      time.Duration
+	// These bulbs sometimes land a step off the requested value, so the API re-applies a
+	// write until it holds. 0 attempts disables it.
+	LightsSettleAttempts int
+	LightsSettleDelay    time.Duration
 }
 
 func Load() (*Config, error) {
@@ -55,8 +59,10 @@ func Load() (*Config, error) {
 		LightsBridgeToken: os.Getenv("LIGHTS_BRIDGE_TOKEN"),
 		// A cold BLE connect through the bridge takes ~11s; anything under ~20s aborts reads
 		// that would have succeeded.
-		LightsBridgeTimeout: getEnvDuration("LIGHTS_BRIDGE_TIMEOUT_MS", 20000),
-		LightsCacheTTL:      getEnvDuration("LIGHTS_CACHE_MS", 2000),
+		LightsBridgeTimeout:  getEnvDuration("LIGHTS_BRIDGE_TIMEOUT_MS", 20000),
+		LightsCacheTTL:       getEnvDuration("LIGHTS_CACHE_MS", 2000),
+		LightsSettleAttempts: getEnvInt("LIGHTS_SETTLE_ATTEMPTS", 2),
+		LightsSettleDelay:    getEnvDuration("LIGHTS_SETTLE_DELAY_MS", 400),
 	}
 
 	var missing []string
@@ -99,4 +105,14 @@ func getEnvDuration(key string, defaultMs int) time.Duration {
 		}
 	}
 	return time.Duration(defaultMs) * time.Millisecond
+}
+
+// getEnvInt reads an integer from the environment, falling back to defaultValue.
+func getEnvInt(key string, defaultValue int) int {
+	if raw := os.Getenv(key); raw != "" {
+		if v, err := strconv.Atoi(raw); err == nil {
+			return v
+		}
+	}
+	return defaultValue
 }

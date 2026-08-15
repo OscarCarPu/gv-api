@@ -98,7 +98,7 @@ func main() {
 	} else {
 		lightsDriver = lights.NewMockDriver()
 	}
-	lightsHandler := lights.NewHandler(lights.NewService(lightsRegistry, lightsDriver, cfg.LightsCacheTTL))
+	lightsHandler := lights.NewHandler(lights.NewService(lightsRegistry, lightsDriver, cfg.LightsCacheTTL, cfg.LightsSettleAttempts, cfg.LightsSettleDelay))
 
 	rutasRepo := rutas.NewRepository(db)
 	rutasService := rutas.NewService(rutasRepo)
