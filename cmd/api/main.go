@@ -19,6 +19,7 @@ import (
 	"gv-api/internal/database/plandb"
 	"gv-api/internal/finance"
 	"gv-api/internal/habits"
+	"gv-api/internal/lights"
 	"gv-api/internal/middleware"
 	"gv-api/internal/plan"
 	"gv-api/internal/rutas"
@@ -89,6 +90,16 @@ func main() {
 	financeHandler := finance.NewHandler(financeService)
 
 	// Rutas Setup
+	// Lights have no database: the registry comes from env and the state from the BLE bridge.
+	lightsRegistry := lights.ParseRegistry(cfg.Lights)
+	var lightsDriver lights.Driver
+	if cfg.LightsDriver == "bridge" {
+		lightsDriver = lights.NewBridgeDriver(cfg.LightsBridgeURL, cfg.LightsBridgeToken, cfg.LightsBridgeTimeout)
+	} else {
+		lightsDriver = lights.NewMockDriver()
+	}
+	lightsHandler := lights.NewHandler(lights.NewService(lightsRegistry, lightsDriver, cfg.LightsCacheTTL))
+
 	rutasRepo := rutas.NewRepository(db)
 	rutasService := rutas.NewService(rutasRepo)
 	rutasHandler := rutas.NewHandler(rutasService)
@@ -124,6 +135,7 @@ func main() {
 	r.Group(func(r chi.Router) {
 		r.Use(semiMiddleware.Handle)
 		varietyHandler.RegisterRoutes(r)
+		lightsHandler.RegisterRoutes(r)
 	})
 
 	// Full private
