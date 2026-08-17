@@ -28,6 +28,18 @@ services:
       - .env
     ports:
       - "8080:8080"
+    volumes:
+      # Domotics lights talk to the bulbs over BlueZ, which lives on the host and is reached
+      # through its D-Bus socket. No host networking and no extra capabilities are needed —
+      # BlueZ's own policy lets any local uid send to org.bluez. Without the mount the API
+      # still runs; every bulb simply reads offline.
+      #
+      # One catch, measured rather than guessed: the reference dbus-daemon resolves the
+      # connecting uid to a host user, and drops the connection ("connection reset by peer")
+      # when it cannot. This image runs as uid 100, which usually exists nowhere on the host,
+      # so the scan fails there while working fine under `go run` as your own user. If the
+      # deploy host needs it, add `user: "1000:1000"` (any uid the host knows) to this service.
+      - /run/dbus/system_bus_socket:/run/dbus/system_bus_socket
     healthcheck:
       test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://localhost:8080/health"]
       interval: 5s

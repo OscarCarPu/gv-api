@@ -1,14 +1,10 @@
 package lights
 
 import (
-	"bytes"
 	"context"
-	"encoding/json"
+	"errors"
 	"fmt"
-	"io"
 	"log/slog"
-	"net/http"
-	"strings"
 	"sync"
 	"time"
 )
@@ -20,165 +16,406 @@ import (
 // error is reserved for the driver itself being unusable.
 type Driver interface {
 	Kind() string
-	GetState(ctx context.Context, light Config) State
-	Apply(ctx context.Context, light Config, cmd Command) State
+	GetState(ctx context.Context, light Light) State
+	Apply(ctx context.Context, light Light, cmd Command) State
+	// Discover lists bulbs in range, so adding one is picking it off a list rather than
+	// typing a BLE address. Unlike the two above, this one does return an error: it is a
+	// deliberate action with a person waiting on the answer, and "no adapter" is the whole
+	// story rather than one card's worth of it.
+	Discover(ctx context.Context, window time.Duration) ([]Discovered, error)
 }
 
-// --- bridge driver -------------------------------------------------------------------
+// --- BlueZ driver --------------------------------------------------------------------
 
-// BridgeDriver talks to the BLE bridge daemon over HTTP.
+/*
+BlueZDriver talks to the bulbs over Bluetooth, through BlueZ on this host.
+
+It owns three things the hardware forces on it:
+
+  - **One conversation per bulb at a time.** BLE stacks serialise badly: two overlapping GATT
+    writes to one peripheral tend to fail both. A per-address lock makes that structural
+    rather than a rule clients have to follow.
+
+  - **Last known values.** Not every bulb can be read, and even a readable one answers nothing
+    when written a value it already holds. So the driver remembers what it last set, and a
+    reply is that record updated with whatever the bulb actually confirmed.
+
+  - **Letting go.** These lamps accept a single central, so holding the link forever locks out
+    their own remote and the vendor app. A bulb nobody has touched for idleDisconnect is
+    dropped; reconnecting costs a second or two.
+
+A cold call is slow and legitimately so: when BlueZ has dropped an unbonded bulb's object it
+must rediscover it (~8s) before it can even connect, and a full read is three round-trips
+after that. Warm calls return in well under a second.
+*/
+type BlueZDriver struct {
+	gatt           gatt
+	idleDisconnect time.Duration
+
+	mu    sync.Mutex
+	locks map[string]*sync.Mutex // per BLE address
+	known map[string]State       // per light id, last values seen or set
+	used  map[string]time.Time   // per BLE address, when it was last talked to
+
+	stop     chan struct{}
+	stopOnce sync.Once
+}
+
+// NewBlueZDriver builds a driver over the given adapter (empty means hci0). A zero timeout or
+// idle window uses the defaults.
 //
-// A cold call is slow and legitimately so: when BlueZ has dropped an unbonded bulb's object it
-// must rediscover it (~8s) before it can even connect, and a full read is three round-trips
-// after that — measured at ~11s. Hence the generous default timeout; warm calls return in well
-// under a second.
-type BridgeDriver struct {
-	baseURL string
-	token   string
-	client  *http.Client
+// It opens nothing: the D-Bus connection is made on first use, so the API still starts on a
+// host with no Bluetooth and reports the trouble per bulb instead of refusing to boot.
+func NewBlueZDriver(adapter string, connectTimeout, idleDisconnect time.Duration) *BlueZDriver {
+	return newDriver(newBluezGATT(adapter, connectTimeout), idleDisconnect)
 }
 
-// NewBridgeDriver builds a driver for the daemon at baseURL. Timeout of 0 uses the default.
-func NewBridgeDriver(baseURL, token string, timeout time.Duration) *BridgeDriver {
-	if timeout <= 0 {
-		timeout = 20 * time.Second
+// newDriver is the seam the tests use, with a fake gatt in place of the radio.
+func newDriver(g gatt, idleDisconnect time.Duration) *BlueZDriver {
+	if idleDisconnect <= 0 {
+		idleDisconnect = 90 * time.Second
 	}
-	return &BridgeDriver{
-		baseURL: strings.TrimRight(baseURL, "/"),
-		token:   token,
-		client:  &http.Client{Timeout: timeout},
+	d := &BlueZDriver{
+		gatt:           g,
+		idleDisconnect: idleDisconnect,
+		locks:          map[string]*sync.Mutex{},
+		known:          map[string]State{},
+		used:           map[string]time.Time{},
+		stop:           make(chan struct{}),
 	}
+	go d.reapIdle()
+	return d
 }
 
-func (d *BridgeDriver) Kind() string { return "bridge" }
+func (d *BlueZDriver) Kind() string { return "bluez" }
 
-func (d *BridgeDriver) GetState(ctx context.Context, light Config) State {
-	return d.call(ctx, light, "/state", nil)
+// Close stops the idle sweep and releases the bus. Bulbs are left connected: the host is
+// shutting down anyway, and BlueZ drops the links with it.
+func (d *BlueZDriver) Close() error {
+	d.stopOnce.Do(func() { close(d.stop) })
+	return d.gatt.Close()
 }
 
-func (d *BridgeDriver) Apply(ctx context.Context, light Config, cmd Command) State {
-	return d.call(ctx, light, "/command", &cmd)
-}
-
-// bridgeRequest is the daemon's wire format. The bridge holds no registry of its own, so
-// every request carries the bulb it applies to.
-type bridgeRequest struct {
-	Device  bridgeDevice `json:"device"`
-	Command *Command     `json:"command,omitempty"`
-}
-
-type bridgeDevice struct {
-	ID       string         `json:"id"`
-	Address  string         `json:"address"`
-	Protocol string         `json:"protocol"`
-	Options  map[string]any `json:"options"`
-}
-
-func (d *BridgeDriver) call(ctx context.Context, light Config, path string, cmd *Command) State {
-	now := time.Now().UnixMilli()
-
-	if d.baseURL == "" {
-		return offlineState(light, "LIGHTS_BRIDGE_URL is not set", now)
+func (d *BlueZDriver) GetState(ctx context.Context, light Light) State {
+	proto, ok := protocolFor(light.Protocol)
+	if !ok {
+		return d.failed(light, "no protocol %q configured for this bulb", light.Protocol)
 	}
 
-	options := light.Options
-	if options == nil {
-		options = map[string]any{}
+	unlock := d.lockBulb(light.Address)
+	defer unlock()
+
+	if err := d.connect(ctx, light); err != nil {
+		return d.offline(light, err)
 	}
-	body, err := json.Marshal(bridgeRequest{
-		Device: bridgeDevice{
-			ID:       light.ID,
-			Address:  light.Address,
-			Protocol: light.Protocol,
-			Options:  options,
-		},
-		Command: cmd,
-	})
+	if !proto.Readable() {
+		// Nothing to ask: the bulb only takes orders. What we last set is the best answer
+		// there is, and it is a true one as long as nobody used the physical remote.
+		return d.online(light)
+	}
+
+	values, err := proto.Read(ctx, d.gatt, light)
 	if err != nil {
-		return offlineState(light, err.Error(), now)
+		d.drop(light.Address)
+		return d.offline(light, err)
+	}
+	if values.empty() {
+		// The bulb stayed quiet on every query. It is there — the connection worked — so
+		// report it online with what we last knew rather than a blank card.
+		slog.Debug("bulb answered no queries", "light", light.ID)
+		return d.online(light)
+	}
+	d.remember(light, values)
+	return d.online(light)
+}
+
+func (d *BlueZDriver) Apply(ctx context.Context, light Light, cmd Command) State {
+	proto, ok := protocolFor(light.Protocol)
+	if !ok {
+		return d.failed(light, "no protocol %q configured for this bulb", light.Protocol)
 	}
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, d.baseURL+path, bytes.NewReader(body))
-	if err != nil {
-		return offlineState(light, err.Error(), now)
-	}
-	req.Header.Set("Content-Type", "application/json")
-	if d.token != "" {
-		req.Header.Set("Authorization", "Bearer "+d.token)
+	unlock := d.lockBulb(light.Address)
+	defer unlock()
+
+	if err := d.connect(ctx, light); err != nil {
+		return d.offline(light, err)
 	}
 
-	resp, err := d.client.Do(req)
-	if err != nil {
-		// Never propagate: an unreachable bridge means every bulb reads offline, not a 500.
-		// The full error (with the bridge URL) goes to the log, not to the client.
-		slog.Warn("light bridge call failed", "light", light.ID, "path", path, "error", err)
-		return offlineState(light, bridgeErrorMessage(err), now)
-	}
-	defer func() { _ = resp.Body.Close() }()
-
-	if resp.StatusCode != http.StatusOK {
-		// The body is the bridge's own JSON error, which is ours and safe to pass on; the
-		// status alone would not say why.
-		detail, _ := io.ReadAll(io.LimitReader(resp.Body, 200))
-		msg := fmt.Sprintf("bridge %d", resp.StatusCode)
-		if len(detail) > 0 {
-			msg += ": " + strings.TrimSpace(string(detail))
+	if err := applyCommand(ctx, proto, d.gatt, light, cmd); err != nil {
+		if errors.Is(err, errUnsupported) {
+			// A capability this model does not have. The bulb is fine, so it stays online and
+			// keeps its state; only the card says why nothing happened.
+			state := d.online(light)
+			state.Error = capabilityMessage(cmd)
+			return state
 		}
-		return offlineState(light, msg, now)
+		// Drop the link so the next call reconnects: a half-dead one never recovers.
+		d.drop(light.Address)
+		return d.offline(light, err)
 	}
 
-	// Start from the offline baseline so any field the bridge omits has a sane value, then
-	// let the bridge's answer win. Online is pre-set to true because a 200 means the bridge
-	// handled the bulb: only an explicit "online": false in the body says otherwise, and a
-	// bridge that simply omits the field must not read as unreachable.
-	state := offlineState(light, "", now)
-	state.Online = true
-	if err := json.NewDecoder(resp.Body).Decode(&state); err != nil {
-		return offlineState(light, "bridge sent invalid JSON: "+err.Error(), now)
-	}
+	d.applied(light, cmd)
+	return d.online(light)
+}
 
-	// Identity and capabilities are ours, not the bridge's — it only knows the wire protocol.
+/*
+Discover scans for bulbs in range.
+
+Scanning and connecting share one radio, and BlueZ slows every in-flight connection while
+discovery is running. That is accepted rather than locked around: a scan is a person standing
+in front of the app adding a lamp, which is not the moment to be optimising a poll.
+*/
+func (d *BlueZDriver) Discover(ctx context.Context, window time.Duration) ([]Discovered, error) {
+	found, err := d.gatt.Scan(ctx, window)
+	if err != nil {
+		// The client only gets the summarised reason, and a scan that finds nothing is the
+		// hardest thing here to diagnose from the outside.
+		slog.Warn("bulb scan failed", "error", err)
+		return nil, err
+	}
+	slog.Debug("bulb scan finished", "found", len(found))
+	return found, nil
+}
+
+// connect brings the bulb up and records that it was used, which is what keeps the idle sweep
+// from disconnecting a bulb mid-conversation.
+func (d *BlueZDriver) connect(ctx context.Context, light Light) error {
+	if light.Address == "" {
+		return errors.New("bulb has no address")
+	}
+	if err := d.gatt.Connect(ctx, light.Address); err != nil {
+		return err
+	}
+	d.mu.Lock()
+	d.used[light.Address] = time.Now()
+	d.mu.Unlock()
+	return nil
+}
+
+// drop forgets a link after a failure so the next call starts clean.
+func (d *BlueZDriver) drop(address string) {
+	d.mu.Lock()
+	delete(d.used, address)
+	d.mu.Unlock()
+	d.gatt.Disconnect(address)
+}
+
+/*
+reapIdle releases bulbs nobody has used lately.
+
+Worth knowing when reading polling code elsewhere: any client polling faster than
+idleDisconnect keeps its bulbs connected indefinitely, because every poll is a real read.
+That is the intended trade — an open Lights tab means someone is using the lights — but it is
+why the remote on the wall stops working while the tab is open.
+*/
+func (d *BlueZDriver) reapIdle() {
+	ticker := time.NewTicker(15 * time.Second)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-d.stop:
+			return
+		case <-ticker.C:
+			for _, address := range d.idleAddresses() {
+				lock := d.bulbLock(address)
+				if !lock.TryLock() {
+					continue // in use right now; next sweep will get it
+				}
+				d.mu.Lock()
+				delete(d.used, address)
+				d.mu.Unlock()
+				d.gatt.Disconnect(address)
+				lock.Unlock()
+				slog.Debug("bulb idle, disconnected", "address", address)
+			}
+		}
+	}
+}
+
+func (d *BlueZDriver) idleAddresses() []string {
+	cutoff := time.Now().Add(-d.idleDisconnect)
+
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	var idle []string
+	for address, used := range d.used {
+		if used.Before(cutoff) {
+			idle = append(idle, address)
+		}
+	}
+	return idle
+}
+
+// --- per-bulb serialisation ----------------------------------------------------------
+
+func (d *BlueZDriver) bulbLock(address string) *sync.Mutex {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	lock, ok := d.locks[address]
+	if !ok {
+		lock = &sync.Mutex{}
+		d.locks[address] = lock
+	}
+	return lock
+}
+
+func (d *BlueZDriver) lockBulb(address string) func() {
+	lock := d.bulbLock(address)
+	lock.Lock()
+	return lock.Unlock
+}
+
+// --- last known values ---------------------------------------------------------------
+
+// baseline returns what we last knew about a bulb, seeded from config the first time.
+// Callers hold the bulb's lock.
+func (d *BlueZDriver) baseline(light Light) State {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+
+	state, ok := d.known[light.ID]
+	if !ok {
+		state = offlineState(light, "", time.Now().UnixMilli())
+		state.Brightness = 60
+		state.ColorTemp = light.MinColorTemp
+	}
+	// Identity and capabilities follow config, so an env edit shows up without a restart of
+	// anything but the API itself.
 	state.ID = light.ID
 	state.Name = light.Name
 	state.Model = light.Model
-	state.SupportsColor = *light.SupportsColor
-	state.SupportsColorTemp = *light.SupportsColorTemp
-	state.MinColorTemp = *light.MinColorTemp
-	state.MaxColorTemp = *light.MaxColorTemp
-	state.UpdatedAt = now
+	state.SupportsColor = light.SupportsColor
+	state.SupportsColorTemp = light.SupportsColorTemp
+	state.MinColorTemp = light.MinColorTemp
+	state.MaxColorTemp = light.MaxColorTemp
+	state.Error = ""
+	state.UpdatedAt = time.Now().UnixMilli()
+	return state
+}
+
+func (d *BlueZDriver) store(state State) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	d.known[state.ID] = state
+}
+
+// remember folds a readback into what we know.
+func (d *BlueZDriver) remember(light Light, values readback) {
+	state := d.baseline(light)
+	if values.Power != nil {
+		state.Power = *values.Power
+	}
+	if values.Brightness != nil {
+		state.Brightness = *values.Brightness
+	}
+	if values.ColorTemp != nil {
+		state.ColorTemp = *values.ColorTemp
+	}
+	if values.Mode != "" {
+		state.Mode = values.Mode
+	}
+	d.store(state)
+}
+
+/*
+applied records what a command changed.
+
+It records only that, and deliberately does not infer that setting brightness or colour turns
+the bulb on: those are separate frames on the hardware, and a dimmed bulb that is off stays
+off. Inferring it made the UI report "on" while the room stayed dark — and, worse, made "All
+on" a no-op, because every bulb already looked on.
+*/
+func (d *BlueZDriver) applied(light Light, cmd Command) {
+	state := d.baseline(light)
+	switch cmd.Type {
+	case CommandPower:
+		state.Power = *cmd.On
+	case CommandBrightness:
+		state.Brightness = float64(clampInt(*cmd.Value, 0, 100))
+	case CommandColor:
+		state.Color = RGB{
+			R: clampInt(cmd.Color.R, 0, 255),
+			G: clampInt(cmd.Color.G, 0, 255),
+			B: clampInt(cmd.Color.B, 0, 255),
+		}
+		state.Mode = "color"
+	case CommandColorTemp:
+		state.ColorTemp = float64(clampInt(*cmd.Kelvin, int(light.MinColorTemp), int(light.MaxColorTemp)))
+		state.Mode = "white"
+	}
+	d.store(state)
+}
+
+// --- replies -------------------------------------------------------------------------
+
+func (d *BlueZDriver) online(light Light) State {
+	state := d.baseline(light)
+	state.Online = true
+	d.store(state)
 	return state
 }
 
 /*
-bridgeErrorMessage turns a transport failure into something worth showing a user.
+offline reports a bulb we could not talk to, keeping its last known settings.
 
-Go's dial errors embed the URL they were dialling, so the raw text reads
-
-	Post "http://192.168.1.160:8477/state": dial tcp 192.168.1.160:8477: connect: connection refused
-
-and this string is handed to every client. That is both confusing — a phone talking only to
-a public domain suddenly shows a LAN address — and needless exposure of where the house's
-bridge lives. Clients get the meaning; the address stays in the server's logs.
+The message is deliberately vague about the cause. BlueZ's own errors carry the D-Bus object
+path, which embeds the bulb's MAC — handing that to every client is both meaningless to a
+person and needless exposure of the house's hardware. Clients get the meaning; the detail
+stays in the log.
 */
-func bridgeErrorMessage(err error) string {
-	msg := err.Error()
+func (d *BlueZDriver) offline(light Light, err error) State {
+	slog.Warn("bulb unreachable", "light", light.ID, "error", err)
+
+	// baseline carries the last known settings and clears Online/Error, so this reports the
+	// attempt without recording it: the bulb's settings are still whatever we last set.
+	state := d.baseline(light)
+	state.Online = false
+	state.Error = bleErrorMessage(err)
+	return state
+}
+
+// failed reports a configuration mistake rather than a hardware one.
+func (d *BlueZDriver) failed(light Light, format string, args ...any) State {
+	return offlineState(light, fmt.Sprintf(format, args...), time.Now().UnixMilli())
+}
+
+func bleErrorMessage(err error) string {
 	switch {
-	case strings.Contains(msg, "context deadline exceeded"), strings.Contains(msg, "Client.Timeout"):
-		return "bridge timed out"
-	case strings.Contains(msg, "connection refused"):
-		return "bridge unreachable — is the daemon running?"
-	case strings.Contains(msg, "no such host"), strings.Contains(msg, "no route to host"),
-		strings.Contains(msg, "network is unreachable"), strings.Contains(msg, "i/o timeout"):
-		return "bridge unreachable"
+	case errors.Is(err, errNoBluetooth):
+		return "no Bluetooth on this host"
+	case errors.Is(err, errBulbBusy):
+		return "bulb busy — another app may be connected to it"
+	case errors.Is(err, errBulbNotFound):
+		return "bulb not found — is it powered and in range?"
+	case errors.Is(err, errNoServices):
+		return "bulb connected but never answered"
+	case errors.Is(err, errNoCharUUID):
+		return "bulb does not have the expected controls"
+	case errors.Is(err, context.DeadlineExceeded), errors.Is(err, context.Canceled):
+		return "bulb did not answer in time"
 	default:
-		return "bridge error"
+		return "bluetooth error"
+	}
+}
+
+// capabilityMessage explains a command the hardware cannot take, in the user's terms.
+func capabilityMessage(cmd Command) string {
+	switch cmd.Type {
+	case CommandColor:
+		return "this bulb is tunable white only"
+	case CommandColorTemp:
+		return "this bulb has a fixed colour temperature"
+	default:
+		return "this bulb does not support that"
 	}
 }
 
 // --- mock driver ---------------------------------------------------------------------
 
 // MockDriver keeps bulb state in memory and touches no hardware. It is the default, so the
-// Domotics UI is workable in development and on any deployment without a bridge configured.
+// Domotics UI is workable in development and on any host without a Bluetooth adapter.
 type MockDriver struct {
 	mu     sync.Mutex
 	states map[string]State
@@ -190,13 +427,34 @@ func NewMockDriver() *MockDriver {
 
 func (d *MockDriver) Kind() string { return "mock" }
 
-func (d *MockDriver) GetState(_ context.Context, light Config) State {
+/*
+Discover invents a couple of bulbs.
+
+The add-a-bulb screen is the one part of this section that cannot be exercised without
+hardware, so the mock answers it too: the flow — scan, pick, name, save — is developable on a
+laptop, and only the last hop to a real lamp is not.
+*/
+func (d *MockDriver) Discover(ctx context.Context, window time.Duration) ([]Discovered, error) {
+	// Take the time a real scan would, so the UI's waiting state is exercised rather than
+	// skipped past.
+	select {
+	case <-time.After(min(window, 2*time.Second)):
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	}
+	return []Discovered{
+		{Address: "00:11:22:33:44:55", Name: "Mock CCT bulb", RSSI: -52},
+		{Address: "00:11:22:33:44:66", Name: "Mock lamp", RSSI: -78},
+	}, nil
+}
+
+func (d *MockDriver) GetState(_ context.Context, light Light) State {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 	return d.current(light)
 }
 
-func (d *MockDriver) Apply(_ context.Context, light Config, cmd Command) State {
+func (d *MockDriver) Apply(_ context.Context, light Light, cmd Command) State {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 
@@ -214,7 +472,7 @@ func (d *MockDriver) Apply(_ context.Context, light Config, cmd Command) State {
 		}
 		state.Mode = "color"
 	case CommandColorTemp:
-		state.ColorTemp = float64(clampInt(*cmd.Kelvin, int(*light.MinColorTemp), int(*light.MaxColorTemp)))
+		state.ColorTemp = float64(clampInt(*cmd.Kelvin, int(light.MinColorTemp), int(light.MaxColorTemp)))
 		state.Mode = "white"
 	}
 	// Deliberately does not infer Power from a brightness or colour command: on the real
@@ -226,22 +484,22 @@ func (d *MockDriver) Apply(_ context.Context, light Config, cmd Command) State {
 }
 
 // current must be called with the lock held.
-func (d *MockDriver) current(light Config) State {
+func (d *MockDriver) current(light Light) State {
 	state, ok := d.states[light.ID]
 	if !ok {
 		state = offlineState(light, "", time.Now().UnixMilli())
 		state.Brightness = 60
-		state.ColorTemp = (*light.MinColorTemp + *light.MaxColorTemp) / 2
+		state.ColorTemp = (light.MinColorTemp + light.MaxColorTemp) / 2
 		d.states[light.ID] = state
 	}
 	// Identity and capabilities follow config, so an env edit shows up without clearing state.
 	state.Online = true
 	state.Name = light.Name
 	state.Model = light.Model
-	state.SupportsColor = *light.SupportsColor
-	state.SupportsColorTemp = *light.SupportsColorTemp
-	state.MinColorTemp = *light.MinColorTemp
-	state.MaxColorTemp = *light.MaxColorTemp
+	state.SupportsColor = light.SupportsColor
+	state.SupportsColorTemp = light.SupportsColorTemp
+	state.MinColorTemp = light.MinColorTemp
+	state.MaxColorTemp = light.MaxColorTemp
 	state.Error = ""
 	return state
 }

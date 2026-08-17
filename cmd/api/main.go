@@ -89,17 +89,21 @@ func main() {
 	financeService := finance.NewService(financeRepo, loc)
 	financeHandler := finance.NewHandler(financeService)
 
-	// Rutas Setup
-	// Lights have no database: the registry comes from env and the state from the BLE bridge.
-	lightsRegistry := lights.ParseRegistry(cfg.Lights)
+	// Lights Setup
+	// Which bulbs exist is a table; what they are doing comes from the bulbs themselves, over
+	// this host's Bluetooth adapter.
+	lightsRepo := lights.NewRepository(db)
 	var lightsDriver lights.Driver
-	if cfg.LightsDriver == "bridge" {
-		lightsDriver = lights.NewBridgeDriver(cfg.LightsBridgeURL, cfg.LightsBridgeToken, cfg.LightsBridgeTimeout)
+	if cfg.LightsDriver == "bluez" {
+		bluez := lights.NewBlueZDriver(cfg.LightsAdapter, cfg.LightsConnectTimeout, cfg.LightsIdleDisconnect)
+		defer func() { _ = bluez.Close() }()
+		lightsDriver = bluez
 	} else {
 		lightsDriver = lights.NewMockDriver()
 	}
-	lightsHandler := lights.NewHandler(lights.NewService(lightsRegistry, lightsDriver, cfg.LightsCacheTTL, cfg.LightsSettleAttempts, cfg.LightsSettleDelay))
+	lightsHandler := lights.NewHandler(lights.NewService(lightsRepo, lightsDriver, cfg.LightsCacheTTL, cfg.LightsSettleAttempts, cfg.LightsSettleDelay))
 
+	// Rutas Setup
 	rutasRepo := rutas.NewRepository(db)
 	rutasService := rutas.NewService(rutasRepo)
 	rutasHandler := rutas.NewHandler(rutasService)
