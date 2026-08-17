@@ -7,17 +7,28 @@
 //	GET  /domotics/lights/{id}     - one bulb's current state
 //	POST /domotics/lights/{id}     - apply one command, returns the resulting state
 //
-// # Where the Bluetooth actually happens
+// # Where the Bluetooth happens
 //
-// Nowhere near this process. The server has no Bluetooth radio at all, and even with a
-// dongle, speaking BLE from a container would mean handing it the host's D-Bus and network
-// namespace. So the radio work lives in a small daemon (gv-web's scripts/ble-bridge) running
-// on a LAN machine that does have one, and this package talks to it over HTTP:
+// Here. The API talks to the bulbs itself, through BlueZ on the host it runs on:
 //
-//	client -> gv-api -> bridge daemon -> bulb
+//	client -> gv-api -> BlueZ -> bulb
 //
-// The bridge is the only thing that knows a bulb's wire protocol. This package knows which
-// bulbs exist (from the LIGHTS env var), enforces the command vocabulary, and caches reads.
+// The container needs nothing but the host's D-Bus socket bind-mounted; see gatt.go for the
+// details and docker-compose.yaml for the mount. Without a working adapter every bulb simply
+// reads offline with an explanation, so the API starts and runs anywhere.
+//
+// This replaced a Python daemon on a second machine, from back when the server had no radio.
+// The hop cost a process to keep alive, a shared secret, and an outage every time that laptop
+// slept.
+//
+// # Layout
+//
+//	config.go    which bulbs exist, from the LIGHTS env var
+//	dto.go       the wire shapes and the command vocabulary
+//	service.go   read cache, in-flight collapsing, and the settle loop
+//	driver.go    per-bulb serialisation, last known values, idle disconnect
+//	protocol.go  per-model frame encoding (currently the LEXMAN ZBEK-13)
+//	gatt.go      BlueZ over D-Bus
 //
 // # Why it lives here rather than in gv-web
 //

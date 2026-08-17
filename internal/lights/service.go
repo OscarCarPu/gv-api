@@ -3,8 +3,10 @@ package lights
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"math"
+	"strings"
 	"sync"
 	"time"
 )
@@ -12,12 +14,21 @@ import (
 // ErrNotFound is returned for an unknown bulb id; the handler maps it to 404.
 var ErrNotFound = errors.New("light not found")
 
+// How many slugs to try before giving up on naming a new bulb: "kitchen", "kitchen-2", ...
+const slugAttempts = 25
+
 // ServiceInterface is the seam the handler depends on, so it can be mocked in tests.
 type ServiceInterface interface {
-	List() []PublicLight
-	States(ctx context.Context, force bool) []State
+	List(ctx context.Context) ([]PublicLight, error)
+	States(ctx context.Context, force bool) ([]State, error)
 	State(ctx context.Context, id string, force bool) (State, error)
 	Send(ctx context.Context, id string, cmd Command) (State, error)
+
+	Create(ctx context.Context, req CreateLightRequest) (PublicLight, error)
+	Update(ctx context.Context, id string, req UpdateLightRequest) (PublicLight, error)
+	Delete(ctx context.Context, id string) error
+	Discover(ctx context.Context, window time.Duration) ([]Discovered, error)
+	Protocols() []ProtocolInfo
 }
 
 // Service reads and writes bulbs through a Driver, with a short read cache.
@@ -28,9 +39,9 @@ type ServiceInterface interface {
 // one bulb share a single in-flight call. Writes bypass the cache and replace it with their
 // result.
 type Service struct {
-	registry *Registry
-	driver   Driver
-	ttl      time.Duration
+	repo   Repository
+	driver Driver
+	ttl    time.Duration
 
 	// How many times a write is re-applied when the bulb drifts off the requested value,
 	// and how long to let it transition before checking. Zero attempts disables settling.
@@ -53,7 +64,7 @@ type inflight struct {
 	state State
 }
 
-func NewService(registry *Registry, driver Driver, ttl time.Duration, settleAttempts int, settleDelay time.Duration) *Service {
+func NewService(repo Repository, driver Driver, ttl time.Duration, settleAttempts int, settleDelay time.Duration) *Service {
 	if ttl < 0 {
 		ttl = 0
 	}
@@ -64,7 +75,7 @@ func NewService(registry *Registry, driver Driver, ttl time.Duration, settleAtte
 		settleDelay = 400 * time.Millisecond
 	}
 	return &Service{
-		registry:       registry,
+		repo:           repo,
 		driver:         driver,
 		ttl:            ttl,
 		settleAttempts: settleAttempts,
@@ -74,38 +85,47 @@ func NewService(registry *Registry, driver Driver, ttl time.Duration, settleAtte
 	}
 }
 
-func (s *Service) List() []PublicLight { return s.registry.Public() }
+func (s *Service) List(ctx context.Context) ([]PublicLight, error) {
+	lights, err := s.repo.List(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return publicLights(lights), nil
+}
 
 // States reads every bulb in parallel — each is an independent connection, and serialising
 // them would multiply the worst case by the number of bulbs.
-func (s *Service) States(ctx context.Context, force bool) []State {
-	lights := s.registry.All()
+func (s *Service) States(ctx context.Context, force bool) ([]State, error) {
+	lights, err := s.repo.List(ctx)
+	if err != nil {
+		return nil, err
+	}
 	out := make([]State, len(lights))
 
 	var wg sync.WaitGroup
 	for i, light := range lights {
 		wg.Add(1)
-		go func(i int, light Config) {
+		go func(i int, light Light) {
 			defer wg.Done()
 			out[i] = s.read(ctx, light, force)
 		}(i, light)
 	}
 	wg.Wait()
-	return out
+	return out, nil
 }
 
 func (s *Service) State(ctx context.Context, id string, force bool) (State, error) {
-	light, ok := s.registry.Get(id)
-	if !ok {
-		return State{}, ErrNotFound
+	light, err := s.repo.Get(ctx, id)
+	if err != nil {
+		return State{}, err
 	}
 	return s.read(ctx, light, force), nil
 }
 
 func (s *Service) Send(ctx context.Context, id string, cmd Command) (State, error) {
-	light, ok := s.registry.Get(id)
-	if !ok {
-		return State{}, ErrNotFound
+	light, err := s.repo.Get(ctx, id)
+	if err != nil {
+		return State{}, err
 	}
 	if err := cmd.Validate(); err != nil {
 		return State{}, err
@@ -130,7 +150,7 @@ Only continuous values are settled. Power is a boolean the bulb either took or d
 colour is not supported by the hardware in use. A bulb that cannot be read back is left
 alone — there is nothing to compare against, and re-writing blind would just be noise.
 */
-func (s *Service) settle(ctx context.Context, light Config, cmd Command, state State) State {
+func (s *Service) settle(ctx context.Context, light Light, cmd Command, state State) State {
 	target, tolerance, ok := settleTarget(cmd)
 	if !ok || !state.Online || s.settleAttempts <= 0 {
 		return state
@@ -192,7 +212,7 @@ func settleActual(cmd Command, state State) (float64, bool) {
 	}
 }
 
-func (s *Service) read(ctx context.Context, light Config, force bool) State {
+func (s *Service) read(ctx context.Context, light Light, force bool) State {
 	if !force {
 		if state, ok := s.cached(light.ID); ok {
 			return state
@@ -230,6 +250,142 @@ func (s *Service) cached(id string) (State, bool) {
 		return State{}, false
 	}
 	return entry.state, true
+}
+
+// --- managing which bulbs exist -------------------------------------------------------
+
+/*
+Create registers a bulb someone picked off a scan.
+
+The caller supplies a name, an address and a model; everything else defaults to what that
+model can do, because nobody adding a lamp to a bedroom knows its kelvin range.
+*/
+func (s *Service) Create(ctx context.Context, req CreateLightRequest) (PublicLight, error) {
+	if err := req.Validate(); err != nil {
+		return PublicLight{}, err
+	}
+	proto, _ := protocolFor(req.Protocol) // Validate already rejected an unknown one
+	info := proto.Info()
+
+	light := Light{
+		Name:              strings.TrimSpace(req.Name),
+		Model:             valueOr(req.Model, info.Label),
+		Address:           normalizeAddress(req.Address),
+		Protocol:          req.Protocol,
+		SupportsColor:     valueOr(req.SupportsColor, info.SupportsColor),
+		SupportsColorTemp: valueOr(req.SupportsColorTemp, info.SupportsColorTemp),
+		MinColorTemp:      valueOr(req.MinColorTemp, info.MinColorTemp),
+		MaxColorTemp:      valueOr(req.MaxColorTemp, info.MaxColorTemp),
+		Options:           req.Options,
+	}
+
+	// Two bulbs called "Bedroom lamp" are perfectly reasonable; two rows with the same id are
+	// not. Suffix until one sticks rather than making the person rename their lamp.
+	base := slugify(light.Name)
+	for attempt := 1; attempt <= slugAttempts; attempt++ {
+		light.ID = base
+		if attempt > 1 {
+			light.ID = fmt.Sprintf("%s-%d", base, attempt)
+		}
+		created, err := s.repo.Create(ctx, light)
+		switch {
+		case err == nil:
+			slog.Info("light added", "light", created.ID, "protocol", created.Protocol)
+			return created.Public(), nil
+		case errors.Is(err, errDuplicateID):
+			continue
+		default:
+			return PublicLight{}, err
+		}
+	}
+	return PublicLight{}, fmt.Errorf("could not find a free id for %q", light.Name)
+}
+
+// Update edits a registered bulb. Omitted fields keep what they had.
+func (s *Service) Update(ctx context.Context, id string, req UpdateLightRequest) (PublicLight, error) {
+	if err := req.Validate(); err != nil {
+		return PublicLight{}, err
+	}
+	light, err := s.repo.Get(ctx, id)
+	if err != nil {
+		return PublicLight{}, err
+	}
+
+	light.Name = strings.TrimSpace(valueOr(req.Name, light.Name))
+	light.Model = valueOr(req.Model, light.Model)
+	light.Protocol = valueOr(req.Protocol, light.Protocol)
+	light.SupportsColor = valueOr(req.SupportsColor, light.SupportsColor)
+	light.SupportsColorTemp = valueOr(req.SupportsColorTemp, light.SupportsColorTemp)
+	light.MinColorTemp = valueOr(req.MinColorTemp, light.MinColorTemp)
+	light.MaxColorTemp = valueOr(req.MaxColorTemp, light.MaxColorTemp)
+	if req.Options != nil {
+		light.Options = req.Options
+	}
+	if light.MinColorTemp >= light.MaxColorTemp {
+		return PublicLight{}, fmt.Errorf(`%w: "minColorTemp" must be below "maxColorTemp"`, ErrInvalidCommand)
+	}
+
+	updated, err := s.repo.Update(ctx, light)
+	if err != nil {
+		return PublicLight{}, err
+	}
+	// A renamed or reconfigured bulb must not keep answering from a cache built under the old
+	// one — the name travels inside State.
+	s.forget(id)
+	return updated.Public(), nil
+}
+
+func (s *Service) Delete(ctx context.Context, id string) error {
+	if err := s.repo.Delete(ctx, id); err != nil {
+		return err
+	}
+	s.forget(id)
+	slog.Info("light removed", "light", id)
+	return nil
+}
+
+/*
+Discover lists bulbs in range and marks the ones already registered.
+
+The marking is why this is a service concern rather than a straight passthrough: without it
+the add screen offers to add a lamp that is already on the page, and the only feedback would
+be a duplicate-address error after the fact.
+*/
+func (s *Service) Discover(ctx context.Context, window time.Duration) ([]Discovered, error) {
+	found, err := s.driver.Discover(ctx, window)
+	if err != nil {
+		return nil, err
+	}
+	lights, err := s.repo.List(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	registered := make(map[string]bool, len(lights))
+	for _, light := range lights {
+		registered[normalizeAddress(light.Address)] = true
+	}
+	for i, device := range found {
+		found[i].Known = registered[normalizeAddress(device.Address)]
+	}
+	return found, nil
+}
+
+func (s *Service) Protocols() []ProtocolInfo { return protocolInfos() }
+
+// forget drops a bulb's cached state, for when the bulb it described has changed or gone.
+func (s *Service) forget(id string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	delete(s.cache, id)
+}
+
+// valueOr resolves an optional field against a fallback.
+func valueOr[T any](value *T, fallback T) T {
+	if value == nil {
+		return fallback
+	}
+	return *value
 }
 
 func (s *Service) store(state State) {

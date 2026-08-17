@@ -2,20 +2,18 @@
 // versions:
 //   sqlc v1.31.1
 
-package financedb
+package lightsdb
 
 import (
 	"time"
 
 	"github.com/jackc/pgx/v5/pgtype"
-	"github.com/shopspring/decimal"
-	txtype "gv-api/internal/finance/txtype"
 )
 
 type Account struct {
 	ID        int32              `db:"id" json:"id"`
 	Name      string             `db:"name" json:"name"`
-	Total     decimal.Decimal    `db:"total" json:"total"`
+	Total     pgtype.Numeric     `db:"total" json:"total"`
 	CreatedAt pgtype.Timestamptz `db:"created_at" json:"created_at"`
 }
 
@@ -28,14 +26,14 @@ type AssistantUsage struct {
 	OutputTokens     int32              `db:"output_tokens" json:"output_tokens"`
 	CacheReadTokens  int32              `db:"cache_read_tokens" json:"cache_read_tokens"`
 	CacheWriteTokens int32              `db:"cache_write_tokens" json:"cache_write_tokens"`
-	CostUsd          decimal.Decimal    `db:"cost_usd" json:"cost_usd"`
+	CostUsd          pgtype.Numeric     `db:"cost_usd" json:"cost_usd"`
 }
 
 type Category struct {
 	ID        int32              `db:"id" json:"id"`
 	Name      string             `db:"name" json:"name"`
 	ParentID  *int32             `db:"parent_id" json:"parent_id"`
-	Type      txtype.Type        `db:"type" json:"type"`
+	Type      interface{}        `db:"type" json:"type"`
 	CreatedAt pgtype.Timestamptz `db:"created_at" json:"created_at"`
 }
 
@@ -136,8 +134,8 @@ type Todo struct {
 
 type Transaction struct {
 	ID          int32              `db:"id" json:"id"`
-	Type        txtype.Type        `db:"type" json:"type"`
-	Amount      decimal.Decimal    `db:"amount" json:"amount"`
+	Type        interface{}        `db:"type" json:"type"`
+	Amount      pgtype.Numeric     `db:"amount" json:"amount"`
 	AccountID   int32              `db:"account_id" json:"account_id"`
 	ToAccountID *int32             `db:"to_account_id" json:"to_account_id"`
 	Description *string            `db:"description" json:"description"`

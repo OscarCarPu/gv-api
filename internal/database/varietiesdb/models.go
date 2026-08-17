@@ -17,6 +17,18 @@ type Account struct {
 	CreatedAt pgtype.Timestamptz `db:"created_at" json:"created_at"`
 }
 
+type AssistantUsage struct {
+	ID               int32              `db:"id" json:"id"`
+	CreatedAt        pgtype.Timestamptz `db:"created_at" json:"created_at"`
+	Model            string             `db:"model" json:"model"`
+	Phase            string             `db:"phase" json:"phase"`
+	InputTokens      int32              `db:"input_tokens" json:"input_tokens"`
+	OutputTokens     int32              `db:"output_tokens" json:"output_tokens"`
+	CacheReadTokens  int32              `db:"cache_read_tokens" json:"cache_read_tokens"`
+	CacheWriteTokens int32              `db:"cache_write_tokens" json:"cache_write_tokens"`
+	CostUsd          pgtype.Numeric     `db:"cost_usd" json:"cost_usd"`
+}
+
 type Category struct {
 	ID        int32              `db:"id" json:"id"`
 	Name      string             `db:"name" json:"name"`
@@ -49,6 +61,20 @@ type HabitLog struct {
 	HabitID int32     `db:"habit_id" json:"habit_id"`
 	LogDate time.Time `db:"log_date" json:"log_date"`
 	Value   float32   `db:"value" json:"value"`
+}
+
+type Light struct {
+	ID                string             `db:"id" json:"id"`
+	Name              string             `db:"name" json:"name"`
+	Model             string             `db:"model" json:"model"`
+	Address           string             `db:"address" json:"address"`
+	Protocol          string             `db:"protocol" json:"protocol"`
+	SupportsColor     bool               `db:"supports_color" json:"supports_color"`
+	SupportsColorTemp bool               `db:"supports_color_temp" json:"supports_color_temp"`
+	MinColorTemp      float64            `db:"min_color_temp" json:"min_color_temp"`
+	MaxColorTemp      float64            `db:"max_color_temp" json:"max_color_temp"`
+	Options           []byte             `db:"options" json:"options"`
+	CreatedAt         pgtype.Timestamptz `db:"created_at" json:"created_at"`
 }
 
 type PlanBlock struct {

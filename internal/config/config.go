@@ -19,14 +19,16 @@ type Config struct {
 	Timezone            string
 	AllowedOrigins      []string
 
-	// Domotics lights. All optional: with no LIGHTS the section is simply empty, and with
-	// LIGHTS_DRIVER unset the in-memory mock is used so nothing needs a Bluetooth bridge.
-	LightsDriver        string
-	Lights              string
-	LightsBridgeURL     string
-	LightsBridgeToken   string
-	LightsBridgeTimeout time.Duration
-	LightsCacheTTL      time.Duration
+	// Domotics lights. Which bulbs exist lives in the database — these only say how to reach
+	// them. With LIGHTS_DRIVER unset the in-memory mock is used, so nothing needs a Bluetooth
+	// adapter to run the app.
+	LightsDriver  string
+	LightsAdapter string
+	// How long a single connect may take, discovery and GATT resolution included, and how
+	// long an untouched bulb keeps the link before it is handed back to its own remote.
+	LightsConnectTimeout time.Duration
+	LightsIdleDisconnect time.Duration
+	LightsCacheTTL       time.Duration
 	// These bulbs sometimes land a step off the requested value, so the API re-applies a
 	// write until it holds. 0 attempts disables it.
 	LightsSettleAttempts int
@@ -53,13 +55,12 @@ func Load() (*Config, error) {
 		Timezone:            getEnv("TIMEZONE", "Europe/Madrid"),
 		AllowedOrigins:      allowedOrigins,
 
-		LightsDriver:      getEnv("LIGHTS_DRIVER", "mock"),
-		Lights:            os.Getenv("LIGHTS"),
-		LightsBridgeURL:   os.Getenv("LIGHTS_BRIDGE_URL"),
-		LightsBridgeToken: os.Getenv("LIGHTS_BRIDGE_TOKEN"),
-		// A cold BLE connect through the bridge takes ~11s; anything under ~20s aborts reads
-		// that would have succeeded.
-		LightsBridgeTimeout:  getEnvDuration("LIGHTS_BRIDGE_TIMEOUT_MS", 20000),
+		LightsDriver:  getEnv("LIGHTS_DRIVER", "mock"),
+		LightsAdapter: getEnv("LIGHTS_ADAPTER", "hci0"),
+		// A cold connect is ~11s when BlueZ has to rediscover the bulb first; anything under
+		// ~20s aborts reads that would have succeeded.
+		LightsConnectTimeout: getEnvDuration("LIGHTS_CONNECT_TIMEOUT_MS", 20000),
+		LightsIdleDisconnect: getEnvDuration("LIGHTS_IDLE_DISCONNECT_MS", 90000),
 		LightsCacheTTL:       getEnvDuration("LIGHTS_CACHE_MS", 2000),
 		LightsSettleAttempts: getEnvInt("LIGHTS_SETTLE_ATTEMPTS", 2),
 		LightsSettleDelay:    getEnvDuration("LIGHTS_SETTLE_DELAY_MS", 400),
