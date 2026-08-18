@@ -82,10 +82,10 @@ var frequencyRank = map[string]int{
 	"monthly": 2,
 }
 
-func (s *Service) GetHistory(ctx context.Context, habitID int32, frequency, startAt, endAt string) (HistoryResponse, error) {
+func (s *Service) GetHistory(ctx context.Context, habitID int32, frequency, startAt, endAt string) (history.Response, error) {
 	habit, err := s.repo.GetHabitByID(ctx, habitID)
 	if err != nil {
-		return HistoryResponse{}, err
+		return history.Response{}, err
 	}
 
 	if frequency == "" {
@@ -94,26 +94,26 @@ func (s *Service) GetHistory(ctx context.Context, habitID int32, frequency, star
 
 	trunc, err := history.ValidFrequency(frequency)
 	if err != nil {
-		return HistoryResponse{}, err
+		return history.Response{}, err
 	}
 
 	start, end, err := history.ParseDateRange(s.location, frequency, startAt, endAt)
 	if err != nil {
-		return HistoryResponse{}, err
+		return history.Response{}, err
 	}
 
 	// Use AVG when viewing at a coarser frequency than the habit's native one.
-	var data []HistoryPoint
+	var data []history.Point
 	if frequencyRank[frequency] > frequencyRank[habit.Frequency] {
 		data, err = s.repo.GetHabitHistoryAvg(ctx, habitID, trunc, start, end, habit.RecordingRequired)
 	} else {
 		data, err = s.repo.GetHabitHistory(ctx, habitID, trunc, start, end, habit.RecordingRequired)
 	}
 	if err != nil {
-		return HistoryResponse{}, err
+		return history.Response{}, err
 	}
 
-	return HistoryResponse{
+	return history.Response{
 		StartAt: start.Format("2006-01-02"),
 		EndAt:   end.Format("2006-01-02"),
 		Data:    data,

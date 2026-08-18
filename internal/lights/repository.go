@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 
-	"gv-api/internal/database/lightsdb"
+	"gv-api/internal/database/gvdb"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
@@ -29,11 +29,11 @@ type Repository interface {
 }
 
 type PostgresRepository struct {
-	q *lightsdb.Queries
+	q *gvdb.Queries
 }
 
 func NewRepository(pool *pgxpool.Pool) *PostgresRepository {
-	return &PostgresRepository{q: lightsdb.New(pool)}
+	return &PostgresRepository{q: gvdb.New(pool)}
 }
 
 func (r *PostgresRepository) List(ctx context.Context) ([]Light, error) {
@@ -82,7 +82,7 @@ func (r *PostgresRepository) Get(ctx context.Context, id string) (Light, error) 
 }
 
 func (r *PostgresRepository) Create(ctx context.Context, light Light) (Light, error) {
-	row, err := r.q.CreateLight(ctx, lightsdb.CreateLightParams{
+	row, err := r.q.CreateLight(ctx, gvdb.CreateLightParams{
 		ID:                light.ID,
 		Name:              light.Name,
 		Model:             light.Model,
@@ -102,7 +102,7 @@ func (r *PostgresRepository) Create(ctx context.Context, light Light) (Light, er
 }
 
 func (r *PostgresRepository) Update(ctx context.Context, light Light) (Light, error) {
-	row, err := r.q.UpdateLight(ctx, lightsdb.UpdateLightParams{
+	row, err := r.q.UpdateLight(ctx, gvdb.UpdateLightParams{
 		ID:                light.ID,
 		Name:              light.Name,
 		Model:             light.Model,

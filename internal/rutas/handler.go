@@ -1,6 +1,7 @@
 package rutas
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -11,6 +12,14 @@ import (
 
 	"github.com/go-chi/chi/v5"
 )
+
+type ServiceInterface interface {
+	List(ctx context.Context) ([]ConcelloMark, error)
+	Get(ctx context.Context, id int32) (ConcelloMark, error)
+	Create(ctx context.Context, req CreateMarkRequest) (ConcelloMark, error)
+	Update(ctx context.Context, req UpdateMarkRequest) (ConcelloMark, error)
+	Delete(ctx context.Context, id int32) error
+}
 
 type Handler struct {
 	service ServiceInterface
@@ -139,4 +148,3 @@ func (h *Handler) Delete(w http.ResponseWriter, r *http.Request) {
 	}
 	w.WriteHeader(http.StatusNoContent)
 }
-

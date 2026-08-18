@@ -20,8 +20,8 @@ type Response struct {
 	Data    []Point `json:"data"`
 }
 
-// FrequencyToTrunc maps API frequency names to PostgreSQL date_trunc names.
-var FrequencyToTrunc = map[string]string{
+// frequencyToTrunc maps API frequency names to PostgreSQL date_trunc names.
+var frequencyToTrunc = map[string]string{
 	"daily":   "day",
 	"weekly":  "week",
 	"monthly": "month",
@@ -29,7 +29,7 @@ var FrequencyToTrunc = map[string]string{
 
 // ValidFrequency returns the trunc name for a frequency, or an error if invalid.
 func ValidFrequency(frequency string) (string, error) {
-	trunc, ok := FrequencyToTrunc[frequency]
+	trunc, ok := frequencyToTrunc[frequency]
 	if !ok {
 		return "", fmt.Errorf("invalid frequency: %s", frequency)
 	}
@@ -69,18 +69,6 @@ func PeriodCeil(date time.Time, frequency string) time.Time {
 		return date
 	}
 	return NextPeriodStart(floor, frequency)
-}
-
-// PreviousPeriodStart returns the start of the period immediately before the given period start.
-func PreviousPeriodStart(start time.Time, frequency string) time.Time {
-	switch frequency {
-	case "weekly":
-		return start.AddDate(0, 0, -7)
-	case "monthly":
-		return start.AddDate(0, -1, 0)
-	default: // daily
-		return start.AddDate(0, 0, -1)
-	}
 }
 
 // NextPeriodStart returns the start of the period immediately after the given period start.

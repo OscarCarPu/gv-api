@@ -3,7 +3,7 @@
 //   sqlc v1.31.1
 // source: plan.sql
 
-package plandb
+package gvdb
 
 import (
 	"context"

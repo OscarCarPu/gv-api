@@ -47,14 +47,6 @@ func unmarshalTodos(data []byte, taskID int32) []TodoResponse {
 	return todos
 }
 
-func depRefIDs(refs []TaskDepRef) []int32 {
-	ids := make([]int32, len(refs))
-	for i, r := range refs {
-		ids[i] = r.ID
-	}
-	return ids
-}
-
 type CreateProjectRequest struct {
 	Name        string     `json:"name"`
 	Description *string    `json:"description"`
@@ -109,9 +101,9 @@ type TaskResponse struct {
 	TaskType    string       `json:"task_type"`
 	Recurrence  *int32       `json:"recurrence,omitempty"`
 	Priority    int32        `json:"priority"`
-	DependsOn []TaskDepRef `json:"depends_on"`
-	Blocks    []TaskDepRef `json:"blocks"`
-	Blocked   bool         `json:"blocked"`
+	DependsOn   []TaskDepRef `json:"depends_on"`
+	Blocks      []TaskDepRef `json:"blocks"`
+	Blocked     bool         `json:"blocked"`
 }
 
 type CreateTodoRequest struct {
@@ -249,9 +241,9 @@ type TaskDetailResponse struct {
 	Recurrence  *int32       `json:"recurrence,omitempty"`
 	Priority    int32        `json:"priority"`
 	TimeSpent   int64        `json:"time_spent"`
-	DependsOn []TaskDepRef `json:"depends_on"`
-	Blocks    []TaskDepRef `json:"blocks"`
-	Blocked   bool         `json:"blocked"`
+	DependsOn   []TaskDepRef `json:"depends_on"`
+	Blocks      []TaskDepRef `json:"blocks"`
+	Blocked     bool         `json:"blocked"`
 }
 
 type TaskFullResponse struct {
@@ -267,10 +259,10 @@ type TaskFullResponse struct {
 	Recurrence  *int32         `json:"recurrence,omitempty"`
 	Priority    int32          `json:"priority"`
 	TimeSpent   int64          `json:"time_spent"`
-	DependsOn []TaskDepRef   `json:"depends_on"`
-	Blocks    []TaskDepRef   `json:"blocks"`
-	Blocked   bool           `json:"blocked"`
-	Todos     []TodoResponse `json:"todos"`
+	DependsOn   []TaskDepRef   `json:"depends_on"`
+	Blocks      []TaskDepRef   `json:"blocks"`
+	Blocked     bool           `json:"blocked"`
+	Todos       []TodoResponse `json:"todos"`
 }
 
 type TaskByDueDateResponse struct {
@@ -286,9 +278,9 @@ type TaskByDueDateResponse struct {
 	ProjectID    *int32       `json:"project_id"`
 	ProjectName  *string      `json:"project_name"`
 	ProjectDueAt *time.Time   `json:"project_due_at"`
-	DependsOn []TaskDepRef `json:"depends_on"`
-	Blocks    []TaskDepRef `json:"blocks"`
-	Blocked   bool         `json:"blocked"`
+	DependsOn    []TaskDepRef `json:"depends_on"`
+	Blocks       []TaskDepRef `json:"blocks"`
+	Blocked      bool         `json:"blocked"`
 }
 
 type TimeEntrySummaryResponse struct {
@@ -332,10 +324,10 @@ type ActiveTreeNode struct {
 	TaskType    *string          `json:"task_type,omitempty"`
 	Recurrence  *int32           `json:"recurrence,omitempty"`
 	Priority    *int32           `json:"priority,omitempty"`
-	DependsOn []TaskDepRef     `json:"depends_on"`
-	Blocks    []TaskDepRef     `json:"blocks"`
-	Blocked   bool             `json:"blocked"`
-	Children  []ActiveTreeNode `json:"children,omitempty"`
+	DependsOn   []TaskDepRef     `json:"depends_on"`
+	Blocks      []TaskDepRef     `json:"blocks"`
+	Blocked     bool             `json:"blocked"`
+	Children    []ActiveTreeNode `json:"children,omitempty"`
 }
 
 type ProjectChildrenResponse struct {

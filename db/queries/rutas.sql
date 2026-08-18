@@ -8,12 +8,6 @@ SELECT id, name, visited_on, description, created_at
 FROM concello_marks
 WHERE id = $1;
 
--- name: UpsertConcelloMark :one
-INSERT INTO concello_marks (name, visited_on, description)
-VALUES ($1, $2, $3)
-ON CONFLICT DO NOTHING
-RETURNING id, name, visited_on, description, created_at;
-
 -- name: CreateConcelloMark :one
 INSERT INTO concello_marks (name, visited_on, description)
 VALUES ($1, $2, $3)

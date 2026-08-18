@@ -94,23 +94,6 @@ func TestNextPeriodStart(t *testing.T) {
 	})
 }
 
-func TestPreviousPeriodStart(t *testing.T) {
-	t.Run("daily subtracts one day", func(t *testing.T) {
-		date := d(2026, 3, 17)
-		assert.Equal(t, d(2026, 3, 16), history.PreviousPeriodStart(date, "daily"))
-	})
-
-	t.Run("weekly subtracts seven days", func(t *testing.T) {
-		monday := d(2026, 3, 16)
-		assert.Equal(t, d(2026, 3, 9), history.PreviousPeriodStart(monday, "weekly"))
-	})
-
-	t.Run("monthly subtracts one month", func(t *testing.T) {
-		first := d(2026, 3, 1)
-		assert.Equal(t, d(2026, 2, 1), history.PreviousPeriodStart(first, "monthly"))
-	})
-}
-
 func TestDefaultStartDate(t *testing.T) {
 	today := d(2026, 3, 17)
 

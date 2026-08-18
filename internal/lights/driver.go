@@ -28,21 +28,15 @@ type Driver interface {
 // --- BlueZ driver --------------------------------------------------------------------
 
 /*
-BlueZDriver talks to the bulbs over Bluetooth, through BlueZ on this host.
+BlueZDriver talks to the bulbs over Bluetooth, through BlueZ on this host. It owns three
+things the hardware forces on it:
 
-It owns three things the hardware forces on it:
-
-  - **One conversation per bulb at a time.** BLE stacks serialise badly: two overlapping GATT
-    writes to one peripheral tend to fail both. A per-address lock makes that structural
-    rather than a rule clients have to follow.
-
-  - **Last known values.** Not every bulb can be read, and even a readable one answers nothing
-    when written a value it already holds. So the driver remembers what it last set, and a
-    reply is that record updated with whatever the bulb actually confirmed.
-
-  - **Letting go.** These lamps accept a single central, so holding the link forever locks out
-    their own remote and the vendor app. A bulb nobody has touched for idleDisconnect is
-    dropped; reconnecting costs a second or two.
+  - One conversation per bulb: two overlapping GATT writes to one peripheral tend to fail
+    both, so a per-address lock makes that structural.
+  - Last known values: not every bulb can be read, and a readable one answers nothing when
+    written a value it already holds, so replies are that record plus what the bulb confirmed.
+  - Letting go: these lamps accept a single central, so a bulb untouched for idleDisconnect
+    is dropped rather than locking out its own remote.
 
 A cold call is slow and legitimately so: when BlueZ has dropped an unbonded bulb's object it
 must rediscover it (~8s) before it can even connect, and a full read is three round-trips

@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"time"
 
-	"gv-api/internal/database/rutasdb"
+	"gv-api/internal/database/gvdb"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -29,14 +29,14 @@ type Repository interface {
 }
 
 type PostgresRepository struct {
-	q *rutasdb.Queries
+	q *gvdb.Queries
 }
 
 func NewRepository(pool *pgxpool.Pool) *PostgresRepository {
-	return &PostgresRepository{q: rutasdb.New(pool)}
+	return &PostgresRepository{q: gvdb.New(pool)}
 }
 
-func toDTO(m rutasdb.ConcelloMark) ConcelloMark {
+func toDTO(m gvdb.ConcelloMark) ConcelloMark {
 	return ConcelloMark{
 		ID:          m.ID,
 		Name:        m.Name,
@@ -73,7 +73,7 @@ func (r *PostgresRepository) Create(ctx context.Context, req CreateMarkRequest) 
 	if err != nil {
 		return ConcelloMark{}, err
 	}
-	row, err := r.q.CreateConcelloMark(ctx, rutasdb.CreateConcelloMarkParams{
+	row, err := r.q.CreateConcelloMark(ctx, gvdb.CreateConcelloMarkParams{
 		Name:        req.Name,
 		VisitedOn:   date,
 		Description: req.Description,
@@ -89,7 +89,7 @@ func (r *PostgresRepository) Update(ctx context.Context, req UpdateMarkRequest) 
 	if err != nil {
 		return ConcelloMark{}, err
 	}
-	row, err := r.q.UpdateConcelloMark(ctx, rutasdb.UpdateConcelloMarkParams{
+	row, err := r.q.UpdateConcelloMark(ctx, gvdb.UpdateConcelloMarkParams{
 		ID:          req.ID,
 		VisitedOn:   date,
 		Description: req.Description,

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"gv-api/internal/history"
 	"net/http"
 
 	"gv-api/internal/httputil"
@@ -18,7 +19,7 @@ type ServiceInterface interface {
 	CreateHabit(ctx context.Context, req CreateHabitRequest) (CreateHabitResponse, error)
 	UpdateHabit(ctx context.Context, req UpdateHabitRequest) (CreateHabitResponse, error)
 	DeleteHabit(ctx context.Context, id int32) error
-	GetHistory(ctx context.Context, habitID int32, frequency, startAt, endAt string) (HistoryResponse, error)
+	GetHistory(ctx context.Context, habitID int32, frequency, startAt, endAt string) (history.Response, error)
 }
 
 type Handler struct {

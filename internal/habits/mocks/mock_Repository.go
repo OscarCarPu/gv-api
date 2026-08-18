@@ -4,9 +4,10 @@ package mocks
 
 import (
 	context "context"
+	gvdb "gv-api/internal/database/gvdb"
 	habits "gv-api/internal/habits"
 
-	habitsdb "gv-api/internal/database/habitsdb"
+	history "gv-api/internal/history"
 
 	mock "github.com/stretchr/testify/mock"
 
@@ -136,22 +137,22 @@ func (_c *MockRepository_DeleteHabit_Call) RunAndReturn(run func(context.Context
 }
 
 // GetHabitByID provides a mock function with given fields: ctx, id
-func (_m *MockRepository) GetHabitByID(ctx context.Context, id int32) (habitsdb.GetHabitByIDRow, error) {
+func (_m *MockRepository) GetHabitByID(ctx context.Context, id int32) (gvdb.GetHabitByIDRow, error) {
 	ret := _m.Called(ctx, id)
 
 	if len(ret) == 0 {
 		panic("no return value specified for GetHabitByID")
 	}
 
-	var r0 habitsdb.GetHabitByIDRow
+	var r0 gvdb.GetHabitByIDRow
 	var r1 error
-	if rf, ok := ret.Get(0).(func(context.Context, int32) (habitsdb.GetHabitByIDRow, error)); ok {
+	if rf, ok := ret.Get(0).(func(context.Context, int32) (gvdb.GetHabitByIDRow, error)); ok {
 		return rf(ctx, id)
 	}
-	if rf, ok := ret.Get(0).(func(context.Context, int32) habitsdb.GetHabitByIDRow); ok {
+	if rf, ok := ret.Get(0).(func(context.Context, int32) gvdb.GetHabitByIDRow); ok {
 		r0 = rf(ctx, id)
 	} else {
-		r0 = ret.Get(0).(habitsdb.GetHabitByIDRow)
+		r0 = ret.Get(0).(gvdb.GetHabitByIDRow)
 	}
 
 	if rf, ok := ret.Get(1).(func(context.Context, int32) error); ok {
@@ -182,34 +183,34 @@ func (_c *MockRepository_GetHabitByID_Call) Run(run func(ctx context.Context, id
 	return _c
 }
 
-func (_c *MockRepository_GetHabitByID_Call) Return(_a0 habitsdb.GetHabitByIDRow, _a1 error) *MockRepository_GetHabitByID_Call {
+func (_c *MockRepository_GetHabitByID_Call) Return(_a0 gvdb.GetHabitByIDRow, _a1 error) *MockRepository_GetHabitByID_Call {
 	_c.Call.Return(_a0, _a1)
 	return _c
 }
 
-func (_c *MockRepository_GetHabitByID_Call) RunAndReturn(run func(context.Context, int32) (habitsdb.GetHabitByIDRow, error)) *MockRepository_GetHabitByID_Call {
+func (_c *MockRepository_GetHabitByID_Call) RunAndReturn(run func(context.Context, int32) (gvdb.GetHabitByIDRow, error)) *MockRepository_GetHabitByID_Call {
 	_c.Call.Return(run)
 	return _c
 }
 
 // GetHabitHistory provides a mock function with given fields: ctx, habitID, frequency, startAt, endAt, fillZeros
-func (_m *MockRepository) GetHabitHistory(ctx context.Context, habitID int32, frequency string, startAt time.Time, endAt time.Time, fillZeros bool) ([]habits.HistoryPoint, error) {
+func (_m *MockRepository) GetHabitHistory(ctx context.Context, habitID int32, frequency string, startAt time.Time, endAt time.Time, fillZeros bool) ([]history.Point, error) {
 	ret := _m.Called(ctx, habitID, frequency, startAt, endAt, fillZeros)
 
 	if len(ret) == 0 {
 		panic("no return value specified for GetHabitHistory")
 	}
 
-	var r0 []habits.HistoryPoint
+	var r0 []history.Point
 	var r1 error
-	if rf, ok := ret.Get(0).(func(context.Context, int32, string, time.Time, time.Time, bool) ([]habits.HistoryPoint, error)); ok {
+	if rf, ok := ret.Get(0).(func(context.Context, int32, string, time.Time, time.Time, bool) ([]history.Point, error)); ok {
 		return rf(ctx, habitID, frequency, startAt, endAt, fillZeros)
 	}
-	if rf, ok := ret.Get(0).(func(context.Context, int32, string, time.Time, time.Time, bool) []habits.HistoryPoint); ok {
+	if rf, ok := ret.Get(0).(func(context.Context, int32, string, time.Time, time.Time, bool) []history.Point); ok {
 		r0 = rf(ctx, habitID, frequency, startAt, endAt, fillZeros)
 	} else {
 		if ret.Get(0) != nil {
-			r0 = ret.Get(0).([]habits.HistoryPoint)
+			r0 = ret.Get(0).([]history.Point)
 		}
 	}
 
@@ -245,34 +246,34 @@ func (_c *MockRepository_GetHabitHistory_Call) Run(run func(ctx context.Context,
 	return _c
 }
 
-func (_c *MockRepository_GetHabitHistory_Call) Return(_a0 []habits.HistoryPoint, _a1 error) *MockRepository_GetHabitHistory_Call {
+func (_c *MockRepository_GetHabitHistory_Call) Return(_a0 []history.Point, _a1 error) *MockRepository_GetHabitHistory_Call {
 	_c.Call.Return(_a0, _a1)
 	return _c
 }
 
-func (_c *MockRepository_GetHabitHistory_Call) RunAndReturn(run func(context.Context, int32, string, time.Time, time.Time, bool) ([]habits.HistoryPoint, error)) *MockRepository_GetHabitHistory_Call {
+func (_c *MockRepository_GetHabitHistory_Call) RunAndReturn(run func(context.Context, int32, string, time.Time, time.Time, bool) ([]history.Point, error)) *MockRepository_GetHabitHistory_Call {
 	_c.Call.Return(run)
 	return _c
 }
 
 // GetHabitHistoryAvg provides a mock function with given fields: ctx, habitID, frequency, startAt, endAt, fillZeros
-func (_m *MockRepository) GetHabitHistoryAvg(ctx context.Context, habitID int32, frequency string, startAt time.Time, endAt time.Time, fillZeros bool) ([]habits.HistoryPoint, error) {
+func (_m *MockRepository) GetHabitHistoryAvg(ctx context.Context, habitID int32, frequency string, startAt time.Time, endAt time.Time, fillZeros bool) ([]history.Point, error) {
 	ret := _m.Called(ctx, habitID, frequency, startAt, endAt, fillZeros)
 
 	if len(ret) == 0 {
 		panic("no return value specified for GetHabitHistoryAvg")
 	}
 
-	var r0 []habits.HistoryPoint
+	var r0 []history.Point
 	var r1 error
-	if rf, ok := ret.Get(0).(func(context.Context, int32, string, time.Time, time.Time, bool) ([]habits.HistoryPoint, error)); ok {
+	if rf, ok := ret.Get(0).(func(context.Context, int32, string, time.Time, time.Time, bool) ([]history.Point, error)); ok {
 		return rf(ctx, habitID, frequency, startAt, endAt, fillZeros)
 	}
-	if rf, ok := ret.Get(0).(func(context.Context, int32, string, time.Time, time.Time, bool) []habits.HistoryPoint); ok {
+	if rf, ok := ret.Get(0).(func(context.Context, int32, string, time.Time, time.Time, bool) []history.Point); ok {
 		r0 = rf(ctx, habitID, frequency, startAt, endAt, fillZeros)
 	} else {
 		if ret.Get(0) != nil {
-			r0 = ret.Get(0).([]habits.HistoryPoint)
+			r0 = ret.Get(0).([]history.Point)
 		}
 	}
 
@@ -308,12 +309,12 @@ func (_c *MockRepository_GetHabitHistoryAvg_Call) Run(run func(ctx context.Conte
 	return _c
 }
 
-func (_c *MockRepository_GetHabitHistoryAvg_Call) Return(_a0 []habits.HistoryPoint, _a1 error) *MockRepository_GetHabitHistoryAvg_Call {
+func (_c *MockRepository_GetHabitHistoryAvg_Call) Return(_a0 []history.Point, _a1 error) *MockRepository_GetHabitHistoryAvg_Call {
 	_c.Call.Return(_a0, _a1)
 	return _c
 }
 
-func (_c *MockRepository_GetHabitHistoryAvg_Call) RunAndReturn(run func(context.Context, int32, string, time.Time, time.Time, bool) ([]habits.HistoryPoint, error)) *MockRepository_GetHabitHistoryAvg_Call {
+func (_c *MockRepository_GetHabitHistoryAvg_Call) RunAndReturn(run func(context.Context, int32, string, time.Time, time.Time, bool) ([]history.Point, error)) *MockRepository_GetHabitHistoryAvg_Call {
 	_c.Call.Return(run)
 	return _c
 }

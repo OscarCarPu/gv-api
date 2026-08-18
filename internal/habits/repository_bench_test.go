@@ -6,7 +6,6 @@ import (
 	"testing"
 	"time"
 
-	"gv-api/internal/database/habitsdb"
 	"gv-api/internal/habits"
 	testutil "gv-api/internal/testutil"
 
@@ -22,7 +21,7 @@ func benchRepo(b *testing.B) (*habits.PostgresRepository, *pgxpool.Pool) {
 	b.Helper()
 	pool := testutil.NewPool(b)
 	testutil.Truncate(b, pool, "habit_logs", "habits")
-	return habits.NewRepository(habitsdb.New(pool)), pool
+	return habits.NewRepository(pool), pool
 }
 
 // seedDailyLogs creates `days` consecutive daily logs ending at today.
@@ -101,8 +100,8 @@ func BenchmarkRecalculateStreak_Weekly(b *testing.B) {
 // backwards looking for the last logged value. With 1 year of sparse logs.
 func BenchmarkRecalculateStreak_CarryForward(b *testing.B) {
 	cases := []struct {
-		name             string
-		logs, spanDays   int
+		name           string
+		logs, spanDays int
 	}{
 		{"30logs_365days", 30, 365},
 		{"100logs_1095days", 100, 1095},

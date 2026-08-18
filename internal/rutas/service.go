@@ -2,14 +2,6 @@ package rutas
 
 import "context"
 
-type ServiceInterface interface {
-	List(ctx context.Context) ([]ConcelloMark, error)
-	Get(ctx context.Context, id int32) (ConcelloMark, error)
-	Create(ctx context.Context, req CreateMarkRequest) (ConcelloMark, error)
-	Update(ctx context.Context, req UpdateMarkRequest) (ConcelloMark, error)
-	Delete(ctx context.Context, id int32) error
-}
-
 type Service struct {
 	repo Repository
 }

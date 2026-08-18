@@ -5,7 +5,6 @@ import (
 	"testing"
 	"time"
 
-	"gv-api/internal/database/habitsdb"
 	"gv-api/internal/habits"
 	"gv-api/internal/testutil"
 
@@ -17,7 +16,7 @@ func newRepo(t *testing.T) (*habits.PostgresRepository, *pgxpool.Pool) {
 	t.Helper()
 	pool := testutil.NewPool(t)
 	testutil.Truncate(t, pool, "habit_logs", "habits")
-	return habits.NewRepository(habitsdb.New(pool)), pool
+	return habits.NewRepository(pool), pool
 }
 
 // readStreaks returns (current_streak, longest_streak) for the habit row.
@@ -193,7 +192,7 @@ func TestIntegration_GetHabitHistory_FillZeros(t *testing.T) {
 	ctx := context.Background()
 	pool := testutil.NewPool(t)
 	testutil.Truncate(t, pool, "habit_logs", "habits")
-	repo := habits.NewRepository(habitsdb.New(pool))
+	repo := habits.NewRepository(pool)
 
 	h, err := repo.CreateHabit(ctx, "daily", nil, "daily", nil, nil, true)
 	require.NoError(t, err)

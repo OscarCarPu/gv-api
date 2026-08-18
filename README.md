@@ -43,8 +43,11 @@ A comprehensive life orchestrator built in Go, designed to centralize data from 
 | `SEMIPRIVATE_PASSWORD` | **Yes** | — | Login password for read-only tokens. |
 | `JWT_SECRET` | **Yes** | — | Secret used to sign JWTs. Generate with `openssl rand -hex 32`. |
 | `TOTP_SECRET` | **Yes** | — | Base32 secret for TOTP 2FA. Generate with `openssl rand -base32 20`. |
+| `ALLOWED_ORIGINS` | **Yes** | — | Comma-separated CORS origins. |
 | `PORT` | No | `8080` | HTTP listen port. |
 | `TIMEZONE` | No | `Europe/Madrid` | IANA timezone for date arithmetic. |
+| `LIGHTS_DRIVER` | No | `mock` | `bluez` to drive real bulbs; anything else uses the in-memory mock. |
+| `LIGHTS_*` | No | — | Adapter, timeouts, cache TTL and settle retries. See `.env.example`. |
 
 ## API
 
@@ -57,6 +60,8 @@ A comprehensive life orchestrator built in Go, designed to centralize data from 
 | **Tasks** | Hierarchical project/task tree with todos, due dates, and Pomodoro time entries. | [tasks](docs/api/tasks/README.md) |
 | **Plan** | Daily time-block planner that schedules tasks from the task tree. | [plan](docs/api/plan.md) |
 | **Finance** | Accounts, categories, transactions, and spending stats (net worth, by-category, monthly, estimation). | [finance](docs/api/finance.md) |
+| **Rutas** | Concello marks: which municipalities were visited and when. | [rutas](docs/api/rutas.md) |
+| **Lights** | Bluetooth bulbs driven over BlueZ, with discovery and a registry. Semiprivate auth. | [lights](docs/api/lights.md) |
 
 ### Infrastructure
 
@@ -69,6 +74,19 @@ A comprehensive life orchestrator built in Go, designed to centralize data from 
 | Header | Direction | Description |
 |---|---|---|
 | `X-Request-ID` | Request & Response | Optional on request; auto-generated (random 8-byte hex) if absent. Echoed back in the response and propagated through logs for correlation. |
+
+## Testing
+
+| Command | Scope |
+|---|---|
+| `make lint` | gofmt + `go vet`. Runs in CI before the tests. |
+| `make test-unit` | Handlers and services against mocks. No database. |
+| `make test-integration` | Repositories against a real test database. |
+| `make test-e2e` | HTTP requests against the running API. |
+| `make test-bench` | Repository benchmarks (`BENCHTIME=10x` to override). |
+| `make test` | All three test levels in order. |
+
+The test database is created and dropped per run.
 
 ## Code Generation
 
