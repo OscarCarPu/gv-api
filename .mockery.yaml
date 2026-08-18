@@ -36,10 +36,3 @@ packages:
     interfaces:
       Repository:
       ServiceInterface:
-  gv-api/internal/varieties:
-    config:
-      dir: internal/varieties/mocks
-      outpkg: mocks
-    interfaces:
-      Repository:
-      ServiceInterface:

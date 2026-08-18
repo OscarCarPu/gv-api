@@ -1,8 +1,7 @@
 # Lights (Domotics)
 
 Control for the house's Bluetooth bulbs. **Semiprivate auth** — either the full or the
-semiprivate token gets in, same tier as varieties, because this is house control rather than
-personal data.
+semiprivate token gets in, because this is house control rather than personal data.
 
 ## Where the Bluetooth happens
 

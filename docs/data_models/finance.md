@@ -104,5 +104,5 @@ The service layer (`internal/finance/service.go`) normalizes optional `from` / `
 - All money values use `NUMERIC(15,2)` end-to-end. In Go they are `github.com/shopspring/decimal.Decimal` (configured via sqlc override) and serialized as JSON strings.
 - DELETE of an account is hard but blocked by `ON DELETE RESTRICT` if any transaction still references it. Delete the transactions first (which the trigger will then reverse from `total`), then delete the account.
 - DELETE of a category is also `ON DELETE RESTRICT` against both `transactions.category_id` and `categories.parent_id` self-references.
-- There is no soft delete and no audit history table on this feature — unlike `weed_varieties`. If audit becomes a requirement, the pattern from `015_weed_varieties_audit.up.sql` can be lifted onto these tables.
+- There is no soft delete and no audit history table on this feature.
 - Accounts are currency-agnostic: amounts are bare `NUMERIC(15,2)` values with no currency tagging. Mixing currencies on the same instance is up to the user.

@@ -24,7 +24,6 @@ import (
 	"gv-api/internal/plan"
 	"gv-api/internal/rutas"
 	"gv-api/internal/tasks"
-	"gv-api/internal/varieties"
 
 	"github.com/go-chi/chi/v5"
 	chimiddleware "github.com/go-chi/chi/v5/middleware"
@@ -78,11 +77,6 @@ func main() {
 	planRepo := plan.NewRepository(planQueries)
 	planService := plan.NewService(planRepo, taskService, loc)
 	planHandler := plan.NewHandler(planService)
-
-	// Varieties Setup
-	varietyRepo := varieties.NewRepository(db)
-	varietyService := varieties.NewService(varietyRepo)
-	varietyHandler := varieties.NewHandler(varietyService)
 
 	// Finance Setup
 	financeRepo := finance.NewRepository(db)
@@ -138,7 +132,6 @@ func main() {
 	// Semiprivate (semi or full token)
 	r.Group(func(r chi.Router) {
 		r.Use(semiMiddleware.Handle)
-		varietyHandler.RegisterRoutes(r)
 		lightsHandler.RegisterRoutes(r)
 	})
 

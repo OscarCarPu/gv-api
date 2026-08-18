@@ -1,6 +1,6 @@
 // Package lights controls the house's Bluetooth bulbs (Domotics section).
 //
-// Endpoints (semiprivate auth, same tier as varieties):
+// Endpoints (semiprivate auth):
 //
 //	GET  /domotics/lights          - configured bulbs, no live state
 //	GET  /domotics/lights/state    - every bulb's current state

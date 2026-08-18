@@ -12,7 +12,7 @@ The API issues JWTs with a `kind` claim that determines which endpoints the toke
 **Endpoint tiers:**
 
 - **Public:** `POST /login`, `POST /login/2fa`.
-- **Semi-private** (accept `semi` *or* `full`): `/varieties` CRUD.
+- **Semi-private** (accept `semi` *or* `full`): `/domotics/lights/*`.
 - **Full-private** (require `full`): everything else (`/habits`, `/tasks/*`).
 
 All protected endpoints expect the token in the `Authorization` header:
