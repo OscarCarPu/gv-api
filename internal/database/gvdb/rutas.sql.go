@@ -3,7 +3,7 @@
 //   sqlc v1.31.1
 // source: rutas.sql
 
-package rutasdb
+package gvdb
 
 import (
 	"context"
@@ -110,32 +110,6 @@ type UpdateConcelloMarkParams struct {
 
 func (q *Queries) UpdateConcelloMark(ctx context.Context, arg UpdateConcelloMarkParams) (ConcelloMark, error) {
 	row := q.db.QueryRow(ctx, updateConcelloMark, arg.ID, arg.VisitedOn, arg.Description)
-	var i ConcelloMark
-	err := row.Scan(
-		&i.ID,
-		&i.Name,
-		&i.VisitedOn,
-		&i.Description,
-		&i.CreatedAt,
-	)
-	return i, err
-}
-
-const upsertConcelloMark = `-- name: UpsertConcelloMark :one
-INSERT INTO concello_marks (name, visited_on, description)
-VALUES ($1, $2, $3)
-ON CONFLICT DO NOTHING
-RETURNING id, name, visited_on, description, created_at
-`
-
-type UpsertConcelloMarkParams struct {
-	Name        string    `db:"name" json:"name"`
-	VisitedOn   time.Time `db:"visited_on" json:"visited_on"`
-	Description string    `db:"description" json:"description"`
-}
-
-func (q *Queries) UpsertConcelloMark(ctx context.Context, arg UpsertConcelloMarkParams) (ConcelloMark, error) {
-	row := q.db.QueryRow(ctx, upsertConcelloMark, arg.Name, arg.VisitedOn, arg.Description)
 	var i ConcelloMark
 	err := row.Scan(
 		&i.ID,

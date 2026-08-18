@@ -16,13 +16,9 @@ import (
 /*
 BlueZ transport for the bulbs, over D-Bus.
 
-This used to be a separate Python daemon on a machine that had a radio, because the server
-had none. Now it does, so the radio work is here: one less process, one less network hop and
-one less place for a bulb's state to be half-known.
-
-Why raw D-Bus rather than a BLE library: BlueZ already does the hard parts (scanning,
-connecting, GATT), it is reachable over a socket the container can be handed, and speaking to
-it needs no CGO and no privileged capabilities. The whole surface a bulb needs is four calls.
+Raw D-Bus rather than a BLE library: BlueZ already does the hard parts (scanning, connecting,
+GATT), it is reachable over a socket the container can be handed, and speaking to it needs no
+CGO and no privileged capabilities. The whole surface a bulb needs is four calls.
 
 # What the container needs
 

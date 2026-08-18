@@ -95,16 +95,11 @@ type TaskResponse struct {
 	StartedAt   *time.Time   `json:"started_at"`
 	FinishedAt  *time.Time   `json:"finished_at"`
 	TaskType    string       `json:"task_type"`
-	Recurrence  *int32      `json:"recurrence,omitempty"`
+	Recurrence  *int32       `json:"recurrence,omitempty"`
 	Priority    int32        `json:"priority"`
-	DependsOn []TaskDepRef `json:"depends_on"`
-	Blocks    []TaskDepRef `json:"blocks"`
-	Blocked   bool         `json:"blocked"`
-}
-
-type CreateTodoRequest struct {
-	TaskID int32  `json:"task_id"`
-	Name   string `json:"name"`
+	DependsOn   []TaskDepRef `json:"depends_on"`
+	Blocks      []TaskDepRef `json:"blocks"`
+	Blocked     bool         `json:"blocked"`
 }
 
 type TodoResponse struct {
@@ -112,36 +107,6 @@ type TodoResponse struct {
 	TaskID int32  `json:"task_id"`
 	Name   string `json:"name"`
 	IsDone bool   `json:"is_done"`
-}
-
-type CreateTimeEntryRequest struct {
-	TaskID     int32      `json:"task_id"`
-	StartedAt  time.Time  `json:"started_at"`
-	FinishedAt *time.Time `json:"finished_at,omitempty"`
-	Comment    *string    `json:"comment,omitempty"`
-}
-
-type TimeEntryResponse struct {
-	ID         int32      `json:"id"`
-	TaskID     int32      `json:"task_id"`
-	StartedAt  time.Time  `json:"started_at"`
-	FinishedAt *time.Time `json:"finished_at"`
-	Comment    *string    `json:"comment"`
-}
-
-type TimeEntryWithTaskResponse struct {
-	ID             int32      `json:"id"`
-	TaskID         int32      `json:"task_id"`
-	TaskName       string     `json:"task_name"`
-	TaskType       string     `json:"task_type"`
-	Recurrence     *int32    `json:"recurrence,omitempty"`
-	ProjectID      *int32     `json:"project_id"`
-	ProjectName    *string    `json:"project_name"`
-	StartedAt      time.Time  `json:"started_at"`
-	FinishedAt     *time.Time `json:"finished_at"`
-	Comment        *string    `json:"comment"`
-	TaskFinishedAt *time.Time `json:"task_finished_at"`
-	TimeSpent      int64      `json:"time_spent"`
 }
 
 type UpdateProjectRequest struct {
@@ -165,71 +130,6 @@ type UpdateTaskRequest struct {
 	Priority    *int32     `json:"priority,omitempty"`
 }
 
-type UpdateTodoRequest struct {
-	Name   *string `json:"name,omitempty"`
-	IsDone *bool   `json:"is_done,omitempty"`
-}
-
-type UpdateTimeEntryRequest struct {
-	StartedAt  *time.Time `json:"started_at,omitempty"`
-	FinishedAt *time.Time `json:"finished_at,omitempty"`
-	Comment    *string    `json:"comment,omitempty"`
-}
-
-type TaskDetailResponse struct {
-	ID          int32        `json:"id"`
-	ProjectID   *int32       `json:"project_id"`
-	Name        string       `json:"name"`
-	Description *string      `json:"description"`
-	DueAt       *time.Time   `json:"due_at"`
-	StartedAt   *time.Time   `json:"started_at"`
-	FinishedAt  *time.Time   `json:"finished_at"`
-	TaskType    string       `json:"task_type"`
-	Recurrence  *int32      `json:"recurrence,omitempty"`
-	TimeSpent   int64        `json:"time_spent"`
-	DependsOn []TaskDepRef `json:"depends_on"`
-	Blocks    []TaskDepRef `json:"blocks"`
-	Blocked   bool         `json:"blocked"`
-}
-
-type ProjectDetailResponse struct {
-	ID          int32      `json:"id"`
-	ParentID    *int32     `json:"parent_id"`
-	Name        string     `json:"name"`
-	Description *string    `json:"description"`
-	StartedAt   *time.Time `json:"started_at"`
-	FinishedAt  *time.Time `json:"finished_at"`
-	TimeSpent   int64      `json:"time_spent"`
-}
-
-type TaskTimeEntriesResponse struct {
-	Task        TaskDetailResponse  `json:"task"`
-	TimeEntries []TimeEntryResponse `json:"time_entries"`
-}
-
-type ProjectChildNode struct {
-	ID          int32          `json:"id"`
-	Type        string         `json:"type"`
-	Name        string         `json:"name"`
-	Description *string        `json:"description"`
-	StartedAt   *time.Time     `json:"started_at"`
-	FinishedAt  *time.Time     `json:"finished_at"`
-	TimeSpent   int64          `json:"time_spent"`
-	ParentID    *int32         `json:"parent_id,omitempty"`
-	ProjectID  *int32         `json:"project_id,omitempty"`
-	TaskType   *string        `json:"task_type,omitempty"`
-	Recurrence *int32        `json:"recurrence,omitempty"`
-	DependsOn  []TaskDepRef   `json:"depends_on,omitempty"`
-	Blocks     []TaskDepRef   `json:"blocks,omitempty"`
-	Blocked    *bool          `json:"blocked,omitempty"`
-	Todos      []TodoResponse `json:"todos,omitempty"`
-}
-
-type ProjectChildrenResponse struct {
-	Project  ProjectDetailResponse `json:"project"`
-	Children []ProjectChildNode    `json:"children"`
-}
-
 type TaskFullResponse struct {
 	ID          int32          `json:"id"`
 	ProjectID   *int32         `json:"project_id"`
@@ -242,28 +142,10 @@ type TaskFullResponse struct {
 	Recurrence  *int32         `json:"recurrence,omitempty"`
 	Priority    int32          `json:"priority"`
 	TimeSpent   int64          `json:"time_spent"`
-	DependsOn []TaskDepRef   `json:"depends_on"`
-	Blocks    []TaskDepRef   `json:"blocks"`
-	Blocked   bool           `json:"blocked"`
-	Todos     []TodoResponse `json:"todos"`
-}
-
-type TaskByDueDateResponse struct {
-	ID           int32        `json:"id"`
-	Name         string       `json:"name"`
-	Description  *string      `json:"description"`
-	DueAt        *time.Time   `json:"due_at"`
-	StartedAt    *time.Time   `json:"started_at"`
-	TaskType     string       `json:"task_type"`
-	Recurrence   *string      `json:"recurrence,omitempty"`
-	Priority     int32        `json:"priority"`
-	TimeSpent    int64        `json:"time_spent"`
-	ProjectID    *int32       `json:"project_id"`
-	ProjectName  *string      `json:"project_name"`
-	ProjectDueAt *time.Time   `json:"project_due_at"`
-	DependsOn []TaskDepRef `json:"depends_on"`
-	Blocks    []TaskDepRef `json:"blocks"`
-	Blocked   bool         `json:"blocked"`
+	DependsOn   []TaskDepRef   `json:"depends_on"`
+	Blocks      []TaskDepRef   `json:"blocks"`
+	Blocked     bool           `json:"blocked"`
+	Todos       []TodoResponse `json:"todos"`
 }
 
 type ActiveTreeNode struct {
@@ -276,21 +158,10 @@ type ActiveTreeNode struct {
 	TaskType    *string          `json:"task_type,omitempty"`
 	Recurrence  *int32           `json:"recurrence,omitempty"`
 	Priority    *int32           `json:"priority,omitempty"`
-	DependsOn []TaskDepRef     `json:"depends_on"`
-	Blocks    []TaskDepRef     `json:"blocks"`
-	Blocked   bool             `json:"blocked"`
-	Children  []ActiveTreeNode `json:"children,omitempty"`
-}
-
-type HistoryPoint struct {
-	Date  string  `json:"date"`
-	Value float32 `json:"value"`
-}
-
-type HistoryResponse struct {
-	StartAt string         `json:"start_at"`
-	EndAt   string         `json:"end_at"`
-	Data    []HistoryPoint `json:"data"`
+	DependsOn   []TaskDepRef     `json:"depends_on"`
+	Blocks      []TaskDepRef     `json:"blocks"`
+	Blocked     bool             `json:"blocked"`
+	Children    []ActiveTreeNode `json:"children,omitempty"`
 }
 
 // APIClient is a test driver that wraps HTTP calls to the API.
@@ -431,34 +302,6 @@ func (c *APIClient) CreateProject(t *testing.T, req CreateProjectRequest) Projec
 	return out
 }
 
-func (c *APIClient) GetRootProjects(t *testing.T) []ProjectResponse {
-	t.Helper()
-	resp := c.do(t, http.MethodGet, "/tasks/projects", nil)
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("GetRootProjects: got status %d, want 200", resp.StatusCode)
-	}
-	var out []ProjectResponse
-	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
-		t.Fatalf("GetRootProjects: decode: %v", err)
-	}
-	return out
-}
-
-func (c *APIClient) GetProjectChildren(t *testing.T, id int32) ProjectChildrenResponse {
-	t.Helper()
-	resp := c.do(t, http.MethodGet, fmt.Sprintf("/tasks/projects/%d/children", id), nil)
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("GetProjectChildren: got status %d, want 200", resp.StatusCode)
-	}
-	var out ProjectChildrenResponse
-	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
-		t.Fatalf("GetProjectChildren: decode: %v", err)
-	}
-	return out
-}
-
 func (c *APIClient) UpdateProject(t *testing.T, id int32, req UpdateProjectRequest) ProjectResponse {
 	t.Helper()
 	body, _ := json.Marshal(req)
@@ -489,20 +332,6 @@ func (c *APIClient) CreateTask(t *testing.T, req CreateTaskRequest) TaskResponse
 	return out
 }
 
-func (c *APIClient) GetTaskTimeEntries(t *testing.T, id int32) TaskTimeEntriesResponse {
-	t.Helper()
-	resp := c.do(t, http.MethodGet, fmt.Sprintf("/tasks/tasks/%d/time-entries", id), nil)
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("GetTaskTimeEntries: got status %d, want 200", resp.StatusCode)
-	}
-	var out TaskTimeEntriesResponse
-	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
-		t.Fatalf("GetTaskTimeEntries: decode: %v", err)
-	}
-	return out
-}
-
 func (c *APIClient) UpdateTask(t *testing.T, id int32, req UpdateTaskRequest) TaskResponse {
 	t.Helper()
 	body, _ := json.Marshal(req)
@@ -518,128 +347,6 @@ func (c *APIClient) UpdateTask(t *testing.T, id int32, req UpdateTaskRequest) Ta
 	return out
 }
 
-func (c *APIClient) CreateTodo(t *testing.T, req CreateTodoRequest) TodoResponse {
-	t.Helper()
-	body, _ := json.Marshal(req)
-	resp := c.do(t, http.MethodPost, "/tasks/todos", body)
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusCreated {
-		t.Fatalf("CreateTodo: got status %d, want 201", resp.StatusCode)
-	}
-	var out TodoResponse
-	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
-		t.Fatalf("CreateTodo: decode: %v", err)
-	}
-	return out
-}
-
-func (c *APIClient) UpdateTodo(t *testing.T, id int32, req UpdateTodoRequest) TodoResponse {
-	t.Helper()
-	body, _ := json.Marshal(req)
-	resp := c.do(t, http.MethodPatch, fmt.Sprintf("/tasks/todos/%d", id), body)
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("UpdateTodo: got status %d, want 200", resp.StatusCode)
-	}
-	var out TodoResponse
-	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
-		t.Fatalf("UpdateTodo: decode: %v", err)
-	}
-	return out
-}
-
-func (c *APIClient) CreateTimeEntry(t *testing.T, req CreateTimeEntryRequest) TimeEntryResponse {
-	t.Helper()
-	body, _ := json.Marshal(req)
-	resp := c.do(t, http.MethodPost, "/tasks/time-entries", body)
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusCreated {
-		t.Fatalf("CreateTimeEntry: got status %d, want 201", resp.StatusCode)
-	}
-	var out TimeEntryResponse
-	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
-		t.Fatalf("CreateTimeEntry: decode: %v", err)
-	}
-	return out
-}
-
-func (c *APIClient) UpdateTimeEntry(t *testing.T, id int32, req UpdateTimeEntryRequest) TimeEntryResponse {
-	t.Helper()
-	body, _ := json.Marshal(req)
-	resp := c.do(t, http.MethodPatch, fmt.Sprintf("/tasks/time-entries/%d", id), body)
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("UpdateTimeEntry: got status %d, want 200", resp.StatusCode)
-	}
-	var out TimeEntryResponse
-	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
-		t.Fatalf("UpdateTimeEntry: decode: %v", err)
-	}
-	return out
-}
-
-func (c *APIClient) GetActiveTree(t *testing.T) []ActiveTreeNode {
-	t.Helper()
-	return c.getActiveTree(t, "/tasks/tree")
-}
-
-func (c *APIClient) GetActiveTreeWithMinPriority(t *testing.T, minPriority int32) []ActiveTreeNode {
-	t.Helper()
-	return c.getActiveTree(t, fmt.Sprintf("/tasks/tree?min_priority=%d", minPriority))
-}
-
-func (c *APIClient) getActiveTree(t *testing.T, path string) []ActiveTreeNode {
-	t.Helper()
-	resp := c.do(t, http.MethodGet, path, nil)
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("GetActiveTree: got status %d, want 200", resp.StatusCode)
-	}
-	var out []ActiveTreeNode
-	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
-		t.Fatalf("GetActiveTree: decode: %v", err)
-	}
-	return out
-}
-
-func (c *APIClient) GetTasksByDueDate(t *testing.T) []TaskByDueDateResponse {
-	t.Helper()
-	return c.getTasksByDueDate(t, "/tasks/tasks/by-due-date")
-}
-
-func (c *APIClient) GetTasksByDueDateWithMinPriority(t *testing.T, minPriority int32) []TaskByDueDateResponse {
-	t.Helper()
-	return c.getTasksByDueDate(t, fmt.Sprintf("/tasks/tasks/by-due-date?min_priority=%d", minPriority))
-}
-
-func (c *APIClient) getTasksByDueDate(t *testing.T, path string) []TaskByDueDateResponse {
-	t.Helper()
-	resp := c.do(t, http.MethodGet, path, nil)
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("GetTasksByDueDate: got status %d, want 200", resp.StatusCode)
-	}
-	var out []TaskByDueDateResponse
-	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
-		t.Fatalf("GetTasksByDueDate: decode: %v", err)
-	}
-	return out
-}
-
-func (c *APIClient) GetProject(t *testing.T, id int32) ProjectDetailResponse {
-	t.Helper()
-	resp := c.do(t, http.MethodGet, fmt.Sprintf("/tasks/projects/%d", id), nil)
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("GetProject: got status %d, want 200", resp.StatusCode)
-	}
-	var out ProjectDetailResponse
-	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
-		t.Fatalf("GetProject: decode: %v", err)
-	}
-	return out
-}
-
 func (c *APIClient) GetTask(t *testing.T, id int32) TaskFullResponse {
 	t.Helper()
 	resp := c.do(t, http.MethodGet, fmt.Sprintf("/tasks/tasks/%d", id), nil)
@@ -650,36 +357,6 @@ func (c *APIClient) GetTask(t *testing.T, id int32) TaskFullResponse {
 	var out TaskFullResponse
 	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
 		t.Fatalf("GetTask: decode: %v", err)
-	}
-	return out
-}
-
-func (c *APIClient) GetTimeEntriesByDateRange(t *testing.T, startTime, endTime string) []TimeEntryWithTaskResponse {
-	t.Helper()
-	path := fmt.Sprintf("/tasks/time-entries?start_time=%s&end_time=%s", startTime, endTime)
-	resp := c.do(t, http.MethodGet, path, nil)
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("GetTimeEntriesByDateRange: got status %d, want 200", resp.StatusCode)
-	}
-	var out []TimeEntryWithTaskResponse
-	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
-		t.Fatalf("GetTimeEntriesByDateRange: decode: %v", err)
-	}
-	return out
-}
-
-func (c *APIClient) GetTimeEntryHistory(t *testing.T, frequency, startAt, endAt string) HistoryResponse {
-	t.Helper()
-	path := fmt.Sprintf("/tasks/time-entries/history?frequency=%s&start_at=%s&end_at=%s", frequency, startAt, endAt)
-	resp := c.do(t, http.MethodGet, path, nil)
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("GetTimeEntryHistory: got status %d, want 200", resp.StatusCode)
-	}
-	var out HistoryResponse
-	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
-		t.Fatalf("GetTimeEntryHistory: decode: %v", err)
 	}
 	return out
 }

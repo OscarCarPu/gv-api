@@ -31,12 +31,10 @@ func withFinIDParam(req *http.Request, key, val string) *http.Request {
 	return req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
 }
 
-func ptr32fin(v int32) *int32 { return &v }
-
 // --- CreateTransaction ---
 
 func TestHandler_CreateTransaction_MissingOccurredAt(t *testing.T) {
-	catID := ptr32fin(1)
+	catID := ptr[int32](1)
 	body := `{"type":"income","amount":"10.00","account_id":1,"category_id":1}`
 	svc := mocks.NewMockServiceInterface(t)
 	svc.EXPECT().CreateTransaction(mock.Anything, mock.MatchedBy(func(req finance.CreateTransactionRequest) bool {
@@ -139,7 +137,7 @@ func TestHandler_GetNetWorthStats_InvalidGranularity(t *testing.T) {
 }
 
 func TestHandler_CreateTransaction_Success(t *testing.T) {
-	catID := ptr32fin(2)
+	catID := ptr[int32](2)
 	now := time.Now()
 	body := `{"type":"income","amount":"50.00","account_id":1,"category_id":2,"occurred_at":"` + now.Format(time.RFC3339) + `"}`
 	svc := mocks.NewMockServiceInterface(t)

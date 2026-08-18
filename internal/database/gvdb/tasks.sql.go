@@ -3,7 +3,7 @@
 //   sqlc v1.31.1
 // source: tasks.sql
 
-package tasksdb
+package gvdb
 
 import (
 	"context"

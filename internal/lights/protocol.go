@@ -10,15 +10,11 @@ import (
 )
 
 /*
-Per-model wire protocols.
+Per-model wire protocols: which GATT characteristic to write to, and what bytes mean "on",
+"60% brightness", "this warm". Every bulb in the registry names one and the driver dispatches
+on that name.
 
-A protocol is the knowledge of how one family of bulbs encodes commands: which GATT
-characteristic to write to, and what bytes mean "on", "60% brightness", "this warm". Every
-bulb in the registry names one; the driver dispatches on that name.
-
-Adding a model
---------------
-Find its address and GATT table with any BLE scanner (`bluetoothctl scan le`, then
+To add a model, find its address and GATT table with any BLE scanner (`bluetoothctl scan le`, then
 `gatt list-attributes`), then implement this interface and register it in protocols below.
 The characteristic you want is almost always the single write handle on a vendor service —
 a 128-bit UUID that is not of the standard 0000xxxx-0000-1000-8000-00805f9b34fb form.

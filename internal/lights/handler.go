@@ -1,6 +1,7 @@
 package lights
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -11,6 +12,20 @@ import (
 
 	"github.com/go-chi/chi/v5"
 )
+
+// ServiceInterface is the seam the handler depends on, so it can be mocked in tests.
+type ServiceInterface interface {
+	List(ctx context.Context) ([]PublicLight, error)
+	States(ctx context.Context, force bool) ([]State, error)
+	State(ctx context.Context, id string, force bool) (State, error)
+	Send(ctx context.Context, id string, cmd Command) (State, error)
+
+	Create(ctx context.Context, req CreateLightRequest) (PublicLight, error)
+	Update(ctx context.Context, id string, req UpdateLightRequest) (PublicLight, error)
+	Delete(ctx context.Context, id string) error
+	Discover(ctx context.Context, window time.Duration) ([]Discovered, error)
+	Protocols() []ProtocolInfo
+}
 
 type Handler struct {
 	service ServiceInterface
@@ -27,11 +42,8 @@ const (
 	maxScanWindow     = 30 * time.Second
 )
 
-// RegisterRoutes mounts the lights endpoints. Semiprivate auth, matching the rest of the
-// Domotics section — it is house control, not personal data.
-//
-// The fixed segments are declared before "/{id}" for readability; chi matches them first
-// regardless, so a bulb can never shadow /state or /discover.
+// RegisterRoutes mounts the lights endpoints under semiprivate auth: house
+// control, not personal data.
 func (h *Handler) RegisterRoutes(r chi.Router) {
 	r.Get("/domotics/lights", h.List)
 	r.Post("/domotics/lights", h.Create)
@@ -134,14 +146,11 @@ func (h *Handler) Delete(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
-/*
-Discover -> GET /domotics/lights/discover?seconds=8
-
-Slow on purpose: it holds the request open for the length of the scan, because the answer
-does not exist until the radio has been listening for a while. The alternative — a job to
-start and a result to poll — is more moving parts than a button pressed once in a while
-deserves.
-*/
+// Discover -> GET /domotics/lights/discover?seconds=8
+//
+// Holds the request open for the length of the scan: the answer does not exist until the
+// radio has been listening for a while, and a start-then-poll job is more moving parts than
+// a button pressed once in a while deserves.
 func (h *Handler) Discover(w http.ResponseWriter, r *http.Request) {
 	devices, err := h.service.Discover(r.Context(), scanWindow(r))
 	if err != nil {

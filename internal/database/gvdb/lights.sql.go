@@ -3,7 +3,7 @@
 //   sqlc v1.31.1
 // source: lights.sql
 
-package lightsdb
+package gvdb
 
 import (
 	"context"

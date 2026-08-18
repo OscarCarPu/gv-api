@@ -11,12 +11,12 @@ type ConcelloMark struct {
 
 type CreateMarkRequest struct {
 	Name        string `json:"name"`
-	VisitedOn   string `json:"visited_on"`   // YYYY-MM-DD
+	VisitedOn   string `json:"visited_on"` // YYYY-MM-DD
 	Description string `json:"description"`
 }
 
 type UpdateMarkRequest struct {
 	ID          int32
-	VisitedOn   string `json:"visited_on"`   // YYYY-MM-DD
+	VisitedOn   string `json:"visited_on"` // YYYY-MM-DD
 	Description string `json:"description"`
 }

@@ -1,4 +1,7 @@
-.PHONY: sqlc run build docker-build up setup-project pgcli-db test demo auth code
+.PHONY: setup-project sqlc generate-mocks pgcli-db demo run build lint \
+	up reset logs up-logs reset-logs down \
+	test test-unit test-integration test-e2e test-bench test-silent \
+	test-api-setup test-db-cleanup auth code
 
 # Colors
 RED=\033[0;31m
@@ -15,21 +18,29 @@ setup-project:
 
 # --- CODE GENERATION ---
 
-# Run sqlc
 sqlc:
 	sqlc generate
 
-# Generate mocks
 generate-mocks:
 	@mockery
 
+# --- RUN & CHECK ---
+
+run:
+	go run ./cmd/api
+
+build:
+	go build -o bin/gv-api ./cmd/api
+
+lint:
+	@test -z "$$(gofmt -l cmd internal test)" || { printf "$(RED)gofmt: $$(gofmt -l cmd internal test)$(NC)\n"; exit 1; }
+	@go vet ./...
+
 # --- DATABASE ---
 
-# Connect to the database with pgcli
 pgcli-db:
 	pgcli postgresql://$(POSTGRES_USER):$(POSTGRES_PASSWORD)@localhost:5432/$(POSTGRES_DB)
 
-# Load demo data into the database
 demo:
 	@printf "$(CYAN)>>> Loading demo data...$(NC)\n"
 	@docker compose exec -T db psql -U $(POSTGRES_USER) -d $(POSTGRES_DB) < db/demo.sql
@@ -37,30 +48,24 @@ demo:
 
 # --- DOCKER OPERATIONS ---
 
-# start the project, building it
 up:
 	docker compose up --build --wait -d
 
-# reset the project
 reset:
 	docker compose down -v --remove-orphans
 	docker compose up --build --wait -d
 
-# follow logs
 logs:
 	docker compose logs -f
 
-# up and logs
 up-logs:
 	make up
 	make logs
 
-# reset and logs
 reset-logs:
 	make reset
 	make logs
 
-# down
 down:
 	docker compose down
 
@@ -124,7 +129,6 @@ test-bench: test-api-setup
 		| awk '{ for (i=1;i<=NF;i++) if ($$i=="ns/op") { $$(i-1)=sprintf("%.3f",$$(i-1)/1e6); $$i="ms/op" } print }'
 	@$(MAKE) test-db-cleanup --no-print-directory
 
-# Run all tests
 test:
 	@$(MAKE) test-unit --no-print-directory
 	@$(MAKE) test-integration --no-print-directory

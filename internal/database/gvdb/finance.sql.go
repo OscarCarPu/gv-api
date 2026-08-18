@@ -3,7 +3,7 @@
 //   sqlc v1.31.1
 // source: finance.sql
 
-package financedb
+package gvdb
 
 import (
 	"context"

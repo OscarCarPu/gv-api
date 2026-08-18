@@ -3,6 +3,7 @@ package habits_test
 import (
 	"context"
 	"errors"
+	"gv-api/internal/history"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -195,8 +196,8 @@ func TestHandler_DeleteHabit(t *testing.T) {
 func TestHandler_GetHistory(t *testing.T) {
 	t.Run("200 on success", func(t *testing.T) {
 		svc := mocks.NewMockServiceInterface(t)
-		svc.EXPECT().GetHistory(mock.Anything, int32(1), "daily", "2026-03-01", "2026-03-19").Return(habits.HistoryResponse{
-			StartAt: "2026-03-01", EndAt: "2026-03-19", Data: []habits.HistoryPoint{},
+		svc.EXPECT().GetHistory(mock.Anything, int32(1), "daily", "2026-03-01", "2026-03-19").Return(history.Response{
+			StartAt: "2026-03-01", EndAt: "2026-03-19", Data: []history.Point{},
 		}, nil)
 		rec := httptest.NewRecorder()
 		habits.NewHandler(svc).GetHistory(rec, withIDParam(newReq(http.MethodGet, "/?frequency=daily&start_at=2026-03-01&end_at=2026-03-19", ""), "1"))

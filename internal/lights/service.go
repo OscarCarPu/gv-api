@@ -17,27 +17,10 @@ var ErrNotFound = errors.New("light not found")
 // How many slugs to try before giving up on naming a new bulb: "kitchen", "kitchen-2", ...
 const slugAttempts = 25
 
-// ServiceInterface is the seam the handler depends on, so it can be mocked in tests.
-type ServiceInterface interface {
-	List(ctx context.Context) ([]PublicLight, error)
-	States(ctx context.Context, force bool) ([]State, error)
-	State(ctx context.Context, id string, force bool) (State, error)
-	Send(ctx context.Context, id string, cmd Command) (State, error)
-
-	Create(ctx context.Context, req CreateLightRequest) (PublicLight, error)
-	Update(ctx context.Context, id string, req UpdateLightRequest) (PublicLight, error)
-	Delete(ctx context.Context, id string) error
-	Discover(ctx context.Context, window time.Duration) ([]Discovered, error)
-	Protocols() []ProtocolInfo
-}
-
-// Service reads and writes bulbs through a Driver, with a short read cache.
-//
-// The cache exists because BLE is slow and serialises badly: a read is hundreds of
-// milliseconds at best, clients poll every few seconds, and two overlapping reads of the same
-// bulb tend to fail both. Reads inside the TTL are served from memory, and concurrent reads of
-// one bulb share a single in-flight call. Writes bypass the cache and replace it with their
-// result.
+// Service reads and writes bulbs through a Driver, with a short read cache: BLE reads take
+// hundreds of milliseconds and two overlapping reads of one bulb tend to fail both, so reads
+// inside the TTL come from memory and concurrent reads share one in-flight call. Writes
+// bypass the cache and replace it with their result.
 type Service struct {
 	repo   Repository
 	driver Driver
@@ -137,19 +120,10 @@ func (s *Service) Send(ctx context.Context, id string, cmd Command) (State, erro
 	return state, nil
 }
 
-/*
-settle re-applies a command until the bulb actually holds the requested value.
-
-These bulbs do not always land where they are told: a value arrives a little late, or the
-lamp settles on a neighbouring step and stays there. Correcting that by hand is not the
-client's job — and doing it in each client would mean three implementations of the same
-retry. So the API closes the loop: write, wait for the lamp to transition, read back, and
-write again if it drifted.
-
-Only continuous values are settled. Power is a boolean the bulb either took or did not, and
-colour is not supported by the hardware in use. A bulb that cannot be read back is left
-alone — there is nothing to compare against, and re-writing blind would just be noise.
-*/
+// settle re-applies a command until the bulb holds the requested value: these bulbs
+// sometimes land on a neighbouring step and stay there, and fixing that in each client
+// would mean three copies of the same retry. Only continuous values are settled — power
+// either took or did not, and a bulb that cannot be read back has nothing to compare.
 func (s *Service) settle(ctx context.Context, light Light, cmd Command, state State) State {
 	target, tolerance, ok := settleTarget(cmd)
 	if !ok || !state.Online || s.settleAttempts <= 0 {
@@ -254,12 +228,9 @@ func (s *Service) cached(id string) (State, bool) {
 
 // --- managing which bulbs exist -------------------------------------------------------
 
-/*
-Create registers a bulb someone picked off a scan.
-
-The caller supplies a name, an address and a model; everything else defaults to what that
-model can do, because nobody adding a lamp to a bedroom knows its kelvin range.
-*/
+// Create registers a bulb picked off a scan. The caller gives a name, an address and a
+// model; the rest defaults to what that model can do, because nobody adding a lamp to a
+// bedroom knows its kelvin range.
 func (s *Service) Create(ctx context.Context, req CreateLightRequest) (PublicLight, error) {
 	if err := req.Validate(); err != nil {
 		return PublicLight{}, err
@@ -344,13 +315,8 @@ func (s *Service) Delete(ctx context.Context, id string) error {
 	return nil
 }
 
-/*
-Discover lists bulbs in range and marks the ones already registered.
-
-The marking is why this is a service concern rather than a straight passthrough: without it
-the add screen offers to add a lamp that is already on the page, and the only feedback would
-be a duplicate-address error after the fact.
-*/
+// Discover lists bulbs in range and marks the ones already registered, so the add screen
+// does not offer a lamp that is already on the page.
 func (s *Service) Discover(ctx context.Context, window time.Duration) ([]Discovered, error) {
 	found, err := s.driver.Discover(ctx, window)
 	if err != nil {

@@ -5,10 +5,12 @@ import (
 	"errors"
 	"time"
 
-	"gv-api/internal/database/plandb"
+	"gv-api/internal/database/gvdb"
+	"gv-api/internal/database/pgconv"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 type Repository interface {
@@ -23,19 +25,11 @@ type Repository interface {
 }
 
 type PostgresRepository struct {
-	q plandb.Querier
+	q *gvdb.Queries
 }
 
-func NewRepository(q plandb.Querier) *PostgresRepository {
-	return &PostgresRepository{q: q}
-}
-
-func pgTimestamptzToPtr(ts pgtype.Timestamptz) *time.Time {
-	if ts.Valid {
-		t := ts.Time
-		return &t
-	}
-	return nil
+func NewRepository(pool *pgxpool.Pool) *PostgresRepository {
+	return &PostgresRepository{q: gvdb.New(pool)}
 }
 
 func (r *PostgresRepository) ListByDate(ctx context.Context, date time.Time) ([]PlanBlockResponse, error) {
@@ -56,8 +50,8 @@ func (r *PostgresRepository) ListByDate(ctx context.Context, date time.Time) ([]
 			Note:           row.Note,
 			TaskType:       row.TaskType,
 			TaskRecurrence: row.TaskRecurrence,
-			TaskStartedAt:  pgTimestamptzToPtr(row.TaskStartedAt),
-			TaskFinishedAt: pgTimestamptzToPtr(row.TaskFinishedAt),
+			TaskStartedAt:  pgconv.TimePtr(row.TaskStartedAt),
+			TaskFinishedAt: pgconv.TimePtr(row.TaskFinishedAt),
 		}
 	}
 	return out, nil
@@ -82,13 +76,13 @@ func (r *PostgresRepository) Get(ctx context.Context, id int32) (PlanBlockRespon
 		Note:           row.Note,
 		TaskType:       row.TaskType,
 		TaskRecurrence: row.TaskRecurrence,
-		TaskStartedAt:  pgTimestamptzToPtr(row.TaskStartedAt),
-		TaskFinishedAt: pgTimestamptzToPtr(row.TaskFinishedAt),
+		TaskStartedAt:  pgconv.TimePtr(row.TaskStartedAt),
+		TaskFinishedAt: pgconv.TimePtr(row.TaskFinishedAt),
 	}, nil
 }
 
 func (r *PostgresRepository) HasOverlap(ctx context.Context, planDate, startedAt, endedAt time.Time, excludeID *int32) (bool, error) {
-	params := plandb.CountOverlappingPlanBlocksParams{
+	params := gvdb.CountOverlappingPlanBlocksParams{
 		PlanDate:  planDate,
 		StartedAt: pgtype.Timestamptz{Time: startedAt, Valid: true},
 		EndedAt:   pgtype.Timestamptz{Time: endedAt, Valid: true},
@@ -116,7 +110,7 @@ func (r *PostgresRepository) GetTaskName(ctx context.Context, taskID int32) (str
 }
 
 func (r *PostgresRepository) Create(ctx context.Context, planDate, startedAt, endedAt time.Time, taskID *int32, label string, note *string) (PlanBlockResponse, error) {
-	row, err := r.q.CreatePlanBlock(ctx, plandb.CreatePlanBlockParams{
+	row, err := r.q.CreatePlanBlock(ctx, gvdb.CreatePlanBlockParams{
 		PlanDate:  planDate,
 		StartedAt: pgtype.Timestamptz{Time: startedAt, Valid: true},
 		EndedAt:   pgtype.Timestamptz{Time: endedAt, Valid: true},
@@ -134,7 +128,7 @@ func (r *PostgresRepository) Create(ctx context.Context, planDate, startedAt, en
 }
 
 func (r *PostgresRepository) Update(ctx context.Context, req UpdatePlanBlockRequest) (PlanBlockResponse, error) {
-	params := plandb.UpdatePlanBlockParams{ID: req.ID}
+	params := gvdb.UpdatePlanBlockParams{ID: req.ID}
 
 	if req.StartedAt != nil {
 		params.SetStartedAt = true

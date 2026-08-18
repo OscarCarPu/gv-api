@@ -234,7 +234,6 @@ func (s *Service) GetActiveTree(ctx context.Context, minPriority *int32) ([]Acti
 	}
 	root = append(root, orphanTasks...)
 
-
 	if root == nil {
 		root = []ActiveTreeNode{}
 	}

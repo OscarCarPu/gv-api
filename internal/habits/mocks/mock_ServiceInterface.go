@@ -6,6 +6,8 @@ import (
 	context "context"
 	habits "gv-api/internal/habits"
 
+	history "gv-api/internal/history"
+
 	mock "github.com/stretchr/testify/mock"
 )
 
@@ -186,22 +188,22 @@ func (_c *MockServiceInterface_GetDailyView_Call) RunAndReturn(run func(context.
 }
 
 // GetHistory provides a mock function with given fields: ctx, habitID, frequency, startAt, endAt
-func (_m *MockServiceInterface) GetHistory(ctx context.Context, habitID int32, frequency string, startAt string, endAt string) (habits.HistoryResponse, error) {
+func (_m *MockServiceInterface) GetHistory(ctx context.Context, habitID int32, frequency string, startAt string, endAt string) (history.Response, error) {
 	ret := _m.Called(ctx, habitID, frequency, startAt, endAt)
 
 	if len(ret) == 0 {
 		panic("no return value specified for GetHistory")
 	}
 
-	var r0 habits.HistoryResponse
+	var r0 history.Response
 	var r1 error
-	if rf, ok := ret.Get(0).(func(context.Context, int32, string, string, string) (habits.HistoryResponse, error)); ok {
+	if rf, ok := ret.Get(0).(func(context.Context, int32, string, string, string) (history.Response, error)); ok {
 		return rf(ctx, habitID, frequency, startAt, endAt)
 	}
-	if rf, ok := ret.Get(0).(func(context.Context, int32, string, string, string) habits.HistoryResponse); ok {
+	if rf, ok := ret.Get(0).(func(context.Context, int32, string, string, string) history.Response); ok {
 		r0 = rf(ctx, habitID, frequency, startAt, endAt)
 	} else {
-		r0 = ret.Get(0).(habits.HistoryResponse)
+		r0 = ret.Get(0).(history.Response)
 	}
 
 	if rf, ok := ret.Get(1).(func(context.Context, int32, string, string, string) error); ok {
@@ -235,12 +237,12 @@ func (_c *MockServiceInterface_GetHistory_Call) Run(run func(ctx context.Context
 	return _c
 }
 
-func (_c *MockServiceInterface_GetHistory_Call) Return(_a0 habits.HistoryResponse, _a1 error) *MockServiceInterface_GetHistory_Call {
+func (_c *MockServiceInterface_GetHistory_Call) Return(_a0 history.Response, _a1 error) *MockServiceInterface_GetHistory_Call {
 	_c.Call.Return(_a0, _a1)
 	return _c
 }
 
-func (_c *MockServiceInterface_GetHistory_Call) RunAndReturn(run func(context.Context, int32, string, string, string) (habits.HistoryResponse, error)) *MockServiceInterface_GetHistory_Call {
+func (_c *MockServiceInterface_GetHistory_Call) RunAndReturn(run func(context.Context, int32, string, string, string) (history.Response, error)) *MockServiceInterface_GetHistory_Call {
 	_c.Call.Return(run)
 	return _c
 }

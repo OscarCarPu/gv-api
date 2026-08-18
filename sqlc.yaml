@@ -1,72 +1,20 @@
 version: "2"
 sql:
+  # One package for the whole schema: every domain's queries land in their own
+  # <domain>.sql.go, but the models and the pool wiring are shared instead of
+  # being regenerated identically once per domain.
   - schema: "db/migrations"
-    queries: "db/queries/habits.sql"
+    queries: "db/queries"
     engine: "postgresql"
     gen:
       go:
-        package: "habitsdb"
+        package: "gvdb"
         sql_package: "pgx/v5"
-        out: "internal/database/habitsdb"
+        out: "internal/database/gvdb"
         emit_json_tags: true
         emit_db_tags: true
         emit_empty_slices: true
         emit_pointers_for_null_types: true
-        emit_interface: true
-
-        overrides:
-          - db_type: "date"
-            go_type: "time.Time"
-
-  - schema: "db/migrations"
-    queries: "db/queries/tasks.sql"
-    engine: "postgresql"
-    gen:
-      go:
-        package: "tasksdb"
-        sql_package: "pgx/v5"
-        out: "internal/database/tasksdb"
-        emit_json_tags: true
-        emit_db_tags: true
-        emit_empty_slices: true
-        emit_pointers_for_null_types: true
-        emit_interface: true
-
-        overrides:
-          - db_type: "date"
-            go_type: "time.Time"
-
-  - schema: "db/migrations"
-    queries: "db/queries/plan.sql"
-    engine: "postgresql"
-    gen:
-      go:
-        package: "plandb"
-        sql_package: "pgx/v5"
-        out: "internal/database/plandb"
-        emit_json_tags: true
-        emit_db_tags: true
-        emit_empty_slices: true
-        emit_pointers_for_null_types: true
-        emit_interface: true
-
-        overrides:
-          - db_type: "date"
-            go_type: "time.Time"
-
-  - schema: "db/migrations"
-    queries: "db/queries/finance.sql"
-    engine: "postgresql"
-    gen:
-      go:
-        package: "financedb"
-        sql_package: "pgx/v5"
-        out: "internal/database/financedb"
-        emit_json_tags: true
-        emit_db_tags: true
-        emit_empty_slices: true
-        emit_pointers_for_null_types: true
-        emit_interface: true
 
         overrides:
           - db_type: "date"
@@ -87,39 +35,3 @@ sql:
               import: "gv-api/internal/finance/txtype"
               package: "txtype"
               type: "Type"
-
-  - schema: "db/migrations"
-    queries: "db/queries/rutas.sql"
-    engine: "postgresql"
-    gen:
-      go:
-        package: "rutasdb"
-        sql_package: "pgx/v5"
-        out: "internal/database/rutasdb"
-        emit_json_tags: true
-        emit_db_tags: true
-        emit_empty_slices: true
-        emit_pointers_for_null_types: true
-        emit_interface: true
-
-        overrides:
-          - db_type: "date"
-            go_type: "time.Time"
-
-  - schema: "db/migrations"
-    queries: "db/queries/lights.sql"
-    engine: "postgresql"
-    gen:
-      go:
-        package: "lightsdb"
-        sql_package: "pgx/v5"
-        out: "internal/database/lightsdb"
-        emit_json_tags: true
-        emit_db_tags: true
-        emit_empty_slices: true
-        emit_pointers_for_null_types: true
-        emit_interface: true
-
-        overrides:
-          - db_type: "date"
-            go_type: "time.Time"

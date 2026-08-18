@@ -1,6 +1,6 @@
-// Package auth provides the auth endpoints and logic
+// Package auth provides the auth endpoints and logic.
 //
-// POST /auth/login - Login with password; returns {token, kind} where kind is
-//   "tmp" (use with /auth/2fa) or "semi" (30d semiprivate token, ready to use)
-// POST /auth/2fa - Login with 2fa to get token
+// POST /login      password login; returns {token, kind}, kind being "tmp"
+// (continue with /login/2fa) or "semi" (30d semiprivate token, ready to use).
+// POST /login/2fa  exchanges a tmp token plus a TOTP code for a full token.
 package auth

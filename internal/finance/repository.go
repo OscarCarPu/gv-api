@@ -5,7 +5,7 @@ import (
 	"errors"
 	"time"
 
-	"gv-api/internal/database/financedb"
+	"gv-api/internal/database/gvdb"
 	"gv-api/internal/finance/txtype"
 
 	"github.com/jackc/pgx/v5"
@@ -46,14 +46,14 @@ type Repository interface {
 }
 
 type PostgresRepository struct {
-	q *financedb.Queries
+	q *gvdb.Queries
 }
 
 func NewRepository(pool *pgxpool.Pool) *PostgresRepository {
-	return &PostgresRepository{q: financedb.New(pool)}
+	return &PostgresRepository{q: gvdb.New(pool)}
 }
 
-func accountToDTO(a financedb.Account) Account {
+func accountToDTO(a gvdb.Account) Account {
 	return Account{
 		ID:        a.ID,
 		Name:      a.Name,
@@ -62,7 +62,7 @@ func accountToDTO(a financedb.Account) Account {
 	}
 }
 
-func categoryToDTO(c financedb.Category) Category {
+func categoryToDTO(c gvdb.Category) Category {
 	return Category{
 		ID:        c.ID,
 		Name:      c.Name,
@@ -72,7 +72,7 @@ func categoryToDTO(c financedb.Category) Category {
 	}
 }
 
-func transactionToDTO(t financedb.Transaction) Transaction {
+func transactionToDTO(t gvdb.Transaction) Transaction {
 	return Transaction{
 		ID:          t.ID,
 		Type:        t.Type,
@@ -120,7 +120,7 @@ func (r *PostgresRepository) CreateAccount(ctx context.Context, req CreateAccoun
 }
 
 func (r *PostgresRepository) UpdateAccount(ctx context.Context, req UpdateAccountRequest) (Account, error) {
-	row, err := r.q.UpdateAccount(ctx, financedb.UpdateAccountParams{
+	row, err := r.q.UpdateAccount(ctx, gvdb.UpdateAccountParams{
 		ID:   req.ID,
 		Name: req.Name,
 	})
@@ -181,7 +181,7 @@ func (r *PostgresRepository) ListCategories(ctx context.Context) ([]Category, er
 }
 
 func (r *PostgresRepository) CreateCategory(ctx context.Context, req CreateCategoryRequest) (Category, error) {
-	row, err := r.q.CreateCategory(ctx, financedb.CreateCategoryParams{
+	row, err := r.q.CreateCategory(ctx, gvdb.CreateCategoryParams{
 		Name:     req.Name,
 		ParentID: req.ParentID,
 		Type:     req.Type,
@@ -193,7 +193,7 @@ func (r *PostgresRepository) CreateCategory(ctx context.Context, req CreateCateg
 }
 
 func (r *PostgresRepository) UpdateCategory(ctx context.Context, req UpdateCategoryRequest) (Category, error) {
-	row, err := r.q.UpdateCategory(ctx, financedb.UpdateCategoryParams{
+	row, err := r.q.UpdateCategory(ctx, gvdb.UpdateCategoryParams{
 		ID:       req.ID,
 		Name:     req.Name,
 		ParentID: req.ParentID,
@@ -248,7 +248,7 @@ func (r *PostgresRepository) GetTransaction(ctx context.Context, id int32) (Tran
 }
 
 func (r *PostgresRepository) ListTransactions(ctx context.Context, q ListTransactionsQuery) ([]Transaction, error) {
-	params := financedb.ListTransactionsParams{
+	params := gvdb.ListTransactionsParams{
 		AccountID:  q.AccountID,
 		CategoryID: q.CategoryID,
 	}
@@ -277,7 +277,7 @@ func (r *PostgresRepository) CreateTransaction(ctx context.Context, req CreateTr
 	if req.OccurredAt != nil {
 		occurredAt = pgtype.Timestamptz{Time: *req.OccurredAt, Valid: true}
 	}
-	row, err := r.q.CreateTransaction(ctx, financedb.CreateTransactionParams{
+	row, err := r.q.CreateTransaction(ctx, gvdb.CreateTransactionParams{
 		Type:        req.Type,
 		Amount:      req.Amount,
 		AccountID:   req.AccountID,
@@ -293,7 +293,7 @@ func (r *PostgresRepository) CreateTransaction(ctx context.Context, req CreateTr
 }
 
 func (r *PostgresRepository) UpdateTransaction(ctx context.Context, req UpdateTransactionRequest) (Transaction, error) {
-	row, err := r.q.UpdateTransaction(ctx, financedb.UpdateTransactionParams{
+	row, err := r.q.UpdateTransaction(ctx, gvdb.UpdateTransactionParams{
 		ID:          req.ID,
 		Type:        req.Type,
 		Amount:      req.Amount,
@@ -372,7 +372,7 @@ func mapTxError(err error) error {
 // --- Stats ---
 
 func (r *PostgresRepository) GetNetWorthSeries(ctx context.Context, q NetWorthQuery) ([]NetWorthPoint, error) {
-	rows, err := r.q.GetNetWorthSeries(ctx, financedb.GetNetWorthSeriesParams{
+	rows, err := r.q.GetNetWorthSeries(ctx, gvdb.GetNetWorthSeriesParams{
 		Granularity: string(q.Granularity),
 		FromAt:      pgtype.Timestamptz{Time: q.From, Valid: true},
 		ToAt:        pgtype.Timestamptz{Time: q.To, Valid: true},
@@ -391,7 +391,7 @@ func (r *PostgresRepository) GetNetWorthSeries(ctx context.Context, q NetWorthQu
 }
 
 func (r *PostgresRepository) GetCategoryStats(ctx context.Context, q CategoryStatsQuery) ([]CategoryStat, error) {
-	rows, err := r.q.GetCategoryStats(ctx, financedb.GetCategoryStatsParams{
+	rows, err := r.q.GetCategoryStats(ctx, gvdb.GetCategoryStatsParams{
 		Type:      q.Type,
 		FromAt:    pgtype.Timestamptz{Time: q.From, Valid: true},
 		ToAt:      pgtype.Timestamptz{Time: q.To, Valid: true},
@@ -425,7 +425,7 @@ func (r *PostgresRepository) GetEarliestTransactionDate(ctx context.Context) (ti
 }
 
 func (r *PostgresRepository) GetMonthlyStats(ctx context.Context, q MonthlyStatsQuery) ([]MonthlyStat, error) {
-	rows, err := r.q.GetMonthlyStats(ctx, financedb.GetMonthlyStatsParams{
+	rows, err := r.q.GetMonthlyStats(ctx, gvdb.GetMonthlyStatsParams{
 		FromAt:     pgtype.Timestamptz{Time: q.From, Valid: true},
 		ToAt:       pgtype.Timestamptz{Time: q.To, Valid: true},
 		AccountID:  q.AccountID,

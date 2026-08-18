@@ -19,7 +19,7 @@ func newSvc(repo finance.Repository) *finance.Service {
 	return finance.NewService(repo, time.UTC)
 }
 
-func ptr32(v int32) *int32 { return &v }
+func ptr[T any](v T) *T { return &v }
 
 func matchTime(t time.Time) interface{} {
 	return mock.MatchedBy(func(got time.Time) bool { return got.Equal(t) })
@@ -35,7 +35,7 @@ func TestService_CreateTransaction_CategoryMismatch(t *testing.T) {
 		Type:       txtype.Type("income"),
 		Amount:     decimal.NewFromInt(100),
 		AccountID:  1,
-		CategoryID: ptr32(5),
+		CategoryID: ptr[int32](5),
 	})
 	assert.ErrorIs(t, err, finance.ErrCategoryMismatch)
 }
@@ -48,7 +48,7 @@ func TestService_CreateTransaction_CategoryNotFound(t *testing.T) {
 		Type:       txtype.Type("income"),
 		Amount:     decimal.NewFromInt(100),
 		AccountID:  1,
-		CategoryID: ptr32(5),
+		CategoryID: ptr[int32](5),
 	})
 	assert.ErrorIs(t, err, finance.ErrInvalidInput)
 }
@@ -75,7 +75,7 @@ func TestService_UpdateTransaction_CategoryMismatch(t *testing.T) {
 		Type:       txtype.Type("expense"),
 		Amount:     decimal.NewFromInt(20),
 		AccountID:  1,
-		CategoryID: ptr32(7),
+		CategoryID: ptr[int32](7),
 	})
 	assert.ErrorIs(t, err, finance.ErrCategoryMismatch)
 }

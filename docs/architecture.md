@@ -2,7 +2,9 @@
 
 ## Overview
 
-**gv-api** is a personal productivity REST API built in Go, managing **habits** (daily tracking) and **tasks** (projects, tasks, todos, time entries). It follows a clean layered architecture with no external framework beyond a lightweight router.
+**gv-api** is a single-user REST API in Go that centralises personal data:
+habits, tasks (projects/tasks/todos/time entries), day planning, finance,
+route marks and Bluetooth light bulbs. No framework beyond a router.
 
 ## Tech Stack
 
@@ -10,156 +12,97 @@
 |---|---|
 | Language | Go 1.25 |
 | HTTP Router | [chi/v5](https://github.com/go-chi/chi) |
-| Database | PostgreSQL 15 (via Docker) |
+| Database | PostgreSQL 15 |
 | DB Driver | [pgx/v5](https://github.com/jackc/pgx) (connection pool) |
 | SQL Code Gen | [sqlc](https://sqlc.dev/) |
+| Migrations | [golang-migrate](https://github.com/golang-migrate/migrate), run at startup |
 | Auth | JWT ([golang-jwt/v5](https://github.com/golang-jwt/jwt)) + TOTP 2FA ([pquerna/otp](https://github.com/pquerna/otp)) |
-| CORS | [go-chi/cors](https://github.com/go-chi/cors) |
-| Testing | stdlib `testing` + [testify](https://github.com/stretchr/testify) |
+| Bluetooth | BlueZ over D-Bus ([godbus](https://github.com/godbus/dbus)) |
+| Testing | stdlib `testing` + [testify](https://github.com/stretchr/testify) + [mockery](https://vektra.github.io/mockery/) |
 | Containerization | Docker multi-stage build + Docker Compose |
 
 ## Project Structure
 
 ```
 gv-api/
-  cmd/api/main.go           # Entry point - wiring, router setup, server start
+  cmd/api/main.go            # Wiring, router setup, server start
   internal/
-    config/config.go         # Environment-based configuration
+    config/                  # Environment-based configuration
     database/
-      db.go                  # pgxpool connection factory
-      habitsdb/              # sqlc-generated code for habits queries
-      tasksdb/               # sqlc-generated code for tasks queries
-    response/response.go     # JSON/Error response helpers
-    history/
-      history.go             # Shared history types and period utilities
-    auth/
-      handler.go             # Login + 2FA HTTP handlers
-      service.go             # JWT generation/validation, password check, TOTP
-      middleware.go           # Bearer token auth middleware
-    habits/
-      handler.go             # HTTP handlers (GetDaily, UpsertLog, CreateHabit)
-      service.go             # Business logic (date parsing, delegation)
-      repository.go          # Data access (maps sqlc types to domain DTOs)
-      dto.go                 # Request/response types
-    tasks/
-      handler.go             # HTTP handlers (CRUD projects/tasks/todos/time-entries)
-      service.go             # Business logic (finish timestamps, delegation)
-      repository.go          # Data access + tree building logic
-      dto.go                 # Request/response types
+      db.go, migrate.go      # pgxpool factory, startup migrations
+      pgconv/                # nullable pgx columns -> Go pointers
+      gvdb/                  # sqlc-generated code, one file per query file
+    response/, httputil/     # JSON responses, URL param parsing
+    middleware/              # request id + slog correlation
+    history/                 # shared history types and period maths
+    testutil/                # test DB pool and truncation
+    auth/                    # login, 2FA, bearer middleware
+    <domain>/                # handler.go, service.go, repository.go, dto.go,
+                             # errors.go, doc.go, mocks/
   db/
-    migrations/              # SQL schema files (used by Docker init + sqlc)
-    queries/                 # SQL queries consumed by sqlc
+    migrations/              # schema, applied in order at startup
+    queries/                 # SQL consumed by sqlc, one file per domain
   test/e2e/                  # End-to-end tests (full stack via HTTP)
-  docs/
-    api/                     # API endpoint documentation (auth, habits, tasks/)
-    business_logic/          # Domain rules narrative
-    data_models/             # DB schema reference
+  docs/                      # api/, business_logic/, data_models/
 ```
+
+Domains: `habits`, `tasks`, `plan`, `finance`, `rutas`, `lights`.
 
 ## Architecture Pattern
 
 ### Handler -> Service -> Repository
 
-Each domain (habits, tasks) follows a strict 3-layer pattern:
+Every domain follows the same three layers:
 
-- **Handler**: HTTP concerns only - decode request, call service, encode response. Defines a `ServiceInterface` for testability.
-- **Service**: Business logic - date handling, default timestamps. Depends on a `Repository` interface.
-- **Repository**: Data access - maps between sqlc-generated types and domain DTOs. Depends on sqlc's `Querier` interface.
+- **Handler**: HTTP only — decode, validate request shape, call service, encode.
+  Declares the `ServiceInterface` it depends on.
+- **Service**: business rules. Depends on the `Repository` interface.
+- **Repository**: data access, mapping sqlc rows to domain DTOs. Takes the
+  `*pgxpool.Pool` and builds its own sqlc `Queries`; the pool is also what lets
+  the ones that need transactions open them.
 
-All dependencies flow inward via interfaces, enabling unit testing with mocks at every layer.
+Both interfaces are mocked by mockery (`.mockery.yaml`), so handler and service
+are unit-testable without a database. Repositories are covered by integration
+tests against a real one.
+
+`lights` adds a fourth seam: a `Driver` interface over the bulbs, with a BlueZ
+implementation and an in-memory mock, so the app runs without a radio.
 
 ### Database Access (sqlc)
 
-SQL queries live in `db/queries/*.sql` with `sqlc` annotations. Running `sqlc generate` produces type-safe Go code in `internal/database/{habitsdb,tasksdb}/`. The generated `Querier` interface is injected into repositories.
+Queries live in `db/queries/<domain>.sql`. `sqlc generate` produces a single
+`gvdb` package from the whole schema (`db/migrations`), with one
+`<domain>.sql.go` per query file plus shared `models.go` and `db.go`. Keeping
+each repository to its own domain's queries is a convention, not a compiler
+boundary.
 
-Configuration in `sqlc.yaml` splits queries into two packages (habitsdb, tasksdb) sharing the same schema migrations.
+### Authentication
 
-### Authentication Flow
+1. `POST /login` — password check. The private password returns a 5-minute
+   `tmp` token; the semiprivate one returns a 30-day `semi` token.
+2. `POST /login/2fa` — tmp token + TOTP code returns a 30-day `full` token.
+3. Routes are grouped by the kinds they accept: `lights` takes `semi` or
+   `full`, everything else requires `full`.
 
-1. `POST /login` - password check -> returns temporary JWT (5 min, kind="tmp")
-2. `POST /login/2fa` - validates tmp token + TOTP code -> returns full JWT (30 days, kind="full")
-3. Protected routes use `auth.Middleware` which validates "full" tokens via `Bearer` header
-
-Single-user system - no user table, password stored in config.
-
-### Configuration
-
-Environment variables loaded via `os.Getenv` with sensible defaults. No `.env` file loader - relies on Docker Compose `env_file` or shell environment.
-
-## API Endpoints
-
-### Public
-| Method | Path | Description |
-|---|---|---|
-| POST | `/login` | Password authentication |
-| POST | `/login/2fa` | TOTP second factor |
-
-### Protected (require Bearer token)
-| Method | Path | Description |
-|---|---|---|
-| GET | `/habits?date=YYYY-MM-DD` | Get habits with logs for a date |
-| POST | `/habits` | Create a habit |
-| POST | `/habits/log` | Upsert a habit log entry |
-| GET | `/habits/{id}/history` | Aggregated habit history |
-| DELETE | `/habits/{id}` | Delete a habit |
-| GET | `/tasks/tree` | Active project/task tree |
-| GET | `/tasks/projects` | Root (unfinished, parentless) projects |
-| GET | `/tasks/projects/list-fast` | Flat list of active projects (id, name) |
-| GET | `/tasks/projects/{id}` | Single project with recursive time_spent |
-| GET | `/tasks/projects/{id}/children` | Project with descendants, tasks, todos, time stats |
-| POST | `/tasks/projects` | Create project |
-| PATCH | `/tasks/projects/{id}` | Update a project |
-| DELETE | `/tasks/projects/{id}` | Delete a project |
-| GET | `/tasks/tasks/list-fast` | Flat list of unfinished tasks (id, name, project) |
-| GET | `/tasks/tasks/by-due-date` | Unfinished tasks with effective due date |
-| POST | `/tasks/tasks` | Create task |
-| GET | `/tasks/tasks/{id}` | Single task with deps, todos, time_spent |
-| PATCH | `/tasks/tasks/{id}` | Update a task |
-| DELETE | `/tasks/tasks/{id}` | Delete a task (cascades) |
-| GET | `/tasks/tasks/{id}/time-entries` | Task detail with time entries |
-| POST | `/tasks/todos` | Create todo |
-| PATCH | `/tasks/todos/{id}` | Update a todo |
-| DELETE | `/tasks/todos/{id}` | Delete a todo |
-| POST | `/tasks/time-entries` | Create time entry |
-| PATCH | `/tasks/time-entries/{id}` | Update a time entry |
-| DELETE | `/tasks/time-entries/{id}` | Delete a time entry |
-| GET | `/tasks/time-entries/history` | Aggregated time entry history |
-| GET | `/tasks/time-entries/summary` | Today + week totals + daily/weekly target + pace |
-| GET | `/tasks/time-entries/active` | Currently running time entry |
-| GET | `/plan/today` | Today's plan blocks + totals + budget |
-| POST | `/plan/blocks` | Create a plan block |
-| PUT | `/plan/blocks/{id}` | Update a plan block |
-| DELETE | `/plan/blocks/{id}` | Delete a plan block |
-
-## Database Schema
-
-### Habits Domain
-- `habits` - id, name, description
-- `habit_logs` - habit_id, log_date, value (unique per habit+date, upsert pattern)
-
-### Tasks Domain
-- `projects` - hierarchical (self-referencing parent_id), with started_at/finished_at
-- `tasks` - belong to optional project, with started_at/finished_at
-- `todos` - checklist items under a task
-- `time_entries` - time tracking per task (started_at/finished_at)
-
-Recursive CTE used for project tree traversal (`GetProjectWithDescendants`).
+Single-user system: no user table, passwords come from the environment.
 
 ## Testing Strategy
 
-Three test levels orchestrated via `Makefile`:
-
 | Level | Command | Scope |
 |---|---|---|
-| Unit | `make test-unit` | Handler/service/repository with mocks, no DB |
-| Integration | `make test-integration` | Repository against real test DB |
-| E2E | `make test-e2e` | Full HTTP requests against running API + DB |
+| Unit | `make test-unit` | Handler/service with mocks, no DB |
+| Integration | `make test-integration` | Repositories against a real test DB |
+| E2E | `make test-e2e` | HTTP against the running API + DB |
+| Bench | `make test-bench` | Repository benchmarks |
 
-Test DB is created/destroyed per run. E2E tests use a custom `APIClient` helper.
+`make lint` (gofmt + `go vet`) runs in CI before the tests. The test DB is
+created and dropped per run.
 
 ## Deployment
 
-- Multi-stage Docker build (golang:alpine builder -> alpine runtime)
-- Non-root user in container
-- Docker Compose with `db` (postgres:15-alpine) + `gv-api` on external `gv` network
-- Migrations applied via Docker entrypoint (volume mount to `/docker-entrypoint-initdb.d`)
+- Multi-stage Docker build (golang:alpine builder -> alpine runtime), non-root.
+- Docker Compose with `db` (postgres:15-alpine) + `gv-api` on the external `gv`
+  network.
+- Migrations run from the API at startup, not from the database image.
+- Gitea Actions deploys on push to `main`: lint, unit tests, then
+  `docker compose up --build --wait`.

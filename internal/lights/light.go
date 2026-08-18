@@ -78,16 +78,9 @@ func offlineState(l Light, errMsg string, now int64) State {
 	}
 }
 
-/*
-slugify turns a name into an id.
-
-Ids are slugs rather than numbers because they are what appears in URLs, in logs and as the
-key three clients hold their local state under — "bedroom" reads better than "7" in all
-three. It is assigned once at creation and never follows a rename, so a client mid-command
-never has the ground move under it.
-
-Accents are folded rather than dropped: "Salón" must become "salon", not "saln".
-*/
+// slugify turns a name into an id. Ids are slugs because they show up in URLs, logs and
+// client-side state, and they are assigned once at creation so a rename never moves the
+// ground under a client mid-command. Accents fold rather than drop: "Salón" -> "salon".
 func slugify(name string) string {
 	var b strings.Builder
 	lastDash := true // leading dashes are dropped

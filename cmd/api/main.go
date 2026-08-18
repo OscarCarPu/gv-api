@@ -11,12 +11,9 @@ import (
 	"time"
 	_ "time/tzdata"
 
-	"gv-api/internal/actor"
 	"gv-api/internal/auth"
 	"gv-api/internal/config"
 	"gv-api/internal/database"
-	"gv-api/internal/database/habitsdb"
-	"gv-api/internal/database/plandb"
 	"gv-api/internal/finance"
 	"gv-api/internal/habits"
 	"gv-api/internal/lights"
@@ -31,9 +28,9 @@ import (
 )
 
 func main() {
-	slog.SetDefault(slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
+	slog.SetDefault(slog.New(middleware.LogHandler{Handler: slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
 		Level: slog.LevelInfo,
-	})))
+	})}))
 
 	cfg, err := config.Load()
 	if err != nil {
@@ -62,8 +59,7 @@ func main() {
 	}
 
 	// Habit Setup
-	habitQueries := habitsdb.New(db)
-	habitRepo := habits.NewRepository(habitQueries)
+	habitRepo := habits.NewRepository(db)
 	habitService := habits.NewService(habitRepo, loc)
 	habitHandler := habits.NewHandler(habitService)
 
@@ -73,8 +69,7 @@ func main() {
 	taskHandler := tasks.NewHandler(taskService)
 
 	// Plan Setup
-	planQueries := plandb.New(db)
-	planRepo := plan.NewRepository(planQueries)
+	planRepo := plan.NewRepository(db)
 	planService := plan.NewService(planRepo, taskService, loc)
 	planHandler := plan.NewHandler(planService)
 
@@ -114,12 +109,11 @@ func main() {
 	r.Use(cors.Handler(cors.Options{
 		AllowedOrigins:   cfg.AllowedOrigins,
 		AllowedMethods:   []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS", "HEAD"},
-		AllowedHeaders:   []string{"Content-Type", "Authorization", "X-Device-ID", "X-Request-ID"},
+		AllowedHeaders:   []string{"Content-Type", "Authorization", "X-Request-ID"},
 		ExposedHeaders:   []string{"Content-Length", "X-Request-ID"},
 		AllowCredentials: false,
 		MaxAge:           300,
 	}))
-	r.Use(actor.Middleware)
 
 	r.Get("/health", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)

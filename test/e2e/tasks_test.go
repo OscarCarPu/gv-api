@@ -119,4 +119,3 @@ func TestE2E_NotFound(t *testing.T) {
 		t.Errorf("got %d, want 404 for missing task", resp.StatusCode)
 	}
 }
-

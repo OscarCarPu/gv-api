@@ -658,4 +658,3 @@ func (h *Handler) GetRootProjects(w http.ResponseWriter, r *http.Request) {
 
 	response.JSON(w, http.StatusOK, projects)
 }
-
