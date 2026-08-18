@@ -57,7 +57,6 @@ A comprehensive life orchestrator built in Go, designed to centralize data from 
 | **Tasks** | Hierarchical project/task tree with todos, due dates, and Pomodoro time entries. | [tasks](docs/api/tasks/README.md) |
 | **Plan** | Daily time-block planner that schedules tasks from the task tree. | [plan](docs/api/plan.md) |
 | **Finance** | Accounts, categories, transactions, and spending stats (net worth, by-category, monthly, estimation). | [finance](docs/api/finance.md) |
-| **Varieties** | Shared lookup tables used across modules. | [varieties](docs/api/varieties.md) |
 
 ### Infrastructure
 
