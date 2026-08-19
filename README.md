@@ -74,6 +74,7 @@ A comprehensive life orchestrator built in Go, designed to centralize data from 
 | Header | Direction | Description |
 |---|---|---|
 | `X-Request-ID` | Request & Response | Optional on request; auto-generated (random 8-byte hex) if absent. Echoed back in the response and propagated through logs for correlation. |
+| `X-Device-ID` | Request | Optional stable per-browser UUID sent by gv-web. Nothing reads it yet, but it is CORS-allowlisted: an unlisted header makes the browser's preflight fail, which blocks the request outright. |
 
 ## Testing
 

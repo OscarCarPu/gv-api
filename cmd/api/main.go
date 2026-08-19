@@ -106,14 +106,7 @@ func main() {
 	r := chi.NewRouter()
 	r.Use(chimiddleware.Recoverer)
 	r.Use(middleware.RequestID)
-	r.Use(cors.Handler(cors.Options{
-		AllowedOrigins:   cfg.AllowedOrigins,
-		AllowedMethods:   []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS", "HEAD"},
-		AllowedHeaders:   []string{"Content-Type", "Authorization", "X-Request-ID"},
-		ExposedHeaders:   []string{"Content-Length", "X-Request-ID"},
-		AllowCredentials: false,
-		MaxAge:           300,
-	}))
+	r.Use(cors.Handler(middleware.CORSOptions(cfg.AllowedOrigins)))
 
 	r.Get("/health", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
