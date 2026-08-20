@@ -116,7 +116,12 @@ Three kinds of row live here:
 `starts_at`/`ends_at` are always set, so a range query is a plain B-tree scan. An all-day event
 is stored as midnight-to-midnight *in `start_tz`* with an exclusive end — Google's
 `start.date`/`end.date` convention pinned to a zone, which is what makes one code path work for
-every range query; the original dates are recovered by rendering `starts_at` in `start_tz`.
+every range query.
+
+`start_tz` is what makes that lossless: the original dates are recovered by rendering `starts_at`
+in it, and the API returns them as `start_date`/`end_date`. It matters because the zone is not the
+same for every calendar — Google reports some as `UTC` and some as `Europe/Madrid` — so the
+instant alone does not say which day an all-day event is on.
 
 Masters have no upper bound to index on (a series can be endless), so a range read fetches every
 master of the selected calendars whose start is before the window's end and expands them in the

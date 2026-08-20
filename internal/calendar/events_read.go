@@ -11,6 +11,9 @@ import (
 	"time"
 )
 
+// dateLayout is the wire format for an all-day event's dates, matching Google's.
+const dateLayout = "2006-01-02"
+
 // maxRangeSpan caps a single query. A calendar UI asks for a day, a week or a month; anything
 // past a couple of years is a client bug or a scrape, and expanding infinite series over it
 // is unbounded work.
@@ -186,6 +189,14 @@ func (s *Service) toEventDTO(owner EventRecord, cal CalendarView, occ *Occurrenc
 	} else if source.IsException() {
 		e.IsException = true
 		e.OriginalStartsAt = source.OriginalStartsAt
+	}
+	if e.AllDay {
+		// Computed after any occurrence override, so a moved all-day instance reports the day it
+		// actually lands on. The zone is the event's own, which is what the instants were built
+		// from, so this round-trips to the dates Google sent.
+		loc := resolveLocation(source.StartTZ, cal.TimeZone)
+		e.StartDate = e.StartsAt.In(loc).Format(dateLayout)
+		e.EndDate = e.EndsAt.In(loc).Format(dateLayout)
 	}
 	e.Attendees = decodeAttendees(source.Attendees)
 	e.Reminders = decodeReminders(source.Reminders)

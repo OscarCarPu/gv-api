@@ -285,6 +285,19 @@ type Event struct {
 	StartsAt time.Time `json:"starts_at"`
 	EndsAt   time.Time `json:"ends_at"`
 	TimeZone string    `json:"time_zone"`
+	/*
+		StartDate/EndDate are set for all-day events only, and they are what a client should
+		place them by.
+
+		An all-day event is a date, not an instant. The instants above are a carrier: they are
+		midnight to midnight in the event's own zone, and calendars do not agree on that zone —
+		some arrive as UTC, others as Europe/Madrid. Rendering those instants in the viewer's
+		zone smears a one-day event across two local days, which looks exactly like a duplicate.
+		These two fields are the dates Google sent, recovered exactly, with EndDate exclusive
+		as Google has it.
+	*/
+	StartDate string `json:"start_date,omitempty"`
+	EndDate   string `json:"end_date,omitempty"`
 
 	Recurring        bool       `json:"recurring"`
 	Recurrence       []string   `json:"recurrence,omitempty"`

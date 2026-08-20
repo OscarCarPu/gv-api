@@ -857,3 +857,110 @@ func TestService_Colors_EventsMatchTheirCalendar(t *testing.T) {
 	}
 	require.NotEqual(t, events[0].Color, events[1].Color)
 }
+
+// --- all-day events are dates ---------------------------------------------------------
+
+func TestService_AllDayEventsCarryTheirDates(t *testing.T) {
+	ctx := context.Background()
+	h := newHarness(t)
+	// Calendars do not agree on a zone: Google reports some as UTC and some as the local one.
+	// Both have to place their all-day events on the same days a person sees in Google.
+	h.connect(t, "me@example.com",
+		google.CalendarListEntry{ID: primaryCal, Summary: "Madrid", TimeZone: "Europe/Madrid", AccessRole: "owner", Primary: true},
+		google.CalendarListEntry{ID: "utc@x", Summary: "UTC", TimeZone: "UTC", AccessRole: "owner"},
+	)
+
+	for _, calID := range []string{primaryCal, "utc@x"} {
+		h.gc.PutEvent("me@example.com", calID, google.Event{
+			ID:      "oneday-" + calID,
+			Summary: "One day",
+			Start:   &google.EventDateTime{Date: "2026-08-02"},
+			End:     &google.EventDateTime{Date: "2026-08-03"},
+		})
+	}
+	_, err := h.svc.SyncAll(ctx, "manual")
+	require.NoError(t, err)
+
+	events, err := h.svc.ListEvents(ctx, calendar.EventsQuery{
+		From: madrid(t, 2026, 8, 1, 0, 0), To: madrid(t, 2026, 8, 5, 0, 0),
+	})
+	require.NoError(t, err)
+	require.Len(t, events, 2)
+	for _, e := range events {
+		require.True(t, e.AllDay)
+		require.Equal(t, "2026-08-02", e.StartDate, "the date google sent, whatever the zone")
+		require.Equal(t, "2026-08-03", e.EndDate, "exclusive, as google has it")
+	}
+}
+
+func TestService_AllDayDatesSurviveAMultiDaySpanAndASeries(t *testing.T) {
+	ctx := context.Background()
+	h := newHarness(t)
+	h.connect(t, "me@example.com", writableEntry(primaryCal, "Personal"))
+
+	h.gc.PutEvent("me@example.com", primaryCal, google.Event{
+		ID: "trip", Summary: "Trip",
+		Start: &google.EventDateTime{Date: "2026-08-20"},
+		End:   &google.EventDateTime{Date: "2026-08-23"},
+	})
+	h.gc.PutEvent("me@example.com", primaryCal, google.Event{
+		ID: "weekly-holiday", Summary: "Every Monday off",
+		Start:      &google.EventDateTime{Date: "2026-08-17"},
+		End:        &google.EventDateTime{Date: "2026-08-18"},
+		Recurrence: []string{"RRULE:FREQ=WEEKLY;COUNT=3"},
+	})
+	_, err := h.svc.SyncAll(ctx, "manual")
+	require.NoError(t, err)
+
+	events, err := h.svc.ListEvents(ctx, calendar.EventsQuery{
+		From: madrid(t, 2026, 8, 16, 0, 0), To: madrid(t, 2026, 9, 6, 0, 0),
+	})
+	require.NoError(t, err)
+
+	var trip calendar.Event
+	var mondays []calendar.Event
+	for _, e := range events {
+		switch e.Summary {
+		case "Trip":
+			trip = e
+		case "Every Monday off":
+			mondays = append(mondays, e)
+		}
+	}
+	require.Equal(t, "2026-08-20", trip.StartDate)
+	require.Equal(t, "2026-08-23", trip.EndDate, "three days covered, end exclusive")
+
+	require.Len(t, mondays, 3, "each occurrence of an all-day series is a day of its own")
+	require.Equal(t, []string{"2026-08-17", "2026-08-24", "2026-08-31"},
+		[]string{mondays[0].StartDate, mondays[1].StartDate, mondays[2].StartDate})
+	for _, m := range mondays {
+		require.Equal(t, 1, daysBetween(t, m.StartDate, m.EndDate), "one day each, not two")
+	}
+}
+
+func daysBetween(t *testing.T, from, to string) int {
+	t.Helper()
+	start, err := time.Parse("2006-01-02", from)
+	require.NoError(t, err)
+	end, err := time.Parse("2006-01-02", to)
+	require.NoError(t, err)
+	return int(end.Sub(start).Hours() / 24)
+}
+
+func TestService_TimedEventsHaveNoDates(t *testing.T) {
+	ctx := context.Background()
+	h := newHarness(t)
+	h.connect(t, "me@example.com", writableEntry(primaryCal, "Personal"))
+	h.gc.PutEvent("me@example.com", primaryCal,
+		timedEvent("a", "Standup", madrid(t, 2026, 8, 20, 9, 0), madrid(t, 2026, 8, 20, 9, 30)))
+	_, err := h.svc.SyncAll(ctx, "manual")
+	require.NoError(t, err)
+
+	events, err := h.svc.ListEvents(ctx, calendar.EventsQuery{
+		From: madrid(t, 2026, 8, 20, 0, 0), To: madrid(t, 2026, 8, 21, 0, 0),
+	})
+	require.NoError(t, err)
+	require.Len(t, events, 1)
+	require.Empty(t, events[0].StartDate, "a timed event is an instant; dates would be a lie")
+	require.Empty(t, events[0].EndDate)
+}

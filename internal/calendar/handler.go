@@ -449,7 +449,7 @@ func parseQueryTime(raw string) (time.Time, error) {
 	if t, err := time.Parse(time.RFC3339, raw); err == nil {
 		return t, nil
 	}
-	return time.Parse("2006-01-02", raw)
+	return time.Parse(dateLayout, raw)
 }
 
 func parseIDList(raw string) ([]int32, error) {
