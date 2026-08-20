@@ -48,6 +48,13 @@ A comprehensive life orchestrator built in Go, designed to centralize data from 
 | `TIMEZONE` | No | `Europe/Madrid` | IANA timezone for date arithmetic. |
 | `LIGHTS_DRIVER` | No | `mock` | `bluez` to drive real bulbs; anything else uses the in-memory mock. |
 | `LIGHTS_*` | No | — | Adapter, timeouts, cache TTL and settle retries. See `.env.example`. |
+| `GOOGLE_CLIENT_ID` | No | — | OAuth client for the Calendar domain. Unset means no account can be connected; everything else still runs. |
+| `GOOGLE_CLIENT_SECRET` | No | — | Its secret. |
+| `GOOGLE_OAUTH_REDIRECT_URL` | No | — | Must match the client's redirect URI exactly, e.g. `https://gv-api.lab-ocp.com/calendar/google/callback`. |
+| `GOOGLE_TOKEN_KEY` | If client set | — | 32 bytes of hex encrypting the stored refresh tokens. Generate with `openssl rand -hex 32`. The server refuses to start without it once a client id is set. |
+| `CALENDAR_WEB_APP_URL` | No | first `ALLOWED_ORIGINS` | Where the OAuth callback sends the browser back to. |
+| `CALENDAR_WEBHOOK_URL` | No | — | Public HTTPS address Google posts change notifications to. Unset means polling only. |
+| `CALENDAR_*` | No | — | Webhook toggle, channel TTL and renewal window, poll interval, notification debounce. See `.env.example`. |
 
 ## API
 
@@ -62,12 +69,15 @@ A comprehensive life orchestrator built in Go, designed to centralize data from 
 | **Finance** | Accounts, categories, transactions, and spending stats (net worth, by-category, monthly, estimation). | [finance](docs/api/finance.md) |
 | **Rutas** | Concello marks: which municipalities were visited and when. | [rutas](docs/api/rutas.md) |
 | **Lights** | Bluetooth bulbs driven over BlueZ, with discovery and a registry. Semiprivate auth. | [lights](docs/api/lights.md) |
+| **Calendar** | Google calendars mirrored locally and editable from here: OAuth per account, incremental sync, push notifications, recurring series expanded on read. | [calendar](docs/api/calendar.md) |
 
 ### Infrastructure
 
 | Method | Path | Auth | Description |
 |---|---|---|---|
 | `GET` | `/health` | None | Returns `200 OK`. Use for liveness probes. |
+| `GET` | `/calendar/google/callback` | Signed state | Where Google's consent redirect lands. Cannot carry a bearer token: it is a browser redirect to the API host. |
+| `POST` | `/calendar/google/webhook` | Channel token | Google's push notifications. Cannot carry a bearer token: Google sends no credentials. |
 
 ### Request / Response Headers
 

@@ -31,6 +31,83 @@ type AssistantUsage struct {
 	CostUsd          decimal.Decimal    `db:"cost_usd" json:"cost_usd"`
 }
 
+type Calendar struct {
+	ID                 int32              `db:"id" json:"id"`
+	AccountID          int32              `db:"account_id" json:"account_id"`
+	GoogleCalendarID   string             `db:"google_calendar_id" json:"google_calendar_id"`
+	Summary            string             `db:"summary" json:"summary"`
+	Description        string             `db:"description" json:"description"`
+	TimeZone           string             `db:"time_zone" json:"time_zone"`
+	BackgroundColor    string             `db:"background_color" json:"background_color"`
+	ForegroundColor    string             `db:"foreground_color" json:"foreground_color"`
+	ColorOverride      string             `db:"color_override" json:"color_override"`
+	AccessRole         string             `db:"access_role" json:"access_role"`
+	IsPrimary          bool               `db:"is_primary" json:"is_primary"`
+	SyncEnabled        bool               `db:"sync_enabled" json:"sync_enabled"`
+	Visible            bool               `db:"visible" json:"visible"`
+	SyncToken          *string            `db:"sync_token" json:"sync_token"`
+	SyncTokenUpdatedAt pgtype.Timestamptz `db:"sync_token_updated_at" json:"sync_token_updated_at"`
+	LastFullSyncAt     pgtype.Timestamptz `db:"last_full_sync_at" json:"last_full_sync_at"`
+	LastSyncAt         pgtype.Timestamptz `db:"last_sync_at" json:"last_sync_at"`
+	LastSyncError      *string            `db:"last_sync_error" json:"last_sync_error"`
+	WatchChannelID     *string            `db:"watch_channel_id" json:"watch_channel_id"`
+	WatchResourceID    *string            `db:"watch_resource_id" json:"watch_resource_id"`
+	WatchToken         *string            `db:"watch_token" json:"watch_token"`
+	WatchExpiresAt     pgtype.Timestamptz `db:"watch_expires_at" json:"watch_expires_at"`
+	DeletedAt          pgtype.Timestamptz `db:"deleted_at" json:"deleted_at"`
+	CreatedAt          pgtype.Timestamptz `db:"created_at" json:"created_at"`
+	UpdatedAt          pgtype.Timestamptz `db:"updated_at" json:"updated_at"`
+}
+
+type CalendarEvent struct {
+	ID               int32              `db:"id" json:"id"`
+	CalendarID       int32              `db:"calendar_id" json:"calendar_id"`
+	GoogleEventID    string             `db:"google_event_id" json:"google_event_id"`
+	IcalUid          string             `db:"ical_uid" json:"ical_uid"`
+	Etag             string             `db:"etag" json:"etag"`
+	Sequence         int32              `db:"sequence" json:"sequence"`
+	Status           string             `db:"status" json:"status"`
+	EventType        string             `db:"event_type" json:"event_type"`
+	Summary          string             `db:"summary" json:"summary"`
+	Description      string             `db:"description" json:"description"`
+	Location         string             `db:"location" json:"location"`
+	AllDay           bool               `db:"all_day" json:"all_day"`
+	StartsAt         pgtype.Timestamptz `db:"starts_at" json:"starts_at"`
+	EndsAt           pgtype.Timestamptz `db:"ends_at" json:"ends_at"`
+	StartTz          string             `db:"start_tz" json:"start_tz"`
+	EndTz            string             `db:"end_tz" json:"end_tz"`
+	Recurrence       []string           `db:"recurrence" json:"recurrence"`
+	RecurringEventID *string            `db:"recurring_event_id" json:"recurring_event_id"`
+	MasterID         *int32             `db:"master_id" json:"master_id"`
+	OriginalStartsAt pgtype.Timestamptz `db:"original_starts_at" json:"original_starts_at"`
+	OrganizerEmail   string             `db:"organizer_email" json:"organizer_email"`
+	CreatorEmail     string             `db:"creator_email" json:"creator_email"`
+	Attendees        []byte             `db:"attendees" json:"attendees"`
+	Reminders        []byte             `db:"reminders" json:"reminders"`
+	Transparency     string             `db:"transparency" json:"transparency"`
+	Visibility       string             `db:"visibility" json:"visibility"`
+	ColorID          string             `db:"color_id" json:"color_id"`
+	HtmlLink         string             `db:"html_link" json:"html_link"`
+	HangoutLink      string             `db:"hangout_link" json:"hangout_link"`
+	CreatedByGv      bool               `db:"created_by_gv" json:"created_by_gv"`
+	GoogleUpdatedAt  pgtype.Timestamptz `db:"google_updated_at" json:"google_updated_at"`
+	CreatedAt        pgtype.Timestamptz `db:"created_at" json:"created_at"`
+	UpdatedAt        pgtype.Timestamptz `db:"updated_at" json:"updated_at"`
+}
+
+type CalendarSyncRun struct {
+	ID         int32              `db:"id" json:"id"`
+	CalendarID *int32             `db:"calendar_id" json:"calendar_id"`
+	Trigger    string             `db:"trigger" json:"trigger"`
+	Kind       string             `db:"kind" json:"kind"`
+	StartedAt  pgtype.Timestamptz `db:"started_at" json:"started_at"`
+	FinishedAt pgtype.Timestamptz `db:"finished_at" json:"finished_at"`
+	Pages      int32              `db:"pages" json:"pages"`
+	Upserted   int32              `db:"upserted" json:"upserted"`
+	Deleted    int32              `db:"deleted" json:"deleted"`
+	Error      *string            `db:"error" json:"error"`
+}
+
 type Category struct {
 	ID        int32              `db:"id" json:"id"`
 	Name      string             `db:"name" json:"name"`
@@ -45,6 +122,22 @@ type ConcelloMark struct {
 	VisitedOn   time.Time          `db:"visited_on" json:"visited_on"`
 	Description string             `db:"description" json:"description"`
 	CreatedAt   pgtype.Timestamptz `db:"created_at" json:"created_at"`
+}
+
+type GoogleAccount struct {
+	ID                   int32              `db:"id" json:"id"`
+	Email                string             `db:"email" json:"email"`
+	Label                string             `db:"label" json:"label"`
+	Color                string             `db:"color" json:"color"`
+	RefreshToken         []byte             `db:"refresh_token" json:"refresh_token"`
+	AccessToken          []byte             `db:"access_token" json:"access_token"`
+	AccessTokenExpiresAt pgtype.Timestamptz `db:"access_token_expires_at" json:"access_token_expires_at"`
+	Scopes               string             `db:"scopes" json:"scopes"`
+	Status               string             `db:"status" json:"status"`
+	LastSyncAt           pgtype.Timestamptz `db:"last_sync_at" json:"last_sync_at"`
+	LastSyncError        *string            `db:"last_sync_error" json:"last_sync_error"`
+	CreatedAt            pgtype.Timestamptz `db:"created_at" json:"created_at"`
+	UpdatedAt            pgtype.Timestamptz `db:"updated_at" json:"updated_at"`
 }
 
 type Habit struct {
