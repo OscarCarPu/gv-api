@@ -787,7 +787,7 @@ func (s *Service) notifyChange(calendarID int32) {
 func googleDateTime(t time.Time, allDay bool, tz string) map[string]any {
 	if allDay {
 		loc := resolveLocation(tz)
-		return map[string]any{"date": t.In(loc).Format("2006-01-02")}
+		return map[string]any{"date": t.In(loc).Format(dateLayout)}
 	}
 	return map[string]any{"dateTime": t.Format(time.RFC3339), "timeZone": tz}
 }
@@ -826,7 +826,7 @@ func parseWriteRange(startRaw, endRaw string, allDay bool, tz string) (time.Time
 func parseWriteTime(raw string, allDay bool, loc *time.Location) (time.Time, error) {
 	raw = strings.TrimSpace(raw)
 	if allDay {
-		if t, err := time.ParseInLocation("2006-01-02", raw, loc); err == nil {
+		if t, err := time.ParseInLocation(dateLayout, raw, loc); err == nil {
 			return t, nil
 		}
 		if t, err := time.Parse(time.RFC3339, raw); err == nil {

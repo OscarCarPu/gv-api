@@ -91,6 +91,14 @@ series is a master plus one row per modified or cancelled occurrence.
 - `scope=instance`/`following` without an occurrence reference is refused. Guessing there
   rewrites a whole series.
 
+**All-day events are dates**
+- Google sends them as `start.date`/`end.date` with no zone. They are stored as instants —
+  midnight to midnight in the calendar's zone, with that zone in `start_tz` — so one index serves
+  every range query, and the dates are handed back on read as `start_date`/`end_date`.
+- Clients must place them by those dates. The zone is not consistent across calendars (Google
+  reports some as `UTC`), so converting the instants into the viewer's zone puts a one-day event
+  on two local days, which looks like a duplicated event and was reported as one.
+
 **Colours**
 - Google's colours are ignored for display: it returns the same pale cyan for every account's
   primary calendar and the same green for every holiday calendar, so four connected accounts

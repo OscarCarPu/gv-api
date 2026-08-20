@@ -199,8 +199,11 @@ Everything happening in `[from, to)`, with recurring series already expanded int
   which one an event belongs to.
 - `editable: false` for read-only calendars, parked accounts, and the event kinds Google
   generates itself (`birthday`, `fromGmail`, `workingLocation`).
-- An all-day event is midnight-to-midnight in `time_zone` with an **exclusive** end, the same
-  convention Google uses.
+- **An all-day event is a date, and `start_date`/`end_date` are what to place it by** (present
+  only for all-day events, `end_date` exclusive, as in Google). `starts_at`/`ends_at` are also
+  filled — midnight to midnight in `time_zone` — but they are a carrier, not the truth: calendars
+  disagree about that zone (Google reports some as `UTC` and some as `Europe/Madrid`), so
+  rendering those instants in the viewer's zone spreads a one-day event across two local days.
 
 ### `GET /calendar/events/{ref}`
 

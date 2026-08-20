@@ -415,7 +415,7 @@ func parseEventTime(dt *google.EventDateTime, fallbackTZ string) (t time.Time, t
 	if dt.Date != "" {
 		tz = firstNonEmpty(dt.TimeZone, fallbackTZ)
 		loc := resolveLocation(tz)
-		parsed, err := time.ParseInLocation("2006-01-02", dt.Date, loc)
+		parsed, err := time.ParseInLocation(dateLayout, dt.Date, loc)
 		if err != nil {
 			return time.Time{}, "", false, false
 		}
