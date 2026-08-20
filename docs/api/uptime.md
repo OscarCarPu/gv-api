@@ -161,6 +161,20 @@ A bare `GRANT SELECT ON marts.uptime_windows` dies with the table the next time 
 recreates it. The rebuild retry above then masks the first few failures, so a permanently
 broken grant reads as an intermittent one — worth getting right the first time.
 
+## Events can be lost, which flatters the numbers
+
+The producer publishes at QoS 0, non-retained. Delivery is `min(publish QoS, subscribe QoS)`,
+so anything published while the pipeline's consumer is down is **lost, not delayed**. The loss
+is invisible from here and biased one way: a missing `down` means the outage never becomes a
+window, so uptime reads higher than it was, and the windows stay contiguous either way — there
+is no gap for gv-api to detect.
+
+Two things follow. Nothing here interpolates or reconciles: this API reports what the marts
+say, and the fix belongs in the producer. And a freshly deployed consumer learns nothing about
+current state until the next transition — on a stable device that can be days, so
+`state: "unknown"` with no ranges is the expected first answer after a deploy rather than a
+wiring fault.
+
 ## No liveness signal
 
 There is deliberately none. `watchdog/ping` exists in the pipeline's topic contract but nothing
