@@ -20,9 +20,11 @@ import (
 	"gv-api/internal/habits"
 	"gv-api/internal/lights"
 	"gv-api/internal/middleware"
+	"gv-api/internal/pipeline"
 	"gv-api/internal/plan"
 	"gv-api/internal/rutas"
 	"gv-api/internal/tasks"
+	"gv-api/internal/uptime"
 
 	"github.com/go-chi/chi/v5"
 	chimiddleware "github.com/go-chi/chi/v5/middleware"
@@ -123,6 +125,23 @@ func main() {
 	}
 	calendarHandler := calendar.NewHandler(calendarService)
 
+	// Pipeline Setup
+	// central-pipeline's database: another project's PostgreSQL, on its own DSN, read-only
+	// and never migrated from here. One connection shared by every domain that reads a mart
+	// out of it. An unset DSN is normal — those endpoints answer 503, nothing else changes.
+	pipelineDB, err := pipeline.Connect(context.Background(), cfg.PipelineDBUrl)
+	if err != nil {
+		slog.Error("failed to configure pipeline database", "error", err)
+		os.Exit(1)
+	}
+	defer pipelineDB.Close()
+
+	// Uptime Setup
+	// How much of the time the lab and its ESP32 watchdog have been reachable, straight off
+	// the marts dbt builds from what they publish over MQTT.
+	uptimeRepo := uptime.NewRepository(pipelineDB)
+	uptimeHandler := uptime.NewHandler(uptime.NewService(uptimeRepo, cfg.PipelineStaleAfter))
+
 	// Rutas Setup
 	rutasRepo := rutas.NewRepository(db)
 	rutasService := rutas.NewService(rutasRepo)
@@ -155,6 +174,7 @@ func main() {
 	r.Group(func(r chi.Router) {
 		r.Use(semiMiddleware.Handle)
 		lightsHandler.RegisterRoutes(r)
+		uptimeHandler.RegisterRoutes(r)
 	})
 
 	// Full private

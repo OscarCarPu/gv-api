@@ -28,6 +28,10 @@ services:
       - .env
     ports:
       - "8080:8080"
+    # The uptime domain reads central-pipeline's database, which is a separate compose stack:
+    # reachable only through the port it publishes on the host, not on the `gv` network.
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     volumes:
       # Domotics lights talk to the bulbs over BlueZ, which lives on the host and is reached
       # through its D-Bus socket. No host networking and no extra capabilities are needed —

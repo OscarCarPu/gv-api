@@ -43,3 +43,10 @@ packages:
     interfaces:
       Repository:
       ServiceInterface:
+  gv-api/internal/uptime:
+    config:
+      dir: internal/uptime/mocks
+      outpkg: mocks
+    interfaces:
+      Repository:
+      ServiceInterface:

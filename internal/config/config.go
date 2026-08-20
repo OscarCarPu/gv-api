@@ -34,6 +34,15 @@ type Config struct {
 	LightsSettleAttempts int
 	LightsSettleDelay    time.Duration
 
+	// central-pipeline. A second, independent database: the one that owns the marts gv-api
+	// reads — watchdog uptime today, whatever device comes next. Not gv's own DSN and not
+	// gv's schema, since dbt creates and drops those relations. Unset means the domains
+	// reading it mount and answer 503 instead of the app failing to start.
+	PipelineDBUrl string
+	// Every mart carries the dbt run time, not now(). Past this age the numbers are
+	// reported as stale rather than presented as live.
+	PipelineStaleAfter time.Duration
+
 	// Calendar. With no client id/secret the domain still mounts and answers; it simply has
 	// nothing connected and never syncs, the same way lights run on a mock driver with no
 	// radio. GoogleTokenKey is required as soon as credentials are present, because the
@@ -84,6 +93,11 @@ func Load() (*Config, error) {
 		LightsCacheTTL:       getEnvDuration("LIGHTS_CACHE_MS", 2000),
 		LightsSettleAttempts: getEnvInt("LIGHTS_SETTLE_ATTEMPTS", 2),
 		LightsSettleDelay:    getEnvDuration("LIGHTS_SETTLE_DELAY_MS", 400),
+
+		PipelineDBUrl: os.Getenv("PIPELINE_DATABASE_URL"),
+		// dbt is a batch job and is not scheduled yet, so generous: this only decides when
+		// the UI stops calling the numbers current.
+		PipelineStaleAfter: getEnvDuration("PIPELINE_STALE_AFTER_MS", 2*60*60*1000),
 
 		GoogleClientID:     os.Getenv("GOOGLE_CLIENT_ID"),
 		GoogleClientSecret: os.Getenv("GOOGLE_CLIENT_SECRET"),

@@ -8,13 +8,20 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-func NewPool(tb testing.TB) *pgxpool.Pool {
+// DSN is the test database's connection string, skipping the test when there is none. For
+// tests that need to open a pool of their own rather than take NewPool's.
+func DSN(tb testing.TB) string {
 	tb.Helper()
 	url := os.Getenv("TEST_DB_URL")
 	if url == "" {
 		tb.Skip("TEST_DB_URL not set")
 	}
-	pool, err := pgxpool.New(context.Background(), url)
+	return url
+}
+
+func NewPool(tb testing.TB) *pgxpool.Pool {
+	tb.Helper()
+	pool, err := pgxpool.New(context.Background(), DSN(tb))
 	if err != nil {
 		tb.Fatal(err)
 	}

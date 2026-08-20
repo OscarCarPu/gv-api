@@ -4,8 +4,8 @@
 
 **gv-api** is a single-user REST API in Go that centralises personal data:
 habits, tasks (projects/tasks/todos/time entries), day planning, finance,
-route marks, Bluetooth light bulbs and a mirror of the user's Google
-calendars. No framework beyond a router.
+route marks, Bluetooth light bulbs, a mirror of the user's Google calendars
+and the uptime of the home lab. No framework beyond a router.
 
 ## Tech Stack
 
@@ -39,6 +39,7 @@ gv-api/
     middleware/              # request id + slog correlation
     history/                 # shared history types and period maths
     testutil/                # test DB pool and truncation
+    pipeline/                # read-only connection to central-pipeline's database
     auth/                    # login, 2FA, bearer middleware
     <domain>/                # handler.go, service.go, repository.go, dto.go,
                              # errors.go, doc.go, mocks/
@@ -49,7 +50,8 @@ gv-api/
   docs/                      # api/, business_logic/, data_models/
 ```
 
-Domains: `habits`, `tasks`, `plan`, `finance`, `rutas`, `lights`, `calendar`.
+Domains: `habits`, `tasks`, `plan`, `finance`, `rutas`, `lights`, `calendar`,
+`uptime`.
 
 ## Architecture Pattern
 
@@ -88,13 +90,43 @@ Queries live in `db/queries/<domain>.sql`. `sqlc generate` produces a single
 each repository to its own domain's queries is a convention, not a compiler
 boundary.
 
+### The Second Database (central-pipeline)
+
+Every domain but one reads gv's own PostgreSQL through sqlc. `uptime` reads
+someone else's: [central-pipeline][cp] collects what the devices around the
+house publish over MQTT and models it with dbt into marts in its own instance,
+on its own port. `internal/pipeline` holds that connection, and any later
+domain backed by the same pipeline shares it rather than opening a second one.
+
+What that boundary implies, and why the code looks different there:
+
+- **Separate DSN, separate pool** (`PIPELINE_DATABASE_URL`). Two servers, not
+  two schemas. The pipeline stack is allowed to be down while gv-api runs, so
+  the pool is opened without a ping and with no warm connections, and an unset
+  DSN is a normal state: reads report `pipeline.ErrNotConfigured` and the
+  handler answers 503.
+- **Read-only on the connection** (`default_transaction_read_only`), not only by
+  grant. dbt owns those relations.
+- **No migrations, no sqlc.** sqlc generates from `db/migrations`, which does not
+  describe this schema; the queries are hand-written against the column contract
+  in central-pipeline's `docs/sources/watchdog.md`. Repository integration tests
+  build the marts as fixtures, so they run without the other project's stack.
+- **Reads retry.** Every dbt run drops and recreates the marts, so a read can
+  land in the gap where a relation does not exist. `pipeline.Collect` retries
+  the codes that look like that rebuild before failing.
+- **Nothing is live.** The marts carry the dbt run time rather than `now()`, so
+  freshness is part of the response (`computed_at`, `stale`) rather than
+  assumed.
+
+[cp]: https://github.com/OscarCarPu/central-pipeline
+
 ### Authentication
 
 1. `POST /login` — password check. The private password returns a 5-minute
    `tmp` token; the semiprivate one returns a 30-day `semi` token.
 2. `POST /login/2fa` — tmp token + TOTP code returns a 30-day `full` token.
-3. Routes are grouped by the kinds they accept: `lights` takes `semi` or
-   `full`, everything else requires `full`.
+3. Routes are grouped by the kinds they accept: `lights` and `uptime` take
+   `semi` or `full`, everything else requires `full`.
 
 Two endpoints are public because they cannot be otherwise, each with its own
 guard rather than an exemption: `GET /calendar/google/callback` (Google's
