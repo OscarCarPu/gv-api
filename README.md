@@ -48,6 +48,8 @@ A comprehensive life orchestrator built in Go, designed to centralize data from 
 | `TIMEZONE` | No | `Europe/Madrid` | IANA timezone for date arithmetic. |
 | `LIGHTS_DRIVER` | No | `mock` | `bluez` to drive real bulbs; anything else uses the in-memory mock. |
 | `LIGHTS_*` | No | — | Adapter, timeouts, cache TTL and settle retries. See `.env.example`. |
+| `PIPELINE_DATABASE_URL` | No | — | Connection string for **central-pipeline's** PostgreSQL, which owns the marts the Uptime domain reads. A second database, not gv's: read-only, never migrated from here. Unset means those endpoints answer 503. |
+| `PIPELINE_STALE_AFTER_MS` | No | `7200000` | How old a mart may be before the API reports it as stale. Every mart carries the dbt run time, not `now()`. |
 | `GOOGLE_CLIENT_ID` | No | — | OAuth client for the Calendar domain. Unset means no account can be connected; everything else still runs. |
 | `GOOGLE_CLIENT_SECRET` | No | — | Its secret. |
 | `GOOGLE_OAUTH_REDIRECT_URL` | No | — | Must match the client's redirect URI exactly, e.g. `https://gv-api.lab-ocp.com/calendar/google/callback`. |
@@ -70,6 +72,7 @@ A comprehensive life orchestrator built in Go, designed to centralize data from 
 | **Rutas** | Concello marks: which municipalities were visited and when. | [rutas](docs/api/rutas.md) |
 | **Lights** | Bluetooth bulbs driven over BlueZ, with discovery and a registry. Semiprivate auth. | [lights](docs/api/lights.md) |
 | **Calendar** | Google calendars mirrored locally and editable from here: OAuth per account, incremental sync, push notifications, recurring series expanded on read. | [calendar](docs/api/calendar.md) |
+| **Uptime** | How much of the time the lab and its ESP32 watchdog have been reachable, read from central-pipeline's marts. Semiprivate auth. | [uptime](docs/api/uptime.md) |
 
 ### Infrastructure
 
