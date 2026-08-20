@@ -154,12 +154,23 @@ that it **survives a dbt run**:
 
 ```sql
 GRANT USAGE ON SCHEMA marts TO gv_api;
+-- the tables that exist now
+GRANT SELECT ON ALL TABLES IN SCHEMA marts TO gv_api;
+-- and the ones dbt will create in their place
 ALTER DEFAULT PRIVILEGES IN SCHEMA marts GRANT SELECT ON TABLES TO gv_api;
 ```
 
-A bare `GRANT SELECT ON marts.uptime_windows` dies with the table the next time dbt drops and
-recreates it. The rebuild retry above then masks the first few failures, so a permanently
-broken grant reads as an intermittent one — worth getting right the first time.
+Both halves are needed. A bare `GRANT SELECT ON marts.uptime_windows` dies with the table the
+next time dbt drops and recreates it; `ALTER DEFAULT PRIVILEGES` alone covers only tables
+created after it, so nothing is readable until the next run.
+
+**Run that last statement as the role dbt connects with.** Default privileges attach to the
+granting role, not to the schema: run as a different superuser it silently applies to *that*
+role's future tables and does nothing for dbt's. Use `FOR ROLE <dbt role>` if you are not that
+role. The grant then looks correct and starts failing one dbt run later.
+
+Every way of getting this wrong fails identically: the rebuild retry above absorbs the first
+attempts, so a permanently broken grant reads as an intermittent one.
 
 ## Events can be lost, which flatters the numbers
 
