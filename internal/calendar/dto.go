@@ -102,6 +102,9 @@ type CalendarView struct {
 	AccountLabel  string
 	AccountColor  string
 	AccountStatus string
+	// AssignedColor is gv's own colour for this calendar, filled in when the list is read.
+	// Google's colours are unusable as identity: every primary calendar shares one.
+	AssignedColor string
 }
 
 type SyncRun struct {
@@ -212,23 +215,26 @@ type CalendarSyncState struct {
 }
 
 type Calendar struct {
-	ID               int32             `json:"id"`
-	AccountID        int32             `json:"account_id"`
-	AccountEmail     string            `json:"account_email"`
-	AccountStatus    string            `json:"account_status"`
-	GoogleCalendarID string            `json:"google_calendar_id"`
-	Summary          string            `json:"summary"`
-	Description      string            `json:"description"`
-	TimeZone         string            `json:"time_zone"`
-	Color            string            `json:"color"`
-	ForegroundColor  string            `json:"foreground_color"`
-	AccessRole       string            `json:"access_role"`
-	Writable         bool              `json:"writable"`
-	IsPrimary        bool              `json:"is_primary"`
-	SyncEnabled      bool              `json:"sync_enabled"`
-	Visible          bool              `json:"visible"`
-	Deleted          bool              `json:"deleted"`
-	Sync             CalendarSyncState `json:"sync"`
+	ID               int32  `json:"id"`
+	AccountID        int32  `json:"account_id"`
+	AccountEmail     string `json:"account_email"`
+	AccountStatus    string `json:"account_status"`
+	GoogleCalendarID string `json:"google_calendar_id"`
+	Summary          string `json:"summary"`
+	Description      string `json:"description"`
+	TimeZone         string `json:"time_zone"`
+	// Color is what clients paint with: the user's override if set, otherwise gv's assigned
+	// palette colour. BackgroundColor is Google's own, kept for reference.
+	Color           string            `json:"color"`
+	BackgroundColor string            `json:"background_color"`
+	ForegroundColor string            `json:"foreground_color"`
+	AccessRole      string            `json:"access_role"`
+	Writable        bool              `json:"writable"`
+	IsPrimary       bool              `json:"is_primary"`
+	SyncEnabled     bool              `json:"sync_enabled"`
+	Visible         bool              `json:"visible"`
+	Deleted         bool              `json:"deleted"`
+	Sync            CalendarSyncState `json:"sync"`
 }
 
 type Attendee struct {

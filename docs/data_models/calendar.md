@@ -37,8 +37,8 @@ plaintext token in a backup is a copy of the grant.
 | google_calendar_id | TEXT | NOT NULL |
 | summary / description | TEXT | NOT NULL, DEFAULT `''` |
 | time_zone | TEXT | NOT NULL, DEFAULT `'UTC'` |
-| background_color / foreground_color | TEXT | NOT NULL, DEFAULT `''` (Google's) |
-| color_override | TEXT | NOT NULL, DEFAULT `''` (local) |
+| background_color / foreground_color | TEXT | NOT NULL, DEFAULT `''` (Google's, kept for reference) |
+| color_override | TEXT | NOT NULL, DEFAULT `''` (the user pinning a colour) |
 | access_role | TEXT | NOT NULL, DEFAULT `'reader'` — `owner`/`writer` are writable |
 | is_primary | BOOLEAN | NOT NULL, DEFAULT FALSE |
 | sync_enabled | BOOLEAN | NOT NULL, DEFAULT TRUE |
@@ -63,6 +63,11 @@ and it is the only thing authenticating a webhook that by necessity is public.
 The three columns Google owns (`summary`, colours, `access_role`) are refreshed on every
 calendar-list pass; the three the user owns (`sync_enabled`, `visible`, `color_override`)
 deliberately are not.
+
+The colour clients actually paint with is **not stored**: it is assigned when the list is read,
+by creation order through a fixed palette. Storing it would mean a migration to change the
+palette and a column that can drift from it; deriving it costs nothing and cannot go stale.
+Google's `background_color` is useless as identity — every primary calendar shares one value.
 
 ### calendar_events
 

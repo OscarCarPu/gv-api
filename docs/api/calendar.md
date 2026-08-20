@@ -99,7 +99,8 @@ Every calendar of every account, with its sync state.
     "summary": "Personal",
     "description": "",
     "time_zone": "Europe/Madrid",
-    "color": "#3366cc",
+    "color": "#3b82f6",
+    "background_color": "#9fe1e7",
     "foreground_color": "#ffffff",
     "access_role": "owner",
     "writable": true,
@@ -121,7 +122,12 @@ Every calendar of every account, with its sync state.
 
 - `writable` is `false` for the `reader` and `freeBusyReader` roles. Writes to those are
   refused here rather than forwarded to be rejected.
-- `color` is the local override when there is one, and Google's colour otherwise.
+- `color` is what to paint with: the user's `color_override` if set, otherwise a colour **gv
+  assigns**. `background_color` is Google's own value, kept for reference — it identifies
+  nothing, because every primary calendar comes back as the same pale cyan (`#9fe1e7`) and every
+  holiday calendar as the same green. The assignment follows creation order through a 12-colour
+  palette, so a calendar keeps its colour when another one appears, and the palette is mid-tone
+  so a client can put light text on it (see `internal/calendar/colors.go`).
 - `deleted: true` means the calendar is gone from Google. The row and its events stay, so a
   view does not empty out without explanation.
 - `watch_active: false` means changes to that calendar arrive on the next poll instead of in

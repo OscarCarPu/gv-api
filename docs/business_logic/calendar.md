@@ -91,6 +91,16 @@ series is a master plus one row per modified or cancelled occurrence.
 - `scope=instance`/`following` without an occurrence reference is refused. Guessing there
   rewrites a whole series.
 
+**Colours**
+- Google's colours are ignored for display: it returns the same pale cyan for every account's
+  primary calendar and the same green for every holiday calendar, so four connected accounts
+  would be indistinguishable, and a pastel picked for a white UI vanishes on a dark one.
+- gv assigns one instead, by creation order through a 12-colour palette. Going by id rather than
+  by a hash of the name means a new calendar takes the next free colour instead of possibly
+  colliding with an existing one, and nothing already on screen is repainted.
+- An explicit `color_override` always wins. Which ink to write on top of a colour is the
+  client's call, computed from its luminance.
+
 **What cannot be written**
 - Calendars with the `reader` or `freeBusyReader` role, and the event kinds Google generates
   itself (`birthday`, `fromGmail`, `workingLocation`). Both are refused here, before the

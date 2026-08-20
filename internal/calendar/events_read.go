@@ -36,6 +36,9 @@ func (s *Service) ListEvents(ctx context.Context, q EventsQuery) ([]Event, error
 	if err != nil {
 		return nil, err
 	}
+	// Events carry their calendar's colour, so the same assignment the calendar list uses has to
+	// run here too, or the two would disagree.
+	assignColors(views)
 	byID := make(map[int32]CalendarView, len(views))
 	ids := make([]int32, 0, len(views))
 	for _, v := range views {
@@ -151,7 +154,7 @@ func (s *Service) toEventDTO(owner EventRecord, cal CalendarView, occ *Occurrenc
 		AccountID:      cal.AccountID,
 		AccountEmail:   cal.AccountEmail,
 		CalendarName:   cal.Summary,
-		Color:          calendarColor(cal.CalendarRecord),
+		Color:          cal.DisplayColor(),
 		GoogleEventID:  owner.GoogleEventID,
 		Summary:        source.Summary,
 		Description:    source.Description,
@@ -308,6 +311,7 @@ func (s *Service) calendarView(ctx context.Context, calendarID int32) (CalendarV
 	if err != nil {
 		return CalendarView{}, err
 	}
+	assignColors(views)
 	for _, v := range views {
 		if v.ID == calendarID {
 			return v, nil
