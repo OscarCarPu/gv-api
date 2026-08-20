@@ -29,6 +29,13 @@ packages:
     interfaces:
       Repository:
       ServiceInterface:
+  gv-api/internal/calendar:
+    config:
+      dir: internal/calendar/mocks
+      outpkg: mocks
+    interfaces:
+      Repository:
+      ServiceInterface:
   gv-api/internal/rutas:
     config:
       dir: internal/rutas/mocks

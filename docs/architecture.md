@@ -4,7 +4,8 @@
 
 **gv-api** is a single-user REST API in Go that centralises personal data:
 habits, tasks (projects/tasks/todos/time entries), day planning, finance,
-route marks and Bluetooth light bulbs. No framework beyond a router.
+route marks, Bluetooth light bulbs and a mirror of the user's Google
+calendars. No framework beyond a router.
 
 ## Tech Stack
 
@@ -18,6 +19,8 @@ route marks and Bluetooth light bulbs. No framework beyond a router.
 | Migrations | [golang-migrate](https://github.com/golang-migrate/migrate), run at startup |
 | Auth | JWT ([golang-jwt/v5](https://github.com/golang-jwt/jwt)) + TOTP 2FA ([pquerna/otp](https://github.com/pquerna/otp)) |
 | Bluetooth | BlueZ over D-Bus ([godbus](https://github.com/godbus/dbus)) |
+| Google OAuth | [x/oauth2](https://pkg.go.dev/golang.org/x/oauth2) for tokens; the Calendar REST calls are hand-rolled |
+| Recurrence | [rrule-go](https://github.com/teambition/rrule-go) (RFC 5545 expansion) |
 | Testing | stdlib `testing` + [testify](https://github.com/stretchr/testify) + [mockery](https://vektra.github.io/mockery/) |
 | Containerization | Docker multi-stage build + Docker Compose |
 
@@ -46,7 +49,7 @@ gv-api/
   docs/                      # api/, business_logic/, data_models/
 ```
 
-Domains: `habits`, `tasks`, `plan`, `finance`, `rutas`, `lights`.
+Domains: `habits`, `tasks`, `plan`, `finance`, `rutas`, `lights`, `calendar`.
 
 ## Architecture Pattern
 
@@ -68,6 +71,15 @@ tests against a real one.
 `lights` adds a fourth seam: a `Driver` interface over the bulbs, with a BlueZ
 implementation and an in-memory mock, so the app runs without a radio.
 
+`calendar` adds the same kind of seam for a remote service: a `google.Client`
+interface with an HTTP implementation and an in-memory `Fake` that reproduces
+what actually matters there — sync tokens going stale (410), etags failing
+(412), grants dying (`invalid_grant`), occurrences materialising on first
+write. The sync rules are testable without a network because of it. It is also
+the only domain with a **background worker**: one goroutine, started in
+`main.go` and cancelled on shutdown, that drains push notifications, polls as a
+safety net and replaces push channels before they expire.
+
 ### Database Access (sqlc)
 
 Queries live in `db/queries/<domain>.sql`. `sqlc generate` produces a single
@@ -83,6 +95,13 @@ boundary.
 2. `POST /login/2fa` — tmp token + TOTP code returns a 30-day `full` token.
 3. Routes are grouped by the kinds they accept: `lights` takes `semi` or
    `full`, everything else requires `full`.
+
+Two endpoints are public because they cannot be otherwise, each with its own
+guard rather than an exemption: `GET /calendar/google/callback` (Google's
+consent redirect lands on the API host, where the web app's session cookie does
+not exist — guarded by an HMAC-signed `state`) and `POST
+/calendar/google/webhook` (Google's notification carries no credentials —
+guarded by the per-channel token it echoes back).
 
 Single-user system: no user table, passwords come from the environment.
 
@@ -106,3 +125,24 @@ created and dropped per run.
 - Migrations run from the API at startup, not from the database image.
 - Gitea Actions deploys on push to `main`: lint, unit tests, then
   `docker compose up --build --wait`.
+
+### Where it runs
+
+The homelab host, reached as `ssh.lab-ocp.com` (ssh over `cloudflared access
+ssh`). The stacks live in `/home/ocp/docker/gv/{gv-api,gv-web}`.
+
+Both services are published through a Cloudflare tunnel, with valid
+certificates and no Cloudflare Access in front:
+
+| Hostname | Service |
+|---|---|
+| `https://gv.lab-ocp.com` | gv-web (`ORIGIN`) |
+| `https://gv-api.lab-ocp.com` | gv-api (`VITE_API_URL`; `ALLOWED_ORIGINS` is just the web host) |
+
+The ingress rules for those two hostnames are managed in the Cloudflare
+dashboard, not in `/etc/cloudflared/config.yml` on the host — that file only
+carries the ssh and minecraft routes.
+
+That the API is publicly reachable over HTTPS is what makes third-party OAuth
+redirects and inbound webhooks possible at all; the `calendar` domain depends on
+both.

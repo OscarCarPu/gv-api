@@ -12,6 +12,8 @@ import (
 	_ "time/tzdata"
 
 	"gv-api/internal/auth"
+	"gv-api/internal/calendar"
+	calendargoogle "gv-api/internal/calendar/google"
 	"gv-api/internal/config"
 	"gv-api/internal/database"
 	"gv-api/internal/finance"
@@ -92,6 +94,35 @@ func main() {
 	}
 	lightsHandler := lights.NewHandler(lights.NewService(lightsRepo, lightsDriver, cfg.LightsCacheTTL, cfg.LightsSettleAttempts, cfg.LightsSettleDelay))
 
+	// Calendar Setup
+	// The whole domain runs off one Google client; with no credentials configured it mounts
+	// and answers, but nothing is connected and the background worker does not start.
+	calendarRepo := calendar.NewRepository(db)
+	calendarClient := calendargoogle.NewClient(calendargoogle.Config{
+		ClientID:     cfg.GoogleClientID,
+		ClientSecret: cfg.GoogleClientSecret,
+		RedirectURL:  cfg.GoogleRedirectURL,
+	})
+	calendarService, err := calendar.NewService(calendarRepo, calendarClient, calendar.Config{
+		ClientID:         cfg.GoogleClientID,
+		ClientSecret:     cfg.GoogleClientSecret,
+		RedirectURL:      cfg.GoogleRedirectURL,
+		WebAppURL:        cfg.CalendarWebAppURL,
+		WebhookEnabled:   cfg.CalendarWebhookEnabled,
+		WebhookURL:       cfg.CalendarWebhookURL,
+		WatchTTL:         cfg.CalendarWatchTTL,
+		WatchRenewBefore: cfg.CalendarWatchRenewBefore,
+		SyncInterval:     cfg.CalendarSyncInterval,
+		Debounce:         cfg.CalendarDebounce,
+		StateSecret:      []byte(cfg.JwtSecret),
+		TokenKey:         cfg.GoogleTokenKey,
+	}, loc)
+	if err != nil {
+		slog.Error("failed to set up calendar", "error", err)
+		os.Exit(1)
+	}
+	calendarHandler := calendar.NewHandler(calendarService)
+
 	// Rutas Setup
 	rutasRepo := rutas.NewRepository(db)
 	rutasService := rutas.NewService(rutasRepo)
@@ -115,6 +146,10 @@ func main() {
 	// Public
 	r.Post("/login", authHandler.Login)
 	r.Post("/login/2fa", authHandler.Login2FA)
+	// Google redirects a browser here after consent, and posts push notifications here. Neither
+	// can carry a bearer token: the first is guarded by a signed state parameter, the second by
+	// the per-channel token Google echoes back.
+	calendarHandler.RegisterPublicRoutes(r)
 
 	// Semiprivate (semi or full token)
 	r.Group(func(r chi.Router) {
@@ -130,6 +165,7 @@ func main() {
 		planHandler.RegisterRoutes(r)
 		financeHandler.RegisterRoutes(r)
 		rutasHandler.RegisterRoutes(r)
+		calendarHandler.RegisterRoutes(r)
 	})
 
 	server := &http.Server{
@@ -140,6 +176,12 @@ func main() {
 		WriteTimeout:      30 * time.Second,
 		IdleTimeout:       120 * time.Second,
 	}
+
+	// The calendar's background loop: it drains push notifications, polls as a safety net and
+	// keeps the push channels from expiring. Tied to a context so shutdown stops it.
+	workerCtx, stopWorker := context.WithCancel(context.Background())
+	defer stopWorker()
+	go calendar.NewWorker(calendarService).Run(workerCtx)
 
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
@@ -154,6 +196,7 @@ func main() {
 
 	<-quit
 	slog.Info("shutting down server")
+	stopWorker()
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	if err := server.Shutdown(shutdownCtx); err != nil {
