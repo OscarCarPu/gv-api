@@ -762,3 +762,98 @@ func TestService_ConnectedAccountEmailIsTrimmedIntoTheRedirect(t *testing.T) {
 		"without prompt=consent a re-connect returns no refresh token")
 	require.True(t, strings.Contains(out.URL, "access_type=offline"))
 }
+
+// --- colours -------------------------------------------------------------------------
+
+func TestService_Colors_AreAssignedNotTakenFromGoogle(t *testing.T) {
+	ctx := context.Background()
+	h := newHarness(t)
+	// Google hands back the same pale cyan for every primary calendar and the same green for
+	// every holiday one, which is the whole reason gv assigns its own.
+	googleCyan := google.CalendarListEntry{
+		ID: primaryCal, Summary: "Personal", TimeZone: "Europe/Madrid",
+		AccessRole: "owner", Primary: true, BackgroundColor: "#9fe1e7",
+	}
+	otherCyan := google.CalendarListEntry{
+		ID: "other@x", Summary: "Other", TimeZone: "Europe/Madrid",
+		AccessRole: "owner", BackgroundColor: "#9fe1e7",
+	}
+	h.connect(t, "me@example.com", googleCyan, otherCyan)
+
+	cals, err := h.svc.ListCalendars(ctx)
+	require.NoError(t, err)
+	require.Len(t, cals, 2)
+	require.NotEqual(t, cals[0].Color, cals[1].Color,
+		"two calendars that share a colour in google must not share one here")
+	for _, c := range cals {
+		require.NotEqual(t, "#9fe1e7", c.Color, "google's pastel is not what we paint with")
+		require.Equal(t, "#9fe1e7", c.BackgroundColor, "but it is still reported")
+	}
+}
+
+func TestService_Colors_SurviveANewCalendarAppearing(t *testing.T) {
+	ctx := context.Background()
+	h := newHarness(t)
+	h.connect(t, "me@example.com", writableEntry(primaryCal, "Personal"))
+
+	before, err := h.svc.ListCalendars(ctx)
+	require.NoError(t, err)
+	require.Len(t, before, 1)
+
+	// A calendar shared with the account later must not repaint the ones already on screen.
+	h.gc.AddAccount("me@example.com",
+		writableEntry(primaryCal, "Personal"), writableEntry("new@x", "Newly shared"))
+	_, err = h.svc.SyncAll(ctx, "poll")
+	require.NoError(t, err)
+
+	after, err := h.svc.ListCalendars(ctx)
+	require.NoError(t, err)
+	require.Len(t, after, 2)
+	require.Equal(t, before[0].Color, after[0].Color)
+	require.NotEqual(t, after[0].Color, after[1].Color)
+}
+
+func TestService_Colors_OverrideWins(t *testing.T) {
+	ctx := context.Background()
+	h := newHarness(t)
+	h.connect(t, "me@example.com", writableEntry(primaryCal, "Personal"))
+
+	override := "#ff00ff"
+	_, err := h.svc.UpdateCalendar(ctx, 1, calendar.UpdateCalendarRequest{ColorOverride: &override})
+	require.NoError(t, err)
+
+	cals, err := h.svc.ListCalendars(ctx)
+	require.NoError(t, err)
+	require.Equal(t, override, cals[0].Color, "an explicit choice is not overruled by the palette")
+}
+
+func TestService_Colors_EventsMatchTheirCalendar(t *testing.T) {
+	ctx := context.Background()
+	h := newHarness(t)
+	h.connect(t, "me@example.com",
+		writableEntry(primaryCal, "Personal"), writableEntry("work@x", "Work"))
+	h.gc.PutEvent("me@example.com", primaryCal,
+		timedEvent("a", "Personal thing", madrid(t, 2026, 8, 20, 9, 0), madrid(t, 2026, 8, 20, 10, 0)))
+	h.gc.PutEvent("me@example.com", "work@x",
+		timedEvent("b", "Work thing", madrid(t, 2026, 8, 20, 11, 0), madrid(t, 2026, 8, 20, 12, 0)))
+	_, err := h.svc.SyncAll(ctx, "manual")
+	require.NoError(t, err)
+
+	cals, err := h.svc.ListCalendars(ctx)
+	require.NoError(t, err)
+	byID := map[int32]string{}
+	for _, c := range cals {
+		byID[c.ID] = c.Color
+	}
+
+	events, err := h.svc.ListEvents(ctx, calendar.EventsQuery{
+		From: madrid(t, 2026, 8, 20, 0, 0), To: madrid(t, 2026, 8, 21, 0, 0),
+	})
+	require.NoError(t, err)
+	require.Len(t, events, 2)
+	for _, e := range events {
+		require.Equal(t, byID[e.CalendarID], e.Color,
+			"an event's colour is its calendar's, or the two views disagree on screen")
+	}
+	require.NotEqual(t, events[0].Color, events[1].Color)
+}

@@ -442,6 +442,7 @@ func (s *Service) ListCalendars(ctx context.Context) ([]Calendar, error) {
 	if err != nil {
 		return nil, err
 	}
+	assignColors(views)
 	out := make([]Calendar, 0, len(views))
 	for _, v := range views {
 		out = append(out, toCalendarDTO(v))
@@ -459,7 +460,8 @@ func toCalendarDTO(v CalendarView) Calendar {
 		Summary:          v.Summary,
 		Description:      v.Description,
 		TimeZone:         v.TimeZone,
-		Color:            calendarColor(v.CalendarRecord),
+		Color:            v.DisplayColor(),
+		BackgroundColor:  v.BackgroundColor,
 		ForegroundColor:  v.ForegroundColor,
 		AccessRole:       v.AccessRole,
 		Writable:         v.Writable(),
@@ -478,11 +480,17 @@ func toCalendarDTO(v CalendarView) Calendar {
 	}
 }
 
-func calendarColor(c CalendarRecord) string {
-	if c.ColorOverride != "" {
-		return c.ColorOverride
+// DisplayColor is the colour clients paint with. An override is the user's explicit choice, the
+// assignment is gv's, and Google's own value is only a last resort — it is the same pale cyan for
+// every primary calendar, so it identifies nothing.
+func (v CalendarView) DisplayColor() string {
+	if v.ColorOverride != "" {
+		return v.ColorOverride
 	}
-	return c.BackgroundColor
+	if v.AssignedColor != "" {
+		return v.AssignedColor
+	}
+	return v.BackgroundColor
 }
 
 func (s *Service) UpdateCalendar(ctx context.Context, id int32, req UpdateCalendarRequest) (Calendar, error) {
