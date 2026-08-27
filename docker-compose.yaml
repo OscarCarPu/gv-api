@@ -21,6 +21,9 @@ services:
   gv-api:
     build: .
     container_name: gv_api
+    # Uid 1000 (ocp) exists on the deploy host, so the reference dbus-daemon can resolve the
+    # connecting uid and won't reset the D-Bus connection. See the volumes comment below.
+    user: "1000:1000"
     depends_on:
       db:
         condition: service_healthy
@@ -40,9 +43,8 @@ services:
       #
       # One catch, measured rather than guessed: the reference dbus-daemon resolves the
       # connecting uid to a host user, and drops the connection ("connection reset by peer")
-      # when it cannot. This image runs as uid 100, which usually exists nowhere on the host,
-      # so the scan fails there while working fine under `go run` as your own user. If the
-      # deploy host needs it, add `user: "1000:1000"` (any uid the host knows) to this service.
+      # when it cannot. The image normally runs as uid 100, which usually exists nowhere on
+      # the host, so the `user:` override above pins it to a uid the host actually knows.
       - /run/dbus/system_bus_socket:/run/dbus/system_bus_socket
     healthcheck:
       test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://localhost:8080/health"]
