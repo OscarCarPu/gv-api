@@ -57,6 +57,10 @@ const (
 	// through service discovery; the next one almost always works.
 	connectRetries = 3
 	retryPause     = 800 * time.Millisecond
+
+	// How long to wait for Powered to come back true after a reset. Measured on the
+	// deploy host's adapter, which is unusually slow to act on its own StartDiscovery too.
+	adapterResetSettle = 3 * time.Second
 )
 
 // errQuiet is not used as a failure: a bulb that answers nothing to a query is normal (these
@@ -279,15 +283,57 @@ func (g *bluezGATT) discoverBriefly(ctx context.Context) {
 		return
 	}
 	adapter := conn.Object(bluezName, g.adapterPath())
+	g.ensureNotStuck(ctx, adapter)
 	if call := adapter.CallWithContext(ctx, adapterIface+".StartDiscovery", 0); call.Err != nil {
 		return // already discovering, or no adapter — the next connect reports it
 	}
 	sleepCtx(ctx, discoveryWindow)
-	// Stop with a fresh context: the caller's may already be done, and leaving the adapter
-	// scanning burns power and slows every later connect.
+	g.stopDiscovery(ctx, adapter)
+}
+
+/*
+ensureNotStuck clears a Discovering flag nobody is going to turn off.
+
+Measured against the deploy host's adapter: StartDiscovery can take 5-6s to actually take
+effect, and once it has, StopDiscovery still answers "no discovery started" — the radio is
+scanning with nothing left able to stop it, which fails every scan and connect after it the
+same way. A power cycle is the one thing that reliably clears this on that hardware, so it is
+the recovery path rather than a longer StopDiscovery timeout.
+*/
+func (g *bluezGATT) ensureNotStuck(ctx context.Context, adapter dbus.BusObject) {
+	discovering, err := boolProp(adapter, adapterIface, "Discovering")
+	if err != nil || !discovering {
+		return
+	}
+	g.resetAdapter(ctx, adapter)
+}
+
+// stopDiscovery is StopDiscovery plus the same power-cycle fallback: leaving Discovering true
+// after a failed stop would just hand the next caller the same stuck adapter.
+func (g *bluezGATT) stopDiscovery(ctx context.Context, adapter dbus.BusObject) {
+	// Fresh context: the caller's may already be done, and leaving the adapter scanning
+	// burns power and slows every later connect.
 	stopCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 2*time.Second)
 	defer cancel()
 	_ = adapter.CallWithContext(stopCtx, adapterIface+".StopDiscovery", 0).Err
+	g.ensureNotStuck(stopCtx, adapter)
+}
+
+// resetAdapter power-cycles the radio via its Powered property.
+func (g *bluezGATT) resetAdapter(ctx context.Context, adapter dbus.BusObject) {
+	_ = adapter.SetProperty(adapterIface+".Powered", false)
+	sleepCtx(ctx, 1*time.Second)
+	_ = adapter.SetProperty(adapterIface+".Powered", true)
+
+	deadline := time.Now().Add(adapterResetSettle)
+	for time.Now().Before(deadline) {
+		if powered, err := boolProp(adapter, adapterIface, "Powered"); err == nil && powered {
+			return
+		}
+		if !sleepCtx(ctx, 250*time.Millisecond) {
+			return
+		}
+	}
 }
 
 /*
@@ -304,14 +350,13 @@ func (g *bluezGATT) Scan(ctx context.Context, window time.Duration) ([]Discovere
 		return nil, err
 	}
 	adapter := conn.Object(bluezName, g.adapterPath())
+	g.ensureNotStuck(ctx, adapter)
 
 	if call := adapter.CallWithContext(ctx, adapterIface+".StartDiscovery", 0); call.Err != nil {
 		return nil, classifyDBus(call.Err)
 	}
 	sleepCtx(ctx, window)
-	stopCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 2*time.Second)
-	defer cancel()
-	_ = adapter.CallWithContext(stopCtx, adapterIface+".StopDiscovery", 0).Err
+	g.stopDiscovery(ctx, adapter)
 
 	var objects map[dbus.ObjectPath]map[string]map[string]dbus.Variant
 	call := conn.Object(bluezName, "/").CallWithContext(ctx, "org.freedesktop.DBus.ObjectManager.GetManagedObjects", 0)
