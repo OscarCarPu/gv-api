@@ -17,6 +17,13 @@ jobs:
           make lint
           go test -short ./internal/...
 
+      - name: Backup database
+        run: |
+          cd /home/ocp/docker/gv/gv-api
+          # Best-effort: db-backup won't exist yet on the very first deploy after it's
+          # introduced, and a deploy shouldn't fail just because the safety net isn't up.
+          docker compose exec -T db-backup /backup.sh || echo "::warning::pre-deploy backup skipped or failed"
+
       - name: Deploy
         run: |
           cd /home/ocp/docker/gv/gv-api

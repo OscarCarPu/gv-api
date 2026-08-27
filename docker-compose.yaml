@@ -32,9 +32,9 @@ services:
     environment:
       - POSTGRES_HOST=db
       - SCHEDULE=@daily
-      - BACKUP_KEEP_DAYS=14
-      - BACKUP_KEEP_WEEKS=8
-      - BACKUP_KEEP_MONTHS=6
+      - BACKUP_KEEP_DAYS=7
+      - BACKUP_KEEP_WEEKS=0
+      - BACKUP_KEEP_MONTHS=0
     volumes:
       - ./backups:/backups
     networks:
