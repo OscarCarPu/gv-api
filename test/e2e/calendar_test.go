@@ -258,7 +258,9 @@ func TestE2E_Calendar_ListEventsExpandsTheMirror(t *testing.T) {
 		if e.AccountEmail != "e2e@example.com" {
 			t.Errorf("event %q is missing its source account", e.Summary)
 		}
-		if e.CalendarName != "Personal" || e.Color != "#3366cc" {
+		// Color is gv's assigned palette colour (first calendar, so palette slot 0), not the
+		// seeded background_color — see internal/calendar/colors.go.
+		if e.CalendarName != "Personal" || e.Color != "#3b82f6" {
 			t.Errorf("event %q is missing its calendar's name or colour", e.Summary)
 		}
 		if !e.Editable {
