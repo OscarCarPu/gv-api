@@ -18,6 +18,29 @@ services:
       - gv
     restart: unless-stopped
 
+  # A bind mount, not a named volume, on purpose: `docker compose down -v` only removes
+  # volumes declared under the top-level `volumes:` key, so backups on disk survive that
+  # even though postgres_data doesn't.
+  db-backup:
+    image: prodrigestivill/postgres-backup-local:15
+    container_name: gv_db_backup
+    depends_on:
+      db:
+        condition: service_healthy
+    env_file:
+      - .env
+    environment:
+      - POSTGRES_HOST=db
+      - SCHEDULE=@daily
+      - BACKUP_KEEP_DAYS=14
+      - BACKUP_KEEP_WEEKS=8
+      - BACKUP_KEEP_MONTHS=6
+    volumes:
+      - ./backups:/backups
+    networks:
+      - gv
+    restart: unless-stopped
+
   gv-api:
     build: .
     container_name: gv_api
