@@ -55,8 +55,10 @@ fix it, by connecting the account again) or `revoked`.
 
 ### `POST /calendar/accounts/auth-url`
 
-Returns the Google consent URL for adding an account. One account per grant: four Google
-logins mean running this four times.
+Returns the Google consent URL for adding an account. One account per grant: four Google logins
+mean four trips through the consent screen, though **the same URL serves all of them** — it is
+signed with a 30-minute expiry, not consumed on use, so it can be opened once per account while
+it lasts.
 
 ```json
 { "url": "https://accounts.google.com/o/oauth2/auth?access_type=offline&prompt=consent&..." }
@@ -349,7 +351,7 @@ Neither can carry a bearer token, so each has its own guard.
 ### `GET /calendar/google/callback`
 
 Where Google's redirect lands after consent. Guarded by the signed `state` parameter (HMAC over
-a nonce and a 10-minute expiry). Always answers `302`, back to the web app with `?connected=`
+a nonce and a 30-minute expiry). Always answers `302`, back to the web app with `?connected=`
 or `?error=` — the person is looking at a browser tab, where a JSON error is a dead end.
 
 ### `POST /calendar/google/webhook`

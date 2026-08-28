@@ -144,6 +144,24 @@ func TestService_Connect_RefusesWhenGoogleReturnsNoRefreshToken(t *testing.T) {
 	require.Empty(t, accounts)
 }
 
+func TestService_AuthURL_StateOutlivesAMultiAccountSitting(t *testing.T) {
+	h := newHarness(t)
+	out, err := h.svc.AuthURL(context.Background())
+	require.NoError(t, err)
+	state := mustState(t, out.URL)
+
+	// The same URL has to still work a while later: it is used once per account, by hand.
+	code := h.gc.AddAccount("me@example.com", writableEntry(primaryCal, "Personal"))
+	h.svc.SetNow(func() time.Time { return time.Now().Add(25 * time.Minute) })
+	_, err = h.svc.HandleCallback(context.Background(), code, state)
+	require.NoError(t, err)
+
+	// Past the window it is refused, so a link left lying around does not stay usable.
+	h.svc.SetNow(func() time.Time { return time.Now().Add(31 * time.Minute) })
+	_, err = h.svc.HandleCallback(context.Background(), code, state)
+	require.ErrorIs(t, err, calendar.ErrInvalidState)
+}
+
 func TestService_Callback_RejectsForgedState(t *testing.T) {
 	h := newHarness(t)
 	code := h.gc.AddAccount("me@example.com", writableEntry(primaryCal, "Personal"))
