@@ -179,9 +179,10 @@ span at most two years. Unbounded expansion of endless series is the reason for 
 - **Why the sync worker lives in the API process**: it needs the same repository, tokens and
   shutdown as everything else. An external cron would have to authenticate against this API to
   ask it to do what it already knows how to do, and the real trigger is a webhook anyway.
-- **Why the state parameter is signed rather than stored**: it is single-use by being
-  short-lived, needs no cleanup, and survives a restart in the middle of a consent flow, which
-  a value in memory would not.
+- **Why the state parameter is signed rather than stored**: it needs no cleanup and survives a
+  restart in the middle of a consent flow, which a value in memory would not. It is bounded by
+  time (30 minutes) rather than by use, which is what lets one URL connect four accounts in a
+  row — the flow a person actually goes through.
 - **Why the callback and the webhook are public**: they have to be. Google's redirect lands on
   the API host, where the web app's session cookie does not exist, and Google's notification
   POST carries no credentials at all. Each gets a guard of its own — a signed state, a

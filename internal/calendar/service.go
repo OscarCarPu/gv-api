@@ -136,6 +136,15 @@ func (s *Service) requireConfigured() error {
 // --- OAuth ---------------------------------------------------------------------------
 
 /*
+oauthStateTTL is how long a consent URL stays usable.
+
+Long enough to connect several accounts in one sitting — the URL is not single-use, so the same
+one serves each account in turn — and short enough that a link left in a chat log or a shell
+history is not an open door for long.
+*/
+const oauthStateTTL = 30 * time.Minute
+
+/*
 AuthURL returns the Google consent URL for adding an account.
 
 The state parameter is an HMAC over a nonce and an expiry rather than a row in a table: it is
@@ -150,7 +159,7 @@ func (s *Service) AuthURL(_ context.Context) (AuthURLResponse, error) {
 	if _, err := rand.Read(nonce); err != nil {
 		return AuthURLResponse{}, err
 	}
-	payload := fmt.Sprintf("%s.%d", hex.EncodeToString(nonce), s.now().Add(10*time.Minute).Unix())
+	payload := fmt.Sprintf("%s.%d", hex.EncodeToString(nonce), s.now().Add(oauthStateTTL).Unix())
 	state := payload + "." + s.signState(payload)
 	return AuthURLResponse{URL: s.gc.AuthURL(state)}, nil
 }
@@ -379,6 +388,10 @@ func (s *Service) DeleteAccount(ctx context.Context, id int32) error {
 	if err := s.repo.DeleteAccount(ctx, id); err != nil {
 		return err
 	}
+	// Deliberately at info: this drops every mirrored event of the account, and the only other
+	// trace it leaves is an absence.
+	slog.InfoContext(ctx, "calendar: account disconnected, its calendars and events are gone",
+		"account", acc.ID, "email", acc.Email)
 	s.stream.Publish(StreamMessage{Type: "account.disconnected", AccountEmail: acc.Email})
 	return nil
 }
@@ -547,3 +560,7 @@ func jsonOrEmpty(v any, fallback string) []byte {
 	}
 	return raw
 }
+
+// SetNow overrides the clock. Exported for tests that need to look at what happens either side
+// of the consent window; nothing in the app calls it.
+func (s *Service) SetNow(now func() time.Time) { s.now = now }
