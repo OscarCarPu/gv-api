@@ -300,6 +300,19 @@ func effectiveDue(t TaskByDueDateResponse) *time.Time {
 	return t.ProjectDueAt
 }
 
+// normalizedDue re-anchors a due date's calendar day to s.location's midnight. due_at is stored
+// as a conceptual date (midnight UTC), not a real moment; comparing it as-is against "today"
+// (already midnight in s.location) mixes two different offsets for the same calendar day and
+// puts the day boundary in the wrong place by exactly that offset.
+func (s *Service) normalizedDue(t TaskByDueDateResponse) *time.Time {
+	due := effectiveDue(t)
+	if due == nil {
+		return nil
+	}
+	norm := time.Date(due.Year(), due.Month(), due.Day(), 0, 0, 0, 0, s.location)
+	return &norm
+}
+
 // applyUrgency fills RemainingHours/StartBy/Urgent on standard tasks that carry an estimate.
 // Recurring and continuous tasks are skipped: a recurring task's time_spent accumulates across
 // every past cycle (renewing only reschedules due_at, it never resets anything), so it would
@@ -314,15 +327,17 @@ func (s *Service) applyUrgency(ctx context.Context, rows []TaskByDueDateResponse
 	today = time.Date(today.Year(), today.Month(), today.Day(), 0, 0, 0, 0, s.location)
 
 	var maxDue time.Time
+	estimatedIdx := make([]int, 0, len(rows))
 	estimatedIDs := make([]int32, 0, len(rows))
-	for _, t := range rows {
+	for i, t := range rows {
 		if t.TaskType != "standard" || t.EstimateHours == nil {
 			continue
 		}
-		due := effectiveDue(t)
+		due := s.normalizedDue(t)
 		if due == nil {
 			continue
 		}
+		estimatedIdx = append(estimatedIdx, i)
 		estimatedIDs = append(estimatedIDs, t.ID)
 		if due.After(maxDue) {
 			maxDue = *due
@@ -346,15 +361,23 @@ func (s *Service) applyUrgency(ctx context.Context, rows []TaskByDueDateResponse
 		return err
 	}
 
-	for i := range rows {
+	// Every task's backward-fill draws from the same freeByDate pool, so left unordered two
+	// tasks racing for the same day's hours would each assume they had all of it to themselves.
+	// Higher-priority tasks claim hours first and decrement the shared pool as they go, so a
+	// lower-priority task genuinely starved by that competition shows up as urgent even though
+	// it would easily fit in the capacity if it were the only task due around then. Priority
+	// wins the claim order; the sooner deadline breaks ties within the same priority.
+	sort.SliceStable(estimatedIdx, func(a, b int) bool {
+		ra, rb := &rows[estimatedIdx[a]], &rows[estimatedIdx[b]]
+		if ra.Priority != rb.Priority {
+			return ra.Priority < rb.Priority
+		}
+		return s.normalizedDue(*ra).Before(*s.normalizedDue(*rb))
+	})
+
+	for _, i := range estimatedIdx {
 		t := &rows[i]
-		if t.TaskType != "standard" || t.EstimateHours == nil {
-			continue
-		}
-		due := effectiveDue(*t)
-		if due == nil {
-			continue
-		}
+		due := s.normalizedDue(*t)
 
 		spentHours := decimal.NewFromInt(t.TimeSpent).Div(decimal.NewFromInt(3600))
 		remaining := t.EstimateHours.Sub(spentHours).Sub(plannedByTask[t.ID])
@@ -368,13 +391,26 @@ func (s *Service) applyUrgency(ctx context.Context, rows []TaskByDueDateResponse
 
 		acc := decimal.Zero
 		startBy := today
+		consumed := make(map[string]decimal.Decimal)
 		for d := due.AddDate(0, 0, -1); !d.Before(today); d = d.AddDate(0, 0, -1) {
-			acc = acc.Add(freeByDate[d.Format("2006-01-02")])
+			dateStr := d.Format("2006-01-02")
+			if avail := freeByDate[dateStr]; avail.GreaterThan(decimal.Zero) {
+				take := avail
+				if need := remaining.Sub(acc); take.GreaterThan(need) {
+					take = need
+				}
+				acc = acc.Add(take)
+				consumed[dateStr] = take
+			}
 			if acc.GreaterThanOrEqual(remaining) {
 				startBy = d
 				break
 			}
 		}
+		for dateStr, amt := range consumed {
+			freeByDate[dateStr] = freeByDate[dateStr].Sub(amt)
+		}
+
 		startByStr := startBy.Format("2006-01-02")
 		t.StartBy = &startByStr
 		t.Urgent = !startBy.After(today)

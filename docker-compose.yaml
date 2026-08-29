@@ -37,6 +37,15 @@ services:
       - BACKUP_KEEP_MONTHS=0
     volumes:
       - ./backups:/backups
+    # Same check the image's own HEALTHCHECK runs, just polled far more often: its default
+    # 300s interval means `up --wait` (the deploy workflow and `make reset`/`up`) blocks a
+    # full 5 minutes on every fresh create waiting for the first check to land.
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8080/ || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
     networks:
       - gv
     restart: unless-stopped
