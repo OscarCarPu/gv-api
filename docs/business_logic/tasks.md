@@ -93,6 +93,15 @@ Only finished entries count toward time calculations.
 - Timezone-aware: uses the server's configured timezone (Europe/Madrid) for period boundaries.
 - Entries spanning a period boundary are split: the portion before midnight (or Monday, or 1st of month) counts toward the earlier period, the portion after counts toward the later one.
 
+**Estimate and urgency (Due Soon)**
+- `estimate_hours` is an optional decimal hours estimate on a task. It only produces urgency on `task_type = 'standard'` tasks — `recurring` and `continuous` ignore it even if set:
+  - A recurring task's `time_spent` accumulates across *every* past cycle (renewing only reschedules `due_at`, it never resets `time_spent`), so after a couple of renewals it would read as permanently over-estimate and never look urgent again.
+  - A continuous task has no real deadline to count back from.
+- `GetTasksByDueDate` computes, for each eligible task: `remaining_hours = max(estimate_hours − time_spent_hours − already_planned_hours, 0)`, where `already_planned_hours` is the sum of that task's own `plan_blocks` not yet in the past (see [business_logic/plan.md](plan.md)) — a task already fully scheduled is not urgent even if untouched.
+- If `remaining_hours > 0`, the service walks backward day by day from the effective due date (own `due_at`, falling back to the project's), accumulating the daily free hours reported by the capacity domain (`GET /capacity/free-busy`), until the accumulated free time covers `remaining_hours`. The day that threshold is crossed is `start_by`. `urgent = start_by <= today` — i.e. the task should already have been started to make its deadline.
+- This is a per-task computation: two urgent-adjacent tasks competing for the same free hours are each evaluated independently, not against a shared schedule (no earliest-deadline-first packing across tasks).
+- One batched capacity call and one batched planned-hours call cover every eligible task in the response, never one call per task.
+
 **Task dependencies**
 - A task can depend on other tasks. Dependencies are managed via the `depends_on` field on create/update task (list of task IDs). Setting `depends_on` replaces all existing dependencies. Omitting it leaves them unchanged.
 - Finished tasks cannot be added as dependencies (silently ignored during create/update).

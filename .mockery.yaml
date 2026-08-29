@@ -50,3 +50,9 @@ packages:
     interfaces:
       Repository:
       ServiceInterface:
+  gv-api/internal/capacity:
+    config:
+      dir: internal/capacity/mocks
+      outpkg: mocks
+    interfaces:
+      ServiceInterface:

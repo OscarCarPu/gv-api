@@ -50,7 +50,8 @@ See [README](README.md) for shared `task_type` / `recurrence` / `priority` seman
     "depends_on": [2, 3],
     "task_type": "recurring",
     "recurrence": 7,
-    "priority": 2
+    "priority": 2,
+    "estimate_hours": "3.5"
   }
   ```
   - `name` (required): The name of the task.
@@ -61,6 +62,7 @@ See [README](README.md) for shared `task_type` / `recurrence` / `priority` seman
   - `task_type` (optional): One of `"standard"` (default), `"continuous"`, or `"recurring"`.
   - `recurrence` (required when `task_type` is `"recurring"`, rejected otherwise): Number of days between recurrences (positive integer).
   - `priority` (optional): Integer from 1 (highest) to 5 (lowest). Defaults to 3.
+  - `estimate_hours` (optional): Decimal hours string, > 0. Only used for urgency when `task_type` is `"standard"` — see [business_logic/tasks.md](../../business_logic/tasks.md).
 - **Success Response:**
   - **Code:** `201 Created`
   - **Content:**
@@ -76,11 +78,13 @@ See [README](README.md) for shared `task_type` / `recurrence` / `priority` seman
       "task_type": "recurring",
       "recurrence": 7,
       "priority": 2,
+      "estimate_hours": "3.5",
       "depends_on": [{"id": 2, "name": "Other Task", "due_at": "2025-05-15"}, {"id": 3, "name": "Another Task", "due_at": null}],
       "blocks": [],
       "blocked": true
     }
     ```
+  - `estimate_hours`: echoes the request, `null` if not set.
   - `depends_on`: Tasks this task depends on (this task is blocked by them). Each entry contains `id`, `name`, and `due_at` (used for effective due date computation).
   - `blocks`: Tasks that depend on this task (they are blocked by this task). Each entry contains `id`, `name`, and `due_at`.
   - `blocked`: `true` if the task has at least one unfinished dependency, `false` otherwise.
@@ -144,7 +148,8 @@ See [README](README.md) for shared `task_type` / `recurrence` / `priority` seman
     "depends_on": [3, 4],
     "task_type": "recurring",
     "recurrence": 7,
-    "priority": 1
+    "priority": 1,
+    "estimate_hours": "2"
   }
   ```
   - `name` (optional): New name.
@@ -158,6 +163,7 @@ See [README](README.md) for shared `task_type` / `recurrence` / `priority` seman
   - `task_type` (optional): One of `"standard"`, `"continuous"`, or `"recurring"`. When changing to `"recurring"`, `recurrence` must be provided. When changing to a non-recurring type, `recurrence` is automatically cleared.
   - `recurrence` (optional): Number of days between recurrences (positive integer). Required when `task_type` is set to `"recurring"`. Rejected when `task_type` is set to a non-recurring type. Can be sent alone to change the interval of an already-recurring task.
   - `priority` (optional): Integer from 1 (highest) to 5 (lowest).
+  - `estimate_hours` (optional): Decimal hours string, > 0. Pass `null` to clear it. Omitting the field leaves it unchanged.
 - **Success Response:**
   - **Code:** `200 OK`
   - **Content:**
@@ -173,6 +179,7 @@ See [README](README.md) for shared `task_type` / `recurrence` / `priority` seman
       "task_type": "recurring",
       "recurrence": 7,
       "priority": 1,
+      "estimate_hours": "2",
       "depends_on": [{"id": 3, "name": "Dep A", "due_at": null}, {"id": 4, "name": "Dep B", "due_at": "2025-07-01"}],
       "blocks": [{"id": 7, "name": "Blocked Task", "due_at": null}],
       "blocked": true
@@ -203,7 +210,7 @@ See [README](README.md) for shared `task_type` / `recurrence` / `priority` seman
 
 - **Method:** `GET`
 - **Endpoint:** `/tasks/tasks/by-due-date`
-- **Description:** Returns unfinished tasks that have a due date (own, project, or inherited from dependencies), ordered by effective `due_at` first, then by project `due_at`, then by name. Tasks hidden by blocked dependencies are excluded. A task's `due_at` in the response reflects its effective due date (minimum of own and dependencies'). Includes time spent from completed time entries.
+- **Description:** Returns unfinished tasks that have a due date (own, project, or inherited from dependencies), ordered by effective `due_at` first, then by project `due_at`, then by name. Tasks hidden by blocked dependencies are excluded. A task's `due_at` in the response reflects its effective due date (minimum of own and dependencies'). Includes time spent from completed time entries, plus urgency fields — see [business_logic/tasks.md](../../business_logic/tasks.md#estimate-and-urgency-due-soon).
 - **Query Parameters:**
   - `min_priority` (optional): Integer from 1 to 5. When provided, only tasks with `priority <= min_priority` are returned (1 = highest importance).
 - **Success Response:**
@@ -220,6 +227,10 @@ See [README](README.md) for shared `task_type` / `recurrence` / `priority` seman
         "task_type": "standard",
         "priority": 2,
         "time_spent": 5400,
+        "estimate_hours": "6",
+        "remaining_hours": "4.5",
+        "start_by": "2025-05-30",
+        "urgent": false,
         "project_id": 1,
         "project_name": "My Project",
         "project_due_at": "2025-12-31",
@@ -229,6 +240,8 @@ See [README](README.md) for shared `task_type` / `recurrence` / `priority` seman
       }
     ]
     ```
+  - `estimate_hours`, `remaining_hours`, `start_by`: all `null` when the task has no estimate, or is `recurring`/`continuous` (only `standard` tasks compute urgency).
+  - `urgent`: `true` when there is not enough free capacity left between today and the effective due date to cover `remaining_hours` — the task should already have been started.
 - **Error Responses:**
   - **Code:** `500 Internal Server Error`
     - **Content:** `Failed to get tasks by due date`

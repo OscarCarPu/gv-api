@@ -32,7 +32,7 @@ func seedTasks(b *testing.B, repo *tasks.PostgresRepository, n int) []int32 {
 	due := time.Now().Add(72 * time.Hour)
 	ids := make([]int32, n)
 	for i := 0; i < n; i++ {
-		t, err := repo.CreateTask(ctx, nil, fmt.Sprintf("t%d", i), nil, &due, "standard", nil, 3)
+		t, err := repo.CreateTask(ctx, nil, fmt.Sprintf("t%d", i), nil, &due, "standard", nil, 3, nil)
 		if err != nil {
 			b.Fatal(err)
 		}
@@ -135,7 +135,7 @@ func BenchmarkGetProjectChildren(b *testing.B) {
 					b.Fatal(err)
 				}
 				for ti := 0; ti < tc.tasksPerProject; ti++ {
-					task, err := repo.CreateTask(ctx, &p.ID, fmt.Sprintf("t%d-%d", d, ti), nil, nil, "standard", nil, 3)
+					task, err := repo.CreateTask(ctx, &p.ID, fmt.Sprintf("t%d-%d", d, ti), nil, nil, "standard", nil, 3, nil)
 					if err != nil {
 						b.Fatal(err)
 					}

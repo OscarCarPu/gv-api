@@ -4,9 +4,9 @@ VALUES ($1, $2, $3, $4)
 RETURNING id, name, description, due_at, parent_id;
 
 -- name: CreateTask :one
-INSERT INTO tasks (project_id, name, description, due_at, task_type, recurrence, priority)
-VALUES ($1, $2, $3, $4, $5, $6, $7)
-RETURNING id, project_id, name, description, due_at, task_type, recurrence, priority;
+INSERT INTO tasks (project_id, name, description, due_at, task_type, recurrence, priority, estimate_hours)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+RETURNING id, project_id, name, description, due_at, task_type, recurrence, priority, estimate_hours;
 
 -- name: CreateTodo :one
 INSERT INTO todos (task_id, name)
@@ -37,9 +37,11 @@ UPDATE tasks SET
     finished_at = CASE WHEN @clear_finished_at::bool THEN NULL WHEN @set_finished_at::bool THEN @finished_at::timestamptz ELSE finished_at END,
     task_type   = CASE WHEN @set_task_type::bool     THEN @task_type::text         ELSE task_type END,
     recurrence  = CASE WHEN @clear_recurrence::bool THEN NULL WHEN @set_recurrence::bool THEN @recurrence::int ELSE recurrence END,
-    priority    = CASE WHEN @set_priority::bool      THEN @priority::int           ELSE priority END
+    priority    = CASE WHEN @set_priority::bool      THEN @priority::int           ELSE priority END,
+    estimate_hours = CASE WHEN @clear_estimate_hours::bool THEN NULL
+                          WHEN @set_estimate_hours::bool THEN @estimate_hours::numeric ELSE estimate_hours END
 WHERE id = @id
-RETURNING id, project_id, name, description, due_at, started_at, finished_at, task_type, recurrence, priority;
+RETURNING id, project_id, name, description, due_at, started_at, finished_at, task_type, recurrence, priority, estimate_hours;
 
 -- name: UpdateProject :one
 UPDATE projects SET
@@ -248,7 +250,7 @@ task_hidden AS (
 SELECT
     t.id, t.name, t.description,
     e.effective_due_at AS due_at,
-    t.started_at, t.task_type, t.recurrence, t.priority,
+    t.started_at, t.task_type, t.recurrence, t.priority, t.estimate_hours,
     p.id AS project_id, p.name AS project_name, p.due_at AS project_due_at,
     COALESCE(SUM(EXTRACT(EPOCH FROM (te.finished_at - te.started_at)))::bigint, 0)::bigint AS time_spent,
     COALESCE((SELECT json_agg(json_build_object('id', t2.id, 'name', t2.name, 'due_at', t2.due_at) ORDER BY t2.name) FROM task_dependencies td JOIN tasks t2 ON t2.id = td.depends_on WHERE td.task_id = t.id AND t2.finished_at IS NULL), '[]')::json AS depends_on,
@@ -268,7 +270,7 @@ GROUP BY t.id, p.id, e.effective_due_at, tb.blocked
 ORDER BY e.effective_due_at ASC NULLS LAST, p.due_at ASC NULLS LAST, t.name;
 
 -- name: GetTaskByID :one
-SELECT t.id, t.project_id, t.name, t.description, t.due_at, t.started_at, t.finished_at, t.task_type, t.recurrence, t.priority,
+SELECT t.id, t.project_id, t.name, t.description, t.due_at, t.started_at, t.finished_at, t.task_type, t.recurrence, t.priority, t.estimate_hours,
     p.name AS project_name,
     COALESCE(SUM(EXTRACT(EPOCH FROM (te.finished_at - te.started_at)))::bigint, 0)::bigint AS time_spent,
     COALESCE((SELECT json_agg(json_build_object('id', t2.id, 'name', t2.name, 'due_at', t2.due_at) ORDER BY t2.name) FROM task_dependencies td JOIN tasks t2 ON t2.id = td.depends_on WHERE td.task_id = t.id AND t2.finished_at IS NULL), '[]')::json AS depends_on,

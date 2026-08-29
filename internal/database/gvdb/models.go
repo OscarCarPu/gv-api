@@ -173,15 +173,17 @@ type Light struct {
 }
 
 type PlanBlock struct {
-	ID        int32              `db:"id" json:"id"`
-	PlanDate  time.Time          `db:"plan_date" json:"plan_date"`
-	StartedAt pgtype.Timestamptz `db:"started_at" json:"started_at"`
-	EndedAt   pgtype.Timestamptz `db:"ended_at" json:"ended_at"`
-	TaskID    *int32             `db:"task_id" json:"task_id"`
-	Label     string             `db:"label" json:"label"`
-	Note      *string            `db:"note" json:"note"`
-	CreatedAt pgtype.Timestamptz `db:"created_at" json:"created_at"`
-	UpdatedAt pgtype.Timestamptz `db:"updated_at" json:"updated_at"`
+	ID           int32              `db:"id" json:"id"`
+	PlanDate     time.Time          `db:"plan_date" json:"plan_date"`
+	StartedAt    pgtype.Timestamptz `db:"started_at" json:"started_at"`
+	EndedAt      pgtype.Timestamptz `db:"ended_at" json:"ended_at"`
+	TaskID       *int32             `db:"task_id" json:"task_id"`
+	Label        string             `db:"label" json:"label"`
+	Note         *string            `db:"note" json:"note"`
+	CreatedAt    pgtype.Timestamptz `db:"created_at" json:"created_at"`
+	UpdatedAt    pgtype.Timestamptz `db:"updated_at" json:"updated_at"`
+	EventRef     *string            `db:"event_ref" json:"event_ref"`
+	CommitmentID *int32             `db:"commitment_id" json:"commitment_id"`
 }
 
 type Project struct {
@@ -194,17 +196,35 @@ type Project struct {
 	FinishedAt  pgtype.Timestamptz `db:"finished_at" json:"finished_at"`
 }
 
+type RecurringCommitment struct {
+	ID         int32              `db:"id" json:"id"`
+	TaskID     int32              `db:"task_id" json:"task_id"`
+	Label      string             `db:"label" json:"label"`
+	DaysOfWeek []int16            `db:"days_of_week" json:"days_of_week"`
+	StartTime  pgtype.Time        `db:"start_time" json:"start_time"`
+	EndTime    pgtype.Time        `db:"end_time" json:"end_time"`
+	Active     bool               `db:"active" json:"active"`
+	CreatedAt  pgtype.Timestamptz `db:"created_at" json:"created_at"`
+	UpdatedAt  pgtype.Timestamptz `db:"updated_at" json:"updated_at"`
+}
+
+type RecurringCommitmentSkip struct {
+	CommitmentID int32     `db:"commitment_id" json:"commitment_id"`
+	SkipDate     time.Time `db:"skip_date" json:"skip_date"`
+}
+
 type Task struct {
-	ID          int32              `db:"id" json:"id"`
-	ProjectID   *int32             `db:"project_id" json:"project_id"`
-	Name        string             `db:"name" json:"name"`
-	Description *string            `db:"description" json:"description"`
-	DueAt       pgtype.Date        `db:"due_at" json:"due_at"`
-	StartedAt   pgtype.Timestamptz `db:"started_at" json:"started_at"`
-	FinishedAt  pgtype.Timestamptz `db:"finished_at" json:"finished_at"`
-	TaskType    string             `db:"task_type" json:"task_type"`
-	Recurrence  *int32             `db:"recurrence" json:"recurrence"`
-	Priority    int32              `db:"priority" json:"priority"`
+	ID            int32              `db:"id" json:"id"`
+	ProjectID     *int32             `db:"project_id" json:"project_id"`
+	Name          string             `db:"name" json:"name"`
+	Description   *string            `db:"description" json:"description"`
+	DueAt         pgtype.Date        `db:"due_at" json:"due_at"`
+	StartedAt     pgtype.Timestamptz `db:"started_at" json:"started_at"`
+	FinishedAt    pgtype.Timestamptz `db:"finished_at" json:"finished_at"`
+	TaskType      string             `db:"task_type" json:"task_type"`
+	Recurrence    *int32             `db:"recurrence" json:"recurrence"`
+	Priority      int32              `db:"priority" json:"priority"`
+	EstimateHours *decimal.Decimal   `db:"estimate_hours" json:"estimate_hours"`
 }
 
 type TaskDependency struct {

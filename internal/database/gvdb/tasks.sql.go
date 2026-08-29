@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/shopspring/decimal"
 )
 
 const createProject = `-- name: CreateProject :one
@@ -52,30 +53,32 @@ func (q *Queries) CreateProject(ctx context.Context, arg CreateProjectParams) (C
 }
 
 const createTask = `-- name: CreateTask :one
-INSERT INTO tasks (project_id, name, description, due_at, task_type, recurrence, priority)
-VALUES ($1, $2, $3, $4, $5, $6, $7)
-RETURNING id, project_id, name, description, due_at, task_type, recurrence, priority
+INSERT INTO tasks (project_id, name, description, due_at, task_type, recurrence, priority, estimate_hours)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+RETURNING id, project_id, name, description, due_at, task_type, recurrence, priority, estimate_hours
 `
 
 type CreateTaskParams struct {
-	ProjectID   *int32      `db:"project_id" json:"project_id"`
-	Name        string      `db:"name" json:"name"`
-	Description *string     `db:"description" json:"description"`
-	DueAt       pgtype.Date `db:"due_at" json:"due_at"`
-	TaskType    string      `db:"task_type" json:"task_type"`
-	Recurrence  *int32      `db:"recurrence" json:"recurrence"`
-	Priority    int32       `db:"priority" json:"priority"`
+	ProjectID     *int32           `db:"project_id" json:"project_id"`
+	Name          string           `db:"name" json:"name"`
+	Description   *string          `db:"description" json:"description"`
+	DueAt         pgtype.Date      `db:"due_at" json:"due_at"`
+	TaskType      string           `db:"task_type" json:"task_type"`
+	Recurrence    *int32           `db:"recurrence" json:"recurrence"`
+	Priority      int32            `db:"priority" json:"priority"`
+	EstimateHours *decimal.Decimal `db:"estimate_hours" json:"estimate_hours"`
 }
 
 type CreateTaskRow struct {
-	ID          int32       `db:"id" json:"id"`
-	ProjectID   *int32      `db:"project_id" json:"project_id"`
-	Name        string      `db:"name" json:"name"`
-	Description *string     `db:"description" json:"description"`
-	DueAt       pgtype.Date `db:"due_at" json:"due_at"`
-	TaskType    string      `db:"task_type" json:"task_type"`
-	Recurrence  *int32      `db:"recurrence" json:"recurrence"`
-	Priority    int32       `db:"priority" json:"priority"`
+	ID            int32            `db:"id" json:"id"`
+	ProjectID     *int32           `db:"project_id" json:"project_id"`
+	Name          string           `db:"name" json:"name"`
+	Description   *string          `db:"description" json:"description"`
+	DueAt         pgtype.Date      `db:"due_at" json:"due_at"`
+	TaskType      string           `db:"task_type" json:"task_type"`
+	Recurrence    *int32           `db:"recurrence" json:"recurrence"`
+	Priority      int32            `db:"priority" json:"priority"`
+	EstimateHours *decimal.Decimal `db:"estimate_hours" json:"estimate_hours"`
 }
 
 func (q *Queries) CreateTask(ctx context.Context, arg CreateTaskParams) (CreateTaskRow, error) {
@@ -87,6 +90,7 @@ func (q *Queries) CreateTask(ctx context.Context, arg CreateTaskParams) (CreateT
 		arg.TaskType,
 		arg.Recurrence,
 		arg.Priority,
+		arg.EstimateHours,
 	)
 	var i CreateTaskRow
 	err := row.Scan(
@@ -98,6 +102,7 @@ func (q *Queries) CreateTask(ctx context.Context, arg CreateTaskParams) (CreateT
 		&i.TaskType,
 		&i.Recurrence,
 		&i.Priority,
+		&i.EstimateHours,
 	)
 	return i, err
 }
@@ -499,7 +504,7 @@ func (q *Queries) GetRootProjects(ctx context.Context) ([]GetRootProjectsRow, er
 }
 
 const getTaskByID = `-- name: GetTaskByID :one
-SELECT t.id, t.project_id, t.name, t.description, t.due_at, t.started_at, t.finished_at, t.task_type, t.recurrence, t.priority,
+SELECT t.id, t.project_id, t.name, t.description, t.due_at, t.started_at, t.finished_at, t.task_type, t.recurrence, t.priority, t.estimate_hours,
     p.name AS project_name,
     COALESCE(SUM(EXTRACT(EPOCH FROM (te.finished_at - te.started_at)))::bigint, 0)::bigint AS time_spent,
     COALESCE((SELECT json_agg(json_build_object('id', t2.id, 'name', t2.name, 'due_at', t2.due_at) ORDER BY t2.name) FROM task_dependencies td JOIN tasks t2 ON t2.id = td.depends_on WHERE td.task_id = t.id AND t2.finished_at IS NULL), '[]')::json AS depends_on,
@@ -514,22 +519,23 @@ GROUP BY t.id, p.name
 `
 
 type GetTaskByIDRow struct {
-	ID          int32              `db:"id" json:"id"`
-	ProjectID   *int32             `db:"project_id" json:"project_id"`
-	Name        string             `db:"name" json:"name"`
-	Description *string            `db:"description" json:"description"`
-	DueAt       pgtype.Date        `db:"due_at" json:"due_at"`
-	StartedAt   pgtype.Timestamptz `db:"started_at" json:"started_at"`
-	FinishedAt  pgtype.Timestamptz `db:"finished_at" json:"finished_at"`
-	TaskType    string             `db:"task_type" json:"task_type"`
-	Recurrence  *int32             `db:"recurrence" json:"recurrence"`
-	Priority    int32              `db:"priority" json:"priority"`
-	ProjectName *string            `db:"project_name" json:"project_name"`
-	TimeSpent   int64              `db:"time_spent" json:"time_spent"`
-	DependsOn   []byte             `db:"depends_on" json:"depends_on"`
-	Blocks      []byte             `db:"blocks" json:"blocks"`
-	Blocked     bool               `db:"blocked" json:"blocked"`
-	Todos       []byte             `db:"todos" json:"todos"`
+	ID            int32              `db:"id" json:"id"`
+	ProjectID     *int32             `db:"project_id" json:"project_id"`
+	Name          string             `db:"name" json:"name"`
+	Description   *string            `db:"description" json:"description"`
+	DueAt         pgtype.Date        `db:"due_at" json:"due_at"`
+	StartedAt     pgtype.Timestamptz `db:"started_at" json:"started_at"`
+	FinishedAt    pgtype.Timestamptz `db:"finished_at" json:"finished_at"`
+	TaskType      string             `db:"task_type" json:"task_type"`
+	Recurrence    *int32             `db:"recurrence" json:"recurrence"`
+	Priority      int32              `db:"priority" json:"priority"`
+	EstimateHours *decimal.Decimal   `db:"estimate_hours" json:"estimate_hours"`
+	ProjectName   *string            `db:"project_name" json:"project_name"`
+	TimeSpent     int64              `db:"time_spent" json:"time_spent"`
+	DependsOn     []byte             `db:"depends_on" json:"depends_on"`
+	Blocks        []byte             `db:"blocks" json:"blocks"`
+	Blocked       bool               `db:"blocked" json:"blocked"`
+	Todos         []byte             `db:"todos" json:"todos"`
 }
 
 func (q *Queries) GetTaskByID(ctx context.Context, id int32) (GetTaskByIDRow, error) {
@@ -546,6 +552,7 @@ func (q *Queries) GetTaskByID(ctx context.Context, id int32) (GetTaskByIDRow, er
 		&i.TaskType,
 		&i.Recurrence,
 		&i.Priority,
+		&i.EstimateHours,
 		&i.ProjectName,
 		&i.TimeSpent,
 		&i.DependsOn,
@@ -616,7 +623,7 @@ task_hidden AS (
 SELECT
     t.id, t.name, t.description,
     e.effective_due_at AS due_at,
-    t.started_at, t.task_type, t.recurrence, t.priority,
+    t.started_at, t.task_type, t.recurrence, t.priority, t.estimate_hours,
     p.id AS project_id, p.name AS project_name, p.due_at AS project_due_at,
     COALESCE(SUM(EXTRACT(EPOCH FROM (te.finished_at - te.started_at)))::bigint, 0)::bigint AS time_spent,
     COALESCE((SELECT json_agg(json_build_object('id', t2.id, 'name', t2.name, 'due_at', t2.due_at) ORDER BY t2.name) FROM task_dependencies td JOIN tasks t2 ON t2.id = td.depends_on WHERE td.task_id = t.id AND t2.finished_at IS NULL), '[]')::json AS depends_on,
@@ -637,21 +644,22 @@ ORDER BY e.effective_due_at ASC NULLS LAST, p.due_at ASC NULLS LAST, t.name
 `
 
 type GetTasksByDueDateRow struct {
-	ID           int32              `db:"id" json:"id"`
-	Name         string             `db:"name" json:"name"`
-	Description  *string            `db:"description" json:"description"`
-	DueAt        interface{}        `db:"due_at" json:"due_at"`
-	StartedAt    pgtype.Timestamptz `db:"started_at" json:"started_at"`
-	TaskType     string             `db:"task_type" json:"task_type"`
-	Recurrence   *int32             `db:"recurrence" json:"recurrence"`
-	Priority     int32              `db:"priority" json:"priority"`
-	ProjectID    *int32             `db:"project_id" json:"project_id"`
-	ProjectName  *string            `db:"project_name" json:"project_name"`
-	ProjectDueAt pgtype.Date        `db:"project_due_at" json:"project_due_at"`
-	TimeSpent    int64              `db:"time_spent" json:"time_spent"`
-	DependsOn    []byte             `db:"depends_on" json:"depends_on"`
-	Blocks       []byte             `db:"blocks" json:"blocks"`
-	Blocked      bool               `db:"blocked" json:"blocked"`
+	ID            int32              `db:"id" json:"id"`
+	Name          string             `db:"name" json:"name"`
+	Description   *string            `db:"description" json:"description"`
+	DueAt         interface{}        `db:"due_at" json:"due_at"`
+	StartedAt     pgtype.Timestamptz `db:"started_at" json:"started_at"`
+	TaskType      string             `db:"task_type" json:"task_type"`
+	Recurrence    *int32             `db:"recurrence" json:"recurrence"`
+	Priority      int32              `db:"priority" json:"priority"`
+	EstimateHours *decimal.Decimal   `db:"estimate_hours" json:"estimate_hours"`
+	ProjectID     *int32             `db:"project_id" json:"project_id"`
+	ProjectName   *string            `db:"project_name" json:"project_name"`
+	ProjectDueAt  pgtype.Date        `db:"project_due_at" json:"project_due_at"`
+	TimeSpent     int64              `db:"time_spent" json:"time_spent"`
+	DependsOn     []byte             `db:"depends_on" json:"depends_on"`
+	Blocks        []byte             `db:"blocks" json:"blocks"`
+	Blocked       bool               `db:"blocked" json:"blocked"`
 }
 
 // Returns unfinished tasks that have a due_at (own or inherited from a blocked task) or whose project has one.
@@ -674,6 +682,7 @@ func (q *Queries) GetTasksByDueDate(ctx context.Context, minPriority *int32) ([]
 			&i.TaskType,
 			&i.Recurrence,
 			&i.Priority,
+			&i.EstimateHours,
 			&i.ProjectID,
 			&i.ProjectName,
 			&i.ProjectDueAt,
@@ -1336,35 +1345,40 @@ UPDATE tasks SET
     finished_at = CASE WHEN $13::bool THEN NULL WHEN $14::bool THEN $15::timestamptz ELSE finished_at END,
     task_type   = CASE WHEN $16::bool     THEN $17::text         ELSE task_type END,
     recurrence  = CASE WHEN $18::bool THEN NULL WHEN $19::bool THEN $20::int ELSE recurrence END,
-    priority    = CASE WHEN $21::bool      THEN $22::int           ELSE priority END
-WHERE id = $23
-RETURNING id, project_id, name, description, due_at, started_at, finished_at, task_type, recurrence, priority
+    priority    = CASE WHEN $21::bool      THEN $22::int           ELSE priority END,
+    estimate_hours = CASE WHEN $23::bool THEN NULL
+                          WHEN $24::bool THEN $25::numeric ELSE estimate_hours END
+WHERE id = $26
+RETURNING id, project_id, name, description, due_at, started_at, finished_at, task_type, recurrence, priority, estimate_hours
 `
 
 type UpdateTaskParams struct {
-	SetName         bool               `db:"set_name" json:"set_name"`
-	Name            string             `db:"name" json:"name"`
-	SetDescription  bool               `db:"set_description" json:"set_description"`
-	Description     string             `db:"description" json:"description"`
-	ClearDueAt      bool               `db:"clear_due_at" json:"clear_due_at"`
-	SetDueAt        bool               `db:"set_due_at" json:"set_due_at"`
-	DueAt           time.Time          `db:"due_at" json:"due_at"`
-	SetProjectID    bool               `db:"set_project_id" json:"set_project_id"`
-	ProjectID       int32              `db:"project_id" json:"project_id"`
-	ClearStartedAt  bool               `db:"clear_started_at" json:"clear_started_at"`
-	SetStartedAt    bool               `db:"set_started_at" json:"set_started_at"`
-	StartedAt       pgtype.Timestamptz `db:"started_at" json:"started_at"`
-	ClearFinishedAt bool               `db:"clear_finished_at" json:"clear_finished_at"`
-	SetFinishedAt   bool               `db:"set_finished_at" json:"set_finished_at"`
-	FinishedAt      pgtype.Timestamptz `db:"finished_at" json:"finished_at"`
-	SetTaskType     bool               `db:"set_task_type" json:"set_task_type"`
-	TaskType        string             `db:"task_type" json:"task_type"`
-	ClearRecurrence bool               `db:"clear_recurrence" json:"clear_recurrence"`
-	SetRecurrence   bool               `db:"set_recurrence" json:"set_recurrence"`
-	Recurrence      int32              `db:"recurrence" json:"recurrence"`
-	SetPriority     bool               `db:"set_priority" json:"set_priority"`
-	Priority        int32              `db:"priority" json:"priority"`
-	ID              int32              `db:"id" json:"id"`
+	SetName            bool               `db:"set_name" json:"set_name"`
+	Name               string             `db:"name" json:"name"`
+	SetDescription     bool               `db:"set_description" json:"set_description"`
+	Description        string             `db:"description" json:"description"`
+	ClearDueAt         bool               `db:"clear_due_at" json:"clear_due_at"`
+	SetDueAt           bool               `db:"set_due_at" json:"set_due_at"`
+	DueAt              time.Time          `db:"due_at" json:"due_at"`
+	SetProjectID       bool               `db:"set_project_id" json:"set_project_id"`
+	ProjectID          int32              `db:"project_id" json:"project_id"`
+	ClearStartedAt     bool               `db:"clear_started_at" json:"clear_started_at"`
+	SetStartedAt       bool               `db:"set_started_at" json:"set_started_at"`
+	StartedAt          pgtype.Timestamptz `db:"started_at" json:"started_at"`
+	ClearFinishedAt    bool               `db:"clear_finished_at" json:"clear_finished_at"`
+	SetFinishedAt      bool               `db:"set_finished_at" json:"set_finished_at"`
+	FinishedAt         pgtype.Timestamptz `db:"finished_at" json:"finished_at"`
+	SetTaskType        bool               `db:"set_task_type" json:"set_task_type"`
+	TaskType           string             `db:"task_type" json:"task_type"`
+	ClearRecurrence    bool               `db:"clear_recurrence" json:"clear_recurrence"`
+	SetRecurrence      bool               `db:"set_recurrence" json:"set_recurrence"`
+	Recurrence         int32              `db:"recurrence" json:"recurrence"`
+	SetPriority        bool               `db:"set_priority" json:"set_priority"`
+	Priority           int32              `db:"priority" json:"priority"`
+	ClearEstimateHours bool               `db:"clear_estimate_hours" json:"clear_estimate_hours"`
+	SetEstimateHours   bool               `db:"set_estimate_hours" json:"set_estimate_hours"`
+	EstimateHours      decimal.Decimal    `db:"estimate_hours" json:"estimate_hours"`
+	ID                 int32              `db:"id" json:"id"`
 }
 
 func (q *Queries) UpdateTask(ctx context.Context, arg UpdateTaskParams) (Task, error) {
@@ -1391,6 +1405,9 @@ func (q *Queries) UpdateTask(ctx context.Context, arg UpdateTaskParams) (Task, e
 		arg.Recurrence,
 		arg.SetPriority,
 		arg.Priority,
+		arg.ClearEstimateHours,
+		arg.SetEstimateHours,
+		arg.EstimateHours,
 		arg.ID,
 	)
 	var i Task
@@ -1405,6 +1422,7 @@ func (q *Queries) UpdateTask(ctx context.Context, arg UpdateTaskParams) (Task, e
 		&i.TaskType,
 		&i.Recurrence,
 		&i.Priority,
+		&i.EstimateHours,
 	)
 	return i, err
 }

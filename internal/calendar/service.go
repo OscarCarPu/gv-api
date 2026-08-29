@@ -45,14 +45,22 @@ type Config struct {
 	CancelledRetention time.Duration
 }
 
+// planBlockSyncer keeps a plan_block that hangs off a calendar event in step with it. Both
+// methods are no-ops if no plan_block links to that event_ref.
+type planBlockSyncer interface {
+	SyncEventTime(ctx context.Context, eventRef string, startsAt, endsAt time.Time) error
+	DetachEvent(ctx context.Context, eventRef string) error
+}
+
 // Service holds the calendar domain's rules.
 type Service struct {
-	repo   Repository
-	gc     google.Client
-	cipher *tokenCipher
-	cfg    Config
-	stream *Stream
-	loc    *time.Location
+	repo     Repository
+	gc       google.Client
+	cipher   *tokenCipher
+	cfg      Config
+	stream   *Stream
+	loc      *time.Location
+	planSync planBlockSyncer
 
 	// changes carries calendar ids that a webhook says have moved. The worker debounces and
 	// drains it; nothing here blocks on a sync, because Google drops a channel that does not
@@ -67,7 +75,7 @@ type Service struct {
 	now func() time.Time
 }
 
-func NewService(repo Repository, gc google.Client, cfg Config, loc *time.Location) (*Service, error) {
+func NewService(repo Repository, gc google.Client, cfg Config, loc *time.Location, planSync planBlockSyncer) (*Service, error) {
 	if cfg.WatchTTL <= 0 {
 		cfg.WatchTTL = 7 * 24 * time.Hour
 	}
@@ -88,14 +96,15 @@ func NewService(repo Repository, gc google.Client, cfg Config, loc *time.Locatio
 	}
 
 	s := &Service{
-		repo:    repo,
-		gc:      gc,
-		cfg:     cfg,
-		stream:  NewStream(),
-		loc:     loc,
-		changes: make(chan int32, 256),
-		syncing: map[int32]bool{},
-		now:     time.Now,
+		repo:     repo,
+		gc:       gc,
+		cfg:      cfg,
+		stream:   NewStream(),
+		loc:      loc,
+		planSync: planSync,
+		changes:  make(chan int32, 256),
+		syncing:  map[int32]bool{},
+		now:      time.Now,
 	}
 
 	// Without a key the tokens would have to be stored in the clear, which is not a trade

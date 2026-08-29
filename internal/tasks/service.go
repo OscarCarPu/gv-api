@@ -5,12 +5,25 @@ import (
 	"sort"
 	"time"
 
+	"gv-api/internal/capacity"
 	"gv-api/internal/history"
+
+	"github.com/shopspring/decimal"
 )
+
+type capacityProvider interface {
+	FreeBusyRange(ctx context.Context, from, to time.Time) ([]capacity.DayFreeBusy, error)
+}
+
+type plannedHoursProvider interface {
+	PlannedHoursByTask(ctx context.Context, taskIDs []int32, from time.Time) (map[int32]decimal.Decimal, error)
+}
 
 type Service struct {
 	repo     Repository
 	location *time.Location
+	capacity capacityProvider
+	plan     plannedHoursProvider
 }
 
 func NewService(repo Repository, loc *time.Location) *Service {
@@ -18,6 +31,15 @@ func NewService(repo Repository, loc *time.Location) *Service {
 		loc = time.UTC
 	}
 	return &Service{repo: repo, location: loc}
+}
+
+// SetUrgencyProviders wires the dependencies GetTasksByDueDate needs to compute urgency.
+// A setter rather than a constructor argument because plan.Service itself depends on
+// tasks.Service (for the time-entry budget summary) — constructing both the normal way would
+// require each to exist before the other does.
+func (s *Service) SetUrgencyProviders(capacity capacityProvider, plan plannedHoursProvider) {
+	s.capacity = capacity
+	s.plan = plan
 }
 
 func (s *Service) CreateProject(ctx context.Context, req CreateProjectRequest) (ProjectResponse, error) {
@@ -33,7 +55,7 @@ func (s *Service) CreateTask(ctx context.Context, req CreateTaskRequest) (TaskRe
 	if req.Priority != nil {
 		priority = *req.Priority
 	}
-	resp, err := s.repo.CreateTask(ctx, req.ProjectID, req.Name, req.Description, req.DueAt, taskType, req.Recurrence, priority)
+	resp, err := s.repo.CreateTask(ctx, req.ProjectID, req.Name, req.Description, req.DueAt, taskType, req.Recurrence, priority, req.EstimateHours)
 	if err != nil {
 		return resp, err
 	}
@@ -265,7 +287,99 @@ func (s *Service) GetTasksByDueDate(ctx context.Context, minPriority *int32) ([]
 	if rows == nil {
 		rows = []TaskByDueDateResponse{}
 	}
+	if err := s.applyUrgency(ctx, rows); err != nil {
+		return nil, err
+	}
 	return rows, nil
+}
+
+func effectiveDue(t TaskByDueDateResponse) *time.Time {
+	if t.DueAt != nil {
+		return t.DueAt
+	}
+	return t.ProjectDueAt
+}
+
+// applyUrgency fills RemainingHours/StartBy/Urgent on standard tasks that carry an estimate.
+// Recurring and continuous tasks are skipped: a recurring task's time_spent accumulates across
+// every past cycle (renewing only reschedules due_at, it never resets anything), so it would
+// read as permanently covered after a couple of renewals; a continuous task has no real
+// deadline to count back from.
+func (s *Service) applyUrgency(ctx context.Context, rows []TaskByDueDateResponse) error {
+	if s.capacity == nil || s.plan == nil {
+		return nil
+	}
+
+	today := time.Now().In(s.location)
+	today = time.Date(today.Year(), today.Month(), today.Day(), 0, 0, 0, 0, s.location)
+
+	var maxDue time.Time
+	estimatedIDs := make([]int32, 0, len(rows))
+	for _, t := range rows {
+		if t.TaskType != "standard" || t.EstimateHours == nil {
+			continue
+		}
+		due := effectiveDue(t)
+		if due == nil {
+			continue
+		}
+		estimatedIDs = append(estimatedIDs, t.ID)
+		if due.After(maxDue) {
+			maxDue = *due
+		}
+	}
+	if maxDue.IsZero() {
+		return nil
+	}
+
+	series, err := s.capacity.FreeBusyRange(ctx, today, maxDue.AddDate(0, 0, 1))
+	if err != nil {
+		return err
+	}
+	freeByDate := make(map[string]decimal.Decimal, len(series))
+	for _, d := range series {
+		freeByDate[d.Date] = d.FreeHours
+	}
+
+	plannedByTask, err := s.plan.PlannedHoursByTask(ctx, estimatedIDs, today)
+	if err != nil {
+		return err
+	}
+
+	for i := range rows {
+		t := &rows[i]
+		if t.TaskType != "standard" || t.EstimateHours == nil {
+			continue
+		}
+		due := effectiveDue(*t)
+		if due == nil {
+			continue
+		}
+
+		spentHours := decimal.NewFromInt(t.TimeSpent).Div(decimal.NewFromInt(3600))
+		remaining := t.EstimateHours.Sub(spentHours).Sub(plannedByTask[t.ID])
+		if remaining.IsNegative() {
+			remaining = decimal.Zero
+		}
+		t.RemainingHours = &remaining
+		if remaining.IsZero() {
+			continue
+		}
+
+		acc := decimal.Zero
+		startBy := today
+		for d := due.AddDate(0, 0, -1); !d.Before(today); d = d.AddDate(0, 0, -1) {
+			acc = acc.Add(freeByDate[d.Format("2006-01-02")])
+			if acc.GreaterThanOrEqual(remaining) {
+				startBy = d
+				break
+			}
+		}
+		startByStr := startBy.Format("2006-01-02")
+		t.StartBy = &startByStr
+		t.Urgent = !startBy.After(today)
+	}
+	return nil
 }
 
 func (s *Service) GetActiveTimeEntry(ctx context.Context) (ActiveTimeEntryResponse, error) {

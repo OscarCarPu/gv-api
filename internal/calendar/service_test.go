@@ -24,11 +24,33 @@ const (
 	holidayCal  = "es.spain#holiday@group.v.calendar.google.com"
 )
 
+type planSyncCall struct {
+	ref        string
+	start, end time.Time
+}
+
+type stubPlanSync struct {
+	syncCalls   []planSyncCall
+	detachCalls []string
+	err         error
+}
+
+func (s *stubPlanSync) SyncEventTime(_ context.Context, ref string, start, end time.Time) error {
+	s.syncCalls = append(s.syncCalls, planSyncCall{ref, start, end})
+	return s.err
+}
+
+func (s *stubPlanSync) DetachEvent(_ context.Context, ref string) error {
+	s.detachCalls = append(s.detachCalls, ref)
+	return nil
+}
+
 type harness struct {
-	svc  *calendar.Service
-	repo *fakeRepo
-	gc   *google.Fake
-	loc  *time.Location
+	svc      *calendar.Service
+	repo     *fakeRepo
+	gc       *google.Fake
+	loc      *time.Location
+	planSync *stubPlanSync
 }
 
 func newHarness(t *testing.T) *harness {
@@ -38,6 +60,7 @@ func newHarness(t *testing.T) *harness {
 
 	gc := google.NewFake()
 	repo := newFakeRepo()
+	planSync := &stubPlanSync{}
 	svc, err := calendar.NewService(repo, gc, calendar.Config{
 		ClientID:       "client",
 		ClientSecret:   "secret",
@@ -47,9 +70,9 @@ func newHarness(t *testing.T) *harness {
 		StateSecret:    []byte("state-secret"),
 		WebhookEnabled: true,
 		WebhookURL:     "https://api.example/calendar/google/webhook",
-	}, loc)
+	}, loc, planSync)
 	require.NoError(t, err)
-	return &harness{svc: svc, repo: repo, gc: gc, loc: loc}
+	return &harness{svc: svc, repo: repo, gc: gc, loc: loc, planSync: planSync}
 }
 
 // connect runs the real consent flow against the fake, so every test starts from the state a
@@ -172,7 +195,7 @@ func TestService_Callback_RejectsForgedState(t *testing.T) {
 
 func TestService_NotConfigured_StillAnswers(t *testing.T) {
 	loc := time.UTC
-	svc, err := calendar.NewService(newFakeRepo(), google.NewFake(), calendar.Config{}, loc)
+	svc, err := calendar.NewService(newFakeRepo(), google.NewFake(), calendar.Config{}, loc, &stubPlanSync{})
 	require.NoError(t, err)
 	require.False(t, svc.Configured())
 
@@ -192,7 +215,7 @@ func TestService_NotConfigured_StillAnswers(t *testing.T) {
 func TestService_NewService_RequiresTokenKeyWhenConfigured(t *testing.T) {
 	_, err := calendar.NewService(newFakeRepo(), google.NewFake(), calendar.Config{
 		ClientID: "id", ClientSecret: "secret",
-	}, time.UTC)
+	}, time.UTC, &stubPlanSync{})
 	require.ErrorContains(t, err, "GOOGLE_TOKEN_KEY")
 }
 
