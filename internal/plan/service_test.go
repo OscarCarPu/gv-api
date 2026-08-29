@@ -67,10 +67,12 @@ func TestService_Create(t *testing.T) {
 	t.Run("free-time block with explicit label", func(t *testing.T) {
 		repo := mocks.NewMockRepository(t)
 		repo.EXPECT().
-			HasOverlap(mock.Anything, mock.Anything, mock.Anything, mock.Anything, (*int32)(nil)).
+			HasOverlap(mock.Anything, mock.Anything, mock.Anything, (*int32)(nil)).
 			Return(false, nil)
 		repo.EXPECT().
-			Create(mock.Anything, mock.Anything, mock.Anything, mock.Anything, (*int32)(nil), "comer", (*string)(nil)).
+			Create(mock.Anything, mock.MatchedBy(func(p plan.CreatePlanBlockParams) bool {
+				return p.TaskID == nil && p.Label == "comer" && p.Note == nil
+			})).
 			Return(plan.PlanBlockResponse{ID: 1, Label: "comer"}, nil)
 		svc := plan.NewService(repo, stubTasksSummary{}, time.UTC)
 
@@ -86,7 +88,7 @@ func TestService_Create(t *testing.T) {
 	t.Run("rejects overlap on create", func(t *testing.T) {
 		repo := mocks.NewMockRepository(t)
 		repo.EXPECT().
-			HasOverlap(mock.Anything, mock.Anything, mock.Anything, mock.Anything, (*int32)(nil)).
+			HasOverlap(mock.Anything, mock.Anything, mock.Anything, (*int32)(nil)).
 			Return(true, nil)
 		svc := plan.NewService(repo, stubTasksSummary{}, time.UTC)
 
@@ -104,10 +106,12 @@ func TestService_Create(t *testing.T) {
 			GetTaskName(mock.Anything, int32(42)).
 			Return("Refactor agenda", nil)
 		repo.EXPECT().
-			HasOverlap(mock.Anything, mock.Anything, mock.Anything, mock.Anything, (*int32)(nil)).
+			HasOverlap(mock.Anything, mock.Anything, mock.Anything, (*int32)(nil)).
 			Return(false, nil)
 		repo.EXPECT().
-			Create(mock.Anything, mock.Anything, mock.Anything, mock.Anything, ptr(int32(42)), "Refactor agenda", (*string)(nil)).
+			Create(mock.Anything, mock.MatchedBy(func(p plan.CreatePlanBlockParams) bool {
+				return p.TaskID != nil && *p.TaskID == 42 && p.Label == "Refactor agenda"
+			})).
 			Return(plan.PlanBlockResponse{ID: 2, TaskID: ptr(int32(42)), Label: "Refactor agenda"}, nil)
 		svc := plan.NewService(repo, stubTasksSummary{}, time.UTC)
 
@@ -124,10 +128,12 @@ func TestService_Create(t *testing.T) {
 		repo := mocks.NewMockRepository(t)
 		// GetTaskName must NOT be called because the caller provided a label.
 		repo.EXPECT().
-			HasOverlap(mock.Anything, mock.Anything, mock.Anything, mock.Anything, (*int32)(nil)).
+			HasOverlap(mock.Anything, mock.Anything, mock.Anything, (*int32)(nil)).
 			Return(false, nil)
 		repo.EXPECT().
-			Create(mock.Anything, mock.Anything, mock.Anything, mock.Anything, ptr(int32(42)), "Sprint planning", (*string)(nil)).
+			Create(mock.Anything, mock.MatchedBy(func(p plan.CreatePlanBlockParams) bool {
+				return p.TaskID != nil && *p.TaskID == 42 && p.Label == "Sprint planning"
+			})).
 			Return(plan.PlanBlockResponse{ID: 3, TaskID: ptr(int32(42)), Label: "Sprint planning"}, nil)
 		svc := plan.NewService(repo, stubTasksSummary{}, time.UTC)
 
@@ -206,7 +212,7 @@ func TestService_Update(t *testing.T) {
 	t.Run("rejects overlap on update, excluding self", func(t *testing.T) {
 		repo := mocks.NewMockRepository(t)
 		repo.EXPECT().
-			HasOverlap(mock.Anything, mock.Anything, mock.Anything, mock.Anything, ptr(int32(7))).
+			HasOverlap(mock.Anything, mock.Anything, mock.Anything, ptr(int32(7))).
 			Return(true, nil)
 		svc := plan.NewService(repo, stubTasksSummary{}, time.UTC)
 
@@ -281,4 +287,44 @@ func TestService_GetToday_PropagatesBudgetError(t *testing.T) {
 
 	_, err := svc.GetToday(context.Background())
 	assert.ErrorIs(t, err, boom)
+}
+
+func TestService_CreateCommitment(t *testing.T) {
+	t.Run("rejects an unknown task_id", func(t *testing.T) {
+		repo := mocks.NewMockRepository(t)
+		repo.EXPECT().
+			GetTaskName(mock.Anything, int32(999)).
+			Return("", plan.ErrTaskNotFound)
+		svc := plan.NewService(repo, stubTasksSummary{}, time.UTC)
+
+		_, err := svc.CreateCommitment(context.Background(), plan.CreateCommitmentRequest{
+			TaskID:     999,
+			Label:      "Work",
+			DaysOfWeek: []int32{1, 2, 3, 4, 5},
+			StartTime:  "09:00",
+			EndTime:    "13:00",
+		})
+		assert.ErrorIs(t, err, plan.ErrTaskNotFound)
+	})
+
+	t.Run("creates when the task exists", func(t *testing.T) {
+		repo := mocks.NewMockRepository(t)
+		repo.EXPECT().
+			GetTaskName(mock.Anything, int32(42)).
+			Return("Work", nil)
+		repo.EXPECT().
+			CreateCommitment(mock.Anything, mock.Anything).
+			Return(plan.RecurringCommitmentResponse{ID: 1, TaskID: 42, Label: "Work"}, nil)
+		svc := plan.NewService(repo, stubTasksSummary{}, time.UTC)
+
+		got, err := svc.CreateCommitment(context.Background(), plan.CreateCommitmentRequest{
+			TaskID:     42,
+			Label:      "Work",
+			DaysOfWeek: []int32{1, 2, 3, 4, 5},
+			StartTime:  "09:00",
+			EndTime:    "13:00",
+		})
+		require.NoError(t, err)
+		assert.Equal(t, "Work", got.Label)
+	})
 }

@@ -8,11 +8,12 @@ import (
 	"gv-api/internal/history"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/shopspring/decimal"
 )
 
 type Repository interface {
 	CreateProject(ctx context.Context, name string, description *string, dueAt *time.Time, parentID *int32) (ProjectResponse, error)
-	CreateTask(ctx context.Context, projectID *int32, name string, description *string, dueAt *time.Time, taskType string, recurrence *int32, priority int32) (TaskResponse, error)
+	CreateTask(ctx context.Context, projectID *int32, name string, description *string, dueAt *time.Time, taskType string, recurrence *int32, priority int32, estimateHours *decimal.Decimal) (TaskResponse, error)
 	CreateTodo(ctx context.Context, taskID int32, name string) (TodoResponse, error)
 	CreateTimeEntry(ctx context.Context, taskID int32, startedAt time.Time, finishedAt *time.Time, comment *string) (TimeEntryResponse, error)
 	UpdateProject(ctx context.Context, req UpdateProjectRequest) (ProjectResponse, error)

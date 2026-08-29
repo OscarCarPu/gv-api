@@ -159,6 +159,10 @@ func (s *Service) UpdateEvent(ctx context.Context, ref string, req UpdateEventRe
 
 	s.afterWrite(ctx, cal)
 
+	if req.StartsAt != nil || req.EndsAt != nil {
+		s.syncPlanAfterUpdate(ctx, ref, scope)
+	}
+
 	// The reference stays valid for an instance edit (the occurrence keeps its original slot)
 	// and for a whole-series edit. After a split the caller is looking at the new series, so
 	// re-resolve from the occurrence instead.
@@ -166,6 +170,27 @@ func (s *Service) UpdateEvent(ctx context.Context, ref string, req UpdateEventRe
 		return s.eventAt(ctx, cal.ID, *originalStart)
 	}
 	return s.GetEvent(ctx, ref)
+}
+
+// syncPlanAfterUpdate keeps a plan_block linked to this event (if any) in step with its new
+// time. A scope=following split can leave ref pointing at an occurrence now governed by a new
+// series master, under a different id — trying to resolve it here is what detects that case
+// generically, rather than reasoning through what splitSeries did.
+func (s *Service) syncPlanAfterUpdate(ctx context.Context, ref, scope string) {
+	ev, err := s.GetEvent(ctx, ref)
+	if err != nil {
+		if scope == ScopeFollowing && errors.Is(err, ErrNotFound) {
+			if derr := s.planSync.DetachEvent(ctx, ref); derr != nil {
+				slog.ErrorContext(ctx, "calendar: detaching plan block after series split", "ref", ref, "error", derr)
+			}
+			return
+		}
+		slog.ErrorContext(ctx, "calendar: resolving event to sync linked plan block", "ref", ref, "error", err)
+		return
+	}
+	if err := s.planSync.SyncEventTime(ctx, ref, ev.StartsAt, ev.EndsAt); err != nil {
+		slog.ErrorContext(ctx, "calendar: syncing linked plan block", "ref", ref, "error", err)
+	}
 }
 
 /*
@@ -220,6 +245,9 @@ func (s *Service) DeleteEvent(ctx context.Context, ref, scopeParam, sendUpdatesP
 	}
 
 	s.afterWrite(ctx, cal)
+	if err := s.planSync.DetachEvent(ctx, ref); err != nil {
+		slog.ErrorContext(ctx, "calendar: detaching plan block after event delete", "ref", ref, "error", err)
+	}
 	return nil
 }
 
@@ -274,6 +302,11 @@ func (s *Service) MoveEvent(ctx context.Context, ref string, req MoveEventReques
 		}
 		s.afterWrite(ctx, source)
 		s.afterWrite(ctx, dest)
+		// The local row was deleted and recreated, so its id — and any event_ref built from
+		// it — changed even though the underlying Google event did not.
+		if err := s.planSync.DetachEvent(ctx, ref); err != nil {
+			slog.ErrorContext(ctx, "calendar: detaching plan block after move", "ref", ref, "error", err)
+		}
 		ev, err := s.GetEvent(ctx, strconv.FormatInt(int64(newRec.ID), 10))
 		return MoveResult{Event: ev}, err
 	}
@@ -300,6 +333,9 @@ func (s *Service) MoveEvent(ctx context.Context, ref string, req MoveEventReques
 	}
 	s.afterWrite(ctx, source)
 	s.afterWrite(ctx, dest)
+	if err := s.planSync.DetachEvent(ctx, ref); err != nil {
+		slog.ErrorContext(ctx, "calendar: detaching plan block after cross-account move", "ref", ref, "error", err)
+	}
 	ev, err := s.GetEvent(ctx, strconv.FormatInt(int64(newRec.ID), 10))
 	return MoveResult{Event: ev, Recreated: true}, err
 }

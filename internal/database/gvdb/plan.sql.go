@@ -10,27 +10,36 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/shopspring/decimal"
 )
+
+const clearPlanBlockEventRef = `-- name: ClearPlanBlockEventRef :exec
+UPDATE plan_blocks SET event_ref = NULL WHERE id = $1
+`
+
+func (q *Queries) ClearPlanBlockEventRef(ctx context.Context, id int32) error {
+	_, err := q.db.Exec(ctx, clearPlanBlockEventRef, id)
+	return err
+}
 
 const countOverlappingPlanBlocks = `-- name: CountOverlappingPlanBlocks :one
 SELECT COUNT(*) FROM plan_blocks
-WHERE plan_date = $1
-  AND started_at < $2
-  AND ended_at   > $3
-  AND (NOT $4::bool OR id <> $5::int)
+WHERE started_at < $1
+  AND ended_at   > $2
+  AND (NOT $3::bool OR id <> $4::int)
 `
 
 type CountOverlappingPlanBlocksParams struct {
-	PlanDate     time.Time          `db:"plan_date" json:"plan_date"`
 	EndedAt      pgtype.Timestamptz `db:"ended_at" json:"ended_at"`
 	StartedAt    pgtype.Timestamptz `db:"started_at" json:"started_at"`
 	HasExcludeID bool               `db:"has_exclude_id" json:"has_exclude_id"`
 	ExcludeID    int32              `db:"exclude_id" json:"exclude_id"`
 }
 
+// Plain interval overlap, no plan_date filter: a multi-day block only sharing its plan_date
+// (start day) with the query would otherwise let a real conflict on day 2+ through unnoticed.
 func (q *Queries) CountOverlappingPlanBlocks(ctx context.Context, arg CountOverlappingPlanBlocksParams) (int64, error) {
 	row := q.db.QueryRow(ctx, countOverlappingPlanBlocks,
-		arg.PlanDate,
 		arg.EndedAt,
 		arg.StartedAt,
 		arg.HasExcludeID,
@@ -41,29 +50,70 @@ func (q *Queries) CountOverlappingPlanBlocks(ctx context.Context, arg CountOverl
 	return count, err
 }
 
+const createCommitment = `-- name: CreateCommitment :one
+INSERT INTO recurring_commitments (task_id, label, days_of_week, start_time, end_time)
+VALUES ($1, $2, $3, $4, $5)
+RETURNING id, task_id, label, days_of_week, start_time, end_time, active, created_at, updated_at
+`
+
+type CreateCommitmentParams struct {
+	TaskID     int32       `db:"task_id" json:"task_id"`
+	Label      string      `db:"label" json:"label"`
+	DaysOfWeek []int16     `db:"days_of_week" json:"days_of_week"`
+	StartTime  pgtype.Time `db:"start_time" json:"start_time"`
+	EndTime    pgtype.Time `db:"end_time" json:"end_time"`
+}
+
+func (q *Queries) CreateCommitment(ctx context.Context, arg CreateCommitmentParams) (RecurringCommitment, error) {
+	row := q.db.QueryRow(ctx, createCommitment,
+		arg.TaskID,
+		arg.Label,
+		arg.DaysOfWeek,
+		arg.StartTime,
+		arg.EndTime,
+	)
+	var i RecurringCommitment
+	err := row.Scan(
+		&i.ID,
+		&i.TaskID,
+		&i.Label,
+		&i.DaysOfWeek,
+		&i.StartTime,
+		&i.EndTime,
+		&i.Active,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const createPlanBlock = `-- name: CreatePlanBlock :one
-INSERT INTO plan_blocks (plan_date, started_at, ended_at, task_id, label, note)
-VALUES ($1, $2, $3, $4, $5, $6)
-RETURNING id, plan_date, started_at, ended_at, task_id, label, note
+INSERT INTO plan_blocks (plan_date, started_at, ended_at, task_id, label, note, event_ref, commitment_id)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+RETURNING id, plan_date, started_at, ended_at, task_id, label, note, event_ref, commitment_id
 `
 
 type CreatePlanBlockParams struct {
-	PlanDate  time.Time          `db:"plan_date" json:"plan_date"`
-	StartedAt pgtype.Timestamptz `db:"started_at" json:"started_at"`
-	EndedAt   pgtype.Timestamptz `db:"ended_at" json:"ended_at"`
-	TaskID    *int32             `db:"task_id" json:"task_id"`
-	Label     string             `db:"label" json:"label"`
-	Note      *string            `db:"note" json:"note"`
+	PlanDate     time.Time          `db:"plan_date" json:"plan_date"`
+	StartedAt    pgtype.Timestamptz `db:"started_at" json:"started_at"`
+	EndedAt      pgtype.Timestamptz `db:"ended_at" json:"ended_at"`
+	TaskID       *int32             `db:"task_id" json:"task_id"`
+	Label        string             `db:"label" json:"label"`
+	Note         *string            `db:"note" json:"note"`
+	EventRef     *string            `db:"event_ref" json:"event_ref"`
+	CommitmentID *int32             `db:"commitment_id" json:"commitment_id"`
 }
 
 type CreatePlanBlockRow struct {
-	ID        int32              `db:"id" json:"id"`
-	PlanDate  time.Time          `db:"plan_date" json:"plan_date"`
-	StartedAt pgtype.Timestamptz `db:"started_at" json:"started_at"`
-	EndedAt   pgtype.Timestamptz `db:"ended_at" json:"ended_at"`
-	TaskID    *int32             `db:"task_id" json:"task_id"`
-	Label     string             `db:"label" json:"label"`
-	Note      *string            `db:"note" json:"note"`
+	ID           int32              `db:"id" json:"id"`
+	PlanDate     time.Time          `db:"plan_date" json:"plan_date"`
+	StartedAt    pgtype.Timestamptz `db:"started_at" json:"started_at"`
+	EndedAt      pgtype.Timestamptz `db:"ended_at" json:"ended_at"`
+	TaskID       *int32             `db:"task_id" json:"task_id"`
+	Label        string             `db:"label" json:"label"`
+	Note         *string            `db:"note" json:"note"`
+	EventRef     *string            `db:"event_ref" json:"event_ref"`
+	CommitmentID *int32             `db:"commitment_id" json:"commitment_id"`
 }
 
 func (q *Queries) CreatePlanBlock(ctx context.Context, arg CreatePlanBlockParams) (CreatePlanBlockRow, error) {
@@ -74,6 +124,8 @@ func (q *Queries) CreatePlanBlock(ctx context.Context, arg CreatePlanBlockParams
 		arg.TaskID,
 		arg.Label,
 		arg.Note,
+		arg.EventRef,
+		arg.CommitmentID,
 	)
 	var i CreatePlanBlockRow
 	err := row.Scan(
@@ -84,8 +136,19 @@ func (q *Queries) CreatePlanBlock(ctx context.Context, arg CreatePlanBlockParams
 		&i.TaskID,
 		&i.Label,
 		&i.Note,
+		&i.EventRef,
+		&i.CommitmentID,
 	)
 	return i, err
+}
+
+const deleteCommitment = `-- name: DeleteCommitment :exec
+DELETE FROM recurring_commitments WHERE id = $1
+`
+
+func (q *Queries) DeleteCommitment(ctx context.Context, id int32) error {
+	_, err := q.db.Exec(ctx, deleteCommitment, id)
+	return err
 }
 
 const deletePlanBlock = `-- name: DeletePlanBlock :exec
@@ -115,6 +178,8 @@ SELECT
     pb.task_id,
     pb.label,
     pb.note,
+    pb.event_ref,
+    pb.commitment_id,
     t.name        AS task_name,
     t.task_type   AS task_type,
     t.recurrence  AS task_recurrence,
@@ -133,6 +198,8 @@ type GetPlanBlockRow struct {
 	TaskID         *int32             `db:"task_id" json:"task_id"`
 	Label          string             `db:"label" json:"label"`
 	Note           *string            `db:"note" json:"note"`
+	EventRef       *string            `db:"event_ref" json:"event_ref"`
+	CommitmentID   *int32             `db:"commitment_id" json:"commitment_id"`
 	TaskName       *string            `db:"task_name" json:"task_name"`
 	TaskType       *string            `db:"task_type" json:"task_type"`
 	TaskRecurrence *int32             `db:"task_recurrence" json:"task_recurrence"`
@@ -151,11 +218,47 @@ func (q *Queries) GetPlanBlock(ctx context.Context, id int32) (GetPlanBlockRow, 
 		&i.TaskID,
 		&i.Label,
 		&i.Note,
+		&i.EventRef,
+		&i.CommitmentID,
 		&i.TaskName,
 		&i.TaskType,
 		&i.TaskRecurrence,
 		&i.TaskStartedAt,
 		&i.TaskFinishedAt,
+	)
+	return i, err
+}
+
+const getPlanBlockByEventRef = `-- name: GetPlanBlockByEventRef :one
+SELECT id, plan_date, started_at, ended_at, task_id, label, note, event_ref, commitment_id
+FROM plan_blocks WHERE event_ref = $1
+`
+
+type GetPlanBlockByEventRefRow struct {
+	ID           int32              `db:"id" json:"id"`
+	PlanDate     time.Time          `db:"plan_date" json:"plan_date"`
+	StartedAt    pgtype.Timestamptz `db:"started_at" json:"started_at"`
+	EndedAt      pgtype.Timestamptz `db:"ended_at" json:"ended_at"`
+	TaskID       *int32             `db:"task_id" json:"task_id"`
+	Label        string             `db:"label" json:"label"`
+	Note         *string            `db:"note" json:"note"`
+	EventRef     *string            `db:"event_ref" json:"event_ref"`
+	CommitmentID *int32             `db:"commitment_id" json:"commitment_id"`
+}
+
+func (q *Queries) GetPlanBlockByEventRef(ctx context.Context, eventRef *string) (GetPlanBlockByEventRefRow, error) {
+	row := q.db.QueryRow(ctx, getPlanBlockByEventRef, eventRef)
+	var i GetPlanBlockByEventRefRow
+	err := row.Scan(
+		&i.ID,
+		&i.PlanDate,
+		&i.StartedAt,
+		&i.EndedAt,
+		&i.TaskID,
+		&i.Label,
+		&i.Note,
+		&i.EventRef,
+		&i.CommitmentID,
 	)
 	return i, err
 }
@@ -171,6 +274,136 @@ func (q *Queries) GetTaskName(ctx context.Context, id int32) (string, error) {
 	return name, err
 }
 
+const insertRecurringCommitmentSkip = `-- name: InsertRecurringCommitmentSkip :exec
+INSERT INTO recurring_commitment_skips (commitment_id, skip_date)
+VALUES ($1, $2) ON CONFLICT DO NOTHING
+`
+
+type InsertRecurringCommitmentSkipParams struct {
+	CommitmentID int32     `db:"commitment_id" json:"commitment_id"`
+	SkipDate     time.Time `db:"skip_date" json:"skip_date"`
+}
+
+func (q *Queries) InsertRecurringCommitmentSkip(ctx context.Context, arg InsertRecurringCommitmentSkipParams) error {
+	_, err := q.db.Exec(ctx, insertRecurringCommitmentSkip, arg.CommitmentID, arg.SkipDate)
+	return err
+}
+
+const listActiveCommitments = `-- name: ListActiveCommitments :many
+SELECT id, task_id, label, days_of_week, start_time, end_time, active, created_at, updated_at FROM recurring_commitments WHERE active ORDER BY id
+`
+
+func (q *Queries) ListActiveCommitments(ctx context.Context) ([]RecurringCommitment, error) {
+	rows, err := q.db.Query(ctx, listActiveCommitments)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []RecurringCommitment{}
+	for rows.Next() {
+		var i RecurringCommitment
+		if err := rows.Scan(
+			&i.ID,
+			&i.TaskID,
+			&i.Label,
+			&i.DaysOfWeek,
+			&i.StartTime,
+			&i.EndTime,
+			&i.Active,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listCommitments = `-- name: ListCommitments :many
+SELECT rc.id, rc.task_id, rc.label, rc.days_of_week, rc.start_time, rc.end_time, rc.active, rc.created_at, rc.updated_at, t.name AS task_name FROM recurring_commitments rc
+JOIN tasks t ON t.id = rc.task_id
+ORDER BY rc.id
+`
+
+type ListCommitmentsRow struct {
+	ID         int32              `db:"id" json:"id"`
+	TaskID     int32              `db:"task_id" json:"task_id"`
+	Label      string             `db:"label" json:"label"`
+	DaysOfWeek []int16            `db:"days_of_week" json:"days_of_week"`
+	StartTime  pgtype.Time        `db:"start_time" json:"start_time"`
+	EndTime    pgtype.Time        `db:"end_time" json:"end_time"`
+	Active     bool               `db:"active" json:"active"`
+	CreatedAt  pgtype.Timestamptz `db:"created_at" json:"created_at"`
+	UpdatedAt  pgtype.Timestamptz `db:"updated_at" json:"updated_at"`
+	TaskName   string             `db:"task_name" json:"task_name"`
+}
+
+func (q *Queries) ListCommitments(ctx context.Context) ([]ListCommitmentsRow, error) {
+	rows, err := q.db.Query(ctx, listCommitments)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListCommitmentsRow{}
+	for rows.Next() {
+		var i ListCommitmentsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.TaskID,
+			&i.Label,
+			&i.DaysOfWeek,
+			&i.StartTime,
+			&i.EndTime,
+			&i.Active,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.TaskName,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listPlanBlocksByCommitment = `-- name: ListPlanBlocksByCommitment :many
+SELECT plan_date FROM plan_blocks
+WHERE commitment_id = $1 AND plan_date >= $2::date AND plan_date < $3::date
+`
+
+type ListPlanBlocksByCommitmentParams struct {
+	CommitmentID *int32    `db:"commitment_id" json:"commitment_id"`
+	FromDate     time.Time `db:"from_date" json:"from_date"`
+	ToDate       time.Time `db:"to_date" json:"to_date"`
+}
+
+func (q *Queries) ListPlanBlocksByCommitment(ctx context.Context, arg ListPlanBlocksByCommitmentParams) ([]time.Time, error) {
+	rows, err := q.db.Query(ctx, listPlanBlocksByCommitment, arg.CommitmentID, arg.FromDate, arg.ToDate)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []time.Time{}
+	for rows.Next() {
+		var plan_date time.Time
+		if err := rows.Scan(&plan_date); err != nil {
+			return nil, err
+		}
+		items = append(items, plan_date)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listPlanBlocksByDate = `-- name: ListPlanBlocksByDate :many
 SELECT
     pb.id,
@@ -180,6 +413,8 @@ SELECT
     pb.task_id,
     pb.label,
     pb.note,
+    pb.event_ref,
+    pb.commitment_id,
     t.name        AS task_name,
     t.task_type   AS task_type,
     t.recurrence  AS task_recurrence,
@@ -199,6 +434,8 @@ type ListPlanBlocksByDateRow struct {
 	TaskID         *int32             `db:"task_id" json:"task_id"`
 	Label          string             `db:"label" json:"label"`
 	Note           *string            `db:"note" json:"note"`
+	EventRef       *string            `db:"event_ref" json:"event_ref"`
+	CommitmentID   *int32             `db:"commitment_id" json:"commitment_id"`
 	TaskName       *string            `db:"task_name" json:"task_name"`
 	TaskType       *string            `db:"task_type" json:"task_type"`
 	TaskRecurrence *int32             `db:"task_recurrence" json:"task_recurrence"`
@@ -223,6 +460,8 @@ func (q *Queries) ListPlanBlocksByDate(ctx context.Context, planDate time.Time) 
 			&i.TaskID,
 			&i.Label,
 			&i.Note,
+			&i.EventRef,
+			&i.CommitmentID,
 			&i.TaskName,
 			&i.TaskType,
 			&i.TaskRecurrence,
@@ -239,46 +478,320 @@ func (q *Queries) ListPlanBlocksByDate(ctx context.Context, planDate time.Time) 
 	return items, nil
 }
 
+const listPlanBlocksByDateRange = `-- name: ListPlanBlocksByDateRange :many
+SELECT
+    pb.id,
+    pb.plan_date,
+    pb.started_at,
+    pb.ended_at,
+    pb.task_id,
+    pb.label,
+    pb.note,
+    pb.event_ref,
+    pb.commitment_id,
+    t.name        AS task_name,
+    t.task_type   AS task_type,
+    t.recurrence  AS task_recurrence,
+    t.started_at  AS task_started_at,
+    t.finished_at AS task_finished_at
+FROM plan_blocks pb
+LEFT JOIN tasks t ON t.id = pb.task_id
+WHERE pb.started_at < $1::timestamptz AND pb.ended_at > $2::timestamptz
+ORDER BY pb.started_at
+`
+
+type ListPlanBlocksByDateRangeParams struct {
+	ToDate   pgtype.Timestamptz `db:"to_date" json:"to_date"`
+	FromDate pgtype.Timestamptz `db:"from_date" json:"from_date"`
+}
+
+type ListPlanBlocksByDateRangeRow struct {
+	ID             int32              `db:"id" json:"id"`
+	PlanDate       time.Time          `db:"plan_date" json:"plan_date"`
+	StartedAt      pgtype.Timestamptz `db:"started_at" json:"started_at"`
+	EndedAt        pgtype.Timestamptz `db:"ended_at" json:"ended_at"`
+	TaskID         *int32             `db:"task_id" json:"task_id"`
+	Label          string             `db:"label" json:"label"`
+	Note           *string            `db:"note" json:"note"`
+	EventRef       *string            `db:"event_ref" json:"event_ref"`
+	CommitmentID   *int32             `db:"commitment_id" json:"commitment_id"`
+	TaskName       *string            `db:"task_name" json:"task_name"`
+	TaskType       *string            `db:"task_type" json:"task_type"`
+	TaskRecurrence *int32             `db:"task_recurrence" json:"task_recurrence"`
+	TaskStartedAt  pgtype.Timestamptz `db:"task_started_at" json:"task_started_at"`
+	TaskFinishedAt pgtype.Timestamptz `db:"task_finished_at" json:"task_finished_at"`
+}
+
+// Any block whose interval touches [from, to), not only the ones that START there — so a
+// multi-day block (a 2-day festival) shows up on every day it spans, not just the first.
+func (q *Queries) ListPlanBlocksByDateRange(ctx context.Context, arg ListPlanBlocksByDateRangeParams) ([]ListPlanBlocksByDateRangeRow, error) {
+	rows, err := q.db.Query(ctx, listPlanBlocksByDateRange, arg.ToDate, arg.FromDate)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListPlanBlocksByDateRangeRow{}
+	for rows.Next() {
+		var i ListPlanBlocksByDateRangeRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.PlanDate,
+			&i.StartedAt,
+			&i.EndedAt,
+			&i.TaskID,
+			&i.Label,
+			&i.Note,
+			&i.EventRef,
+			&i.CommitmentID,
+			&i.TaskName,
+			&i.TaskType,
+			&i.TaskRecurrence,
+			&i.TaskStartedAt,
+			&i.TaskFinishedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listRecurringCommitmentSkips = `-- name: ListRecurringCommitmentSkips :many
+SELECT skip_date FROM recurring_commitment_skips
+WHERE commitment_id = $1 AND skip_date >= $2::date AND skip_date < $3::date
+`
+
+type ListRecurringCommitmentSkipsParams struct {
+	CommitmentID int32     `db:"commitment_id" json:"commitment_id"`
+	FromDate     time.Time `db:"from_date" json:"from_date"`
+	ToDate       time.Time `db:"to_date" json:"to_date"`
+}
+
+func (q *Queries) ListRecurringCommitmentSkips(ctx context.Context, arg ListRecurringCommitmentSkipsParams) ([]time.Time, error) {
+	rows, err := q.db.Query(ctx, listRecurringCommitmentSkips, arg.CommitmentID, arg.FromDate, arg.ToDate)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []time.Time{}
+	for rows.Next() {
+		var skip_date time.Time
+		if err := rows.Scan(&skip_date); err != nil {
+			return nil, err
+		}
+		items = append(items, skip_date)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const sumBusyHoursByDate = `-- name: SumBusyHoursByDate :many
+WITH tz_blocks AS (
+    SELECT
+        (pb.started_at AT TIME ZONE $1::text) AS local_start,
+        (pb.ended_at AT TIME ZONE $1::text) AS local_end
+    FROM plan_blocks pb
+    WHERE pb.task_id IS NOT NULL OR pb.event_ref IS NOT NULL
+),
+days AS (
+    SELECT generate_series($2::date, $3::date, interval '1 day') AS day
+)
+SELECT
+    days.day::date AS day,
+    SUM(
+        GREATEST(0, EXTRACT(EPOCH FROM (
+            LEAST(tz.local_end, days.day + interval '1 day') - GREATEST(tz.local_start, days.day)
+        )) / 3600.0)
+    )::numeric AS hours
+FROM days
+JOIN tz_blocks tz ON tz.local_start < days.day + interval '1 day' AND tz.local_end > days.day
+GROUP BY days.day
+ORDER BY days.day
+`
+
+type SumBusyHoursByDateParams struct {
+	Timezone string    `db:"timezone" json:"timezone"`
+	FromDate time.Time `db:"from_date" json:"from_date"`
+	ToDate   time.Time `db:"to_date" json:"to_date"`
+}
+
+type SumBusyHoursByDateRow struct {
+	Day   time.Time       `db:"day" json:"day"`
+	Hours decimal.Decimal `db:"hours" json:"hours"`
+}
+
+// Splits each block across every local calendar day it touches, so a multi-day block counts
+// against every day it spans, not just its plan_date. Counts a block as busy when it has a
+// task_id OR an event_ref (a plan can hang off an event with no task, e.g. "festival this
+// weekend", and it should still reduce capacity); a plain label-only block does not count.
+// @timezone converts each instant to local wall-clock time before bucketing by day, same as
+// GetTimeEntryHistory (tasks.sql) does for its own period bucketing. @to_date is the LAST day
+// included (inclusive) — the Go caller decrements its exclusive `to` by one day before calling,
+// because `@to_date::date - interval '1 day'` inline here trips sqlc's query rewriter.
+func (q *Queries) SumBusyHoursByDate(ctx context.Context, arg SumBusyHoursByDateParams) ([]SumBusyHoursByDateRow, error) {
+	rows, err := q.db.Query(ctx, sumBusyHoursByDate, arg.Timezone, arg.FromDate, arg.ToDate)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []SumBusyHoursByDateRow{}
+	for rows.Next() {
+		var i SumBusyHoursByDateRow
+		if err := rows.Scan(&i.Day, &i.Hours); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const sumPlannedHoursByTask = `-- name: SumPlannedHoursByTask :many
+SELECT task_id,
+       SUM(EXTRACT(EPOCH FROM (ended_at - started_at)) / 3600.0)::numeric AS hours
+FROM plan_blocks
+WHERE task_id = ANY($1::int[]) AND ended_at > $2::timestamptz
+GROUP BY task_id
+`
+
+type SumPlannedHoursByTaskParams struct {
+	TaskIds []int32            `db:"task_ids" json:"task_ids"`
+	FromTs  pgtype.Timestamptz `db:"from_ts" json:"from_ts"`
+}
+
+type SumPlannedHoursByTaskRow struct {
+	TaskID *int32          `db:"task_id" json:"task_id"`
+	Hours  decimal.Decimal `db:"hours" json:"hours"`
+}
+
+// Hours already reserved in the plan for each task, counting only what has not passed yet
+// (ended_at > @from_ts). A block that already ended without being worked does not count as
+// coverage: if it was not done, the task is still genuinely pending.
+func (q *Queries) SumPlannedHoursByTask(ctx context.Context, arg SumPlannedHoursByTaskParams) ([]SumPlannedHoursByTaskRow, error) {
+	rows, err := q.db.Query(ctx, sumPlannedHoursByTask, arg.TaskIds, arg.FromTs)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []SumPlannedHoursByTaskRow{}
+	for rows.Next() {
+		var i SumPlannedHoursByTaskRow
+		if err := rows.Scan(&i.TaskID, &i.Hours); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const updateCommitment = `-- name: UpdateCommitment :one
+UPDATE recurring_commitments SET
+    label        = CASE WHEN $1::bool        THEN $2::text        ELSE label        END,
+    days_of_week = CASE WHEN $3::bool THEN $4::smallint[] ELSE days_of_week END,
+    start_time   = CASE WHEN $5::bool   THEN $6::time   ELSE start_time   END,
+    end_time     = CASE WHEN $7::bool     THEN $8::time     ELSE end_time     END,
+    active       = CASE WHEN $9::bool       THEN $10::bool       ELSE active       END
+WHERE id = $11
+RETURNING id, task_id, label, days_of_week, start_time, end_time, active, created_at, updated_at
+`
+
+type UpdateCommitmentParams struct {
+	SetLabel      bool        `db:"set_label" json:"set_label"`
+	Label         string      `db:"label" json:"label"`
+	SetDaysOfWeek bool        `db:"set_days_of_week" json:"set_days_of_week"`
+	DaysOfWeek    []int16     `db:"days_of_week" json:"days_of_week"`
+	SetStartTime  bool        `db:"set_start_time" json:"set_start_time"`
+	StartTime     pgtype.Time `db:"start_time" json:"start_time"`
+	SetEndTime    bool        `db:"set_end_time" json:"set_end_time"`
+	EndTime       pgtype.Time `db:"end_time" json:"end_time"`
+	SetActive     bool        `db:"set_active" json:"set_active"`
+	Active        bool        `db:"active" json:"active"`
+	ID            int32       `db:"id" json:"id"`
+}
+
+func (q *Queries) UpdateCommitment(ctx context.Context, arg UpdateCommitmentParams) (RecurringCommitment, error) {
+	row := q.db.QueryRow(ctx, updateCommitment,
+		arg.SetLabel,
+		arg.Label,
+		arg.SetDaysOfWeek,
+		arg.DaysOfWeek,
+		arg.SetStartTime,
+		arg.StartTime,
+		arg.SetEndTime,
+		arg.EndTime,
+		arg.SetActive,
+		arg.Active,
+		arg.ID,
+	)
+	var i RecurringCommitment
+	err := row.Scan(
+		&i.ID,
+		&i.TaskID,
+		&i.Label,
+		&i.DaysOfWeek,
+		&i.StartTime,
+		&i.EndTime,
+		&i.Active,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const updatePlanBlock = `-- name: UpdatePlanBlock :one
 UPDATE plan_blocks SET
-    started_at = CASE WHEN $1::bool THEN $2::timestamptz ELSE started_at END,
-    ended_at   = CASE WHEN $3::bool   THEN $4::timestamptz   ELSE ended_at   END,
-    plan_date  = CASE WHEN $5::bool  THEN $6::date         ELSE plan_date  END,
-    task_id    = CASE WHEN $7::bool  THEN NULL
-                      WHEN $8::bool    THEN $9::int            ELSE task_id    END,
-    label      = CASE WHEN $10::bool      THEN $11::text             ELSE label      END,
-    note       = CASE WHEN $12::bool     THEN NULL
-                      WHEN $13::bool       THEN $14::text              ELSE note       END
-WHERE id = $15
-RETURNING id, plan_date, started_at, ended_at, task_id, label, note
+    started_at    = CASE WHEN $1::bool THEN $2::timestamptz ELSE started_at END,
+    ended_at      = CASE WHEN $3::bool   THEN $4::timestamptz   ELSE ended_at   END,
+    plan_date     = CASE WHEN $5::bool  THEN $6::date         ELSE plan_date  END,
+    task_id       = CASE WHEN $7::bool  THEN NULL
+                        WHEN $8::bool    THEN $9::int            ELSE task_id    END,
+    label         = CASE WHEN $10::bool      THEN $11::text             ELSE label      END,
+    note          = CASE WHEN $12::bool     THEN NULL
+                        WHEN $13::bool       THEN $14::text              ELSE note       END,
+    commitment_id = CASE WHEN $15::bool THEN NULL ELSE commitment_id END
+WHERE id = $16
+RETURNING id, plan_date, started_at, ended_at, task_id, label, note, event_ref, commitment_id
 `
 
 type UpdatePlanBlockParams struct {
-	SetStartedAt bool               `db:"set_started_at" json:"set_started_at"`
-	StartedAt    pgtype.Timestamptz `db:"started_at" json:"started_at"`
-	SetEndedAt   bool               `db:"set_ended_at" json:"set_ended_at"`
-	EndedAt      pgtype.Timestamptz `db:"ended_at" json:"ended_at"`
-	SetPlanDate  bool               `db:"set_plan_date" json:"set_plan_date"`
-	PlanDate     time.Time          `db:"plan_date" json:"plan_date"`
-	ClearTaskID  bool               `db:"clear_task_id" json:"clear_task_id"`
-	SetTaskID    bool               `db:"set_task_id" json:"set_task_id"`
-	TaskID       int32              `db:"task_id" json:"task_id"`
-	SetLabel     bool               `db:"set_label" json:"set_label"`
-	Label        string             `db:"label" json:"label"`
-	ClearNote    bool               `db:"clear_note" json:"clear_note"`
-	SetNote      bool               `db:"set_note" json:"set_note"`
-	Note         string             `db:"note" json:"note"`
-	ID           int32              `db:"id" json:"id"`
+	SetStartedAt      bool               `db:"set_started_at" json:"set_started_at"`
+	StartedAt         pgtype.Timestamptz `db:"started_at" json:"started_at"`
+	SetEndedAt        bool               `db:"set_ended_at" json:"set_ended_at"`
+	EndedAt           pgtype.Timestamptz `db:"ended_at" json:"ended_at"`
+	SetPlanDate       bool               `db:"set_plan_date" json:"set_plan_date"`
+	PlanDate          time.Time          `db:"plan_date" json:"plan_date"`
+	ClearTaskID       bool               `db:"clear_task_id" json:"clear_task_id"`
+	SetTaskID         bool               `db:"set_task_id" json:"set_task_id"`
+	TaskID            int32              `db:"task_id" json:"task_id"`
+	SetLabel          bool               `db:"set_label" json:"set_label"`
+	Label             string             `db:"label" json:"label"`
+	ClearNote         bool               `db:"clear_note" json:"clear_note"`
+	SetNote           bool               `db:"set_note" json:"set_note"`
+	Note              string             `db:"note" json:"note"`
+	ClearCommitmentID bool               `db:"clear_commitment_id" json:"clear_commitment_id"`
+	ID                int32              `db:"id" json:"id"`
 }
 
 type UpdatePlanBlockRow struct {
-	ID        int32              `db:"id" json:"id"`
-	PlanDate  time.Time          `db:"plan_date" json:"plan_date"`
-	StartedAt pgtype.Timestamptz `db:"started_at" json:"started_at"`
-	EndedAt   pgtype.Timestamptz `db:"ended_at" json:"ended_at"`
-	TaskID    *int32             `db:"task_id" json:"task_id"`
-	Label     string             `db:"label" json:"label"`
-	Note      *string            `db:"note" json:"note"`
+	ID           int32              `db:"id" json:"id"`
+	PlanDate     time.Time          `db:"plan_date" json:"plan_date"`
+	StartedAt    pgtype.Timestamptz `db:"started_at" json:"started_at"`
+	EndedAt      pgtype.Timestamptz `db:"ended_at" json:"ended_at"`
+	TaskID       *int32             `db:"task_id" json:"task_id"`
+	Label        string             `db:"label" json:"label"`
+	Note         *string            `db:"note" json:"note"`
+	EventRef     *string            `db:"event_ref" json:"event_ref"`
+	CommitmentID *int32             `db:"commitment_id" json:"commitment_id"`
 }
 
 func (q *Queries) UpdatePlanBlock(ctx context.Context, arg UpdatePlanBlockParams) (UpdatePlanBlockRow, error) {
@@ -297,6 +810,7 @@ func (q *Queries) UpdatePlanBlock(ctx context.Context, arg UpdatePlanBlockParams
 		arg.ClearNote,
 		arg.SetNote,
 		arg.Note,
+		arg.ClearCommitmentID,
 		arg.ID,
 	)
 	var i UpdatePlanBlockRow
@@ -308,6 +822,30 @@ func (q *Queries) UpdatePlanBlock(ctx context.Context, arg UpdatePlanBlockParams
 		&i.TaskID,
 		&i.Label,
 		&i.Note,
+		&i.EventRef,
+		&i.CommitmentID,
 	)
 	return i, err
+}
+
+const updatePlanBlockTimes = `-- name: UpdatePlanBlockTimes :exec
+UPDATE plan_blocks SET started_at = $1, ended_at = $2, plan_date = $3
+WHERE id = $4
+`
+
+type UpdatePlanBlockTimesParams struct {
+	StartedAt pgtype.Timestamptz `db:"started_at" json:"started_at"`
+	EndedAt   pgtype.Timestamptz `db:"ended_at" json:"ended_at"`
+	PlanDate  time.Time          `db:"plan_date" json:"plan_date"`
+	ID        int32              `db:"id" json:"id"`
+}
+
+func (q *Queries) UpdatePlanBlockTimes(ctx context.Context, arg UpdatePlanBlockTimesParams) error {
+	_, err := q.db.Exec(ctx, updatePlanBlockTimes,
+		arg.StartedAt,
+		arg.EndedAt,
+		arg.PlanDate,
+		arg.ID,
+	)
+	return err
 }

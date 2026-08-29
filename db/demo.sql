@@ -5,7 +5,7 @@
 -- CLEAN SLATE
 -- =============================================================================
 -- Delete in dependency order (children before parents)
-TRUNCATE plan_blocks, time_entries, todos, task_dependencies, tasks, projects, habit_logs, habits, transactions, accounts, categories RESTART IDENTITY CASCADE;
+TRUNCATE plan_blocks, recurring_commitment_skips, recurring_commitments, time_entries, todos, task_dependencies, tasks, projects, habit_logs, habits, transactions, accounts, categories RESTART IDENTITY CASCADE;
 
 -- =============================================================================
 -- HABITS
@@ -469,6 +469,28 @@ INSERT INTO tasks (name, description, started_at, task_type, priority) VALUES
 INSERT INTO tasks (project_id, name, description, started_at, task_type, priority) VALUES
     (4, 'API bug triage', 'Investigate and fix reported API issues as they come in', NOW() - INTERVAL '5 days', 'continuous', 2),                             -- id=30  under API v2
     (1, 'Design feedback', 'Address design review comments as they arrive', NOW() - INTERVAL '7 days', 'continuous', 3);                                      -- id=31  under Website Redesign
+
+-- Capacity/urgency demo
+-- "Trabajo" backs the recurring commitment below (Mon-Fri, see RECURRING COMMITMENTS section).
+-- The other two share the same near-term due date and estimate_hours on purpose: checked in
+-- isolation "Actualizar CV" would comfortably fit days before its deadline, but
+-- "Presentación para el consejo" (higher priority, processed first) claims almost all of the
+-- same shared free hours, genuinely starving the smaller task down to "must start today" too —
+-- see internal/tasks/service.go's applyUrgency priority-ordered allocation.
+INSERT INTO tasks (name, description, task_type, priority) VALUES
+    ('Trabajo', 'Placeholder task backing the "Trabajo" recurring commitment', 'continuous', 3);                                                              -- id=32
+
+INSERT INTO tasks (name, description, due_at, priority, estimate_hours) VALUES
+    ('Presentación para el consejo', 'Board deck: numbers, roadmap, and the ask', CURRENT_DATE + INTERVAL '4 days', 1, 30),                                   -- id=33
+    ('Actualizar CV', 'Refresh with the last two projects before it goes stale', CURRENT_DATE + INTERVAL '4 days', 4, 5);                                     -- id=34
+
+-- A handful of existing tasks also carry an estimate, so "Due Soon" shows a realistic mix of
+-- estimated/un-estimated tasks rather than only the two purpose-built ones above. "Fix server
+-- logs" already has a linked plan_block today, so its remaining_hours also reflects that.
+UPDATE tasks SET estimate_hours = 6  WHERE id = 18;  -- Fix server logs
+UPDATE tasks SET estimate_hours = 3  WHERE id = 19;  -- Update dependencies
+UPDATE tasks SET estimate_hours = 15 WHERE id = 10;  -- Research frameworks
+UPDATE tasks SET estimate_hours = 20 WHERE id = 13;  -- Set up data ingestion
 
 -- =============================================================================
 -- TODOS
@@ -1374,3 +1396,12 @@ INSERT INTO plan_blocks (plan_date, started_at, ended_at, task_id, label, note) 
     (CURRENT_DATE, CURRENT_DATE + INTERVAL '16 hours',                CURRENT_DATE + INTERVAL '16 hours 30 minutes', NULL, 'paseo',                   NULL),
     (CURRENT_DATE, CURRENT_DATE + INTERVAL '16 hours 30 minutes',     CURRENT_DATE + INTERVAL '18 hours',            14,   'Build transformation layer', NULL),
     (CURRENT_DATE, CURRENT_DATE + INTERVAL '18 hours',                CURRENT_DATE + INTERVAL '19 hours',            22,   'Review PR backlog',       'Focus on the API v2 PRs');
+
+-- =============================================================================
+-- RECURRING COMMITMENTS
+-- A fixed weekly work schedule (Mon-Fri). Materializes as real plan_blocks the first time
+-- any date range covering a matching weekday is read (GET /plan/range, or internally by the
+-- capacity domain) — nothing to seed here beyond the template itself.
+-- =============================================================================
+INSERT INTO recurring_commitments (task_id, label, days_of_week, start_time, end_time) VALUES
+    (32, 'Trabajo', '{1,2,3,4,5}', '09:00', '17:00');

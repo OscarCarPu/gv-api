@@ -51,7 +51,12 @@ gv-api/
 ```
 
 Domains: `habits`, `tasks`, `plan`, `finance`, `rutas`, `lights`, `calendar`,
-`uptime`.
+`uptime`, `capacity`.
+
+`capacity` is the one domain without a `Repository`/table of its own: its one number (a daily
+free-hours constant) is an environment variable, not editable from the app, and its one real
+computation (`FreeBusyRange`) reads `plan_blocks` through a small interface `plan.Service`
+already implements — see [docs/business_logic/plan.md](business_logic/plan.md).
 
 ## Architecture Pattern
 

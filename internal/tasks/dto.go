@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"log/slog"
 	"time"
+
+	"github.com/shopspring/decimal"
 )
 
 type TaskDepRef struct {
@@ -80,30 +82,32 @@ type TaskFastResponse struct {
 }
 
 type CreateTaskRequest struct {
-	ProjectID   *int32     `json:"project_id"`
-	Name        string     `json:"name"`
-	Description *string    `json:"description"`
-	DueAt       *time.Time `json:"due_at"`
-	DependsOn   []int32    `json:"depends_on"`
-	TaskType    *string    `json:"task_type"`
-	Recurrence  *int32     `json:"recurrence"`
-	Priority    *int32     `json:"priority"`
+	ProjectID     *int32           `json:"project_id"`
+	Name          string           `json:"name"`
+	Description   *string          `json:"description"`
+	DueAt         *time.Time       `json:"due_at"`
+	DependsOn     []int32          `json:"depends_on"`
+	TaskType      *string          `json:"task_type"`
+	Recurrence    *int32           `json:"recurrence"`
+	Priority      *int32           `json:"priority"`
+	EstimateHours *decimal.Decimal `json:"estimate_hours"`
 }
 
 type TaskResponse struct {
-	ID          int32        `json:"id"`
-	ProjectID   *int32       `json:"project_id"`
-	Name        string       `json:"name"`
-	Description *string      `json:"description"`
-	DueAt       *time.Time   `json:"due_at"`
-	StartedAt   *time.Time   `json:"started_at"`
-	FinishedAt  *time.Time   `json:"finished_at"`
-	TaskType    string       `json:"task_type"`
-	Recurrence  *int32       `json:"recurrence,omitempty"`
-	Priority    int32        `json:"priority"`
-	DependsOn   []TaskDepRef `json:"depends_on"`
-	Blocks      []TaskDepRef `json:"blocks"`
-	Blocked     bool         `json:"blocked"`
+	ID            int32            `json:"id"`
+	ProjectID     *int32           `json:"project_id"`
+	Name          string           `json:"name"`
+	Description   *string          `json:"description"`
+	DueAt         *time.Time       `json:"due_at"`
+	StartedAt     *time.Time       `json:"started_at"`
+	FinishedAt    *time.Time       `json:"finished_at"`
+	TaskType      string           `json:"task_type"`
+	Recurrence    *int32           `json:"recurrence,omitempty"`
+	Priority      int32            `json:"priority"`
+	EstimateHours *decimal.Decimal `json:"estimate_hours"`
+	DependsOn     []TaskDepRef     `json:"depends_on"`
+	Blocks        []TaskDepRef     `json:"blocks"`
+	Blocked       bool             `json:"blocked"`
 }
 
 type CreateTodoRequest struct {
@@ -194,19 +198,40 @@ func (n *NullableTime) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
+// NullableDecimal distinguishes between an absent JSON field and an explicit null.
+type NullableDecimal struct {
+	Value *decimal.Decimal
+	Set   bool
+}
+
+func (n *NullableDecimal) UnmarshalJSON(data []byte) error {
+	n.Set = true
+	if string(data) == "null" {
+		n.Value = nil
+		return nil
+	}
+	var d decimal.Decimal
+	if err := json.Unmarshal(data, &d); err != nil {
+		return err
+	}
+	n.Value = &d
+	return nil
+}
+
 type UpdateTaskRequest struct {
-	ID          int32        `json:"-"`
-	Name        *string      `json:"name"`
-	Description *string      `json:"description"`
-	DueAt       NullableTime `json:"due_at"`
-	ProjectID   *int32       `json:"project_id"`
-	StartedAt   NullableTime `json:"started_at"`
-	FinishedAt  NullableTime `json:"finished_at"`
-	DependsOn   *[]int32     `json:"depends_on"`
-	Blocks      *[]int32     `json:"blocks"`
-	TaskType    *string      `json:"task_type"`
-	Recurrence  *int32       `json:"recurrence"`
-	Priority    *int32       `json:"priority"`
+	ID            int32           `json:"-"`
+	Name          *string         `json:"name"`
+	Description   *string         `json:"description"`
+	DueAt         NullableTime    `json:"due_at"`
+	ProjectID     *int32          `json:"project_id"`
+	StartedAt     NullableTime    `json:"started_at"`
+	FinishedAt    NullableTime    `json:"finished_at"`
+	DependsOn     *[]int32        `json:"depends_on"`
+	Blocks        *[]int32        `json:"blocks"`
+	TaskType      *string         `json:"task_type"`
+	Recurrence    *int32          `json:"recurrence"`
+	Priority      *int32          `json:"priority"`
+	EstimateHours NullableDecimal `json:"estimate_hours"`
 }
 
 type UpdateTodoRequest struct {
@@ -247,40 +272,45 @@ type TaskDetailResponse struct {
 }
 
 type TaskFullResponse struct {
-	ID          int32          `json:"id"`
-	ProjectID   *int32         `json:"project_id"`
-	ProjectName *string        `json:"project_name"`
-	Name        string         `json:"name"`
-	Description *string        `json:"description"`
-	DueAt       *time.Time     `json:"due_at"`
-	StartedAt   *time.Time     `json:"started_at"`
-	FinishedAt  *time.Time     `json:"finished_at"`
-	TaskType    string         `json:"task_type"`
-	Recurrence  *int32         `json:"recurrence,omitempty"`
-	Priority    int32          `json:"priority"`
-	TimeSpent   int64          `json:"time_spent"`
-	DependsOn   []TaskDepRef   `json:"depends_on"`
-	Blocks      []TaskDepRef   `json:"blocks"`
-	Blocked     bool           `json:"blocked"`
-	Todos       []TodoResponse `json:"todos"`
+	ID            int32            `json:"id"`
+	ProjectID     *int32           `json:"project_id"`
+	ProjectName   *string          `json:"project_name"`
+	Name          string           `json:"name"`
+	Description   *string          `json:"description"`
+	DueAt         *time.Time       `json:"due_at"`
+	StartedAt     *time.Time       `json:"started_at"`
+	FinishedAt    *time.Time       `json:"finished_at"`
+	TaskType      string           `json:"task_type"`
+	Recurrence    *int32           `json:"recurrence,omitempty"`
+	Priority      int32            `json:"priority"`
+	EstimateHours *decimal.Decimal `json:"estimate_hours"`
+	TimeSpent     int64            `json:"time_spent"`
+	DependsOn     []TaskDepRef     `json:"depends_on"`
+	Blocks        []TaskDepRef     `json:"blocks"`
+	Blocked       bool             `json:"blocked"`
+	Todos         []TodoResponse   `json:"todos"`
 }
 
 type TaskByDueDateResponse struct {
-	ID           int32        `json:"id"`
-	Name         string       `json:"name"`
-	Description  *string      `json:"description"`
-	DueAt        *time.Time   `json:"due_at"`
-	StartedAt    *time.Time   `json:"started_at"`
-	TaskType     string       `json:"task_type"`
-	Recurrence   *int32       `json:"recurrence,omitempty"`
-	Priority     int32        `json:"priority"`
-	TimeSpent    int64        `json:"time_spent"`
-	ProjectID    *int32       `json:"project_id"`
-	ProjectName  *string      `json:"project_name"`
-	ProjectDueAt *time.Time   `json:"project_due_at"`
-	DependsOn    []TaskDepRef `json:"depends_on"`
-	Blocks       []TaskDepRef `json:"blocks"`
-	Blocked      bool         `json:"blocked"`
+	ID             int32            `json:"id"`
+	Name           string           `json:"name"`
+	Description    *string          `json:"description"`
+	DueAt          *time.Time       `json:"due_at"`
+	StartedAt      *time.Time       `json:"started_at"`
+	TaskType       string           `json:"task_type"`
+	Recurrence     *int32           `json:"recurrence,omitempty"`
+	Priority       int32            `json:"priority"`
+	TimeSpent      int64            `json:"time_spent"`
+	EstimateHours  *decimal.Decimal `json:"estimate_hours"`
+	RemainingHours *decimal.Decimal `json:"remaining_hours"`
+	StartBy        *string          `json:"start_by"`
+	Urgent         bool             `json:"urgent"`
+	ProjectID      *int32           `json:"project_id"`
+	ProjectName    *string          `json:"project_name"`
+	ProjectDueAt   *time.Time       `json:"project_due_at"`
+	DependsOn      []TaskDepRef     `json:"depends_on"`
+	Blocks         []TaskDepRef     `json:"blocks"`
+	Blocked        bool             `json:"blocked"`
 }
 
 type TimeEntrySummaryResponse struct {

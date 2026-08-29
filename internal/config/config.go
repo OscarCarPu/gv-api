@@ -62,6 +62,9 @@ type Config struct {
 	CalendarWatchRenewBefore time.Duration
 	CalendarSyncInterval     time.Duration
 	CalendarDebounce         time.Duration
+
+	// Theoretical free hours per day, same every day of the year. Not editable from the app.
+	DailyCapacityHours float64
 }
 
 func Load() (*Config, error) {
@@ -114,6 +117,8 @@ func Load() (*Config, error) {
 		// they are coalesced for a couple of seconds before syncing.
 		CalendarSyncInterval: getEnvDuration("CALENDAR_SYNC_INTERVAL_MS", 15*60*1000),
 		CalendarDebounce:     getEnvDuration("CALENDAR_DEBOUNCE_MS", 2000),
+
+		DailyCapacityHours: getEnvFloat("DAILY_CAPACITY_HOURS", 14),
 	}
 	cfg.CalendarWebhookEnabled = getEnvBool("CALENDAR_WEBHOOK_ENABLED", cfg.CalendarWebhookURL != "")
 	if cfg.CalendarWebAppURL == "" && len(allowedOrigins) > 0 {
@@ -176,6 +181,16 @@ func getEnvBool(key string, defaultValue bool) bool {
 func getEnvInt(key string, defaultValue int) int {
 	if raw := os.Getenv(key); raw != "" {
 		if v, err := strconv.Atoi(raw); err == nil {
+			return v
+		}
+	}
+	return defaultValue
+}
+
+// getEnvFloat reads a float from the environment, falling back to defaultValue.
+func getEnvFloat(key string, defaultValue float64) float64 {
+	if raw := os.Getenv(key); raw != "" {
+		if v, err := strconv.ParseFloat(raw, 64); err == nil {
 			return v
 		}
 	}

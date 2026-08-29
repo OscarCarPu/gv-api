@@ -6,10 +6,12 @@ import (
 	"testing"
 	"time"
 
+	"gv-api/internal/capacity"
 	"gv-api/internal/history"
 	"gv-api/internal/tasks"
 	"gv-api/internal/tasks/mocks"
 
+	"github.com/shopspring/decimal"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
@@ -19,7 +21,7 @@ func TestService_CreateTask(t *testing.T) {
 	t.Run("creates task with dependencies", func(t *testing.T) {
 		repo := mocks.NewMockRepository(t)
 		repo.EXPECT().
-			CreateTask(mock.Anything, mock.Anything, "My Task", mock.Anything, mock.Anything, "standard", mock.Anything, int32(3)).
+			CreateTask(mock.Anything, mock.Anything, "My Task", mock.Anything, mock.Anything, "standard", mock.Anything, int32(3), mock.Anything).
 			Return(tasks.TaskResponse{ID: 10, Name: "My Task"}, nil)
 		repo.EXPECT().
 			ReplaceTaskDependencies(mock.Anything, int32(10), []int32{2, 3}).
@@ -44,7 +46,7 @@ func TestService_CreateTask(t *testing.T) {
 	t.Run("creates task without dependencies", func(t *testing.T) {
 		repo := mocks.NewMockRepository(t)
 		repo.EXPECT().
-			CreateTask(mock.Anything, mock.Anything, "Simple Task", mock.Anything, mock.Anything, "standard", mock.Anything, int32(3)).
+			CreateTask(mock.Anything, mock.Anything, "Simple Task", mock.Anything, mock.Anything, "standard", mock.Anything, int32(3), mock.Anything).
 			Return(tasks.TaskResponse{ID: 11, Name: "Simple Task"}, nil)
 		repo.EXPECT().
 			GetTaskDependencies(mock.Anything, int32(11)).
@@ -63,7 +65,7 @@ func TestService_CreateTask(t *testing.T) {
 
 	t.Run("propagates error from ReplaceTaskDependencies", func(t *testing.T) {
 		repo := mocks.NewMockRepository(t)
-		repo.EXPECT().CreateTask(mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
+		repo.EXPECT().CreateTask(mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
 			Return(tasks.TaskResponse{ID: 10}, nil)
 		repo.EXPECT().ReplaceTaskDependencies(mock.Anything, int32(10), []int32{99}).
 			Return(errors.New("fk violation"))
@@ -89,7 +91,7 @@ func TestService_CreateTask(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			repo := mocks.NewMockRepository(t)
 			repo.EXPECT().
-				CreateTask(mock.Anything, mock.Anything, "T", mock.Anything, mock.Anything, "standard", mock.Anything, tc.want).
+				CreateTask(mock.Anything, mock.Anything, "T", mock.Anything, mock.Anything, "standard", mock.Anything, tc.want, mock.Anything).
 				Return(tasks.TaskResponse{ID: 1, Name: "T", Priority: tc.want}, nil)
 			repo.EXPECT().GetTaskDependencies(mock.Anything, int32(1)).
 				Return([]tasks.TaskDepRef{}, []tasks.TaskDepRef{}, false, nil)
@@ -619,6 +621,111 @@ func TestService_PriorityFilter(t *testing.T) {
 		_, err := svc.GetTasksByDueDate(context.Background(), &threshold)
 		require.NoError(t, err)
 	})
+}
+
+type stubCapacityProvider struct {
+	days []capacity.DayFreeBusy
+}
+
+func (s stubCapacityProvider) FreeBusyRange(_ context.Context, _, _ time.Time) ([]capacity.DayFreeBusy, error) {
+	return s.days, nil
+}
+
+type stubPlannedHoursProvider struct{}
+
+func (stubPlannedHoursProvider) PlannedHoursByTask(_ context.Context, _ []int32, _ time.Time) (map[int32]decimal.Decimal, error) {
+	return map[int32]decimal.Decimal{}, nil
+}
+
+// due_at is stored as midnight UTC for its calendar date, while "today" is midnight in the
+// server's own location (never UTC in the real deployment). A due date of "tomorrow" makes
+// start_by fall on today's date for any task, regardless of its estimate — this asserts that
+// both a task whose estimate fits inside today's free hours and one that doesn't still agree.
+func TestService_GetTasksByDueDate_UrgencyAgreesAcrossOffset(t *testing.T) {
+	loc, err := time.LoadLocation("Europe/Madrid")
+	require.NoError(t, err)
+
+	now := time.Now().In(loc)
+	today := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, loc)
+	dueTomorrow := time.Date(today.Year(), today.Month(), today.Day()+1, 0, 0, 0, 0, time.UTC)
+
+	fitsToday := decimal.RequireFromString("1")
+	exceedsToday := decimal.RequireFromString("25")
+
+	repo := mocks.NewMockRepository(t)
+	repo.EXPECT().
+		GetTasksByDueDate(mock.Anything, (*int32)(nil)).
+		Return([]tasks.TaskByDueDateResponse{
+			{ID: 1, TaskType: "standard", DueAt: &dueTomorrow, EstimateHours: &exceedsToday},
+			{ID: 2, TaskType: "standard", DueAt: &dueTomorrow, EstimateHours: &fitsToday},
+		}, nil)
+
+	svc := tasks.NewService(repo, loc)
+	svc.SetUrgencyProviders(
+		stubCapacityProvider{days: []capacity.DayFreeBusy{
+			{Date: today.Format("2006-01-02"), FreeHours: decimal.RequireFromString("14")},
+		}},
+		stubPlannedHoursProvider{},
+	)
+
+	got, err := svc.GetTasksByDueDate(context.Background(), nil)
+	require.NoError(t, err)
+	require.Len(t, got, 2)
+	for _, r := range got {
+		assert.Truef(t, r.Urgent, "task %d: start_by=%v urgent=%v (both must be urgent — start_by is today either way)", r.ID, r.StartBy, r.Urgent)
+	}
+}
+
+// Two tasks sharing the same 5-day, 20-hour due-date window draw from the same freeByDate pool.
+// Checked independently, a task needing only 3 hours would comfortably fit in the day furthest
+// from today and not be urgent — but a higher-priority task claiming 16 of those 20 hours first
+// (everything except today itself) pushes the second task's only remaining room onto today,
+// which must show up as urgent rather than being silently missed because each task's own check
+// looked fine in isolation.
+func TestService_GetTasksByDueDate_UrgencyAccountsForCompetingTasks(t *testing.T) {
+	loc, err := time.LoadLocation("Europe/Madrid")
+	require.NoError(t, err)
+
+	now := time.Now().In(loc)
+	today := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, loc)
+	dueIn5Days := time.Date(today.Year(), today.Month(), today.Day()+5, 0, 0, 0, 0, time.UTC)
+
+	days := make([]capacity.DayFreeBusy, 0, 5)
+	for i := 0; i < 5; i++ {
+		d := today.AddDate(0, 0, i)
+		days = append(days, capacity.DayFreeBusy{Date: d.Format("2006-01-02"), FreeHours: decimal.RequireFromString("4")})
+	}
+
+	repo := mocks.NewMockRepository(t)
+	repo.EXPECT().
+		GetTasksByDueDate(mock.Anything, (*int32)(nil)).
+		Return([]tasks.TaskByDueDateResponse{
+			{ID: 1, Priority: 1, TaskType: "standard", DueAt: &dueIn5Days, EstimateHours: decPtr("16")},
+			{ID: 2, Priority: 3, TaskType: "standard", DueAt: &dueIn5Days, EstimateHours: decPtr("3")},
+		}, nil)
+
+	svc := tasks.NewService(repo, loc)
+	svc.SetUrgencyProviders(
+		stubCapacityProvider{days: days},
+		stubPlannedHoursProvider{},
+	)
+
+	got, err := svc.GetTasksByDueDate(context.Background(), nil)
+	require.NoError(t, err)
+	require.Len(t, got, 2)
+
+	byID := map[int32]tasks.TaskByDueDateResponse{}
+	for _, r := range got {
+		byID[r.ID] = r
+	}
+
+	assert.Falsef(t, byID[1].Urgent, "higher-priority task: start_by=%v urgent=%v", byID[1].StartBy, byID[1].Urgent)
+	assert.Truef(t, byID[2].Urgent, "lower-priority task starved of shared hours must be urgent: start_by=%v urgent=%v", byID[2].StartBy, byID[2].Urgent)
+}
+
+func decPtr(s string) *decimal.Decimal {
+	d := decimal.RequireFromString(s)
+	return &d
 }
 
 func TestService_GetTimeEntrySummary(t *testing.T) {

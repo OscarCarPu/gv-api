@@ -133,8 +133,27 @@ series is a master plus one row per modified or cancelled occurrence.
   back without a refresh token is rejected rather than stored.
 
 **Isolation**
-- Nothing here touches `plan_blocks`, `tasks` or `habits`. A unified view is a later decision,
+- Nothing here touches `tasks` or `habits`. A unified view of those is a later decision,
   deliberately not made now.
+- The one exception is a single narrow hook toward `plan_blocks`, described next — the calendar
+  domain still never reads or writes `tasks`/`habits`, and it does not read `plan_blocks` either,
+  only tells `plan` when an event it might be linked to changed.
+
+**Keeping a linked plan_block in step (`plan_blocks.event_ref`)**
+- A plan_block can optionally link to an event via its `instance_id` (owned and validated by the
+  `plan` domain — see [business_logic/plan.md](plan.md)). This domain does not know that link
+  exists; it just calls a small interface (`planBlockSyncer`) after a write succeeds:
+  - `UpdateEvent` that changes `starts_at`/`ends_at`: re-resolves the ref afterward and pushes the
+    confirmed new times. If the ref no longer resolves (a `scope=following` split moved the
+    occurrence under a new series master), it asks `plan` to detach the link instead of pushing
+    stale times.
+  - `DeleteEvent`: always asks `plan` to detach the ref, regardless of scope.
+  - `MoveEvent`: whenever the event's local id actually changes (moving to a different calendar
+    recreates the local row even within the same Google account — see above), asks `plan` to
+    detach the old ref. The no-op case (`dest.ID == source.ID`) does not.
+- This call is best-effort and never fails the request: the event write already succeeded in
+  Google by the time it happens, and a plan_block a day out of sync is a much smaller problem
+  than losing an already-accepted calendar write over it. Errors are logged, not surfaced.
 
 ### Validations
 

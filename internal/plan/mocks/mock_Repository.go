@@ -4,9 +4,11 @@ package mocks
 
 import (
 	context "context"
-	plan "gv-api/internal/plan"
 
+	decimal "github.com/shopspring/decimal"
 	mock "github.com/stretchr/testify/mock"
+
+	plan "gv-api/internal/plan"
 
 	time "time"
 )
@@ -24,9 +26,56 @@ func (_m *MockRepository) EXPECT() *MockRepository_Expecter {
 	return &MockRepository_Expecter{mock: &_m.Mock}
 }
 
-// Create provides a mock function with given fields: ctx, planDate, startedAt, endedAt, taskID, label, note
-func (_m *MockRepository) Create(ctx context.Context, planDate time.Time, startedAt time.Time, endedAt time.Time, taskID *int32, label string, note *string) (plan.PlanBlockResponse, error) {
-	ret := _m.Called(ctx, planDate, startedAt, endedAt, taskID, label, note)
+// ClearEventRef provides a mock function with given fields: ctx, id
+func (_m *MockRepository) ClearEventRef(ctx context.Context, id int32) error {
+	ret := _m.Called(ctx, id)
+
+	if len(ret) == 0 {
+		panic("no return value specified for ClearEventRef")
+	}
+
+	var r0 error
+	if rf, ok := ret.Get(0).(func(context.Context, int32) error); ok {
+		r0 = rf(ctx, id)
+	} else {
+		r0 = ret.Error(0)
+	}
+
+	return r0
+}
+
+// MockRepository_ClearEventRef_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'ClearEventRef'
+type MockRepository_ClearEventRef_Call struct {
+	*mock.Call
+}
+
+// ClearEventRef is a helper method to define mock.On call
+//   - ctx context.Context
+//   - id int32
+func (_e *MockRepository_Expecter) ClearEventRef(ctx interface{}, id interface{}) *MockRepository_ClearEventRef_Call {
+	return &MockRepository_ClearEventRef_Call{Call: _e.mock.On("ClearEventRef", ctx, id)}
+}
+
+func (_c *MockRepository_ClearEventRef_Call) Run(run func(ctx context.Context, id int32)) *MockRepository_ClearEventRef_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].(context.Context), args[1].(int32))
+	})
+	return _c
+}
+
+func (_c *MockRepository_ClearEventRef_Call) Return(_a0 error) *MockRepository_ClearEventRef_Call {
+	_c.Call.Return(_a0)
+	return _c
+}
+
+func (_c *MockRepository_ClearEventRef_Call) RunAndReturn(run func(context.Context, int32) error) *MockRepository_ClearEventRef_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// Create provides a mock function with given fields: ctx, params
+func (_m *MockRepository) Create(ctx context.Context, params plan.CreatePlanBlockParams) (plan.PlanBlockResponse, error) {
+	ret := _m.Called(ctx, params)
 
 	if len(ret) == 0 {
 		panic("no return value specified for Create")
@@ -34,17 +83,17 @@ func (_m *MockRepository) Create(ctx context.Context, planDate time.Time, starte
 
 	var r0 plan.PlanBlockResponse
 	var r1 error
-	if rf, ok := ret.Get(0).(func(context.Context, time.Time, time.Time, time.Time, *int32, string, *string) (plan.PlanBlockResponse, error)); ok {
-		return rf(ctx, planDate, startedAt, endedAt, taskID, label, note)
+	if rf, ok := ret.Get(0).(func(context.Context, plan.CreatePlanBlockParams) (plan.PlanBlockResponse, error)); ok {
+		return rf(ctx, params)
 	}
-	if rf, ok := ret.Get(0).(func(context.Context, time.Time, time.Time, time.Time, *int32, string, *string) plan.PlanBlockResponse); ok {
-		r0 = rf(ctx, planDate, startedAt, endedAt, taskID, label, note)
+	if rf, ok := ret.Get(0).(func(context.Context, plan.CreatePlanBlockParams) plan.PlanBlockResponse); ok {
+		r0 = rf(ctx, params)
 	} else {
 		r0 = ret.Get(0).(plan.PlanBlockResponse)
 	}
 
-	if rf, ok := ret.Get(1).(func(context.Context, time.Time, time.Time, time.Time, *int32, string, *string) error); ok {
-		r1 = rf(ctx, planDate, startedAt, endedAt, taskID, label, note)
+	if rf, ok := ret.Get(1).(func(context.Context, plan.CreatePlanBlockParams) error); ok {
+		r1 = rf(ctx, params)
 	} else {
 		r1 = ret.Error(1)
 	}
@@ -59,19 +108,14 @@ type MockRepository_Create_Call struct {
 
 // Create is a helper method to define mock.On call
 //   - ctx context.Context
-//   - planDate time.Time
-//   - startedAt time.Time
-//   - endedAt time.Time
-//   - taskID *int32
-//   - label string
-//   - note *string
-func (_e *MockRepository_Expecter) Create(ctx interface{}, planDate interface{}, startedAt interface{}, endedAt interface{}, taskID interface{}, label interface{}, note interface{}) *MockRepository_Create_Call {
-	return &MockRepository_Create_Call{Call: _e.mock.On("Create", ctx, planDate, startedAt, endedAt, taskID, label, note)}
+//   - params plan.CreatePlanBlockParams
+func (_e *MockRepository_Expecter) Create(ctx interface{}, params interface{}) *MockRepository_Create_Call {
+	return &MockRepository_Create_Call{Call: _e.mock.On("Create", ctx, params)}
 }
 
-func (_c *MockRepository_Create_Call) Run(run func(ctx context.Context, planDate time.Time, startedAt time.Time, endedAt time.Time, taskID *int32, label string, note *string)) *MockRepository_Create_Call {
+func (_c *MockRepository_Create_Call) Run(run func(ctx context.Context, params plan.CreatePlanBlockParams)) *MockRepository_Create_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].(context.Context), args[1].(time.Time), args[2].(time.Time), args[3].(time.Time), args[4].(*int32), args[5].(string), args[6].(*string))
+		run(args[0].(context.Context), args[1].(plan.CreatePlanBlockParams))
 	})
 	return _c
 }
@@ -81,7 +125,64 @@ func (_c *MockRepository_Create_Call) Return(_a0 plan.PlanBlockResponse, _a1 err
 	return _c
 }
 
-func (_c *MockRepository_Create_Call) RunAndReturn(run func(context.Context, time.Time, time.Time, time.Time, *int32, string, *string) (plan.PlanBlockResponse, error)) *MockRepository_Create_Call {
+func (_c *MockRepository_Create_Call) RunAndReturn(run func(context.Context, plan.CreatePlanBlockParams) (plan.PlanBlockResponse, error)) *MockRepository_Create_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// CreateCommitment provides a mock function with given fields: ctx, req
+func (_m *MockRepository) CreateCommitment(ctx context.Context, req plan.CreateCommitmentRequest) (plan.RecurringCommitmentResponse, error) {
+	ret := _m.Called(ctx, req)
+
+	if len(ret) == 0 {
+		panic("no return value specified for CreateCommitment")
+	}
+
+	var r0 plan.RecurringCommitmentResponse
+	var r1 error
+	if rf, ok := ret.Get(0).(func(context.Context, plan.CreateCommitmentRequest) (plan.RecurringCommitmentResponse, error)); ok {
+		return rf(ctx, req)
+	}
+	if rf, ok := ret.Get(0).(func(context.Context, plan.CreateCommitmentRequest) plan.RecurringCommitmentResponse); ok {
+		r0 = rf(ctx, req)
+	} else {
+		r0 = ret.Get(0).(plan.RecurringCommitmentResponse)
+	}
+
+	if rf, ok := ret.Get(1).(func(context.Context, plan.CreateCommitmentRequest) error); ok {
+		r1 = rf(ctx, req)
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
+}
+
+// MockRepository_CreateCommitment_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'CreateCommitment'
+type MockRepository_CreateCommitment_Call struct {
+	*mock.Call
+}
+
+// CreateCommitment is a helper method to define mock.On call
+//   - ctx context.Context
+//   - req plan.CreateCommitmentRequest
+func (_e *MockRepository_Expecter) CreateCommitment(ctx interface{}, req interface{}) *MockRepository_CreateCommitment_Call {
+	return &MockRepository_CreateCommitment_Call{Call: _e.mock.On("CreateCommitment", ctx, req)}
+}
+
+func (_c *MockRepository_CreateCommitment_Call) Run(run func(ctx context.Context, req plan.CreateCommitmentRequest)) *MockRepository_CreateCommitment_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].(context.Context), args[1].(plan.CreateCommitmentRequest))
+	})
+	return _c
+}
+
+func (_c *MockRepository_CreateCommitment_Call) Return(_a0 plan.RecurringCommitmentResponse, _a1 error) *MockRepository_CreateCommitment_Call {
+	_c.Call.Return(_a0, _a1)
+	return _c
+}
+
+func (_c *MockRepository_CreateCommitment_Call) RunAndReturn(run func(context.Context, plan.CreateCommitmentRequest) (plan.RecurringCommitmentResponse, error)) *MockRepository_CreateCommitment_Call {
 	_c.Call.Return(run)
 	return _c
 }
@@ -129,6 +230,53 @@ func (_c *MockRepository_Delete_Call) Return(_a0 error) *MockRepository_Delete_C
 }
 
 func (_c *MockRepository_Delete_Call) RunAndReturn(run func(context.Context, int32) error) *MockRepository_Delete_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// DeleteCommitment provides a mock function with given fields: ctx, id
+func (_m *MockRepository) DeleteCommitment(ctx context.Context, id int32) error {
+	ret := _m.Called(ctx, id)
+
+	if len(ret) == 0 {
+		panic("no return value specified for DeleteCommitment")
+	}
+
+	var r0 error
+	if rf, ok := ret.Get(0).(func(context.Context, int32) error); ok {
+		r0 = rf(ctx, id)
+	} else {
+		r0 = ret.Error(0)
+	}
+
+	return r0
+}
+
+// MockRepository_DeleteCommitment_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'DeleteCommitment'
+type MockRepository_DeleteCommitment_Call struct {
+	*mock.Call
+}
+
+// DeleteCommitment is a helper method to define mock.On call
+//   - ctx context.Context
+//   - id int32
+func (_e *MockRepository_Expecter) DeleteCommitment(ctx interface{}, id interface{}) *MockRepository_DeleteCommitment_Call {
+	return &MockRepository_DeleteCommitment_Call{Call: _e.mock.On("DeleteCommitment", ctx, id)}
+}
+
+func (_c *MockRepository_DeleteCommitment_Call) Run(run func(ctx context.Context, id int32)) *MockRepository_DeleteCommitment_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].(context.Context), args[1].(int32))
+	})
+	return _c
+}
+
+func (_c *MockRepository_DeleteCommitment_Call) Return(_a0 error) *MockRepository_DeleteCommitment_Call {
+	_c.Call.Return(_a0)
+	return _c
+}
+
+func (_c *MockRepository_DeleteCommitment_Call) RunAndReturn(run func(context.Context, int32) error) *MockRepository_DeleteCommitment_Call {
 	_c.Call.Return(run)
 	return _c
 }
@@ -237,6 +385,63 @@ func (_c *MockRepository_Get_Call) RunAndReturn(run func(context.Context, int32)
 	return _c
 }
 
+// GetByEventRef provides a mock function with given fields: ctx, eventRef
+func (_m *MockRepository) GetByEventRef(ctx context.Context, eventRef string) (plan.PlanBlockResponse, error) {
+	ret := _m.Called(ctx, eventRef)
+
+	if len(ret) == 0 {
+		panic("no return value specified for GetByEventRef")
+	}
+
+	var r0 plan.PlanBlockResponse
+	var r1 error
+	if rf, ok := ret.Get(0).(func(context.Context, string) (plan.PlanBlockResponse, error)); ok {
+		return rf(ctx, eventRef)
+	}
+	if rf, ok := ret.Get(0).(func(context.Context, string) plan.PlanBlockResponse); ok {
+		r0 = rf(ctx, eventRef)
+	} else {
+		r0 = ret.Get(0).(plan.PlanBlockResponse)
+	}
+
+	if rf, ok := ret.Get(1).(func(context.Context, string) error); ok {
+		r1 = rf(ctx, eventRef)
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
+}
+
+// MockRepository_GetByEventRef_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'GetByEventRef'
+type MockRepository_GetByEventRef_Call struct {
+	*mock.Call
+}
+
+// GetByEventRef is a helper method to define mock.On call
+//   - ctx context.Context
+//   - eventRef string
+func (_e *MockRepository_Expecter) GetByEventRef(ctx interface{}, eventRef interface{}) *MockRepository_GetByEventRef_Call {
+	return &MockRepository_GetByEventRef_Call{Call: _e.mock.On("GetByEventRef", ctx, eventRef)}
+}
+
+func (_c *MockRepository_GetByEventRef_Call) Run(run func(ctx context.Context, eventRef string)) *MockRepository_GetByEventRef_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].(context.Context), args[1].(string))
+	})
+	return _c
+}
+
+func (_c *MockRepository_GetByEventRef_Call) Return(_a0 plan.PlanBlockResponse, _a1 error) *MockRepository_GetByEventRef_Call {
+	_c.Call.Return(_a0, _a1)
+	return _c
+}
+
+func (_c *MockRepository_GetByEventRef_Call) RunAndReturn(run func(context.Context, string) (plan.PlanBlockResponse, error)) *MockRepository_GetByEventRef_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // GetTaskName provides a mock function with given fields: ctx, taskID
 func (_m *MockRepository) GetTaskName(ctx context.Context, taskID int32) (string, error) {
 	ret := _m.Called(ctx, taskID)
@@ -294,9 +499,9 @@ func (_c *MockRepository_GetTaskName_Call) RunAndReturn(run func(context.Context
 	return _c
 }
 
-// HasOverlap provides a mock function with given fields: ctx, planDate, startedAt, endedAt, excludeID
-func (_m *MockRepository) HasOverlap(ctx context.Context, planDate time.Time, startedAt time.Time, endedAt time.Time, excludeID *int32) (bool, error) {
-	ret := _m.Called(ctx, planDate, startedAt, endedAt, excludeID)
+// HasOverlap provides a mock function with given fields: ctx, startedAt, endedAt, excludeID
+func (_m *MockRepository) HasOverlap(ctx context.Context, startedAt time.Time, endedAt time.Time, excludeID *int32) (bool, error) {
+	ret := _m.Called(ctx, startedAt, endedAt, excludeID)
 
 	if len(ret) == 0 {
 		panic("no return value specified for HasOverlap")
@@ -304,17 +509,17 @@ func (_m *MockRepository) HasOverlap(ctx context.Context, planDate time.Time, st
 
 	var r0 bool
 	var r1 error
-	if rf, ok := ret.Get(0).(func(context.Context, time.Time, time.Time, time.Time, *int32) (bool, error)); ok {
-		return rf(ctx, planDate, startedAt, endedAt, excludeID)
+	if rf, ok := ret.Get(0).(func(context.Context, time.Time, time.Time, *int32) (bool, error)); ok {
+		return rf(ctx, startedAt, endedAt, excludeID)
 	}
-	if rf, ok := ret.Get(0).(func(context.Context, time.Time, time.Time, time.Time, *int32) bool); ok {
-		r0 = rf(ctx, planDate, startedAt, endedAt, excludeID)
+	if rf, ok := ret.Get(0).(func(context.Context, time.Time, time.Time, *int32) bool); ok {
+		r0 = rf(ctx, startedAt, endedAt, excludeID)
 	} else {
 		r0 = ret.Get(0).(bool)
 	}
 
-	if rf, ok := ret.Get(1).(func(context.Context, time.Time, time.Time, time.Time, *int32) error); ok {
-		r1 = rf(ctx, planDate, startedAt, endedAt, excludeID)
+	if rf, ok := ret.Get(1).(func(context.Context, time.Time, time.Time, *int32) error); ok {
+		r1 = rf(ctx, startedAt, endedAt, excludeID)
 	} else {
 		r1 = ret.Error(1)
 	}
@@ -329,17 +534,16 @@ type MockRepository_HasOverlap_Call struct {
 
 // HasOverlap is a helper method to define mock.On call
 //   - ctx context.Context
-//   - planDate time.Time
 //   - startedAt time.Time
 //   - endedAt time.Time
 //   - excludeID *int32
-func (_e *MockRepository_Expecter) HasOverlap(ctx interface{}, planDate interface{}, startedAt interface{}, endedAt interface{}, excludeID interface{}) *MockRepository_HasOverlap_Call {
-	return &MockRepository_HasOverlap_Call{Call: _e.mock.On("HasOverlap", ctx, planDate, startedAt, endedAt, excludeID)}
+func (_e *MockRepository_Expecter) HasOverlap(ctx interface{}, startedAt interface{}, endedAt interface{}, excludeID interface{}) *MockRepository_HasOverlap_Call {
+	return &MockRepository_HasOverlap_Call{Call: _e.mock.On("HasOverlap", ctx, startedAt, endedAt, excludeID)}
 }
 
-func (_c *MockRepository_HasOverlap_Call) Run(run func(ctx context.Context, planDate time.Time, startedAt time.Time, endedAt time.Time, excludeID *int32)) *MockRepository_HasOverlap_Call {
+func (_c *MockRepository_HasOverlap_Call) Run(run func(ctx context.Context, startedAt time.Time, endedAt time.Time, excludeID *int32)) *MockRepository_HasOverlap_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].(context.Context), args[1].(time.Time), args[2].(time.Time), args[3].(time.Time), args[4].(*int32))
+		run(args[0].(context.Context), args[1].(time.Time), args[2].(time.Time), args[3].(*int32))
 	})
 	return _c
 }
@@ -349,7 +553,113 @@ func (_c *MockRepository_HasOverlap_Call) Return(_a0 bool, _a1 error) *MockRepos
 	return _c
 }
 
-func (_c *MockRepository_HasOverlap_Call) RunAndReturn(run func(context.Context, time.Time, time.Time, time.Time, *int32) (bool, error)) *MockRepository_HasOverlap_Call {
+func (_c *MockRepository_HasOverlap_Call) RunAndReturn(run func(context.Context, time.Time, time.Time, *int32) (bool, error)) *MockRepository_HasOverlap_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// InsertCommitmentSkip provides a mock function with given fields: ctx, commitmentID, skipDate
+func (_m *MockRepository) InsertCommitmentSkip(ctx context.Context, commitmentID int32, skipDate time.Time) error {
+	ret := _m.Called(ctx, commitmentID, skipDate)
+
+	if len(ret) == 0 {
+		panic("no return value specified for InsertCommitmentSkip")
+	}
+
+	var r0 error
+	if rf, ok := ret.Get(0).(func(context.Context, int32, time.Time) error); ok {
+		r0 = rf(ctx, commitmentID, skipDate)
+	} else {
+		r0 = ret.Error(0)
+	}
+
+	return r0
+}
+
+// MockRepository_InsertCommitmentSkip_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'InsertCommitmentSkip'
+type MockRepository_InsertCommitmentSkip_Call struct {
+	*mock.Call
+}
+
+// InsertCommitmentSkip is a helper method to define mock.On call
+//   - ctx context.Context
+//   - commitmentID int32
+//   - skipDate time.Time
+func (_e *MockRepository_Expecter) InsertCommitmentSkip(ctx interface{}, commitmentID interface{}, skipDate interface{}) *MockRepository_InsertCommitmentSkip_Call {
+	return &MockRepository_InsertCommitmentSkip_Call{Call: _e.mock.On("InsertCommitmentSkip", ctx, commitmentID, skipDate)}
+}
+
+func (_c *MockRepository_InsertCommitmentSkip_Call) Run(run func(ctx context.Context, commitmentID int32, skipDate time.Time)) *MockRepository_InsertCommitmentSkip_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].(context.Context), args[1].(int32), args[2].(time.Time))
+	})
+	return _c
+}
+
+func (_c *MockRepository_InsertCommitmentSkip_Call) Return(_a0 error) *MockRepository_InsertCommitmentSkip_Call {
+	_c.Call.Return(_a0)
+	return _c
+}
+
+func (_c *MockRepository_InsertCommitmentSkip_Call) RunAndReturn(run func(context.Context, int32, time.Time) error) *MockRepository_InsertCommitmentSkip_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// ListActiveCommitments provides a mock function with given fields: ctx
+func (_m *MockRepository) ListActiveCommitments(ctx context.Context) ([]plan.RecurringCommitmentResponse, error) {
+	ret := _m.Called(ctx)
+
+	if len(ret) == 0 {
+		panic("no return value specified for ListActiveCommitments")
+	}
+
+	var r0 []plan.RecurringCommitmentResponse
+	var r1 error
+	if rf, ok := ret.Get(0).(func(context.Context) ([]plan.RecurringCommitmentResponse, error)); ok {
+		return rf(ctx)
+	}
+	if rf, ok := ret.Get(0).(func(context.Context) []plan.RecurringCommitmentResponse); ok {
+		r0 = rf(ctx)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).([]plan.RecurringCommitmentResponse)
+		}
+	}
+
+	if rf, ok := ret.Get(1).(func(context.Context) error); ok {
+		r1 = rf(ctx)
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
+}
+
+// MockRepository_ListActiveCommitments_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'ListActiveCommitments'
+type MockRepository_ListActiveCommitments_Call struct {
+	*mock.Call
+}
+
+// ListActiveCommitments is a helper method to define mock.On call
+//   - ctx context.Context
+func (_e *MockRepository_Expecter) ListActiveCommitments(ctx interface{}) *MockRepository_ListActiveCommitments_Call {
+	return &MockRepository_ListActiveCommitments_Call{Call: _e.mock.On("ListActiveCommitments", ctx)}
+}
+
+func (_c *MockRepository_ListActiveCommitments_Call) Run(run func(ctx context.Context)) *MockRepository_ListActiveCommitments_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].(context.Context))
+	})
+	return _c
+}
+
+func (_c *MockRepository_ListActiveCommitments_Call) Return(_a0 []plan.RecurringCommitmentResponse, _a1 error) *MockRepository_ListActiveCommitments_Call {
+	_c.Call.Return(_a0, _a1)
+	return _c
+}
+
+func (_c *MockRepository_ListActiveCommitments_Call) RunAndReturn(run func(context.Context) ([]plan.RecurringCommitmentResponse, error)) *MockRepository_ListActiveCommitments_Call {
 	_c.Call.Return(run)
 	return _c
 }
@@ -413,6 +723,367 @@ func (_c *MockRepository_ListByDate_Call) RunAndReturn(run func(context.Context,
 	return _c
 }
 
+// ListByDateRange provides a mock function with given fields: ctx, from, to
+func (_m *MockRepository) ListByDateRange(ctx context.Context, from time.Time, to time.Time) ([]plan.PlanBlockResponse, error) {
+	ret := _m.Called(ctx, from, to)
+
+	if len(ret) == 0 {
+		panic("no return value specified for ListByDateRange")
+	}
+
+	var r0 []plan.PlanBlockResponse
+	var r1 error
+	if rf, ok := ret.Get(0).(func(context.Context, time.Time, time.Time) ([]plan.PlanBlockResponse, error)); ok {
+		return rf(ctx, from, to)
+	}
+	if rf, ok := ret.Get(0).(func(context.Context, time.Time, time.Time) []plan.PlanBlockResponse); ok {
+		r0 = rf(ctx, from, to)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).([]plan.PlanBlockResponse)
+		}
+	}
+
+	if rf, ok := ret.Get(1).(func(context.Context, time.Time, time.Time) error); ok {
+		r1 = rf(ctx, from, to)
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
+}
+
+// MockRepository_ListByDateRange_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'ListByDateRange'
+type MockRepository_ListByDateRange_Call struct {
+	*mock.Call
+}
+
+// ListByDateRange is a helper method to define mock.On call
+//   - ctx context.Context
+//   - from time.Time
+//   - to time.Time
+func (_e *MockRepository_Expecter) ListByDateRange(ctx interface{}, from interface{}, to interface{}) *MockRepository_ListByDateRange_Call {
+	return &MockRepository_ListByDateRange_Call{Call: _e.mock.On("ListByDateRange", ctx, from, to)}
+}
+
+func (_c *MockRepository_ListByDateRange_Call) Run(run func(ctx context.Context, from time.Time, to time.Time)) *MockRepository_ListByDateRange_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].(context.Context), args[1].(time.Time), args[2].(time.Time))
+	})
+	return _c
+}
+
+func (_c *MockRepository_ListByDateRange_Call) Return(_a0 []plan.PlanBlockResponse, _a1 error) *MockRepository_ListByDateRange_Call {
+	_c.Call.Return(_a0, _a1)
+	return _c
+}
+
+func (_c *MockRepository_ListByDateRange_Call) RunAndReturn(run func(context.Context, time.Time, time.Time) ([]plan.PlanBlockResponse, error)) *MockRepository_ListByDateRange_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// ListCommitmentSkips provides a mock function with given fields: ctx, commitmentID, from, to
+func (_m *MockRepository) ListCommitmentSkips(ctx context.Context, commitmentID int32, from time.Time, to time.Time) (map[string]bool, error) {
+	ret := _m.Called(ctx, commitmentID, from, to)
+
+	if len(ret) == 0 {
+		panic("no return value specified for ListCommitmentSkips")
+	}
+
+	var r0 map[string]bool
+	var r1 error
+	if rf, ok := ret.Get(0).(func(context.Context, int32, time.Time, time.Time) (map[string]bool, error)); ok {
+		return rf(ctx, commitmentID, from, to)
+	}
+	if rf, ok := ret.Get(0).(func(context.Context, int32, time.Time, time.Time) map[string]bool); ok {
+		r0 = rf(ctx, commitmentID, from, to)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(map[string]bool)
+		}
+	}
+
+	if rf, ok := ret.Get(1).(func(context.Context, int32, time.Time, time.Time) error); ok {
+		r1 = rf(ctx, commitmentID, from, to)
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
+}
+
+// MockRepository_ListCommitmentSkips_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'ListCommitmentSkips'
+type MockRepository_ListCommitmentSkips_Call struct {
+	*mock.Call
+}
+
+// ListCommitmentSkips is a helper method to define mock.On call
+//   - ctx context.Context
+//   - commitmentID int32
+//   - from time.Time
+//   - to time.Time
+func (_e *MockRepository_Expecter) ListCommitmentSkips(ctx interface{}, commitmentID interface{}, from interface{}, to interface{}) *MockRepository_ListCommitmentSkips_Call {
+	return &MockRepository_ListCommitmentSkips_Call{Call: _e.mock.On("ListCommitmentSkips", ctx, commitmentID, from, to)}
+}
+
+func (_c *MockRepository_ListCommitmentSkips_Call) Run(run func(ctx context.Context, commitmentID int32, from time.Time, to time.Time)) *MockRepository_ListCommitmentSkips_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].(context.Context), args[1].(int32), args[2].(time.Time), args[3].(time.Time))
+	})
+	return _c
+}
+
+func (_c *MockRepository_ListCommitmentSkips_Call) Return(_a0 map[string]bool, _a1 error) *MockRepository_ListCommitmentSkips_Call {
+	_c.Call.Return(_a0, _a1)
+	return _c
+}
+
+func (_c *MockRepository_ListCommitmentSkips_Call) RunAndReturn(run func(context.Context, int32, time.Time, time.Time) (map[string]bool, error)) *MockRepository_ListCommitmentSkips_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// ListCommitments provides a mock function with given fields: ctx
+func (_m *MockRepository) ListCommitments(ctx context.Context) ([]plan.RecurringCommitmentResponse, error) {
+	ret := _m.Called(ctx)
+
+	if len(ret) == 0 {
+		panic("no return value specified for ListCommitments")
+	}
+
+	var r0 []plan.RecurringCommitmentResponse
+	var r1 error
+	if rf, ok := ret.Get(0).(func(context.Context) ([]plan.RecurringCommitmentResponse, error)); ok {
+		return rf(ctx)
+	}
+	if rf, ok := ret.Get(0).(func(context.Context) []plan.RecurringCommitmentResponse); ok {
+		r0 = rf(ctx)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).([]plan.RecurringCommitmentResponse)
+		}
+	}
+
+	if rf, ok := ret.Get(1).(func(context.Context) error); ok {
+		r1 = rf(ctx)
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
+}
+
+// MockRepository_ListCommitments_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'ListCommitments'
+type MockRepository_ListCommitments_Call struct {
+	*mock.Call
+}
+
+// ListCommitments is a helper method to define mock.On call
+//   - ctx context.Context
+func (_e *MockRepository_Expecter) ListCommitments(ctx interface{}) *MockRepository_ListCommitments_Call {
+	return &MockRepository_ListCommitments_Call{Call: _e.mock.On("ListCommitments", ctx)}
+}
+
+func (_c *MockRepository_ListCommitments_Call) Run(run func(ctx context.Context)) *MockRepository_ListCommitments_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].(context.Context))
+	})
+	return _c
+}
+
+func (_c *MockRepository_ListCommitments_Call) Return(_a0 []plan.RecurringCommitmentResponse, _a1 error) *MockRepository_ListCommitments_Call {
+	_c.Call.Return(_a0, _a1)
+	return _c
+}
+
+func (_c *MockRepository_ListCommitments_Call) RunAndReturn(run func(context.Context) ([]plan.RecurringCommitmentResponse, error)) *MockRepository_ListCommitments_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// ListPlanBlockDatesByCommitment provides a mock function with given fields: ctx, commitmentID, from, to
+func (_m *MockRepository) ListPlanBlockDatesByCommitment(ctx context.Context, commitmentID int32, from time.Time, to time.Time) (map[string]bool, error) {
+	ret := _m.Called(ctx, commitmentID, from, to)
+
+	if len(ret) == 0 {
+		panic("no return value specified for ListPlanBlockDatesByCommitment")
+	}
+
+	var r0 map[string]bool
+	var r1 error
+	if rf, ok := ret.Get(0).(func(context.Context, int32, time.Time, time.Time) (map[string]bool, error)); ok {
+		return rf(ctx, commitmentID, from, to)
+	}
+	if rf, ok := ret.Get(0).(func(context.Context, int32, time.Time, time.Time) map[string]bool); ok {
+		r0 = rf(ctx, commitmentID, from, to)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(map[string]bool)
+		}
+	}
+
+	if rf, ok := ret.Get(1).(func(context.Context, int32, time.Time, time.Time) error); ok {
+		r1 = rf(ctx, commitmentID, from, to)
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
+}
+
+// MockRepository_ListPlanBlockDatesByCommitment_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'ListPlanBlockDatesByCommitment'
+type MockRepository_ListPlanBlockDatesByCommitment_Call struct {
+	*mock.Call
+}
+
+// ListPlanBlockDatesByCommitment is a helper method to define mock.On call
+//   - ctx context.Context
+//   - commitmentID int32
+//   - from time.Time
+//   - to time.Time
+func (_e *MockRepository_Expecter) ListPlanBlockDatesByCommitment(ctx interface{}, commitmentID interface{}, from interface{}, to interface{}) *MockRepository_ListPlanBlockDatesByCommitment_Call {
+	return &MockRepository_ListPlanBlockDatesByCommitment_Call{Call: _e.mock.On("ListPlanBlockDatesByCommitment", ctx, commitmentID, from, to)}
+}
+
+func (_c *MockRepository_ListPlanBlockDatesByCommitment_Call) Run(run func(ctx context.Context, commitmentID int32, from time.Time, to time.Time)) *MockRepository_ListPlanBlockDatesByCommitment_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].(context.Context), args[1].(int32), args[2].(time.Time), args[3].(time.Time))
+	})
+	return _c
+}
+
+func (_c *MockRepository_ListPlanBlockDatesByCommitment_Call) Return(_a0 map[string]bool, _a1 error) *MockRepository_ListPlanBlockDatesByCommitment_Call {
+	_c.Call.Return(_a0, _a1)
+	return _c
+}
+
+func (_c *MockRepository_ListPlanBlockDatesByCommitment_Call) RunAndReturn(run func(context.Context, int32, time.Time, time.Time) (map[string]bool, error)) *MockRepository_ListPlanBlockDatesByCommitment_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// SumBusyHoursByDate provides a mock function with given fields: ctx, from, to, timezone
+func (_m *MockRepository) SumBusyHoursByDate(ctx context.Context, from time.Time, to time.Time, timezone string) (map[string]decimal.Decimal, error) {
+	ret := _m.Called(ctx, from, to, timezone)
+
+	if len(ret) == 0 {
+		panic("no return value specified for SumBusyHoursByDate")
+	}
+
+	var r0 map[string]decimal.Decimal
+	var r1 error
+	if rf, ok := ret.Get(0).(func(context.Context, time.Time, time.Time, string) (map[string]decimal.Decimal, error)); ok {
+		return rf(ctx, from, to, timezone)
+	}
+	if rf, ok := ret.Get(0).(func(context.Context, time.Time, time.Time, string) map[string]decimal.Decimal); ok {
+		r0 = rf(ctx, from, to, timezone)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(map[string]decimal.Decimal)
+		}
+	}
+
+	if rf, ok := ret.Get(1).(func(context.Context, time.Time, time.Time, string) error); ok {
+		r1 = rf(ctx, from, to, timezone)
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
+}
+
+// MockRepository_SumBusyHoursByDate_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'SumBusyHoursByDate'
+type MockRepository_SumBusyHoursByDate_Call struct {
+	*mock.Call
+}
+
+// SumBusyHoursByDate is a helper method to define mock.On call
+//   - ctx context.Context
+//   - from time.Time
+//   - to time.Time
+//   - timezone string
+func (_e *MockRepository_Expecter) SumBusyHoursByDate(ctx interface{}, from interface{}, to interface{}, timezone interface{}) *MockRepository_SumBusyHoursByDate_Call {
+	return &MockRepository_SumBusyHoursByDate_Call{Call: _e.mock.On("SumBusyHoursByDate", ctx, from, to, timezone)}
+}
+
+func (_c *MockRepository_SumBusyHoursByDate_Call) Run(run func(ctx context.Context, from time.Time, to time.Time, timezone string)) *MockRepository_SumBusyHoursByDate_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].(context.Context), args[1].(time.Time), args[2].(time.Time), args[3].(string))
+	})
+	return _c
+}
+
+func (_c *MockRepository_SumBusyHoursByDate_Call) Return(_a0 map[string]decimal.Decimal, _a1 error) *MockRepository_SumBusyHoursByDate_Call {
+	_c.Call.Return(_a0, _a1)
+	return _c
+}
+
+func (_c *MockRepository_SumBusyHoursByDate_Call) RunAndReturn(run func(context.Context, time.Time, time.Time, string) (map[string]decimal.Decimal, error)) *MockRepository_SumBusyHoursByDate_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// SumPlannedHoursByTask provides a mock function with given fields: ctx, taskIDs, from
+func (_m *MockRepository) SumPlannedHoursByTask(ctx context.Context, taskIDs []int32, from time.Time) (map[int32]decimal.Decimal, error) {
+	ret := _m.Called(ctx, taskIDs, from)
+
+	if len(ret) == 0 {
+		panic("no return value specified for SumPlannedHoursByTask")
+	}
+
+	var r0 map[int32]decimal.Decimal
+	var r1 error
+	if rf, ok := ret.Get(0).(func(context.Context, []int32, time.Time) (map[int32]decimal.Decimal, error)); ok {
+		return rf(ctx, taskIDs, from)
+	}
+	if rf, ok := ret.Get(0).(func(context.Context, []int32, time.Time) map[int32]decimal.Decimal); ok {
+		r0 = rf(ctx, taskIDs, from)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(map[int32]decimal.Decimal)
+		}
+	}
+
+	if rf, ok := ret.Get(1).(func(context.Context, []int32, time.Time) error); ok {
+		r1 = rf(ctx, taskIDs, from)
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
+}
+
+// MockRepository_SumPlannedHoursByTask_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'SumPlannedHoursByTask'
+type MockRepository_SumPlannedHoursByTask_Call struct {
+	*mock.Call
+}
+
+// SumPlannedHoursByTask is a helper method to define mock.On call
+//   - ctx context.Context
+//   - taskIDs []int32
+//   - from time.Time
+func (_e *MockRepository_Expecter) SumPlannedHoursByTask(ctx interface{}, taskIDs interface{}, from interface{}) *MockRepository_SumPlannedHoursByTask_Call {
+	return &MockRepository_SumPlannedHoursByTask_Call{Call: _e.mock.On("SumPlannedHoursByTask", ctx, taskIDs, from)}
+}
+
+func (_c *MockRepository_SumPlannedHoursByTask_Call) Run(run func(ctx context.Context, taskIDs []int32, from time.Time)) *MockRepository_SumPlannedHoursByTask_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].(context.Context), args[1].([]int32), args[2].(time.Time))
+	})
+	return _c
+}
+
+func (_c *MockRepository_SumPlannedHoursByTask_Call) Return(_a0 map[int32]decimal.Decimal, _a1 error) *MockRepository_SumPlannedHoursByTask_Call {
+	_c.Call.Return(_a0, _a1)
+	return _c
+}
+
+func (_c *MockRepository_SumPlannedHoursByTask_Call) RunAndReturn(run func(context.Context, []int32, time.Time) (map[int32]decimal.Decimal, error)) *MockRepository_SumPlannedHoursByTask_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // Update provides a mock function with given fields: ctx, req
 func (_m *MockRepository) Update(ctx context.Context, req plan.UpdatePlanBlockRequest) (plan.PlanBlockResponse, error) {
 	ret := _m.Called(ctx, req)
@@ -466,6 +1137,112 @@ func (_c *MockRepository_Update_Call) Return(_a0 plan.PlanBlockResponse, _a1 err
 }
 
 func (_c *MockRepository_Update_Call) RunAndReturn(run func(context.Context, plan.UpdatePlanBlockRequest) (plan.PlanBlockResponse, error)) *MockRepository_Update_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// UpdateCommitment provides a mock function with given fields: ctx, req
+func (_m *MockRepository) UpdateCommitment(ctx context.Context, req plan.UpdateCommitmentRequest) (plan.RecurringCommitmentResponse, error) {
+	ret := _m.Called(ctx, req)
+
+	if len(ret) == 0 {
+		panic("no return value specified for UpdateCommitment")
+	}
+
+	var r0 plan.RecurringCommitmentResponse
+	var r1 error
+	if rf, ok := ret.Get(0).(func(context.Context, plan.UpdateCommitmentRequest) (plan.RecurringCommitmentResponse, error)); ok {
+		return rf(ctx, req)
+	}
+	if rf, ok := ret.Get(0).(func(context.Context, plan.UpdateCommitmentRequest) plan.RecurringCommitmentResponse); ok {
+		r0 = rf(ctx, req)
+	} else {
+		r0 = ret.Get(0).(plan.RecurringCommitmentResponse)
+	}
+
+	if rf, ok := ret.Get(1).(func(context.Context, plan.UpdateCommitmentRequest) error); ok {
+		r1 = rf(ctx, req)
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
+}
+
+// MockRepository_UpdateCommitment_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'UpdateCommitment'
+type MockRepository_UpdateCommitment_Call struct {
+	*mock.Call
+}
+
+// UpdateCommitment is a helper method to define mock.On call
+//   - ctx context.Context
+//   - req plan.UpdateCommitmentRequest
+func (_e *MockRepository_Expecter) UpdateCommitment(ctx interface{}, req interface{}) *MockRepository_UpdateCommitment_Call {
+	return &MockRepository_UpdateCommitment_Call{Call: _e.mock.On("UpdateCommitment", ctx, req)}
+}
+
+func (_c *MockRepository_UpdateCommitment_Call) Run(run func(ctx context.Context, req plan.UpdateCommitmentRequest)) *MockRepository_UpdateCommitment_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].(context.Context), args[1].(plan.UpdateCommitmentRequest))
+	})
+	return _c
+}
+
+func (_c *MockRepository_UpdateCommitment_Call) Return(_a0 plan.RecurringCommitmentResponse, _a1 error) *MockRepository_UpdateCommitment_Call {
+	_c.Call.Return(_a0, _a1)
+	return _c
+}
+
+func (_c *MockRepository_UpdateCommitment_Call) RunAndReturn(run func(context.Context, plan.UpdateCommitmentRequest) (plan.RecurringCommitmentResponse, error)) *MockRepository_UpdateCommitment_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// UpdateTimes provides a mock function with given fields: ctx, id, startedAt, endedAt
+func (_m *MockRepository) UpdateTimes(ctx context.Context, id int32, startedAt time.Time, endedAt time.Time) error {
+	ret := _m.Called(ctx, id, startedAt, endedAt)
+
+	if len(ret) == 0 {
+		panic("no return value specified for UpdateTimes")
+	}
+
+	var r0 error
+	if rf, ok := ret.Get(0).(func(context.Context, int32, time.Time, time.Time) error); ok {
+		r0 = rf(ctx, id, startedAt, endedAt)
+	} else {
+		r0 = ret.Error(0)
+	}
+
+	return r0
+}
+
+// MockRepository_UpdateTimes_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'UpdateTimes'
+type MockRepository_UpdateTimes_Call struct {
+	*mock.Call
+}
+
+// UpdateTimes is a helper method to define mock.On call
+//   - ctx context.Context
+//   - id int32
+//   - startedAt time.Time
+//   - endedAt time.Time
+func (_e *MockRepository_Expecter) UpdateTimes(ctx interface{}, id interface{}, startedAt interface{}, endedAt interface{}) *MockRepository_UpdateTimes_Call {
+	return &MockRepository_UpdateTimes_Call{Call: _e.mock.On("UpdateTimes", ctx, id, startedAt, endedAt)}
+}
+
+func (_c *MockRepository_UpdateTimes_Call) Run(run func(ctx context.Context, id int32, startedAt time.Time, endedAt time.Time)) *MockRepository_UpdateTimes_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].(context.Context), args[1].(int32), args[2].(time.Time), args[3].(time.Time))
+	})
+	return _c
+}
+
+func (_c *MockRepository_UpdateTimes_Call) Return(_a0 error) *MockRepository_UpdateTimes_Call {
+	_c.Call.Return(_a0)
+	return _c
+}
+
+func (_c *MockRepository_UpdateTimes_Call) RunAndReturn(run func(context.Context, int32, time.Time, time.Time) error) *MockRepository_UpdateTimes_Call {
 	_c.Call.Return(run)
 	return _c
 }
