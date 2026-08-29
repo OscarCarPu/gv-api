@@ -9,6 +9,8 @@ import (
 	"gv-api/internal/tasks"
 	testutil "gv-api/internal/testutil"
 
+	"github.com/shopspring/decimal"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -22,7 +24,7 @@ func TestIntegration_ActiveTimeEntryUnique(t *testing.T) {
 	ctx := context.Background()
 	repo := NewRepo(t)
 
-	task, err := repo.CreateTask(ctx, nil, "t", nil, nil, "standard", nil, 4)
+	task, err := repo.CreateTask(ctx, nil, "t", nil, nil, "standard", nil, 4, nil)
 	require.NoError(t, err)
 
 	_, err = repo.CreateTimeEntry(ctx, task.ID, time.Now(), nil, nil)
@@ -43,7 +45,7 @@ func TestIntegration_FinishProjectTreeCascades(t *testing.T) {
 	leaf, err := repo.CreateProject(ctx, "leaf", nil, nil, &mid.ID)
 	require.NoError(t, err)
 
-	leafTask, err := repo.CreateTask(ctx, &leaf.ID, "t", nil, nil, "standard", nil, 4)
+	leafTask, err := repo.CreateTask(ctx, &leaf.ID, "t", nil, nil, "standard", nil, 4, nil)
 	require.NoError(t, err)
 
 	require.NoError(t, repo.FinishDescendantProjects(ctx, root.ID))
@@ -63,7 +65,7 @@ func TestIntegration_ReplaceTaskDependencies(t *testing.T) {
 	repo := NewRepo(t)
 
 	mk := func(name string) int32 {
-		task, err := repo.CreateTask(ctx, nil, name, nil, nil, "standard", nil, 4)
+		task, err := repo.CreateTask(ctx, nil, name, nil, nil, "standard", nil, 4, nil)
 		require.NoError(t, err)
 		return task.ID
 	}
@@ -99,7 +101,7 @@ func TestIntegration_CircularTaskDependenciesRejected(t *testing.T) {
 	repo := NewRepo(t)
 
 	mk := func(name string) int32 {
-		task, err := repo.CreateTask(ctx, nil, name, nil, nil, "standard", nil, 4)
+		task, err := repo.CreateTask(ctx, nil, name, nil, nil, "standard", nil, 4, nil)
 		require.NoError(t, err)
 		return task.ID
 	}
@@ -115,7 +117,7 @@ func TestIntegration_GetUnfinishedTasks_MinPriorityFilter(t *testing.T) {
 	repo := NewRepo(t)
 
 	mkP := func(name string, priority int32) int32 {
-		task, err := repo.CreateTask(ctx, nil, name, nil, nil, "standard", nil, priority)
+		task, err := repo.CreateTask(ctx, nil, name, nil, nil, "standard", nil, priority, nil)
 		require.NoError(t, err)
 		return task.ID
 	}
@@ -150,9 +152,9 @@ func TestIntegration_GetProjectChildren_BottomUpTimeAccumulation(t *testing.T) {
 	leaf, err := repo.CreateProject(ctx, "leaf", nil, nil, &mid.ID)
 	require.NoError(t, err)
 
-	rootTask, err := repo.CreateTask(ctx, &root.ID, "rootTask", nil, nil, "standard", nil, 4)
+	rootTask, err := repo.CreateTask(ctx, &root.ID, "rootTask", nil, nil, "standard", nil, 4, nil)
 	require.NoError(t, err)
-	leafTask, err := repo.CreateTask(ctx, &leaf.ID, "leafTask", nil, nil, "standard", nil, 4)
+	leafTask, err := repo.CreateTask(ctx, &leaf.ID, "leafTask", nil, nil, "standard", nil, 4, nil)
 	require.NoError(t, err)
 
 	now := time.Now().UTC().Truncate(time.Second)
@@ -185,13 +187,13 @@ func TestIntegration_GetProjectChildren_BlocksOrderBeforeBlocked(t *testing.T) {
 
 	// Create in alphabetical order so SQL would naturally sort a, b, c, d.
 	// Then wire deps so the topological order must be: c -> a, d -> b.
-	a, err := repo.CreateTask(ctx, &proj.ID, "a", nil, nil, "standard", nil, 4)
+	a, err := repo.CreateTask(ctx, &proj.ID, "a", nil, nil, "standard", nil, 4, nil)
 	require.NoError(t, err)
-	b, err := repo.CreateTask(ctx, &proj.ID, "b", nil, nil, "standard", nil, 4)
+	b, err := repo.CreateTask(ctx, &proj.ID, "b", nil, nil, "standard", nil, 4, nil)
 	require.NoError(t, err)
-	c, err := repo.CreateTask(ctx, &proj.ID, "c", nil, nil, "standard", nil, 4)
+	c, err := repo.CreateTask(ctx, &proj.ID, "c", nil, nil, "standard", nil, 4, nil)
 	require.NoError(t, err)
-	d, err := repo.CreateTask(ctx, &proj.ID, "d", nil, nil, "standard", nil, 4)
+	d, err := repo.CreateTask(ctx, &proj.ID, "d", nil, nil, "standard", nil, 4, nil)
 	require.NoError(t, err)
 
 	// a depends on c (c blocks a) and b depends on d (d blocks b).
@@ -215,7 +217,7 @@ func TestIntegration_GetProjectChildren_TodosAggregated(t *testing.T) {
 
 	proj, err := repo.CreateProject(ctx, "p", nil, nil, nil)
 	require.NoError(t, err)
-	task, err := repo.CreateTask(ctx, &proj.ID, "t", nil, nil, "standard", nil, 4)
+	task, err := repo.CreateTask(ctx, &proj.ID, "t", nil, nil, "standard", nil, 4, nil)
 	require.NoError(t, err)
 	_, err = repo.CreateTodo(ctx, task.ID, "first")
 	require.NoError(t, err)
@@ -234,7 +236,7 @@ func TestIntegration_GetUnfinishedTasks_HiddenAndBlocked(t *testing.T) {
 	repo := NewRepo(t)
 
 	mk := func(name string) int32 {
-		task, err := repo.CreateTask(ctx, nil, name, nil, nil, "standard", nil, 4)
+		task, err := repo.CreateTask(ctx, nil, name, nil, nil, "standard", nil, 4, nil)
 		require.NoError(t, err)
 		return task.ID
 	}
@@ -265,9 +267,9 @@ func TestIntegration_GetUnfinishedTasks_EffectiveDueAtPropagatesBackward(t *test
 	earlyDue := time.Date(2026, 6, 15, 0, 0, 0, 0, time.UTC)
 	lateDue := time.Date(2026, 12, 31, 0, 0, 0, 0, time.UTC)
 
-	a, err := repo.CreateTask(ctx, nil, "a", nil, &lateDue, "standard", nil, 4)
+	a, err := repo.CreateTask(ctx, nil, "a", nil, &lateDue, "standard", nil, 4, nil)
 	require.NoError(t, err)
-	b, err := repo.CreateTask(ctx, nil, "b", nil, &earlyDue, "standard", nil, 4)
+	b, err := repo.CreateTask(ctx, nil, "b", nil, &earlyDue, "standard", nil, 4, nil)
 	require.NoError(t, err)
 	require.NoError(t, repo.ReplaceTaskDependencies(ctx, b.ID, []int32{a.ID}))
 
@@ -292,15 +294,15 @@ func TestIntegration_GetTasksByDueDate_HiddenFilteredAndOrderedByEffective(t *te
 	earlyDue := time.Date(2026, 6, 15, 0, 0, 0, 0, time.UTC)
 	lateDue := time.Date(2026, 12, 31, 0, 0, 0, 0, time.UTC)
 
-	a, err := repo.CreateTask(ctx, nil, "a", nil, &lateDue, "standard", nil, 4)
+	a, err := repo.CreateTask(ctx, nil, "a", nil, &lateDue, "standard", nil, 4, nil)
 	require.NoError(t, err)
-	b, err := repo.CreateTask(ctx, nil, "b", nil, &earlyDue, "standard", nil, 4)
+	b, err := repo.CreateTask(ctx, nil, "b", nil, &earlyDue, "standard", nil, 4, nil)
 	require.NoError(t, err)
 	require.NoError(t, repo.ReplaceTaskDependencies(ctx, b.ID, []int32{a.ID}))
 
-	c, err := repo.CreateTask(ctx, nil, "c", nil, &lateDue, "standard", nil, 4)
+	c, err := repo.CreateTask(ctx, nil, "c", nil, &lateDue, "standard", nil, 4, nil)
 	require.NoError(t, err)
-	d, err := repo.CreateTask(ctx, nil, "d", nil, nil, "standard", nil, 4)
+	d, err := repo.CreateTask(ctx, nil, "d", nil, nil, "standard", nil, 4, nil)
 	require.NoError(t, err)
 	require.NoError(t, repo.ReplaceTaskDependencies(ctx, d.ID, []int32{c.ID}))
 
@@ -341,12 +343,12 @@ func TestIntegration_GetTasksByDueDate_OverdueShownDespiteMultiLevelBlock(t *tes
 	// a is unblocked; b is blocked at one level (visible); c is hidden by multi-level
 	// blocking (its only dep b is itself blocked).
 	mkChain := func(prefix string, cDue *time.Time) int32 {
-		a, err := repo.CreateTask(ctx, nil, prefix+"-a", nil, &future, "standard", nil, 4)
+		a, err := repo.CreateTask(ctx, nil, prefix+"-a", nil, &future, "standard", nil, 4, nil)
 		require.NoError(t, err)
-		b, err := repo.CreateTask(ctx, nil, prefix+"-b", nil, &future, "standard", nil, 4)
+		b, err := repo.CreateTask(ctx, nil, prefix+"-b", nil, &future, "standard", nil, 4, nil)
 		require.NoError(t, err)
 		require.NoError(t, repo.ReplaceTaskDependencies(ctx, b.ID, []int32{a.ID}))
-		c, err := repo.CreateTask(ctx, nil, prefix+"-c", nil, cDue, "standard", nil, 4)
+		c, err := repo.CreateTask(ctx, nil, prefix+"-c", nil, cDue, "standard", nil, 4, nil)
 		require.NoError(t, err)
 		require.NoError(t, repo.ReplaceTaskDependencies(ctx, c.ID, []int32{b.ID}))
 		return c.ID
@@ -383,7 +385,7 @@ func TestIntegration_GetTasksByDueDate_MinPriorityFilter(t *testing.T) {
 
 	due := time.Now().Add(24 * time.Hour)
 	mkP := func(name string, priority int32) int32 {
-		task, err := repo.CreateTask(ctx, nil, name, nil, &due, "standard", nil, priority)
+		task, err := repo.CreateTask(ctx, nil, name, nil, &due, "standard", nil, priority, nil)
 		require.NoError(t, err)
 		return task.ID
 	}
@@ -400,4 +402,22 @@ func TestIntegration_GetTasksByDueDate_MinPriorityFilter(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, filtered, 1)
 	require.Equal(t, "urgent", filtered[0].Name)
+}
+
+func TestIntegration_GetTasksByDueDate_ReturnsEstimateHours(t *testing.T) {
+	ctx := context.Background()
+	repo := NewRepo(t)
+
+	due := time.Now().Add(24 * time.Hour)
+	estimate := decimal.NewFromFloat(3.5)
+	task, err := repo.CreateTask(ctx, nil, "estimated", nil, &due, "standard", nil, 3, &estimate)
+	require.NoError(t, err)
+	require.NotNil(t, task.EstimateHours)
+	require.True(t, task.EstimateHours.Equal(estimate))
+
+	rows, err := repo.GetTasksByDueDate(ctx, nil)
+	require.NoError(t, err)
+	require.Len(t, rows, 1)
+	require.NotNil(t, rows[0].EstimateHours)
+	assert.True(t, rows[0].EstimateHours.Equal(estimate))
 }

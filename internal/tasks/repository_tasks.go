@@ -10,36 +10,39 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/shopspring/decimal"
 )
 
-func (r *PostgresRepository) CreateTask(ctx context.Context, projectID *int32, name string, description *string, dueAt *time.Time, taskType string, recurrence *int32, priority int32) (TaskResponse, error) {
+func (r *PostgresRepository) CreateTask(ctx context.Context, projectID *int32, name string, description *string, dueAt *time.Time, taskType string, recurrence *int32, priority int32, estimateHours *decimal.Decimal) (TaskResponse, error) {
 	var pgDueAt pgtype.Date
 	if dueAt != nil {
 		pgDueAt = pgtype.Date{Time: *dueAt, Valid: true}
 	}
 
 	row, err := r.q.CreateTask(ctx, gvdb.CreateTaskParams{
-		ProjectID:   projectID,
-		Name:        name,
-		Description: description,
-		DueAt:       pgDueAt,
-		TaskType:    taskType,
-		Recurrence:  recurrence,
-		Priority:    priority,
+		ProjectID:     projectID,
+		Name:          name,
+		Description:   description,
+		DueAt:         pgDueAt,
+		TaskType:      taskType,
+		Recurrence:    recurrence,
+		Priority:      priority,
+		EstimateHours: estimateHours,
 	})
 	if err != nil {
 		return TaskResponse{}, err
 	}
 
 	return TaskResponse{
-		ID:          row.ID,
-		ProjectID:   row.ProjectID,
-		Name:        row.Name,
-		Description: row.Description,
-		DueAt:       pgconv.DatePtr(row.DueAt),
-		TaskType:    row.TaskType,
-		Recurrence:  row.Recurrence,
-		Priority:    row.Priority,
+		ID:            row.ID,
+		ProjectID:     row.ProjectID,
+		Name:          row.Name,
+		Description:   row.Description,
+		DueAt:         pgconv.DatePtr(row.DueAt),
+		TaskType:      row.TaskType,
+		Recurrence:    row.Recurrence,
+		Priority:      row.Priority,
+		EstimateHours: row.EstimateHours,
 	}, nil
 }
 
@@ -96,6 +99,14 @@ func (r *PostgresRepository) UpdateTask(ctx context.Context, req UpdateTaskReque
 		params.SetPriority = true
 		params.Priority = *req.Priority
 	}
+	if req.EstimateHours.Set {
+		if req.EstimateHours.Value == nil {
+			params.ClearEstimateHours = true
+		} else {
+			params.SetEstimateHours = true
+			params.EstimateHours = *req.EstimateHours.Value
+		}
+	}
 
 	row, err := r.q.UpdateTask(ctx, params)
 	if err != nil {
@@ -106,16 +117,17 @@ func (r *PostgresRepository) UpdateTask(ctx context.Context, req UpdateTaskReque
 	}
 
 	return TaskResponse{
-		ID:          row.ID,
-		ProjectID:   row.ProjectID,
-		Name:        row.Name,
-		Description: row.Description,
-		DueAt:       pgconv.DatePtr(row.DueAt),
-		StartedAt:   pgconv.TimePtr(row.StartedAt),
-		FinishedAt:  pgconv.TimePtr(row.FinishedAt),
-		TaskType:    row.TaskType,
-		Recurrence:  row.Recurrence,
-		Priority:    row.Priority,
+		ID:            row.ID,
+		ProjectID:     row.ProjectID,
+		Name:          row.Name,
+		Description:   row.Description,
+		DueAt:         pgconv.DatePtr(row.DueAt),
+		StartedAt:     pgconv.TimePtr(row.StartedAt),
+		FinishedAt:    pgconv.TimePtr(row.FinishedAt),
+		TaskType:      row.TaskType,
+		Recurrence:    row.Recurrence,
+		Priority:      row.Priority,
+		EstimateHours: row.EstimateHours,
 	}, nil
 }
 
@@ -172,22 +184,23 @@ func (r *PostgresRepository) GetTask(ctx context.Context, id int32) (TaskFullRes
 		return TaskFullResponse{}, err
 	}
 	return TaskFullResponse{
-		ID:          row.ID,
-		ProjectID:   row.ProjectID,
-		ProjectName: row.ProjectName,
-		Name:        row.Name,
-		Description: row.Description,
-		DueAt:       pgconv.DatePtr(row.DueAt),
-		StartedAt:   pgconv.TimePtr(row.StartedAt),
-		FinishedAt:  pgconv.TimePtr(row.FinishedAt),
-		TaskType:    row.TaskType,
-		Recurrence:  row.Recurrence,
-		Priority:    row.Priority,
-		TimeSpent:   row.TimeSpent,
-		DependsOn:   dependsOn,
-		Blocks:      blocks,
-		Blocked:     row.Blocked,
-		Todos:       unmarshalTodos(row.Todos, row.ID),
+		ID:            row.ID,
+		ProjectID:     row.ProjectID,
+		ProjectName:   row.ProjectName,
+		Name:          row.Name,
+		Description:   row.Description,
+		DueAt:         pgconv.DatePtr(row.DueAt),
+		StartedAt:     pgconv.TimePtr(row.StartedAt),
+		FinishedAt:    pgconv.TimePtr(row.FinishedAt),
+		TaskType:      row.TaskType,
+		Recurrence:    row.Recurrence,
+		Priority:      row.Priority,
+		EstimateHours: row.EstimateHours,
+		TimeSpent:     row.TimeSpent,
+		DependsOn:     dependsOn,
+		Blocks:        blocks,
+		Blocked:       row.Blocked,
+		Todos:         unmarshalTodos(row.Todos, row.ID),
 	}, nil
 }
 
@@ -208,21 +221,22 @@ func (r *PostgresRepository) GetTasksByDueDate(ctx context.Context, minPriority 
 			return nil, err
 		}
 		tasks[i] = TaskByDueDateResponse{
-			ID:           row.ID,
-			Name:         row.Name,
-			Description:  row.Description,
-			DueAt:        pgconv.AnyDatePtr(row.DueAt),
-			StartedAt:    pgconv.TimePtr(row.StartedAt),
-			TaskType:     row.TaskType,
-			Recurrence:   row.Recurrence,
-			Priority:     row.Priority,
-			TimeSpent:    row.TimeSpent,
-			ProjectID:    row.ProjectID,
-			ProjectName:  row.ProjectName,
-			ProjectDueAt: pgconv.DatePtr(row.ProjectDueAt),
-			DependsOn:    dependsOn,
-			Blocks:       blocks,
-			Blocked:      row.Blocked,
+			ID:            row.ID,
+			Name:          row.Name,
+			Description:   row.Description,
+			DueAt:         pgconv.AnyDatePtr(row.DueAt),
+			StartedAt:     pgconv.TimePtr(row.StartedAt),
+			TaskType:      row.TaskType,
+			Recurrence:    row.Recurrence,
+			Priority:      row.Priority,
+			TimeSpent:     row.TimeSpent,
+			EstimateHours: row.EstimateHours,
+			ProjectID:     row.ProjectID,
+			ProjectName:   row.ProjectName,
+			ProjectDueAt:  pgconv.DatePtr(row.ProjectDueAt),
+			DependsOn:     dependsOn,
+			Blocks:        blocks,
+			Blocked:       row.Blocked,
 		}
 	}
 	return tasks, nil

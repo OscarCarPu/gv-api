@@ -14,6 +14,7 @@ import (
 	"gv-api/internal/auth"
 	"gv-api/internal/calendar"
 	calendargoogle "gv-api/internal/calendar/google"
+	"gv-api/internal/capacity"
 	"gv-api/internal/config"
 	"gv-api/internal/database"
 	"gv-api/internal/finance"
@@ -29,6 +30,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	chimiddleware "github.com/go-chi/chi/v5/middleware"
 	"github.com/go-chi/cors"
+	"github.com/shopspring/decimal"
 )
 
 func main() {
@@ -118,12 +120,21 @@ func main() {
 		Debounce:         cfg.CalendarDebounce,
 		StateSecret:      []byte(cfg.JwtSecret),
 		TokenKey:         cfg.GoogleTokenKey,
-	}, loc)
+	}, loc, planService)
 	if err != nil {
 		slog.Error("failed to set up calendar", "error", err)
 		os.Exit(1)
 	}
 	calendarHandler := calendar.NewHandler(calendarService)
+
+	// Capacity Setup
+	// Depends on plan (for busy hours) and feeds back into tasks (for Due Soon urgency) — that
+	// second edge is wired with a setter, not a constructor arg, because tasks.Service and
+	// plan.Service already depend on each other the other way (plan needs tasks for the time
+	// budget summary).
+	capacityService := capacity.NewService(decimal.NewFromFloat(cfg.DailyCapacityHours), planService)
+	capacityHandler := capacity.NewHandler(capacityService)
+	taskService.SetUrgencyProviders(capacityService, planService)
 
 	// Pipeline Setup
 	// central-pipeline's database: another project's PostgreSQL, on its own DSN, read-only
@@ -186,6 +197,7 @@ func main() {
 		financeHandler.RegisterRoutes(r)
 		rutasHandler.RegisterRoutes(r)
 		calendarHandler.RegisterRoutes(r)
+		capacityHandler.RegisterRoutes(r)
 	})
 
 	server := &http.Server{

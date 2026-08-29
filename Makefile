@@ -22,7 +22,7 @@ sqlc:
 	sqlc generate
 
 generate-mocks:
-	@mockery
+	@GOTOOLCHAIN=go$$(grep -m1 '^go ' go.mod | awk '{print $$2}') mockery
 
 # --- RUN & CHECK ---
 
@@ -99,7 +99,7 @@ test-api-setup:
 test-silent: test-api-setup
 	@printf "$(CYAN)>>> Running all tests...$(NC)\n"
 	@go test -short ./internal/... > /dev/null 2>&1 || { printf "$(RED)>>> Unit tests failed$(NC)\n"; $(MAKE) test-db-cleanup --no-print-directory; exit 1; }
-	@TEST_DB_URL=$(OUTSIDE_TEST_DB_URL) go test -run Integration ./internal/... > /dev/null 2>&1 || { printf "$(RED)>>> Integration tests failed$(NC)\n"; $(MAKE) test-db-cleanup --no-print-directory; exit 1; }
+	@TEST_DB_URL=$(OUTSIDE_TEST_DB_URL) go test -p 1 -run Integration ./internal/... > /dev/null 2>&1 || { printf "$(RED)>>> Integration tests failed$(NC)\n"; $(MAKE) test-db-cleanup --no-print-directory; exit 1; }
 	@TEST_DB_URL=$(OUTSIDE_TEST_DB_URL) PORT=$(PORT) PASSWORD=$(PASSWORD) TOTP_SECRET=$(TOTP_SECRET) go test ./test/e2e/... > /dev/null 2>&1 || { printf "$(RED)>>> E2E tests failed$(NC)\n"; $(MAKE) test-db-cleanup --no-print-directory; exit 1; }
 	@$(MAKE) test-db-cleanup --no-print-directory
 	@printf "$(GREEN)>>> All tests passed$(NC)\n"
@@ -112,7 +112,7 @@ test-unit:
 # Integration tests: require a running database
 test-integration: test-api-setup
 	@printf "$(CYAN)>>> Running integration tests...$(NC)\n"
-	@TEST_DB_URL=$(OUTSIDE_TEST_DB_URL) go test -v -run Integration ./internal/...
+	@TEST_DB_URL=$(OUTSIDE_TEST_DB_URL) go test -p 1 -v -run Integration ./internal/...
 	@$(MAKE) test-db-cleanup --no-print-directory
 
 # E2E tests: require full stack (API + database)
