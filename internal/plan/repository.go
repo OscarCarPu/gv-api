@@ -36,6 +36,10 @@ type Repository interface {
 	GetTaskName(ctx context.Context, taskID int32) (string, error)
 	HasOverlap(ctx context.Context, startedAt, endedAt time.Time, excludeID *int32) (bool, error)
 	Create(ctx context.Context, params CreatePlanBlockParams) (PlanBlockResponse, error)
+	// CreateGenerated inserts a commitment-generated block. created is false, with no error,
+	// when a concurrent request already generated the same (commitment_id, plan_date) occurrence
+	// — see plan_blocks_commitment_date_uidx.
+	CreateGenerated(ctx context.Context, params CreatePlanBlockParams) (created bool, err error)
 	Update(ctx context.Context, req UpdatePlanBlockRequest) (PlanBlockResponse, error)
 	UpdateTimes(ctx context.Context, id int32, startedAt, endedAt time.Time) error
 	ClearEventRef(ctx context.Context, id int32) error
@@ -199,6 +203,24 @@ func (r *PostgresRepository) Create(ctx context.Context, params CreatePlanBlockP
 	// Refetch via Get so the response carries the joined task_* fields, matching
 	// the shape of ListByDate.
 	return r.Get(ctx, row.ID)
+}
+
+func (r *PostgresRepository) CreateGenerated(ctx context.Context, params CreatePlanBlockParams) (bool, error) {
+	_, err := r.q.CreateGeneratedPlanBlock(ctx, gvdb.CreateGeneratedPlanBlockParams{
+		PlanDate:     params.PlanDate,
+		StartedAt:    pgtype.Timestamptz{Time: params.StartedAt, Valid: true},
+		EndedAt:      pgtype.Timestamptz{Time: params.EndedAt, Valid: true},
+		TaskID:       params.TaskID,
+		Label:        params.Label,
+		CommitmentID: params.CommitmentID,
+	})
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return false, nil
+		}
+		return false, err
+	}
+	return true, nil
 }
 
 func (r *PostgresRepository) Update(ctx context.Context, req UpdatePlanBlockRequest) (PlanBlockResponse, error) {

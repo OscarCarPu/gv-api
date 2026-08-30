@@ -313,11 +313,10 @@ func (s *Service) normalizedDue(t TaskByDueDateResponse) *time.Time {
 	return &norm
 }
 
-// applyUrgency fills RemainingHours/StartBy/Urgent on standard tasks that carry an estimate.
-// Recurring and continuous tasks are skipped: a recurring task's time_spent accumulates across
-// every past cycle (renewing only reschedules due_at, it never resets anything), so it would
-// read as permanently covered after a couple of renewals; a continuous task has no real
-// deadline to count back from.
+// applyUrgency fills RemainingHours/StartBy/Urgent on standard and recurring tasks that carry an
+// estimate. Continuous tasks are skipped: they have no real deadline to count back from.
+// Recurring tasks are included, but never have spentHours subtracted from their estimate — see
+// the note at that line for why.
 func (s *Service) applyUrgency(ctx context.Context, rows []TaskByDueDateResponse) error {
 	if s.capacity == nil || s.plan == nil {
 		return nil
@@ -330,7 +329,7 @@ func (s *Service) applyUrgency(ctx context.Context, rows []TaskByDueDateResponse
 	estimatedIdx := make([]int, 0, len(rows))
 	estimatedIDs := make([]int32, 0, len(rows))
 	for i, t := range rows {
-		if t.TaskType != "standard" || t.EstimateHours == nil {
+		if (t.TaskType != "standard" && t.TaskType != "recurring") || t.EstimateHours == nil {
 			continue
 		}
 		due := s.normalizedDue(t)
@@ -379,7 +378,14 @@ func (s *Service) applyUrgency(ctx context.Context, rows []TaskByDueDateResponse
 		t := &rows[i]
 		due := s.normalizedDue(*t)
 
-		spentHours := decimal.NewFromInt(t.TimeSpent).Div(decimal.NewFromInt(3600))
+		// A recurring task's time_spent accumulates across every past cycle — renewing only
+		// reschedules due_at, it never resets time_spent — so subtracting it here would read
+		// as permanently over-estimate after a couple of renewals. estimate_hours is a
+		// per-cycle target, not a lifetime one, for this task type.
+		spentHours := decimal.Zero
+		if t.TaskType != "recurring" {
+			spentHours = decimal.NewFromInt(t.TimeSpent).Div(decimal.NewFromInt(3600))
+		}
 		remaining := t.EstimateHours.Sub(spentHours).Sub(plannedByTask[t.ID])
 		if remaining.IsNegative() {
 			remaining = decimal.Zero

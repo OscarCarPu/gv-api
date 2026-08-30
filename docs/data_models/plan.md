@@ -14,7 +14,7 @@
 | label      | TEXT        | NOT NULL, length 1–200                               |
 | note       | TEXT        | nullable                                             |
 | event_ref  | TEXT        | nullable, unique (partial, WHERE NOT NULL)           |
-| commitment_id | INTEGER  | nullable, FK -> recurring_commitments.id ON DELETE SET NULL |
+| commitment_id | INTEGER  | nullable, FK -> recurring_commitments.id ON DELETE SET NULL, unique with plan_date (partial, WHERE NOT NULL) |
 | created_at | TIMESTAMPTZ | NOT NULL, DEFAULT now()                              |
 | updated_at | TIMESTAMPTZ | NOT NULL, DEFAULT now() (touched by trigger)         |
 
@@ -66,7 +66,7 @@ recurring_commitments (1) --< (many) recurring_commitment_skips  [ON DELETE CASC
 - A block with `task_id` set is a linked block; the UI uses the join with `tasks` to surface task state (`task_type`, `recurrence`, `started_at`, `finished_at`) for inline action buttons.
 - `ON DELETE SET NULL` on the FK means deleting the linked task converts the block into a free-time block with the original `label` intact — the day's plan is never wiped by an unrelated task delete.
 - `event_ref` links a plan_block to a calendar event (`instance_id` — see [data_models/calendar.md](calendar.md)). Purely a local reference: no FK to any calendar table, since a recurring event occurrence may never have a row of its own there.
-- `commitment_id` marks a plan_block as generated from a `recurring_commitments` row. `ON DELETE SET NULL` means deleting the commitment leaves already-generated blocks in place as ordinary manual blocks.
+- `commitment_id` marks a plan_block as generated from a `recurring_commitments` row. `ON DELETE SET NULL` means deleting the commitment leaves already-generated blocks in place as ordinary manual blocks. The partial unique index on `(commitment_id, plan_date)` guards against generating the same occurrence twice when two range reads race — see [business_logic/plan.md](plan.md).
 - Plan blocks never write to `tasks` or `time_entries`. Reads only.
 
 ## Notes

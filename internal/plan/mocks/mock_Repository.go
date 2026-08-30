@@ -187,6 +187,63 @@ func (_c *MockRepository_CreateCommitment_Call) RunAndReturn(run func(context.Co
 	return _c
 }
 
+// CreateGenerated provides a mock function with given fields: ctx, params
+func (_m *MockRepository) CreateGenerated(ctx context.Context, params plan.CreatePlanBlockParams) (bool, error) {
+	ret := _m.Called(ctx, params)
+
+	if len(ret) == 0 {
+		panic("no return value specified for CreateGenerated")
+	}
+
+	var r0 bool
+	var r1 error
+	if rf, ok := ret.Get(0).(func(context.Context, plan.CreatePlanBlockParams) (bool, error)); ok {
+		return rf(ctx, params)
+	}
+	if rf, ok := ret.Get(0).(func(context.Context, plan.CreatePlanBlockParams) bool); ok {
+		r0 = rf(ctx, params)
+	} else {
+		r0 = ret.Get(0).(bool)
+	}
+
+	if rf, ok := ret.Get(1).(func(context.Context, plan.CreatePlanBlockParams) error); ok {
+		r1 = rf(ctx, params)
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
+}
+
+// MockRepository_CreateGenerated_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'CreateGenerated'
+type MockRepository_CreateGenerated_Call struct {
+	*mock.Call
+}
+
+// CreateGenerated is a helper method to define mock.On call
+//   - ctx context.Context
+//   - params plan.CreatePlanBlockParams
+func (_e *MockRepository_Expecter) CreateGenerated(ctx interface{}, params interface{}) *MockRepository_CreateGenerated_Call {
+	return &MockRepository_CreateGenerated_Call{Call: _e.mock.On("CreateGenerated", ctx, params)}
+}
+
+func (_c *MockRepository_CreateGenerated_Call) Run(run func(ctx context.Context, params plan.CreatePlanBlockParams)) *MockRepository_CreateGenerated_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].(context.Context), args[1].(plan.CreatePlanBlockParams))
+	})
+	return _c
+}
+
+func (_c *MockRepository_CreateGenerated_Call) Return(created bool, err error) *MockRepository_CreateGenerated_Call {
+	_c.Call.Return(created, err)
+	return _c
+}
+
+func (_c *MockRepository_CreateGenerated_Call) RunAndReturn(run func(context.Context, plan.CreatePlanBlockParams) (bool, error)) *MockRepository_CreateGenerated_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // Delete provides a mock function with given fields: ctx, id
 func (_m *MockRepository) Delete(ctx context.Context, id int32) error {
 	ret := _m.Called(ctx, id)
