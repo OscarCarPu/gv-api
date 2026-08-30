@@ -240,7 +240,7 @@ See [README](README.md) for shared `task_type` / `recurrence` / `priority` seman
       }
     ]
     ```
-  - `estimate_hours`, `remaining_hours`, `start_by`: all `null` when the task has no estimate, or is `recurring`/`continuous` (only `standard` tasks compute urgency).
+  - `estimate_hours`, `remaining_hours`, `start_by`: all `null` when the task has no estimate, or is `continuous` (`standard` and `recurring` tasks compute urgency; for `recurring`, `remaining_hours` ignores the task's lifetime `time_spent` — see [business_logic/tasks.md](../../business_logic/tasks.md)).
   - `urgent`: `true` when there is not enough free capacity left between today and the effective due date to cover `remaining_hours` — the task should already have been started.
 - **Error Responses:**
   - **Code:** `500 Internal Server Error`

@@ -728,6 +728,54 @@ func decPtr(s string) *decimal.Decimal {
 	return &d
 }
 
+// A recurring task's time_spent accumulates across every past cycle (renewing only reschedules
+// due_at). estimate_hours is a per-cycle target, so a task with a tiny estimate and a huge
+// lifetime time_spent must not read as permanently "done" — the estimate should stay the
+// remaining requirement every cycle, ignoring history.
+func TestService_GetTasksByDueDate_RecurringUrgencyIgnoresLifetimeTimeSpent(t *testing.T) {
+	loc, err := time.LoadLocation("Europe/Madrid")
+	require.NoError(t, err)
+
+	now := time.Now().In(loc)
+	today := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, loc)
+	dueIn3Days := time.Date(today.Year(), today.Month(), today.Day()+3, 0, 0, 0, 0, time.UTC)
+
+	days := make([]capacity.DayFreeBusy, 0, 3)
+	for i := 0; i < 3; i++ {
+		d := today.AddDate(0, 0, i)
+		days = append(days, capacity.DayFreeBusy{Date: d.Format("2006-01-02"), FreeHours: decimal.RequireFromString("4")})
+	}
+
+	repo := mocks.NewMockRepository(t)
+	repo.EXPECT().
+		GetTasksByDueDate(mock.Anything, (*int32)(nil)).
+		Return([]tasks.TaskByDueDateResponse{
+			{
+				ID:            1,
+				Priority:      3,
+				TaskType:      "recurring",
+				Recurrence:    ptr(int32(10)),
+				DueAt:         &dueIn3Days,
+				EstimateHours: decPtr("1.5"),
+				TimeSpent:     30 * 3600, // 30h accumulated across past cycles
+			},
+		}, nil)
+
+	svc := tasks.NewService(repo, loc)
+	svc.SetUrgencyProviders(
+		stubCapacityProvider{days: days},
+		stubPlannedHoursProvider{},
+	)
+
+	got, err := svc.GetTasksByDueDate(context.Background(), nil)
+	require.NoError(t, err)
+	require.Len(t, got, 1)
+
+	require.NotNil(t, got[0].RemainingHours)
+	assert.Truef(t, got[0].RemainingHours.Equal(decimal.RequireFromString("1.5")),
+		"remaining_hours should be the per-cycle estimate untouched by lifetime time_spent, got %v", got[0].RemainingHours)
+}
+
 func TestService_GetTimeEntrySummary(t *testing.T) {
 	loc := time.UTC
 	now := time.Now().In(loc)
