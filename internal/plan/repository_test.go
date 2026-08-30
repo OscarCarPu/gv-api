@@ -2,6 +2,7 @@ package plan_test
 
 import (
 	"context"
+	"sync"
 	"testing"
 	"time"
 
@@ -188,6 +189,48 @@ func TestIntegration_EnsureRecurringBlocks_GeneratesAndRespectsSkips(t *testing.
 	assert.Len(t, blocksAfter, 4, "the skipped Wednesday must not come back")
 
 	_ = commitment
+}
+
+// The existing-rows check inside EnsureRecurringBlocks is a plain read before the insert loop,
+// so two calls covering the same range can both pass it before either commits — reproduced here
+// with real concurrent calls rather than trusting the check alone. plan_blocks_commitment_date_uidx
+// plus CreateGenerated's ON CONFLICT DO NOTHING is what actually prevents the duplicate.
+func TestIntegration_EnsureRecurringBlocks_ConcurrentCallsNeverDuplicate(t *testing.T) {
+	repo, taskRepo := newPlanRepo(t)
+	ctx := context.Background()
+	loc := madrid(t)
+	taskID := mustCreateTask(t, taskRepo, "Work")
+
+	svc := plan.NewService(repo, stubTasksSummary{}, loc)
+	_, err := svc.CreateCommitment(ctx, plan.CreateCommitmentRequest{
+		TaskID: taskID, Label: "Work", DaysOfWeek: []int32{1, 2, 3, 4, 5}, // Mon-Fri
+		StartTime: "09:00", EndTime: "17:00",
+	})
+	require.NoError(t, err)
+
+	// 2026-09-07 is a Monday.
+	from := time.Date(2026, 9, 7, 0, 0, 0, 0, loc)
+	to := from.AddDate(0, 0, 7)
+
+	const concurrency = 8
+	var wg sync.WaitGroup
+	errs := make(chan error, concurrency)
+	wg.Add(concurrency)
+	for range concurrency {
+		go func() {
+			defer wg.Done()
+			errs <- svc.EnsureRecurringBlocks(ctx, from, to)
+		}()
+	}
+	wg.Wait()
+	close(errs)
+	for err := range errs {
+		require.NoError(t, err)
+	}
+
+	blocks, err := repo.ListByDateRange(ctx, from, to)
+	require.NoError(t, err)
+	assert.Len(t, blocks, 5, "Mon-Fri only, exactly one block per day despite %d concurrent generations", concurrency)
 }
 
 func TestIntegration_GetByEventRef_UniqueConstraint(t *testing.T) {
