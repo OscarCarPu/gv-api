@@ -12,8 +12,9 @@ import (
 
 const createHabit = `-- name: CreateHabit :one
 INSERT INTO habits (name, description, frequency, target_min, target_max, recording_required)
-VALUES ($1, $2, $3, $4, $5, $6)
-RETURNING id, name, description, frequency, target_min, target_max, recording_required, current_streak, longest_streak
+  VALUES ($1, $2, $3, $4, $5, $6)
+RETURNING
+  id, name, description, frequency, target_min, target_max, recording_required, current_streak, longest_streak
 `
 
 type CreateHabitParams struct {
@@ -62,7 +63,8 @@ func (q *Queries) CreateHabit(ctx context.Context, arg CreateHabitParams) (Creat
 }
 
 const deleteHabit = `-- name: DeleteHabit :exec
-DELETE FROM habits WHERE id = $1
+DELETE FROM habits
+WHERE id = $1
 `
 
 func (q *Queries) DeleteHabit(ctx context.Context, id int32) error {
@@ -71,8 +73,20 @@ func (q *Queries) DeleteHabit(ctx context.Context, id int32) error {
 }
 
 const getHabitByID = `-- name: GetHabitByID :one
-SELECT id, name, description, frequency, target_min, target_max, recording_required, current_streak, longest_streak
-FROM habits WHERE id = $1
+SELECT
+  id,
+  name,
+  description,
+  frequency,
+  target_min,
+  target_max,
+  recording_required,
+  current_streak,
+  longest_streak
+FROM
+  habits
+WHERE
+  id = $1
 `
 
 type GetHabitByIDRow struct {
@@ -105,25 +119,33 @@ func (q *Queries) GetHabitByID(ctx context.Context, id int32) (GetHabitByIDRow, 
 }
 
 const getHabitHistory = `-- name: GetHabitHistory :many
-SELECT s.date::date AS date,
-    COALESCE((
-        SELECT SUM(hl.value)::REAL
-        FROM habit_logs hl
-        WHERE hl.habit_id = $1
-          AND date_trunc($2::text, hl.log_date::timestamp)::date = s.date
-    ), 0)::REAL AS value
-FROM generate_series($3::date, $4::date, ('1 ' || $2::text)::interval) AS s(date)
-WHERE $5::bool
+SELECT
+  s.date::date AS date,
+  COALESCE((
+    SELECT
+      SUM(hl.value)::real FROM habit_logs hl
+    WHERE
+      hl.habit_id = $1
+      AND date_trunc($2::text, hl.log_date::timestamp)::date = s.date), 0)::real AS value
+FROM
+  generate_series($3::date, $4::date, ('1 ' || $2::text)::interval) AS s (date)
+WHERE
+  $5::bool
 UNION ALL
-SELECT date_trunc($2::text, hl.log_date::timestamp)::date AS date,
-    SUM(hl.value)::REAL AS value
-FROM habit_logs hl
-WHERE NOT $5::bool
+SELECT
+  date_trunc($2::text, hl.log_date::timestamp)::date AS date,
+  SUM(hl.value)::real AS value
+FROM
+  habit_logs hl
+WHERE
+  NOT $5::bool
   AND hl.habit_id = $1
   AND hl.log_date >= $3::date
   AND hl.log_date <= $4::date
-GROUP BY date_trunc($2::text, hl.log_date::timestamp)
-ORDER BY date
+GROUP BY
+  date_trunc($2::text, hl.log_date::timestamp)
+ORDER BY
+  date
 `
 
 type GetHabitHistoryParams struct {
@@ -169,25 +191,33 @@ func (q *Queries) GetHabitHistory(ctx context.Context, arg GetHabitHistoryParams
 }
 
 const getHabitHistoryAvg = `-- name: GetHabitHistoryAvg :many
-SELECT s.date::date AS date,
-    COALESCE((
-        SELECT AVG(hl.value)::REAL
-        FROM habit_logs hl
-        WHERE hl.habit_id = $1
-          AND date_trunc($2::text, hl.log_date::timestamp)::date = s.date
-    ), 0)::REAL AS value
-FROM generate_series($3::date, $4::date, ('1 ' || $2::text)::interval) AS s(date)
-WHERE $5::bool
+SELECT
+  s.date::date AS date,
+  COALESCE((
+    SELECT
+      AVG(hl.value)::real FROM habit_logs hl
+    WHERE
+      hl.habit_id = $1
+      AND date_trunc($2::text, hl.log_date::timestamp)::date = s.date), 0)::real AS value
+FROM
+  generate_series($3::date, $4::date, ('1 ' || $2::text)::interval) AS s (date)
+WHERE
+  $5::bool
 UNION ALL
-SELECT date_trunc($2::text, hl.log_date::timestamp)::date AS date,
-    AVG(hl.value)::REAL AS value
-FROM habit_logs hl
-WHERE NOT $5::bool
+SELECT
+  date_trunc($2::text, hl.log_date::timestamp)::date AS date,
+  AVG(hl.value)::real AS value
+FROM
+  habit_logs hl
+WHERE
+  NOT $5::bool
   AND hl.habit_id = $1
   AND hl.log_date >= $3::date
   AND hl.log_date <= $4::date
-GROUP BY date_trunc($2::text, hl.log_date::timestamp)
-ORDER BY date
+GROUP BY
+  date_trunc($2::text, hl.log_date::timestamp)
+ORDER BY
+  date
 `
 
 type GetHabitHistoryAvgParams struct {
@@ -231,32 +261,58 @@ func (q *Queries) GetHabitHistoryAvg(ctx context.Context, arg GetHabitHistoryAvg
 
 const getHabitsWithLogs = `-- name: GetHabitsWithLogs :many
 SELECT
-    h.id, h.name, h.description,
-    h.frequency, h.target_min, h.target_max, h.recording_required,
-    h.current_streak, h.longest_streak,
-    hl.value AS log_value,
-    COALESCE(
-        (SELECT SUM(hl2.value)
-         FROM habit_logs hl2
-         WHERE hl2.habit_id = h.id
-           AND hl2.log_date BETWEEN
-               CASE h.frequency
-                   WHEN 'daily' THEN $1::date
-                   WHEN 'weekly' THEN date_trunc('week', $1::date)::date
-                   WHEN 'monthly' THEN date_trunc('month', $1::date)::date
-               END
-               AND
-               CASE h.frequency
-                   WHEN 'daily' THEN $1::date
-                   WHEN 'weekly' THEN (date_trunc('week', $1::date) + INTERVAL '6 days')::date
-                   WHEN 'monthly' THEN (date_trunc('month', $1::date) + INTERVAL '1 month - 1 day')::date
-               END
-        ), 0
-    )::REAL AS period_value
-FROM habits h
-LEFT JOIN habit_logs hl ON h.id = hl.habit_id AND hl.log_date = $1
-ORDER BY h.id
+  h.id,
+  h.name,
+  h.description,
+  h.frequency,
+  h.target_min,
+  h.target_max,
+  h.recording_required,
+  CASE WHEN h.target_max = 0 THEN
+    COALESCE(zs.current_streak, 0)
+  ELSE
+    h.current_streak
+  END::int AS current_streak,
+  CASE WHEN h.target_max = 0 THEN
+    COALESCE(zs.longest_streak, 0)
+  ELSE
+    h.longest_streak
+  END::int AS longest_streak,
+  hl.value AS log_value,
+  COALESCE((
+    SELECT
+      SUM(hl2.value)
+    FROM habit_logs hl2
+    WHERE
+      hl2.habit_id = h.id
+      AND hl2.log_date BETWEEN CASE h.frequency
+      WHEN 'daily' THEN
+        $1::date
+      WHEN 'weekly' THEN
+        date_trunc('week', $1::date)::date
+      WHEN 'monthly' THEN
+        date_trunc('month', $1::date)::date
+      END AND CASE h.frequency
+      WHEN 'daily' THEN
+        $1::date
+      WHEN 'weekly' THEN
+        (date_trunc('week', $1::date) + INTERVAL '6 days')::date
+      WHEN 'monthly' THEN
+        (date_trunc('month', $1::date) + INTERVAL '1 month - 1 day')::date
+      END), 0)::real AS period_value
+FROM
+  habits h
+  LEFT JOIN habit_logs hl ON h.id = hl.habit_id
+    AND hl.log_date = $1
+  LEFT JOIN LATERAL recalculate_habit_streak (h.id, $2::date) AS zs ON h.target_max = 0
+ORDER BY
+  h.id
 `
+
+type GetHabitsWithLogsParams struct {
+	TargetDate  time.Time `db:"target_date" json:"target_date"`
+	StreakToday time.Time `db:"streak_today" json:"streak_today"`
+}
 
 type GetHabitsWithLogsRow struct {
 	ID                int32    `db:"id" json:"id"`
@@ -272,8 +328,8 @@ type GetHabitsWithLogsRow struct {
 	PeriodValue       float32  `db:"period_value" json:"period_value"`
 }
 
-func (q *Queries) GetHabitsWithLogs(ctx context.Context, targetDate time.Time) ([]GetHabitsWithLogsRow, error) {
-	rows, err := q.db.Query(ctx, getHabitsWithLogs, targetDate)
+func (q *Queries) GetHabitsWithLogs(ctx context.Context, arg GetHabitsWithLogsParams) ([]GetHabitsWithLogsRow, error) {
+	rows, err := q.db.Query(ctx, getHabitsWithLogs, arg.TargetDate, arg.StreakToday)
 	if err != nil {
 		return nil, err
 	}
@@ -305,10 +361,15 @@ func (q *Queries) GetHabitsWithLogs(ctx context.Context, targetDate time.Time) (
 }
 
 const recalculateHabitStreak = `-- name: RecalculateHabitStreak :exec
-UPDATE habits AS h
-SET current_streak = r.current_streak, longest_streak = r.longest_streak
-FROM recalculate_habit_streak($1, $2::date) AS r
-WHERE h.id = $1
+UPDATE
+  habits AS h
+SET
+  current_streak = r.current_streak,
+  longest_streak = r.longest_streak
+FROM
+  recalculate_habit_streak ($1, $2::date) AS r
+WHERE
+  h.id = $1
 `
 
 type RecalculateHabitStreakParams struct {
@@ -326,15 +387,27 @@ func (q *Queries) RecalculateHabitStreak(ctx context.Context, arg RecalculateHab
 }
 
 const updateHabit = `-- name: UpdateHabit :one
-UPDATE habits
-SET name = $2,
-    description = $3,
-    frequency = $4,
-    target_min = $5,
-    target_max = $6,
-    recording_required = $7
-WHERE id = $1
-RETURNING id, name, description, frequency, target_min, target_max, recording_required, current_streak, longest_streak
+UPDATE
+  habits
+SET
+  name = $2,
+  description = $3,
+  frequency = $4,
+  target_min = $5,
+  target_max = $6,
+  recording_required = $7
+WHERE
+  id = $1
+RETURNING
+  id,
+  name,
+  description,
+  frequency,
+  target_min,
+  target_max,
+  recording_required,
+  current_streak,
+  longest_streak
 `
 
 type UpdateHabitParams struct {
@@ -386,9 +459,10 @@ func (q *Queries) UpdateHabit(ctx context.Context, arg UpdateHabitParams) (Updat
 
 const upsertLog = `-- name: UpsertLog :exec
 INSERT INTO habit_logs (habit_id, log_date, value)
-VALUES ($1, $2, $3)
+  VALUES ($1, $2, $3)
 ON CONFLICT (habit_id, log_date)
-DO UPDATE SET value = excluded.value
+  DO UPDATE SET
+    value = excluded.value
 `
 
 type UpsertLogParams struct {

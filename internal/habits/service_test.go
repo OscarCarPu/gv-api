@@ -183,7 +183,7 @@ func TestService_GetDailyView_DefaultsToToday(t *testing.T) {
 	svc := habits.NewService(repo, time.UTC)
 	ctx := context.Background()
 
-	repo.EXPECT().GetHabitsWithLogs(mock.Anything, mock.Anything).Return([]habits.HabitWithLog{}, nil)
+	repo.EXPECT().GetHabitsWithLogs(mock.Anything, mock.Anything, mock.Anything).Return([]habits.HabitWithLog{}, nil)
 
 	result, err := svc.GetDailyView(ctx, "")
 	require.NoError(t, err)
@@ -196,7 +196,7 @@ func TestService_GetDailyView_ParsesDateParam(t *testing.T) {
 	ctx := context.Background()
 
 	expected := date(2026, 1, 15)
-	repo.EXPECT().GetHabitsWithLogs(mock.Anything, expected).Return([]habits.HabitWithLog{}, nil)
+	repo.EXPECT().GetHabitsWithLogs(mock.Anything, expected, expected).Return([]habits.HabitWithLog{}, nil)
 
 	_, err := svc.GetDailyView(ctx, "2026-01-15")
 	require.NoError(t, err)
@@ -209,6 +209,21 @@ func TestService_GetDailyView_InvalidDate_ReturnsError(t *testing.T) {
 
 	_, err := svc.GetDailyView(ctx, "bad-date")
 	assert.Error(t, err)
+}
+
+func TestService_GetDailyView_FutureDate_CapsStreakTodayToNow(t *testing.T) {
+	repo := mocks.NewMockRepository(t)
+	svc := habits.NewService(repo, time.UTC)
+	ctx := context.Background()
+
+	future := date(2099, 1, 1)
+	today := time.Now().UTC()
+	today = time.Date(today.Year(), today.Month(), today.Day(), 0, 0, 0, 0, time.UTC)
+
+	repo.EXPECT().GetHabitsWithLogs(mock.Anything, future, today).Return([]habits.HabitWithLog{}, nil)
+
+	_, err := svc.GetDailyView(ctx, "2099-01-01")
+	require.NoError(t, err)
 }
 
 // --- GetHistory ---

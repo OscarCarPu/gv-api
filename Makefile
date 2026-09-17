@@ -49,11 +49,11 @@ demo:
 # --- DOCKER OPERATIONS ---
 
 up:
-	docker compose up --build --wait -d
+	docker compose --progress plain up --build --wait -d
 
 reset:
 	docker compose down -v --remove-orphans
-	docker compose up --build --wait -d
+	docker compose --progress plain up --build --wait -d
 
 logs:
 	docker compose logs -f
@@ -92,7 +92,7 @@ test-api-setup:
 	@printf "$(YELLOW)>>> Creating test database...$(NC)\n"
 	@docker compose exec -T db psql -U $(POSTGRES_USER) -d postgres -c "CREATE DATABASE \"$(TEST_DB)\";" > /dev/null
 	@printf "$(CYAN)>>> Rebuilding and restarting API with test database...$(NC)\n"
-	@docker compose -f docker-compose.yaml -f docker-compose.test.yaml up -d --wait --build gv-api > /dev/null
+	@docker compose --progress plain -f docker-compose.yaml -f docker-compose.test.yaml up -d --wait --build gv-api > /dev/null
 	@printf "$(GREEN)>>> API ready$(NC)\n"
 
 # All tests: silent, only prints pass/fail
