@@ -3,8 +3,9 @@ package habits
 import (
 	"context"
 	"errors"
-	"gv-api/internal/history"
 	"time"
+
+	"gv-api/internal/history"
 
 	"gv-api/internal/database/gvdb"
 
@@ -13,7 +14,7 @@ import (
 )
 
 type Repository interface {
-	GetHabitsWithLogs(ctx context.Context, date time.Time) ([]HabitWithLog, error)
+	GetHabitsWithLogs(ctx context.Context, viewDate, streakToday time.Time) ([]HabitWithLog, error)
 	UpsertLog(ctx context.Context, habitID int32, date time.Time, value float32) error
 	CreateHabit(ctx context.Context, name string, description *string, frequency string, targetMin, targetMax *float32, recordingRequired bool) (CreateHabitResponse, error)
 	UpdateHabit(ctx context.Context, id int32, name string, description *string, frequency string, targetMin, targetMax *float32, recordingRequired bool) (CreateHabitResponse, error)
@@ -32,8 +33,8 @@ func NewRepository(pool *pgxpool.Pool) *PostgresRepository {
 	return &PostgresRepository{q: gvdb.New(pool)}
 }
 
-func (r *PostgresRepository) GetHabitsWithLogs(ctx context.Context, date time.Time) ([]HabitWithLog, error) {
-	rows, err := r.q.GetHabitsWithLogs(ctx, date)
+func (r *PostgresRepository) GetHabitsWithLogs(ctx context.Context, viewDate, streakToday time.Time) ([]HabitWithLog, error) {
+	rows, err := r.q.GetHabitsWithLogs(ctx, gvdb.GetHabitsWithLogsParams{TargetDate: viewDate, StreakToday: streakToday})
 	if err != nil {
 		return nil, err
 	}

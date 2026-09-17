@@ -319,9 +319,9 @@ func (_c *MockRepository_GetHabitHistoryAvg_Call) RunAndReturn(run func(context.
 	return _c
 }
 
-// GetHabitsWithLogs provides a mock function with given fields: ctx, date
-func (_m *MockRepository) GetHabitsWithLogs(ctx context.Context, date time.Time) ([]habits.HabitWithLog, error) {
-	ret := _m.Called(ctx, date)
+// GetHabitsWithLogs provides a mock function with given fields: ctx, viewDate, streakToday
+func (_m *MockRepository) GetHabitsWithLogs(ctx context.Context, viewDate time.Time, streakToday time.Time) ([]habits.HabitWithLog, error) {
+	ret := _m.Called(ctx, viewDate, streakToday)
 
 	if len(ret) == 0 {
 		panic("no return value specified for GetHabitsWithLogs")
@@ -329,19 +329,19 @@ func (_m *MockRepository) GetHabitsWithLogs(ctx context.Context, date time.Time)
 
 	var r0 []habits.HabitWithLog
 	var r1 error
-	if rf, ok := ret.Get(0).(func(context.Context, time.Time) ([]habits.HabitWithLog, error)); ok {
-		return rf(ctx, date)
+	if rf, ok := ret.Get(0).(func(context.Context, time.Time, time.Time) ([]habits.HabitWithLog, error)); ok {
+		return rf(ctx, viewDate, streakToday)
 	}
-	if rf, ok := ret.Get(0).(func(context.Context, time.Time) []habits.HabitWithLog); ok {
-		r0 = rf(ctx, date)
+	if rf, ok := ret.Get(0).(func(context.Context, time.Time, time.Time) []habits.HabitWithLog); ok {
+		r0 = rf(ctx, viewDate, streakToday)
 	} else {
 		if ret.Get(0) != nil {
 			r0 = ret.Get(0).([]habits.HabitWithLog)
 		}
 	}
 
-	if rf, ok := ret.Get(1).(func(context.Context, time.Time) error); ok {
-		r1 = rf(ctx, date)
+	if rf, ok := ret.Get(1).(func(context.Context, time.Time, time.Time) error); ok {
+		r1 = rf(ctx, viewDate, streakToday)
 	} else {
 		r1 = ret.Error(1)
 	}
@@ -356,14 +356,15 @@ type MockRepository_GetHabitsWithLogs_Call struct {
 
 // GetHabitsWithLogs is a helper method to define mock.On call
 //   - ctx context.Context
-//   - date time.Time
-func (_e *MockRepository_Expecter) GetHabitsWithLogs(ctx interface{}, date interface{}) *MockRepository_GetHabitsWithLogs_Call {
-	return &MockRepository_GetHabitsWithLogs_Call{Call: _e.mock.On("GetHabitsWithLogs", ctx, date)}
+//   - viewDate time.Time
+//   - streakToday time.Time
+func (_e *MockRepository_Expecter) GetHabitsWithLogs(ctx interface{}, viewDate interface{}, streakToday interface{}) *MockRepository_GetHabitsWithLogs_Call {
+	return &MockRepository_GetHabitsWithLogs_Call{Call: _e.mock.On("GetHabitsWithLogs", ctx, viewDate, streakToday)}
 }
 
-func (_c *MockRepository_GetHabitsWithLogs_Call) Run(run func(ctx context.Context, date time.Time)) *MockRepository_GetHabitsWithLogs_Call {
+func (_c *MockRepository_GetHabitsWithLogs_Call) Run(run func(ctx context.Context, viewDate time.Time, streakToday time.Time)) *MockRepository_GetHabitsWithLogs_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].(context.Context), args[1].(time.Time))
+		run(args[0].(context.Context), args[1].(time.Time), args[2].(time.Time))
 	})
 	return _c
 }
@@ -373,7 +374,7 @@ func (_c *MockRepository_GetHabitsWithLogs_Call) Return(_a0 []habits.HabitWithLo
 	return _c
 }
 
-func (_c *MockRepository_GetHabitsWithLogs_Call) RunAndReturn(run func(context.Context, time.Time) ([]habits.HabitWithLog, error)) *MockRepository_GetHabitsWithLogs_Call {
+func (_c *MockRepository_GetHabitsWithLogs_Call) RunAndReturn(run func(context.Context, time.Time, time.Time) ([]habits.HabitWithLog, error)) *MockRepository_GetHabitsWithLogs_Call {
 	_c.Call.Return(run)
 	return _c
 }

@@ -33,7 +33,15 @@ func (s *Service) GetDailyView(ctx context.Context, dateStr string) ([]HabitWith
 
 	targetDate = time.Date(targetDate.Year(), targetDate.Month(), targetDate.Day(), 0, 0, 0, 0, time.UTC)
 
-	return s.repo.GetHabitsWithLogs(ctx, targetDate)
+	now := time.Now().In(s.location)
+	today := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC)
+
+	streakToday := targetDate
+	if streakToday.After(today) {
+		streakToday = today
+	}
+
+	return s.repo.GetHabitsWithLogs(ctx, targetDate, streakToday)
 }
 
 func (s *Service) LogHabit(ctx context.Context, req LogUpsertRequest) error {
