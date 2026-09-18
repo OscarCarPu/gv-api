@@ -37,7 +37,10 @@ Only finished entries count toward time calculations.
 **Project Hierarchy**
 - Root projects have `parent_id = NULL`.
 - Sub-projects reference a parent project via `parent_id`.
-- No depth limit enforced. No cycle prevention.
+- No depth limit enforced.
+- A project's parent can be changed at any time via PATCH `parent_id` (`null` moves it to the root; omitting the field leaves it unchanged). The whole subtree below the moved project follows it, and `time_spent` roll-ups are recomputed on read.
+- The hierarchy must stay a forest: a project cannot be moved under itself or under any of its descendants, at any depth (409). The parent must exist (400). The check and the write happen in one transaction under an advisory lock, so concurrent moves cannot create a cycle together.
+- `GET /projects/{id}/parent-candidates` lists the valid new parents: every project except the project itself, its descendants and finished projects (the current parent is always kept so it can still be displayed).
 
 **Orphan Tasks**
 - Tasks with `project_id = NULL` are orphans — not assigned to any project.
@@ -142,6 +145,7 @@ Only finished entries count toward time calculations.
 ### Side Effects
 
 - **On project finish** → cascade finishes all descendant projects and their tasks.
+- **On project move** (PATCH `parent_id`) → tasks and sub-projects move with it; `time_spent` on the old and new ancestors changes accordingly.
 - **On task delete** → cascade deletes todos and time entries (FK ON DELETE CASCADE).
 - **On task move** (PATCH `project_id`) → time entries move with the task, affecting `time_spent` on both source and destination projects.
 

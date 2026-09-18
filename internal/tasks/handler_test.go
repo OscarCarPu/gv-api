@@ -204,6 +204,84 @@ func TestHandler_UpdateProject(t *testing.T) {
 		tasks.NewHandler(svc).UpdateProject(rec, req)
 		assert.Equal(t, http.StatusInternalServerError, rec.Code)
 	})
+
+	t.Run("409 on project cycle", func(t *testing.T) {
+		svc := mocks.NewMockServiceInterface(t)
+		svc.EXPECT().UpdateProject(mock.Anything, mock.Anything).Return(tasks.ProjectResponse{}, tasks.ErrProjectCycle)
+		req := withIDParam(newReq(http.MethodPatch, "/", `{"parent_id": 2}`), "1")
+		rec := httptest.NewRecorder()
+		tasks.NewHandler(svc).UpdateProject(rec, req)
+		assert.Equal(t, http.StatusConflict, rec.Code)
+	})
+
+	t.Run("400 when parent project not found", func(t *testing.T) {
+		svc := mocks.NewMockServiceInterface(t)
+		svc.EXPECT().UpdateProject(mock.Anything, mock.Anything).Return(tasks.ProjectResponse{}, tasks.ErrParentNotFound)
+		req := withIDParam(newReq(http.MethodPatch, "/", `{"parent_id": 999}`), "1")
+		rec := httptest.NewRecorder()
+		tasks.NewHandler(svc).UpdateProject(rec, req)
+		assert.Equal(t, http.StatusBadRequest, rec.Code)
+	})
+
+	t.Run("explicit null parent_id is passed as set-to-root", func(t *testing.T) {
+		svc := mocks.NewMockServiceInterface(t)
+		svc.EXPECT().UpdateProject(mock.Anything, mock.MatchedBy(func(r tasks.UpdateProjectRequest) bool {
+			return r.ParentID.Set && r.ParentID.Value == nil
+		})).Return(tasks.ProjectResponse{ID: 1, Name: "P"}, nil)
+		req := withIDParam(newReq(http.MethodPatch, "/", `{"parent_id": null}`), "1")
+		rec := httptest.NewRecorder()
+		tasks.NewHandler(svc).UpdateProject(rec, req)
+		assert.Equal(t, http.StatusOK, rec.Code)
+	})
+
+	t.Run("absent parent_id is not set", func(t *testing.T) {
+		svc := mocks.NewMockServiceInterface(t)
+		svc.EXPECT().UpdateProject(mock.Anything, mock.MatchedBy(func(r tasks.UpdateProjectRequest) bool {
+			return !r.ParentID.Set
+		})).Return(tasks.ProjectResponse{ID: 1, Name: "P"}, nil)
+		req := withIDParam(newReq(http.MethodPatch, "/", `{"name": "P"}`), "1")
+		rec := httptest.NewRecorder()
+		tasks.NewHandler(svc).UpdateProject(rec, req)
+		assert.Equal(t, http.StatusOK, rec.Code)
+	})
+}
+
+func TestHandler_ListProjectParentCandidates(t *testing.T) {
+	t.Run("200 with candidates", func(t *testing.T) {
+		svc := mocks.NewMockServiceInterface(t)
+		svc.EXPECT().ListProjectParentCandidates(mock.Anything, int32(5)).
+			Return([]tasks.ProjectParentCandidate{{ID: 1, Name: "A", Path: "A"}}, nil)
+		req := withIDParam(newReq(http.MethodGet, "/", ""), "5")
+		rec := httptest.NewRecorder()
+		tasks.NewHandler(svc).ListProjectParentCandidates(rec, req)
+		assert.Equal(t, http.StatusOK, rec.Code)
+		assert.Contains(t, rec.Body.String(), `"path":"A"`)
+	})
+
+	t.Run("400 on invalid id", func(t *testing.T) {
+		req := withIDParam(newReq(http.MethodGet, "/", ""), "abc")
+		rec := httptest.NewRecorder()
+		tasks.NewHandler(mocks.NewMockServiceInterface(t)).ListProjectParentCandidates(rec, req)
+		assert.Equal(t, http.StatusBadRequest, rec.Code)
+	})
+
+	t.Run("404 when project not found", func(t *testing.T) {
+		svc := mocks.NewMockServiceInterface(t)
+		svc.EXPECT().ListProjectParentCandidates(mock.Anything, mock.Anything).Return(nil, tasks.ErrNotFound)
+		req := withIDParam(newReq(http.MethodGet, "/", ""), "999")
+		rec := httptest.NewRecorder()
+		tasks.NewHandler(svc).ListProjectParentCandidates(rec, req)
+		assert.Equal(t, http.StatusNotFound, rec.Code)
+	})
+
+	t.Run("500 on service error", func(t *testing.T) {
+		svc := mocks.NewMockServiceInterface(t)
+		svc.EXPECT().ListProjectParentCandidates(mock.Anything, mock.Anything).Return(nil, errors.New("db error"))
+		req := withIDParam(newReq(http.MethodGet, "/", ""), "1")
+		rec := httptest.NewRecorder()
+		tasks.NewHandler(svc).ListProjectParentCandidates(rec, req)
+		assert.Equal(t, http.StatusInternalServerError, rec.Code)
+	})
 }
 
 func TestHandler_UpdateTask(t *testing.T) {
