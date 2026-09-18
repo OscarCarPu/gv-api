@@ -191,6 +191,26 @@ func TestService_UpdateTask(t *testing.T) {
 	})
 }
 
+func TestService_ListProjectParentCandidates(t *testing.T) {
+	t.Run("delegates to repo", func(t *testing.T) {
+		repo := mocks.NewMockRepository(t)
+		want := []tasks.ProjectParentCandidate{{ID: 2, Name: "B", Path: "A / B"}}
+		repo.EXPECT().ListProjectParentCandidates(mock.Anything, int32(1)).Return(want, nil)
+
+		got, err := tasks.NewService(repo, nil).ListProjectParentCandidates(context.Background(), 1)
+		require.NoError(t, err)
+		assert.Equal(t, want, got)
+	})
+
+	t.Run("propagates error", func(t *testing.T) {
+		repo := mocks.NewMockRepository(t)
+		repo.EXPECT().ListProjectParentCandidates(mock.Anything, mock.Anything).Return(nil, tasks.ErrNotFound)
+
+		_, err := tasks.NewService(repo, nil).ListProjectParentCandidates(context.Background(), 1)
+		assert.ErrorIs(t, err, tasks.ErrNotFound)
+	})
+}
+
 func TestService_UpdateProject(t *testing.T) {
 	now := time.Now()
 	name := "updated"

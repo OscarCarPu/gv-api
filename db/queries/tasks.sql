@@ -48,11 +48,54 @@ UPDATE projects SET
     name        = CASE WHEN @set_name::bool        THEN @name::text             ELSE name END,
     description = CASE WHEN @set_description::bool  THEN @description::text      ELSE description END,
     due_at      = CASE WHEN @clear_due_at::bool THEN NULL WHEN @set_due_at::bool THEN @due_at::date ELSE due_at END,
-    parent_id   = CASE WHEN @set_parent_id::bool    THEN @parent_id::int         ELSE parent_id END,
+    parent_id   = CASE WHEN @clear_parent_id::bool THEN NULL WHEN @set_parent_id::bool THEN @parent_id::int ELSE parent_id END,
     started_at  = CASE WHEN @clear_started_at::bool THEN NULL WHEN @set_started_at::bool THEN @started_at::timestamptz ELSE started_at END,
     finished_at = CASE WHEN @clear_finished_at::bool THEN NULL WHEN @set_finished_at::bool THEN @finished_at::timestamptz ELSE finished_at END
 WHERE id = @id
 RETURNING id, parent_id, name, description, due_at, started_at, finished_at;
+
+-- name: LockProjectTree :exec
+-- Serialises parent moves so two concurrent updates can't each pass the cycle check and
+-- together create a cycle.
+SELECT pg_advisory_xact_lock(hashtext('projects_tree'));
+
+-- name: ProjectExists :one
+SELECT EXISTS (SELECT 1 FROM projects WHERE id = @id::int) AS exists;
+
+-- name: ProjectSubtreeContains :one
+-- True when @candidate_id is @root_id itself or any descendant of it, at any depth.
+-- UNION (not UNION ALL) keeps the walk terminating even on already-corrupt data.
+WITH RECURSIVE subtree AS (
+    SELECT id FROM projects WHERE id = @root_id::int
+    UNION
+    SELECT c.id FROM projects c JOIN subtree s ON c.parent_id = s.id
+)
+SELECT EXISTS (SELECT 1 FROM subtree WHERE id = @candidate_id::int) AS contains;
+
+-- name: ListProjectParentCandidates :many
+-- Every valid new parent for project @id: not the project itself, not any of its descendants
+-- (any depth) and not finished — except its current parent, which stays listed so a select can
+-- still show the current value. path is the ancestor chain, used for labels and ordering.
+WITH RECURSIVE
+subtree AS (
+    SELECT id FROM projects WHERE id = @id::int
+    UNION
+    SELECT c.id FROM projects c JOIN subtree s ON c.parent_id = s.id
+),
+tree AS (
+    SELECT id, name, ARRAY[name::text] AS path
+    FROM projects WHERE parent_id IS NULL
+    UNION ALL
+    SELECT c.id, c.name, t.path || c.name::text
+    FROM projects c JOIN tree t ON c.parent_id = t.id
+)
+SELECT t.id, t.name, array_to_string(t.path, ' / ')::text AS path
+FROM tree t
+JOIN projects p ON p.id = t.id
+WHERE t.id NOT IN (SELECT id FROM subtree)
+  AND (p.finished_at IS NULL
+       OR t.id = (SELECT parent_id FROM projects WHERE id = @id::int))
+ORDER BY t.path;
 
 -- name: ListProjectsFast :many
 SELECT id, name FROM projects WHERE started_at IS NOT NULL AND finished_at IS NULL ORDER BY name;

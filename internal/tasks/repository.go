@@ -21,6 +21,7 @@ type Repository interface {
 	UpdateTodo(ctx context.Context, req UpdateTodoRequest) (TodoResponse, error)
 	UpdateTimeEntry(ctx context.Context, req UpdateTimeEntryRequest) (TimeEntryResponse, error)
 	ListProjectsFast(ctx context.Context) ([]ProjectFastResponse, error)
+	ListProjectParentCandidates(ctx context.Context, id int32) ([]ProjectParentCandidate, error)
 	ListTasksFast(ctx context.Context) ([]TaskFastResponse, error)
 	GetRootProjects(ctx context.Context) ([]ProjectResponse, error)
 	GetActiveProjects(ctx context.Context) ([]ActiveProject, error)

@@ -1142,6 +1142,58 @@ func (q *Queries) GetUnfinishedTasks(ctx context.Context, minPriority *int32) ([
 	return items, nil
 }
 
+const listProjectParentCandidates = `-- name: ListProjectParentCandidates :many
+WITH RECURSIVE
+subtree AS (
+    SELECT id FROM projects WHERE id = $1::int
+    UNION
+    SELECT c.id FROM projects c JOIN subtree s ON c.parent_id = s.id
+),
+tree AS (
+    SELECT id, name, ARRAY[name::text] AS path
+    FROM projects WHERE parent_id IS NULL
+    UNION ALL
+    SELECT c.id, c.name, t.path || c.name::text
+    FROM projects c JOIN tree t ON c.parent_id = t.id
+)
+SELECT t.id, t.name, array_to_string(t.path, ' / ')::text AS path
+FROM tree t
+JOIN projects p ON p.id = t.id
+WHERE t.id NOT IN (SELECT id FROM subtree)
+  AND (p.finished_at IS NULL
+       OR t.id = (SELECT parent_id FROM projects WHERE id = $1::int))
+ORDER BY t.path
+`
+
+type ListProjectParentCandidatesRow struct {
+	ID   int32  `db:"id" json:"id"`
+	Name string `db:"name" json:"name"`
+	Path string `db:"path" json:"path"`
+}
+
+// Every valid new parent for project @id: not the project itself, not any of its descendants
+// (any depth) and not finished — except its current parent, which stays listed so a select can
+// still show the current value. path is the ancestor chain, used for labels and ordering.
+func (q *Queries) ListProjectParentCandidates(ctx context.Context, id int32) ([]ListProjectParentCandidatesRow, error) {
+	rows, err := q.db.Query(ctx, listProjectParentCandidates, id)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListProjectParentCandidatesRow{}
+	for rows.Next() {
+		var i ListProjectParentCandidatesRow
+		if err := rows.Scan(&i.ID, &i.Name, &i.Path); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listProjectsFast = `-- name: ListProjectsFast :many
 SELECT id, name FROM projects WHERE started_at IS NOT NULL AND finished_at IS NULL ORDER BY name
 `
@@ -1231,6 +1283,51 @@ func (q *Queries) ListTasksFast(ctx context.Context) ([]ListTasksFastRow, error)
 	return items, nil
 }
 
+const lockProjectTree = `-- name: LockProjectTree :exec
+SELECT pg_advisory_xact_lock(hashtext('projects_tree'))
+`
+
+// Serialises parent moves so two concurrent updates can't each pass the cycle check and
+// together create a cycle.
+func (q *Queries) LockProjectTree(ctx context.Context) error {
+	_, err := q.db.Exec(ctx, lockProjectTree)
+	return err
+}
+
+const projectExists = `-- name: ProjectExists :one
+SELECT EXISTS (SELECT 1 FROM projects WHERE id = $1::int) AS exists
+`
+
+func (q *Queries) ProjectExists(ctx context.Context, id int32) (bool, error) {
+	row := q.db.QueryRow(ctx, projectExists, id)
+	var exists bool
+	err := row.Scan(&exists)
+	return exists, err
+}
+
+const projectSubtreeContains = `-- name: ProjectSubtreeContains :one
+WITH RECURSIVE subtree AS (
+    SELECT id FROM projects WHERE id = $2::int
+    UNION
+    SELECT c.id FROM projects c JOIN subtree s ON c.parent_id = s.id
+)
+SELECT EXISTS (SELECT 1 FROM subtree WHERE id = $1::int) AS contains
+`
+
+type ProjectSubtreeContainsParams struct {
+	CandidateID int32 `db:"candidate_id" json:"candidate_id"`
+	RootID      int32 `db:"root_id" json:"root_id"`
+}
+
+// True when @candidate_id is @root_id itself or any descendant of it, at any depth.
+// UNION (not UNION ALL) keeps the walk terminating even on already-corrupt data.
+func (q *Queries) ProjectSubtreeContains(ctx context.Context, arg ProjectSubtreeContainsParams) (bool, error) {
+	row := q.db.QueryRow(ctx, projectSubtreeContains, arg.CandidateID, arg.RootID)
+	var contains bool
+	err := row.Scan(&contains)
+	return contains, err
+}
+
 const taskBlocksWouldCycle = `-- name: TaskBlocksWouldCycle :one
 SELECT EXISTS(
     SELECT 1 FROM unnest($1::int[]) AS b(id)
@@ -1277,10 +1374,10 @@ UPDATE projects SET
     name        = CASE WHEN $1::bool        THEN $2::text             ELSE name END,
     description = CASE WHEN $3::bool  THEN $4::text      ELSE description END,
     due_at      = CASE WHEN $5::bool THEN NULL WHEN $6::bool THEN $7::date ELSE due_at END,
-    parent_id   = CASE WHEN $8::bool    THEN $9::int         ELSE parent_id END,
-    started_at  = CASE WHEN $10::bool THEN NULL WHEN $11::bool THEN $12::timestamptz ELSE started_at END,
-    finished_at = CASE WHEN $13::bool THEN NULL WHEN $14::bool THEN $15::timestamptz ELSE finished_at END
-WHERE id = $16
+    parent_id   = CASE WHEN $8::bool THEN NULL WHEN $9::bool THEN $10::int ELSE parent_id END,
+    started_at  = CASE WHEN $11::bool THEN NULL WHEN $12::bool THEN $13::timestamptz ELSE started_at END,
+    finished_at = CASE WHEN $14::bool THEN NULL WHEN $15::bool THEN $16::timestamptz ELSE finished_at END
+WHERE id = $17
 RETURNING id, parent_id, name, description, due_at, started_at, finished_at
 `
 
@@ -1292,6 +1389,7 @@ type UpdateProjectParams struct {
 	ClearDueAt      bool               `db:"clear_due_at" json:"clear_due_at"`
 	SetDueAt        bool               `db:"set_due_at" json:"set_due_at"`
 	DueAt           time.Time          `db:"due_at" json:"due_at"`
+	ClearParentID   bool               `db:"clear_parent_id" json:"clear_parent_id"`
 	SetParentID     bool               `db:"set_parent_id" json:"set_parent_id"`
 	ParentID        int32              `db:"parent_id" json:"parent_id"`
 	ClearStartedAt  bool               `db:"clear_started_at" json:"clear_started_at"`
@@ -1312,6 +1410,7 @@ func (q *Queries) UpdateProject(ctx context.Context, arg UpdateProjectParams) (P
 		arg.ClearDueAt,
 		arg.SetDueAt,
 		arg.DueAt,
+		arg.ClearParentID,
 		arg.SetParentID,
 		arg.ParentID,
 		arg.ClearStartedAt,

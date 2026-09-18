@@ -3,6 +3,7 @@ package tasks_test
 import (
 	"context"
 	"errors"
+	"fmt"
 	"testing"
 	"time"
 
@@ -58,6 +59,206 @@ func TestIntegration_FinishProjectTreeCascades(t *testing.T) {
 	gotProj, err := repo.GetProject(ctx, leaf.ID)
 	require.NoError(t, err)
 	require.NotNil(t, gotProj.FinishedAt, "leaf project should be finished by cascade")
+}
+
+// chainProjects creates a linear hierarchy of n projects (P1 → P2 → ... → Pn, P1 the root)
+// and returns their ids in order.
+func chainProjects(t *testing.T, repo *tasks.PostgresRepository, n int) []int32 {
+	t.Helper()
+	ids := make([]int32, 0, n)
+	var parent *int32
+	for i := 1; i <= n; i++ {
+		p, err := repo.CreateProject(context.Background(), fmt.Sprintf("P%d", i), nil, nil, parent)
+		require.NoError(t, err)
+		ids = append(ids, p.ID)
+		id := p.ID
+		parent = &id
+	}
+	return ids
+}
+
+func setParent(id *int32) tasks.NullableInt32 {
+	return tasks.NullableInt32{Value: id, Set: true}
+}
+
+func TestIntegration_UpdateProject_MoveParent(t *testing.T) {
+	ctx := context.Background()
+
+	t.Run("moves under another project", func(t *testing.T) {
+		repo := NewRepo(t)
+		a, err := repo.CreateProject(ctx, "a", nil, nil, nil)
+		require.NoError(t, err)
+		b, err := repo.CreateProject(ctx, "b", nil, nil, nil)
+		require.NoError(t, err)
+
+		got, err := repo.UpdateProject(ctx, tasks.UpdateProjectRequest{ID: b.ID, ParentID: setParent(&a.ID)})
+		require.NoError(t, err)
+		require.NotNil(t, got.ParentID)
+		assert.Equal(t, a.ID, *got.ParentID)
+	})
+
+	t.Run("explicit null moves to root", func(t *testing.T) {
+		repo := NewRepo(t)
+		ids := chainProjects(t, repo, 2)
+
+		got, err := repo.UpdateProject(ctx, tasks.UpdateProjectRequest{ID: ids[1], ParentID: setParent(nil)})
+		require.NoError(t, err)
+		assert.Nil(t, got.ParentID)
+	})
+
+	t.Run("absent parent_id leaves the parent untouched", func(t *testing.T) {
+		repo := NewRepo(t)
+		ids := chainProjects(t, repo, 2)
+		name := "renamed"
+
+		got, err := repo.UpdateProject(ctx, tasks.UpdateProjectRequest{ID: ids[1], Name: &name})
+		require.NoError(t, err)
+		require.NotNil(t, got.ParentID)
+		assert.Equal(t, ids[0], *got.ParentID)
+	})
+
+	t.Run("rejects itself as parent", func(t *testing.T) {
+		repo := NewRepo(t)
+		ids := chainProjects(t, repo, 1)
+
+		_, err := repo.UpdateProject(ctx, tasks.UpdateProjectRequest{ID: ids[0], ParentID: setParent(&ids[0])})
+		assert.ErrorIs(t, err, tasks.ErrProjectCycle)
+	})
+
+	t.Run("rejects any descendant as parent at every depth", func(t *testing.T) {
+		repo := NewRepo(t)
+		ids := chainProjects(t, repo, 5) // P1 → P2 → P3 → P4 → P5
+
+		for _, descendant := range ids[1:] {
+			_, err := repo.UpdateProject(ctx, tasks.UpdateProjectRequest{ID: ids[0], ParentID: setParent(&descendant)})
+			assert.ErrorIs(t, err, tasks.ErrProjectCycle, "P1 under descendant %d", descendant)
+		}
+
+		// The tree is untouched after the rejected moves.
+		p1, err := repo.GetProject(ctx, ids[0])
+		require.NoError(t, err)
+		assert.Nil(t, p1.ParentID)
+	})
+
+	t.Run("allows a descendant to move under an ancestor", func(t *testing.T) {
+		repo := NewRepo(t)
+		ids := chainProjects(t, repo, 5)
+
+		got, err := repo.UpdateProject(ctx, tasks.UpdateProjectRequest{ID: ids[4], ParentID: setParent(&ids[0])})
+		require.NoError(t, err)
+		require.NotNil(t, got.ParentID)
+		assert.Equal(t, ids[0], *got.ParentID)
+	})
+
+	t.Run("rejects an unknown parent", func(t *testing.T) {
+		repo := NewRepo(t)
+		ids := chainProjects(t, repo, 1)
+		missing := int32(999999)
+
+		_, err := repo.UpdateProject(ctx, tasks.UpdateProjectRequest{ID: ids[0], ParentID: setParent(&missing)})
+		assert.ErrorIs(t, err, tasks.ErrParentNotFound)
+	})
+
+	t.Run("unknown project is not found", func(t *testing.T) {
+		repo := NewRepo(t)
+		ids := chainProjects(t, repo, 1)
+		missing := int32(999999)
+
+		_, err := repo.UpdateProject(ctx, tasks.UpdateProjectRequest{ID: missing, ParentID: setParent(&ids[0])})
+		assert.ErrorIs(t, err, tasks.ErrNotFound)
+	})
+
+	t.Run("moving a mid-chain project takes its whole subtree along", func(t *testing.T) {
+		repo := NewRepo(t)
+		ids := chainProjects(t, repo, 5) // P1 → P2 → P3 → P4 → P5
+		other, err := repo.CreateProject(ctx, "other", nil, nil, nil)
+		require.NoError(t, err)
+
+		task, err := repo.CreateTask(ctx, &ids[4], "deep task", nil, nil, "standard", nil, 4, nil)
+		require.NoError(t, err)
+		start := time.Now().Add(-time.Hour)
+		end := time.Now()
+		_, err = repo.CreateTimeEntry(ctx, task.ID, start, &end, nil)
+		require.NoError(t, err)
+
+		// P3 (with P4, P5 below it) moves under "other".
+		_, err = repo.UpdateProject(ctx, tasks.UpdateProjectRequest{ID: ids[2], ParentID: setParent(&other.ID)})
+		require.NoError(t, err)
+
+		moved, err := repo.GetProjectChildren(ctx, ids[2])
+		require.NoError(t, err)
+		require.Len(t, moved.Children, 1, "P4 is still directly under P3")
+		assert.Equal(t, ids[3], moved.Children[0].ID)
+		assert.Equal(t, other.ID, *moved.Project.ParentID)
+		assert.Greater(t, moved.Project.TimeSpent, int64(0), "time entry deep in the subtree still rolls up to P3")
+
+		oldRoot, err := repo.GetProjectChildren(ctx, ids[0])
+		require.NoError(t, err)
+		assert.Equal(t, int64(0), oldRoot.Project.TimeSpent, "old ancestors no longer include the moved subtree")
+
+		newRoot, err := repo.GetProjectChildren(ctx, other.ID)
+		require.NoError(t, err)
+		assert.Greater(t, newRoot.Project.TimeSpent, int64(0), "new ancestor now includes it")
+	})
+}
+
+func TestIntegration_ListProjectParentCandidates(t *testing.T) {
+	ctx := context.Background()
+
+	t.Run("excludes the project, all its descendants and finished projects", func(t *testing.T) {
+		repo := NewRepo(t)
+		ids := chainProjects(t, repo, 5) // P1 → P2 → P3 → P4 → P5
+		sibling, err := repo.CreateProject(ctx, "sibling", nil, nil, nil)
+		require.NoError(t, err)
+		done, err := repo.CreateProject(ctx, "done", nil, nil, nil)
+		require.NoError(t, err)
+		finished := time.Now()
+		_, err = repo.UpdateProject(ctx, tasks.UpdateProjectRequest{ID: done.ID, FinishedAt: tasks.NullableTime{Value: &finished, Set: true}})
+		require.NoError(t, err)
+
+		got, err := repo.ListProjectParentCandidates(ctx, ids[2]) // P3
+		require.NoError(t, err)
+
+		gotIDs := make([]int32, len(got))
+		for i, c := range got {
+			gotIDs[i] = c.ID
+		}
+		assert.ElementsMatch(t, []int32{ids[0], ids[1], sibling.ID}, gotIDs)
+	})
+
+	t.Run("keeps the current parent even when it is finished", func(t *testing.T) {
+		repo := NewRepo(t)
+		ids := chainProjects(t, repo, 2)
+		finished := time.Now()
+		_, err := repo.UpdateProject(ctx, tasks.UpdateProjectRequest{ID: ids[0], FinishedAt: tasks.NullableTime{Value: &finished, Set: true}})
+		require.NoError(t, err)
+
+		got, err := repo.ListProjectParentCandidates(ctx, ids[1])
+		require.NoError(t, err)
+		require.Len(t, got, 1)
+		assert.Equal(t, ids[0], got[0].ID)
+	})
+
+	t.Run("labels deep candidates with the full ancestor path, ordered by path", func(t *testing.T) {
+		repo := NewRepo(t)
+		ids := chainProjects(t, repo, 5) // P1 → P2 → P3 → P4 → P5
+		leaf, err := repo.CreateProject(ctx, "leaf", nil, nil, nil)
+		require.NoError(t, err)
+
+		got, err := repo.ListProjectParentCandidates(ctx, leaf.ID)
+		require.NoError(t, err)
+		require.Len(t, got, 5)
+		assert.Equal(t, "P1", got[0].Path)
+		assert.Equal(t, "P1 / P2 / P3 / P4 / P5", got[4].Path)
+		assert.Equal(t, ids[4], got[4].ID)
+		assert.Equal(t, "P5", got[4].Name)
+	})
+
+	t.Run("unknown project is not found", func(t *testing.T) {
+		repo := NewRepo(t)
+		_, err := repo.ListProjectParentCandidates(ctx, 999999)
+		assert.ErrorIs(t, err, tasks.ErrNotFound)
+	})
 }
 
 func TestIntegration_ReplaceTaskDependencies(t *testing.T) {

@@ -9,6 +9,25 @@ import (
 	"github.com/shopspring/decimal"
 )
 
+type NullableInt32 struct {
+	Value *int32
+	Set   bool
+}
+
+func (n *NullableInt32) UnmarshalJSON(data []byte) error {
+	n.Set = true
+	if string(data) == "null" {
+		n.Value = nil
+		return nil
+	}
+	var v int32
+	if err := json.Unmarshal(data, &v); err != nil {
+		return err
+	}
+	n.Value = &v
+	return nil
+}
+
 type TaskDepRef struct {
 	ID    int32   `json:"id"`
 	Name  string  `json:"name"`
@@ -69,6 +88,15 @@ type ProjectResponse struct {
 type ProjectFastResponse struct {
 	ID   int32  `json:"id"`
 	Name string `json:"name"`
+}
+
+// ProjectParentCandidate is a project that a given project may be moved under.
+// Path is the full ancestor chain ("Grandparent / Parent / Name") for display and
+// disambiguation of projects that share a name.
+type ProjectParentCandidate struct {
+	ID   int32  `json:"id"`
+	Name string `json:"name"`
+	Path string `json:"path"`
 }
 
 type TaskFastResponse struct {
@@ -168,13 +196,13 @@ type TimeEntryWithTaskResponse struct {
 }
 
 type UpdateProjectRequest struct {
-	ID          int32        `json:"-"`
-	Name        *string      `json:"name"`
-	Description *string      `json:"description"`
-	DueAt       NullableTime `json:"due_at"`
-	ParentID    *int32       `json:"parent_id"`
-	StartedAt   NullableTime `json:"started_at"`
-	FinishedAt  NullableTime `json:"finished_at"`
+	ID          int32         `json:"-"`
+	Name        *string       `json:"name"`
+	Description *string       `json:"description"`
+	DueAt       NullableTime  `json:"due_at"`
+	ParentID    NullableInt32 `json:"parent_id"`
+	StartedAt   NullableTime  `json:"started_at"`
+	FinishedAt  NullableTime  `json:"finished_at"`
 }
 
 // NullableTime distinguishes between an absent JSON field and an explicit null.

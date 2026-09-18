@@ -2,7 +2,7 @@
 
 Endpoints are grouped by resource:
 
-- [Projects](projects.md) — projects, tree, project children
+- [Projects](projects.md) — projects, tree, project children, parent candidates
 - [Tasks](tasks.md) — tasks, list-fast, by-due-date, per-task time entries
 - [Todos](todos.md) — todos under a task
 - [Time Entries](time-entries.md) — time tracking, active entry, history, summary

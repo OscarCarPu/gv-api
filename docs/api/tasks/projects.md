@@ -133,7 +133,7 @@ See [README](README.md) for shared `task_type` / `recurrence` / `priority` seman
   - `name` (optional): New name.
   - `description` (optional): New description.
   - `due_at` (optional): New due date. Pass `null` to clear the due date. Omitting the field leaves it unchanged.
-  - `parent_id` (optional): New parent project ID.
+  - `parent_id` (optional): New parent project ID. Pass `null` to move the project to the root. Omitting the field leaves it unchanged. The project's whole subtree moves with it. A project cannot be moved under itself or under any of its descendants (any depth).
   - `started_at` (optional): Start timestamp.
   - `finished_at` (optional): Finish timestamp.
 - **Success Response:**
@@ -152,11 +152,36 @@ See [README](README.md) for shared `task_type` / `recurrence` / `priority` seman
     ```
 - **Error Responses:**
   - **Code:** `400 Bad Request`
-    - **Content:** `invalid project id` or `Invalid Body`
+    - **Content:** `invalid project id`, `Invalid Body` or `parent project not found`
+  - **Code:** `404 Not Found`
+    - **Content:** `project not found`
+  - **Code:** `409 Conflict`
+    - **Content:** `a project cannot be moved under itself or one of its sub-projects`
+  - **Code:** `500 Internal Server Error`
+    - **Content:** `Failed to update project`
+
+## Get Project Parent Candidates
+
+- **Method:** `GET`
+- **Endpoint:** `/tasks/projects/{id}/parent-candidates`
+- **Description:** Returns every project that project `{id}` may be moved under: all projects except itself, its descendants (at any depth) and finished projects. The project's current parent is always included, even when finished, so a picker can still show the current value. Ordered by `path`.
+- **Success Response:**
+  - **Code:** `200 OK`
+  - **Content:**
+    ```json
+    [
+      { "id": 1, "name": "Home", "path": "Home" },
+      { "id": 4, "name": "Kitchen", "path": "Home / Renovation / Kitchen" }
+    ]
+    ```
+  - `path` is the full ancestor chain joined with ` / `, for display and to tell apart projects that share a name.
+- **Error Responses:**
+  - **Code:** `400 Bad Request`
+    - **Content:** `invalid project id`
   - **Code:** `404 Not Found`
     - **Content:** `project not found`
   - **Code:** `500 Internal Server Error`
-    - **Content:** `Failed to update project`
+    - **Content:** `Failed to list parent candidates`
 
 ## Delete Project
 

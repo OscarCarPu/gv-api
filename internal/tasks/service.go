@@ -103,6 +103,10 @@ func (s *Service) UpdateProject(ctx context.Context, req UpdateProjectRequest) (
 	return resp, nil
 }
 
+func (s *Service) ListProjectParentCandidates(ctx context.Context, id int32) ([]ProjectParentCandidate, error) {
+	return s.repo.ListProjectParentCandidates(ctx, id)
+}
+
 func (s *Service) UpdateTask(ctx context.Context, req UpdateTaskRequest) (TaskResponse, error) {
 	resp, err := s.repo.UpdateTask(ctx, req)
 	if err != nil {

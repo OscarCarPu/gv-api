@@ -56,9 +56,13 @@ func (r *PostgresRepository) UpdateProject(ctx context.Context, req UpdateProjec
 			params.DueAt = *req.DueAt.Value
 		}
 	}
-	if req.ParentID != nil {
-		params.SetParentID = true
-		params.ParentID = *req.ParentID
+	if req.ParentID.Set {
+		if req.ParentID.Value == nil {
+			params.ClearParentID = true
+		} else {
+			params.SetParentID = true
+			params.ParentID = *req.ParentID.Value
+		}
 	}
 	if req.StartedAt.Set {
 		if req.StartedAt.Value == nil {
@@ -77,7 +81,18 @@ func (r *PostgresRepository) UpdateProject(ctx context.Context, req UpdateProjec
 		}
 	}
 
-	row, err := r.q.UpdateProject(ctx, params)
+	// The cycle check and the write must be atomic, so they share a transaction.
+	var row gvdb.Project
+	err := r.withTx(ctx, func(q *gvdb.Queries) error {
+		if params.SetParentID {
+			if err := checkProjectMove(ctx, q, req.ID, params.ParentID); err != nil {
+				return err
+			}
+		}
+		var err error
+		row, err = q.UpdateProject(ctx, params)
+		return err
+	})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return ProjectResponse{}, ErrNotFound
@@ -94,6 +109,59 @@ func (r *PostgresRepository) UpdateProject(ctx context.Context, req UpdateProjec
 		StartedAt:   pgconv.TimePtr(row.StartedAt),
 		FinishedAt:  pgconv.TimePtr(row.FinishedAt),
 	}, nil
+}
+
+// checkProjectMove validates moving project id under newParentID: the project and the parent
+// must exist, and the parent must not be the project itself or any of its descendants (at any
+// depth), otherwise the hierarchy would contain a cycle. The advisory lock serialises concurrent
+// moves so two of them can't each pass the check and together create a cycle.
+func checkProjectMove(ctx context.Context, q *gvdb.Queries, id, newParentID int32) error {
+	if err := q.LockProjectTree(ctx); err != nil {
+		return err
+	}
+	exists, err := q.ProjectExists(ctx, id)
+	if err != nil {
+		return err
+	}
+	if !exists {
+		return ErrNotFound
+	}
+	parentExists, err := q.ProjectExists(ctx, newParentID)
+	if err != nil {
+		return err
+	}
+	if !parentExists {
+		return ErrParentNotFound
+	}
+	cycle, err := q.ProjectSubtreeContains(ctx, gvdb.ProjectSubtreeContainsParams{RootID: id, CandidateID: newParentID})
+	if err != nil {
+		return err
+	}
+	if cycle {
+		return ErrProjectCycle
+	}
+	return nil
+}
+
+func (r *PostgresRepository) ListProjectParentCandidates(ctx context.Context, id int32) ([]ProjectParentCandidate, error) {
+	exists, err := r.q.ProjectExists(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	if !exists {
+		return nil, ErrNotFound
+	}
+
+	rows, err := r.q.ListProjectParentCandidates(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+
+	candidates := make([]ProjectParentCandidate, len(rows))
+	for i, row := range rows {
+		candidates[i] = ProjectParentCandidate{ID: row.ID, Name: row.Name, Path: row.Path}
+	}
+	return candidates, nil
 }
 
 func (r *PostgresRepository) GetActiveProjects(ctx context.Context) ([]ActiveProject, error) {
