@@ -6,8 +6,9 @@
 //	GET    /tasks/projects                      - root projects
 //	GET    /tasks/projects/list-fast            - flat list of active projects (id, name)
 //	GET    /tasks/projects/{id}/children        - project children
+//	GET    /tasks/projects/{id}/parent-candidates - valid new parents for a project
 //	POST   /tasks/projects                      - create project
-//	PATCH  /tasks/projects/{id}                 - update project
+//	PATCH  /tasks/projects/{id}                 - update project (parent_id: id = move, null = root)
 //	POST   /tasks/tasks                         - create task
 //	PATCH  /tasks/tasks/{id}                    - update task
 //	GET    /tasks/tasks/{id}/time-entries        - task time entries
