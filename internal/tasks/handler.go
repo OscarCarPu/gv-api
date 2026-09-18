@@ -26,6 +26,7 @@ type ServiceInterface interface {
 	UpdateTodo(ctx context.Context, req UpdateTodoRequest) (TodoResponse, error)
 	UpdateTimeEntry(ctx context.Context, req UpdateTimeEntryRequest) (TimeEntryResponse, error)
 	ListProjectsFast(ctx context.Context) ([]ProjectFastResponse, error)
+	ListProjectParentCandidates(ctx context.Context, id int32) ([]ProjectParentCandidate, error)
 	ListTasksFast(ctx context.Context) ([]TaskFastResponse, error)
 	GetRootProjects(ctx context.Context) ([]ProjectResponse, error)
 	GetActiveTree(ctx context.Context, minPriority *int32) ([]ActiveTreeNode, error)
@@ -61,6 +62,7 @@ func (h *Handler) RegisterRoutes(r chi.Router) {
 	r.Get("/tasks/projects/list-fast", h.ListProjectsFast)
 	r.Get("/tasks/projects/{id}", h.GetProject)
 	r.Get("/tasks/projects/{id}/children", h.GetProjectChildren)
+	r.Get("/tasks/projects/{id}/parent-candidates", h.ListProjectParentCandidates)
 	r.Post("/tasks/projects", h.CreateProject)
 	r.Patch("/tasks/projects/{id}", h.UpdateProject)
 	r.Delete("/tasks/projects/{id}", h.DeleteProject)
@@ -232,6 +234,14 @@ func (h *Handler) UpdateProject(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		if errors.Is(err, ErrNotFound) {
 			response.Error(w, http.StatusNotFound, "project not found")
+			return
+		}
+		if errors.Is(err, ErrProjectCycle) {
+			response.Error(w, http.StatusConflict, err.Error())
+			return
+		}
+		if errors.Is(err, ErrParentNotFound) {
+			response.Error(w, http.StatusBadRequest, err.Error())
 			return
 		}
 		response.InternalError(w, r, err, "Failed to update project")
@@ -647,6 +657,26 @@ func (h *Handler) ListProjectsFast(w http.ResponseWriter, r *http.Request) {
 	}
 
 	response.JSON(w, http.StatusOK, projects)
+}
+
+func (h *Handler) ListProjectParentCandidates(w http.ResponseWriter, r *http.Request) {
+	id, err := httputil.ParseIDParam(r, "project")
+	if err != nil {
+		response.Error(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	candidates, err := h.service.ListProjectParentCandidates(r.Context(), id)
+	if err != nil {
+		if errors.Is(err, ErrNotFound) {
+			response.Error(w, http.StatusNotFound, "project not found")
+			return
+		}
+		response.InternalError(w, r, err, "Failed to list parent candidates")
+		return
+	}
+
+	response.JSON(w, http.StatusOK, candidates)
 }
 
 func (h *Handler) GetRootProjects(w http.ResponseWriter, r *http.Request) {

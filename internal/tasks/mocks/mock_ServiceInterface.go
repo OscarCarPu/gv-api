@@ -1077,6 +1077,65 @@ func (_c *MockServiceInterface_GetTimeEntrySummary_Call) RunAndReturn(run func(c
 	return _c
 }
 
+// ListProjectParentCandidates provides a mock function with given fields: ctx, id
+func (_m *MockServiceInterface) ListProjectParentCandidates(ctx context.Context, id int32) ([]tasks.ProjectParentCandidate, error) {
+	ret := _m.Called(ctx, id)
+
+	if len(ret) == 0 {
+		panic("no return value specified for ListProjectParentCandidates")
+	}
+
+	var r0 []tasks.ProjectParentCandidate
+	var r1 error
+	if rf, ok := ret.Get(0).(func(context.Context, int32) ([]tasks.ProjectParentCandidate, error)); ok {
+		return rf(ctx, id)
+	}
+	if rf, ok := ret.Get(0).(func(context.Context, int32) []tasks.ProjectParentCandidate); ok {
+		r0 = rf(ctx, id)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).([]tasks.ProjectParentCandidate)
+		}
+	}
+
+	if rf, ok := ret.Get(1).(func(context.Context, int32) error); ok {
+		r1 = rf(ctx, id)
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
+}
+
+// MockServiceInterface_ListProjectParentCandidates_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'ListProjectParentCandidates'
+type MockServiceInterface_ListProjectParentCandidates_Call struct {
+	*mock.Call
+}
+
+// ListProjectParentCandidates is a helper method to define mock.On call
+//   - ctx context.Context
+//   - id int32
+func (_e *MockServiceInterface_Expecter) ListProjectParentCandidates(ctx interface{}, id interface{}) *MockServiceInterface_ListProjectParentCandidates_Call {
+	return &MockServiceInterface_ListProjectParentCandidates_Call{Call: _e.mock.On("ListProjectParentCandidates", ctx, id)}
+}
+
+func (_c *MockServiceInterface_ListProjectParentCandidates_Call) Run(run func(ctx context.Context, id int32)) *MockServiceInterface_ListProjectParentCandidates_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].(context.Context), args[1].(int32))
+	})
+	return _c
+}
+
+func (_c *MockServiceInterface_ListProjectParentCandidates_Call) Return(_a0 []tasks.ProjectParentCandidate, _a1 error) *MockServiceInterface_ListProjectParentCandidates_Call {
+	_c.Call.Return(_a0, _a1)
+	return _c
+}
+
+func (_c *MockServiceInterface_ListProjectParentCandidates_Call) RunAndReturn(run func(context.Context, int32) ([]tasks.ProjectParentCandidate, error)) *MockServiceInterface_ListProjectParentCandidates_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // ListProjectsFast provides a mock function with given fields: ctx
 func (_m *MockServiceInterface) ListProjectsFast(ctx context.Context) ([]tasks.ProjectFastResponse, error) {
 	ret := _m.Called(ctx)

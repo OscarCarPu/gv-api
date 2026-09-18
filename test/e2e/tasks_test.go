@@ -38,6 +38,50 @@ func TestE2E_ProjectAndTaskLifecycle(t *testing.T) {
 	}
 }
 
+func TestE2E_MoveProjectParent(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping e2e test in short mode")
+	}
+	truncateTables(t)
+	client := authenticate(t)
+
+	root := client.CreateProject(t, CreateProjectRequest{Name: "Root"})
+	child := client.CreateProject(t, CreateProjectRequest{Name: "Child", ParentID: &root.ID})
+	other := client.CreateProject(t, CreateProjectRequest{Name: "Other"})
+
+	patch := func(id int32, body string) *http.Response {
+		return client.do(t, http.MethodPatch, "/tasks/projects/"+strconv.Itoa(int(id)), []byte(body))
+	}
+
+	// Move under another project.
+	resp := patch(child.ID, `{"parent_id": `+strconv.Itoa(int(other.ID))+`}`)
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("move under other: got status %d, want 200", resp.StatusCode)
+	}
+
+	// The parent must not end up inside its own subtree.
+	resp = patch(other.ID, `{"parent_id": `+strconv.Itoa(int(child.ID))+`}`)
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusConflict {
+		t.Fatalf("cycle: got status %d, want 409", resp.StatusCode)
+	}
+
+	// An explicit null moves it back to the root.
+	resp = patch(child.ID, `{"parent_id": null}`)
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("move to root: got status %d, want 200", resp.StatusCode)
+	}
+
+	// The candidate list for "other" excludes "other" itself.
+	resp = client.do(t, http.MethodGet, "/tasks/projects/"+strconv.Itoa(int(other.ID))+"/parent-candidates", nil)
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("parent-candidates: got status %d, want 200", resp.StatusCode)
+	}
+}
+
 func TestE2E_TaskDependencyChain(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping e2e test in short mode")
