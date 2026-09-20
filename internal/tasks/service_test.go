@@ -696,6 +696,56 @@ func TestService_GetTasksByDueDate_UrgencyAgreesAcrossOffset(t *testing.T) {
 	}
 }
 
+// Every estimated task already past its due date: there is no future day left to spend, so the
+// range handed to capacity ends before it starts. Uses the real capacity service — the stub
+// above returns whatever it is told and cannot reproduce a reversed range, which is how this
+// went unnoticed: the whole Due Soon endpoint answered 500 the moment the last estimated task
+// slipped past its deadline.
+func TestService_GetTasksByDueDate_AllEstimatedTasksOverdue(t *testing.T) {
+	loc, err := time.LoadLocation("Europe/Madrid")
+	require.NoError(t, err)
+
+	now := time.Now().In(loc)
+	longAgo := time.Date(now.Year(), now.Month(), now.Day()-20, 0, 0, 0, 0, time.UTC)
+	estimate := decimal.RequireFromString("6")
+
+	repo := mocks.NewMockRepository(t)
+	repo.EXPECT().
+		GetTasksByDueDate(mock.Anything, (*int32)(nil)).
+		Return([]tasks.TaskByDueDateResponse{
+			{ID: 1, TaskType: "standard", DueAt: &longAgo, EstimateHours: &estimate},
+			{ID: 2, TaskType: "standard", DueAt: &longAgo},
+		}, nil)
+
+	svc := tasks.NewService(repo, loc)
+	svc.SetUrgencyProviders(
+		capacity.NewService(decimal.RequireFromString("8"), stubBusyProvider{}),
+		stubPlannedHoursProvider{},
+	)
+
+	var got []tasks.TaskByDueDateResponse
+	require.NotPanics(t, func() {
+		got, err = svc.GetTasksByDueDate(context.Background(), nil)
+	})
+	require.NoError(t, err)
+	require.Len(t, got, 2)
+
+	today := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, loc).Format("2006-01-02")
+	assert.True(t, got[0].Urgent, "an overdue task with an estimate is urgent")
+	require.NotNil(t, got[0].StartBy)
+	assert.Equal(t, today, *got[0].StartBy, "it should have started already, so start_by is today")
+	require.NotNil(t, got[0].RemainingHours)
+	assert.True(t, got[0].RemainingHours.Equal(estimate))
+	assert.False(t, got[1].Urgent, "no estimate, no urgency")
+	assert.Nil(t, got[1].StartBy)
+}
+
+type stubBusyProvider struct{}
+
+func (stubBusyProvider) BusyHoursByDate(_ context.Context, _, _ time.Time) (map[string]decimal.Decimal, error) {
+	return map[string]decimal.Decimal{}, nil
+}
+
 // Two tasks sharing the same 5-day, 20-hour due-date window draw from the same freeByDate pool.
 // Checked independently, a task needing only 3 hours would comfortably fit in the day furthest
 // from today and not be urgent — but a higher-priority task claiming 16 of those 20 hours first
