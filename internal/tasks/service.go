@@ -350,9 +350,16 @@ func (s *Service) applyUrgency(ctx context.Context, rows []TaskByDueDateResponse
 		return nil
 	}
 
-	series, err := s.capacity.FreeBusyRange(ctx, today, maxDue.AddDate(0, 0, 1))
-	if err != nil {
-		return err
+	// The backward fill below only spends days in [today, due), so when every estimated task is
+	// already due (or overdue) there is no free capacity to look up — those tasks are urgent by
+	// definition and start_by is today. Asking anyway would hand FreeBusyRange a reversed range.
+	var series []capacity.DayFreeBusy
+	if maxDue.After(today) {
+		var err error
+		series, err = s.capacity.FreeBusyRange(ctx, today, maxDue.AddDate(0, 0, 1))
+		if err != nil {
+			return err
+		}
 	}
 	freeByDate := make(map[string]decimal.Decimal, len(series))
 	for _, d := range series {
