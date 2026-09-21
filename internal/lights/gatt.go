@@ -355,8 +355,11 @@ func (g *bluezGATT) Scan(ctx context.Context, window time.Duration) ([]Discovere
 	if call := adapter.CallWithContext(ctx, adapterIface+".StartDiscovery", 0); call.Err != nil {
 		return nil, classifyDBus(call.Err)
 	}
+	// Stopped only after the read: when the adapter still reports Discovering, stopDiscovery
+	// power-cycles the radio, and that wipes BlueZ's device cache, so the list would come back empty.
+	defer g.stopDiscovery(ctx, adapter)
+
 	sleepCtx(ctx, window)
-	g.stopDiscovery(ctx, adapter)
 
 	var objects map[dbus.ObjectPath]map[string]map[string]dbus.Variant
 	call := conn.Object(bluezName, "/").CallWithContext(ctx, "org.freedesktop.DBus.ObjectManager.GetManagedObjects", 0)
