@@ -34,6 +34,9 @@ type Service struct {
 	mu     sync.Mutex
 	cache  map[string]cacheEntry
 	flight map[string]*inflight
+
+	// Bulbs currently in crazy mode; see crazy.go.
+	crazy *crazyModes
 }
 
 type cacheEntry struct {
@@ -65,6 +68,7 @@ func NewService(repo Repository, driver Driver, ttl time.Duration, settleAttempt
 		settleDelay:    settleDelay,
 		cache:          map[string]cacheEntry{},
 		flight:         map[string]*inflight{},
+		crazy:          newCrazyModes(),
 	}
 }
 
@@ -113,6 +117,13 @@ func (s *Service) Send(ctx context.Context, id string, cmd Command) (State, erro
 	if err := cmd.Validate(); err != nil {
 		return State{}, err
 	}
+
+	if cmd.Type == CommandCrazy {
+		return s.setCrazy(ctx, light, *cmd.On), nil
+	}
+
+	// Any other command is a person taking the wheel back, and the sweep would only fight it.
+	s.stopCrazy(id)
 
 	state := s.driver.Apply(ctx, light, cmd)
 	state = s.settle(ctx, light, cmd, state)
@@ -186,7 +197,25 @@ func settleActual(cmd Command, state State) (float64, bool) {
 	}
 }
 
+// setCrazy turns crazy mode on or off and returns the bulb's state afterwards.
+func (s *Service) setCrazy(ctx context.Context, light Light, on bool) State {
+	if on {
+		// Not cached: the sweep answers reads itself for as long as it runs, and a cached copy
+		// would keep claiming crazy after it gave up.
+		return s.startCrazy(ctx, light)
+	}
+	state, ok := s.stopCrazy(light.ID)
+	if !ok {
+		return s.read(ctx, light, false)
+	}
+	s.store(state)
+	return state
+}
+
 func (s *Service) read(ctx context.Context, light Light, force bool) State {
+	if state, ok := s.crazyState(light.ID); ok {
+		return state
+	}
 	if !force {
 		if state, ok := s.cached(light.ID); ok {
 			return state
@@ -300,6 +329,8 @@ func (s *Service) Update(ctx context.Context, id string, req UpdateLightRequest)
 	if err != nil {
 		return PublicLight{}, err
 	}
+	// The sweep was built from the old row: its temperature range, its protocol.
+	s.stopCrazy(id)
 	// A renamed or reconfigured bulb must not keep answering from a cache built under the old
 	// one — the name travels inside State.
 	s.forget(id)
@@ -310,6 +341,7 @@ func (s *Service) Delete(ctx context.Context, id string) error {
 	if err := s.repo.Delete(ctx, id); err != nil {
 		return err
 	}
+	s.stopCrazy(id)
 	s.forget(id)
 	slog.Info("light removed", "light", id)
 	return nil
