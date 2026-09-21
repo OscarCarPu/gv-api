@@ -53,6 +53,9 @@ type Discovered struct {
 	// Known is true when this address is already registered, so the UI can show it as added
 	// rather than offering to add it twice.
 	Known bool `json:"known"`
+	// Services are the GATT service UUIDs the device advertised. They are how a bulb is told
+	// apart from a watch or a TV, and mean nothing to a client, so they stay off the wire.
+	Services []string `json:"-"`
 }
 
 // ProtocolInfo describes one supported bulb family, so the add form can offer a model and

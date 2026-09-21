@@ -941,3 +941,29 @@ func (d *offlineOnReadDriver) Apply(ctx context.Context, light Light, cmd Comman
 }
 
 func ptr[T any](v T) *T { return &v }
+
+type scanningGATT struct {
+	fakeGATT
+	heard []Discovered
+}
+
+func (f *scanningGATT) Scan(context.Context, time.Duration) ([]Discovered, error) {
+	return f.heard, nil
+}
+
+func TestDiscoverKeepsOnlyDevicesAdvertisingABulbService(t *testing.T) {
+	// The scan hears everything in the room; only the service UUID says which of it is a lamp.
+	radio := &scanningGATT{heard: []Discovered{
+		{Address: "ED:2E:9E:5B:69:5C", Name: "Amazfit T-Rex", Services: nil},
+		{Address: "AA:BB:CC:DD:EE:01", Name: "Speaker", Services: []string{"0000180f-0000-1000-8000-00805f9b34fb"}},
+		{Address: "AA:BB:CC:DD:EE:02", Name: "", Services: []string{"0000A100-0000-1000-8000-00805F9B34FB"}},
+	}}
+
+	found, err := newDriver(radio, time.Minute).Discover(context.Background(), time.Millisecond)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(found) != 1 || found[0].Address != "AA:BB:CC:DD:EE:02" {
+		t.Fatalf("want only the device advertising 0xA100, got %+v", found)
+	}
+}

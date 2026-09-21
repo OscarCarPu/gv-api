@@ -337,7 +337,8 @@ func (g *bluezGATT) resetAdapter(ctx context.Context, adapter dbus.BusObject) {
 }
 
 /*
-Scan lists what the adapter can hear.
+Scan lists what the adapter can hear, with the service UUIDs each device advertised so the
+caller can tell bulbs from everything else.
 
 BlueZ answers with everything it has ever seen on this adapter, not just what is advertising
 right now, so the list is filtered to devices with a live RSSI. A lamp already paired to a
@@ -392,7 +393,8 @@ func (g *bluezGATT) Scan(ctx context.Context, window time.Duration) ([]Discovere
 		if !hasRSSI {
 			continue // remembered from an earlier session, not in range now
 		}
-		found = append(found, Discovered{Address: address, Name: name, RSSI: int(rssi)})
+		services, _ := device["UUIDs"].Value().([]string)
+		found = append(found, Discovered{Address: address, Name: name, RSSI: int(rssi), Services: services})
 	}
 
 	// Strongest first: the bulb someone is standing next to is the one they mean.

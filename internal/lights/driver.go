@@ -154,7 +154,8 @@ func (d *BlueZDriver) Apply(ctx context.Context, light Light, cmd Command) State
 }
 
 /*
-Discover scans for bulbs in range.
+Discover scans for bulbs in range: devices that advertise a supported family's service.
+Everything else the radio heard (watches, TVs, tags) is dropped.
 
 Scanning and connecting share one radio, and BlueZ slows every in-flight connection while
 discovery is running. That is accepted rather than locked around: a scan is a person standing
@@ -168,8 +169,14 @@ func (d *BlueZDriver) Discover(ctx context.Context, window time.Duration) ([]Dis
 		slog.Warn("bulb scan failed", "error", err)
 		return nil, err
 	}
-	slog.Debug("bulb scan finished", "found", len(found))
-	return found, nil
+	bulbs := make([]Discovered, 0, len(found))
+	for _, device := range found {
+		if isBulb(device) {
+			bulbs = append(bulbs, device)
+		}
+	}
+	slog.Debug("bulb scan finished", "heard", len(found), "bulbs", len(bulbs))
+	return bulbs, nil
 }
 
 // connect brings the bulb up and records that it was used, which is what keeps the idle sweep
