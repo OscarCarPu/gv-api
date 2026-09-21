@@ -35,6 +35,9 @@ type Service struct {
 	cache  map[string]cacheEntry
 	flight map[string]*inflight
 
+	// polling is true once StartPolling has a poller keeping the cache warm.
+	polling bool
+
 	// Bulbs currently in crazy mode; see crazy.go.
 	crazy *crazyModes
 }
@@ -197,6 +200,77 @@ func settleActual(cmd Command, state State) (float64, bool) {
 	}
 }
 
+// StartPolling checks every bulb's state on a timer, so a read finds it already in the cache
+// instead of waiting on the radio. A zero interval leaves polling off and reads stay live.
+//
+// The cache is then trusted for two intervals rather than the short TTL: with a poller behind
+// it, a stale answer is at most one missed check old, and a live read on the request path is
+// exactly the wait this exists to remove. `?force=1` still goes to the bulb.
+func (s *Service) StartPolling(ctx context.Context, interval time.Duration) {
+	if interval <= 0 {
+		return
+	}
+	s.mu.Lock()
+	s.ttl = max(s.ttl, 2*interval)
+	s.polling = true
+	s.mu.Unlock()
+
+	go func() {
+		s.pollOnce(ctx, interval)
+		ticker := time.NewTicker(interval)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				s.pollOnce(ctx, interval)
+			}
+		}
+	}()
+	slog.Info("light status polling on", "every", interval)
+}
+
+// pollOnce refreshes every bulb in parallel, bounded by the interval so one that hangs cannot
+// push the next round back.
+func (s *Service) pollOnce(ctx context.Context, interval time.Duration) {
+	lights, err := s.repo.List(ctx)
+	if err != nil {
+		slog.Warn("light poll could not list bulbs", "error", err)
+		return
+	}
+	ctx, cancel := context.WithTimeout(withBackground(ctx), interval)
+	defer cancel()
+
+	var wg sync.WaitGroup
+	for _, light := range lights {
+		wg.Add(1)
+		go func(light Light) {
+			defer wg.Done()
+			s.read(ctx, light, true)
+		}(light)
+	}
+	wg.Wait()
+}
+
+// warmIfPolling reads a bulb in the background so its first appearance on a page is not a
+// cold read. Without a poller nothing keeps the answer warm, so there is no point.
+func (s *Service) warmIfPolling(light Light) {
+	s.mu.Lock()
+	polling := s.polling
+	s.mu.Unlock()
+	if !polling {
+		return
+	}
+	go s.warm(light)
+}
+
+func (s *Service) warm(light Light) {
+	ctx, cancel := context.WithTimeout(withBackground(context.Background()), time.Minute)
+	defer cancel()
+	s.read(ctx, light, true)
+}
+
 // setCrazy turns crazy mode on or off and returns the bulb's state afterwards.
 func (s *Service) setCrazy(ctx context.Context, light Light, on bool) State {
 	if on {
@@ -291,6 +365,7 @@ func (s *Service) Create(ctx context.Context, req CreateLightRequest) (PublicLig
 		switch {
 		case err == nil:
 			slog.Info("light added", "light", created.ID, "protocol", created.Protocol)
+			s.warmIfPolling(created)
 			return created.Public(), nil
 		case errors.Is(err, errDuplicateID):
 			continue

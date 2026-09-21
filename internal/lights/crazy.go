@@ -25,9 +25,11 @@ const (
 	crazyBrightnessPeriod = 5 * time.Second
 	crazyTempPeriod       = 4 * time.Second
 
-	// Time between frames. Each frame is up to two BLE writes, so this is a rate the bulb
-	// keeps up with rather than the smoothest one on offer.
-	crazyStep = 300 * time.Millisecond
+	// Time between frames. Each frame is up to two BLE writes, so this is about 3 writes a
+	// second: a rate the bulb keeps up with rather than the smoothest one on offer. At 300ms
+	// (about 7 a second) a bulb answered with ATT errors within a minute and then stopped
+	// advertising until it was power-cycled, so this leaves it well clear of that.
+	crazyStep = 600 * time.Millisecond
 
 	// 0 reads as "off" rather than "dimmest" on these bulbs, and off belongs to the switch.
 	crazyMinBrightness = 1

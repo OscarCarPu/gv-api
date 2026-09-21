@@ -179,8 +179,24 @@ func (d *BlueZDriver) Discover(ctx context.Context, window time.Duration) ([]Dis
 	return bulbs, nil
 }
 
+type backgroundKey struct{}
+
+// withBackground marks work nobody is waiting on, such as the status poller. A bulb that is
+// only being checked must not count as in use, or a check every minute would hold every bulb
+// connected for good and lock out its own remote.
+func withBackground(ctx context.Context) context.Context {
+	return context.WithValue(ctx, backgroundKey{}, true)
+}
+
+func isBackground(ctx context.Context) bool {
+	background, _ := ctx.Value(backgroundKey{}).(bool)
+	return background
+}
+
 // connect brings the bulb up and records that it was used, which is what keeps the idle sweep
-// from disconnecting a bulb mid-conversation.
+// from disconnecting a bulb mid-conversation. A background check connects without counting:
+// a link it opened is left already expired for the sweep to release, and one a person is
+// using keeps the stamp that person gave it.
 func (d *BlueZDriver) connect(ctx context.Context, light Light) error {
 	if light.Address == "" {
 		return errors.New("bulb has no address")
@@ -189,7 +205,11 @@ func (d *BlueZDriver) connect(ctx context.Context, light Light) error {
 		return err
 	}
 	d.mu.Lock()
-	d.used[light.Address] = time.Now()
+	if !isBackground(ctx) {
+		d.used[light.Address] = time.Now()
+	} else if _, inUse := d.used[light.Address]; !inUse {
+		d.used[light.Address] = time.Now().Add(-d.idleDisconnect)
+	}
 	d.mu.Unlock()
 	return nil
 }
@@ -205,10 +225,10 @@ func (d *BlueZDriver) drop(address string) {
 /*
 reapIdle releases bulbs nobody has used lately.
 
-Worth knowing when reading polling code elsewhere: any client polling faster than
-idleDisconnect keeps its bulbs connected indefinitely, because every poll is a real read.
-That is the intended trade — an open Lights tab means someone is using the lights — but it is
-why the remote on the wall stops working while the tab is open.
+Reads a person is waiting on count as use, so a client forcing reads faster than
+idleDisconnect keeps its bulbs connected. The service's own background poll does not (see
+withBackground), and ordinary client polling is answered from its cache, so an open Lights tab
+no longer holds the links.
 */
 func (d *BlueZDriver) reapIdle() {
 	ticker := time.NewTicker(15 * time.Second)
@@ -389,7 +409,7 @@ func bleErrorMessage(err error) string {
 	case errors.Is(err, errBulbBusy):
 		return "bulb busy — another app may be connected to it"
 	case errors.Is(err, errBulbNotFound):
-		return "bulb not found — is it powered and in range?"
+		return "bulb not found — is it powered and in range? If so, switch it off and on"
 	case errors.Is(err, errNoServices):
 		return "bulb connected but never answered"
 	case errors.Is(err, errNoCharUUID):

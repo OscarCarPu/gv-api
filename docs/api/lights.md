@@ -71,7 +71,8 @@ Every bulb's current state. `?force=1` skips the read cache.
       "supportsColorTemp": true,
       "minColorTemp": 2700,
       "maxColorTemp": 6500,
-      "updatedAt": 1786800215474
+      "updatedAt": 1786800215474,
+      "crazy": false
     }
   ]
 }
@@ -94,6 +95,7 @@ Apply one command; the response is the resulting state.
 | `{"type":"brightness","value":0-100}` | set brightness |
 | `{"type":"color","color":{"r":0-255,"g":..,"b":..}}` | set an RGB colour |
 | `{"type":"colorTemp","kelvin":2700}` | set colour temperature |
+| `{"type":"crazy","on":true}` | start or stop crazy mode |
 
 `400` for a malformed command, `404` for an unknown bulb.
 
@@ -112,6 +114,16 @@ offline rather than as the value we hoped for.
 real hardware those are separate frames, so dimming a bulb that is off only changes how it will
 look when switched on. Do not infer power from them — a client that did reported "on" over a
 dark room, and turned its "All on" button into a no-op.
+
+**Crazy mode.** `{"type":"crazy","on":true}` switches the bulb on and sweeps it on its own:
+brightness from 100 down to 1 and back every 5 s, colour temperature from the bulb's coolest
+to its warmest and back every 4 s. It runs in the API, so it outlives the tab that started it,
+and `state.crazy` says whether it is running. Any other command for that bulb ends it, as does
+`{"type":"crazy","on":false}`, editing or deleting the bulb, or five frames in a row that the
+bulb does not take. While it runs `GET /state` answers with what the sweep last wrote instead
+of querying the bulb, because a query would stall the sweep. Frames go out about every 600 ms
+(roughly 3 writes a second): a faster sweep was followed by a bulb that returned ATT errors
+and stopped advertising until it was power-cycled.
 
 ## Errors are per-bulb
 
@@ -196,6 +208,7 @@ LIGHTS_DRIVER=mock|bluez           # mock (default) touches no hardware
 LIGHTS_ADAPTER=hci0
 LIGHTS_CONNECT_TIMEOUT_MS=20000    # a cold connect measures ~11s; don't go much below
 LIGHTS_CACHE_MS=2000
+LIGHTS_POLL_MS=60000               # background status check, so reads are instant (0 = off)
 LIGHTS_IDLE_DISCONNECT_MS=90000    # hand an unused bulb back to its own remote
 LIGHTS_SETTLE_ATTEMPTS=2           # re-apply a drifting write this many times (0 = off)
 LIGHTS_SETTLE_DELAY_MS=400         # let the lamp transition before checking
@@ -213,9 +226,13 @@ Docker does not hit this, because your own uid is real.
 
 **Idle disconnect is worth understanding.** These lamps accept one central, so holding a link
 forever locks out their own remote and the vendor app. A bulb nobody has touched for
-`LIGHTS_IDLE_DISCONNECT_MS` is released. The flip side: any client polling faster than that
-keeps its bulbs connected, which is why the wall remote stops working while the Lights tab is
-open.
+`LIGHTS_IDLE_DISCONNECT_MS` is released.
+
+**Status is polled in the background.** Every `LIGHTS_POLL_MS` the API reads each bulb itself,
+so `GET /state` answers from memory (the cache is trusted for two poll intervals) instead of
+waiting on a cold BLE read, which takes several seconds. `?force=1` still goes to the bulb. A
+background check does not count as use for the idle sweep: it connects, reads, and the bulb is
+released right after, so the poll does not lock out the wall remote. Commands do count.
 
 Adding a bulb family means implementing `protocol` in `internal/lights/protocol.go` — the
 frames for on/off, brightness and colour, and optionally a readback. Use any BLE scanner
