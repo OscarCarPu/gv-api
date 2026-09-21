@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"math"
 	"sort"
+	"strings"
 	"time"
 )
 
@@ -54,6 +55,10 @@ type protocol interface {
 	// Readable is false for bulbs that cannot be asked their current settings; the driver
 	// then answers reads from what it last wrote, which is all anyone can do.
 	Readable() bool
+	// Advertises is the GATT service UUID every bulb of this family puts in its advertisement.
+	// A scan keeps only devices that advertise one of these, so the add list is bulbs rather
+	// than everything with a radio in range.
+	Advertises() string
 	Read(ctx context.Context, g gatt, light Light) (readback, error)
 	SetPower(ctx context.Context, g gatt, light Light, on bool) error
 	SetBrightness(ctx context.Context, g gatt, light Light, value int) error
@@ -63,6 +68,19 @@ type protocol interface {
 
 var protocols = map[string]protocol{
 	"lexman": lexman{},
+}
+
+// isBulb reports whether a scan result advertises the service of any supported family.
+func isBulb(device Discovered) bool {
+	for _, p := range protocols {
+		want := p.Advertises()
+		for _, have := range device.Services {
+			if strings.EqualFold(have, want) {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 func protocolFor(name string) (protocol, bool) {
@@ -148,6 +166,11 @@ const (
 
 func (lexman) Name() string   { return "lexman" }
 func (lexman) Readable() bool { return true }
+
+// Advertises 0xA100 in its advertisement, in the standard Bluetooth base form. This is not the
+// vendor service the frames are written to (lexmanWriteUUID): that one only exists once
+// connected, and the scan has to decide before connecting.
+func (lexman) Advertises() string { return "0000a100-0000-1000-8000-00805f9b34fb" }
 
 func (lexman) Info() ProtocolInfo {
 	return ProtocolInfo{
