@@ -96,7 +96,8 @@ func main() {
 	} else {
 		lightsDriver = lights.NewMockDriver()
 	}
-	lightsHandler := lights.NewHandler(lights.NewService(lightsRepo, lightsDriver, cfg.LightsCacheTTL, cfg.LightsSettleAttempts, cfg.LightsSettleDelay))
+	lightsService := lights.NewService(lightsRepo, lightsDriver, cfg.LightsCacheTTL, cfg.LightsSettleAttempts, cfg.LightsSettleDelay)
+	lightsHandler := lights.NewHandler(lightsService)
 
 	// Calendar Setup
 	// The whole domain runs off one Google client; with no credentials configured it mounts
@@ -214,6 +215,10 @@ func main() {
 	workerCtx, stopWorker := context.WithCancel(context.Background())
 	defer stopWorker()
 	go calendar.NewWorker(calendarService).Run(workerCtx)
+
+	// Bulb status is checked in the background so reads answer from memory: a cold BLE read
+	// takes seconds, and nobody should wait that long for a card to draw.
+	lightsService.StartPolling(workerCtx, cfg.LightsPollInterval)
 
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)

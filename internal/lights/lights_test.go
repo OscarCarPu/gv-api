@@ -1207,3 +1207,103 @@ func TestCrazyCommandNeedsOn(t *testing.T) {
 		t.Errorf("crazy without \"on\" should be invalid, got %v", err)
 	}
 }
+
+// --- background polling ---------------------------------------------------------------
+
+func TestPollingWarmsTheCacheSoReadsNeverWaitOnTheRadio(t *testing.T) {
+	driver := &recordingDriver{inner: NewMockDriver()}
+	svc := NewService(newFakeRepo(bulb(t)), driver, 0, 0, 0)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	svc.StartPolling(ctx, 300*time.Millisecond)
+
+	readCount := func() int {
+		driver.mu.Lock()
+		defer driver.mu.Unlock()
+		return driver.reads
+	}
+	waitFor(t, "the first poll", func() bool { return readCount() >= 1 })
+	before := readCount()
+
+	// A client asking now, with no TTL of its own configured, must get the polled answer.
+	for range 5 {
+		states, err := svc.States(context.Background(), false)
+		if err != nil || len(states) != 1 {
+			t.Fatalf("states: %v %v", states, err)
+		}
+	}
+	if after := readCount(); after != before {
+		t.Errorf("client reads reached the radio: %d -> %d", before, after)
+	}
+
+	// force is the way to get past the cache.
+	if _, err := svc.State(context.Background(), "bedroom", true); err != nil {
+		t.Fatal(err)
+	}
+	if readCount() <= before {
+		t.Error("a forced read should still ask the bulb")
+	}
+}
+
+func TestPollingIsOffAtZeroInterval(t *testing.T) {
+	driver := &recordingDriver{inner: NewMockDriver()}
+	svc := NewService(newFakeRepo(bulb(t)), driver, 0, 0, 0)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	svc.StartPolling(ctx, 0)
+	time.Sleep(30 * time.Millisecond)
+
+	driver.mu.Lock()
+	defer driver.mu.Unlock()
+	if driver.reads != 0 {
+		t.Errorf("no poller should be running, saw %d reads", driver.reads)
+	}
+}
+
+func TestAddingABulbWarmsItWhenPolling(t *testing.T) {
+	driver := &recordingDriver{inner: NewMockDriver()}
+	svc := NewService(newFakeRepo(), driver, 0, 0, 0)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	svc.StartPolling(ctx, time.Hour)
+
+	created, err := svc.Create(context.Background(), CreateLightRequest{
+		Name: "Hall", Address: "AA:BB:CC:00:00:09", Protocol: "lexman",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	waitFor(t, "the new bulb to be read", func() bool {
+		_, ok := svc.cached(created.ID)
+		return ok
+	})
+}
+
+func TestBackgroundChecksDoNotHoldABulbConnected(t *testing.T) {
+	// The whole point of releasing after a poll: a check every minute must not lock the bulb's
+	// own remote out for good.
+	light := bulb(t)
+
+	polled := newDriver(&fakeGATT{}, time.Minute)
+	polled.GetState(withBackground(context.Background()), light)
+	if idle := polled.idleAddresses(); len(idle) != 1 {
+		t.Errorf("a link opened by a background check should be left for the sweep, idle=%v", idle)
+	}
+
+	used := newDriver(&fakeGATT{}, time.Minute)
+	used.GetState(context.Background(), light)
+	if idle := used.idleAddresses(); len(idle) != 0 {
+		t.Errorf("a link a person asked for should count as in use, idle=%v", idle)
+	}
+
+	// A person's link stays theirs when a poll comes through it.
+	shared := newDriver(&fakeGATT{}, time.Minute)
+	shared.GetState(context.Background(), light)
+	shared.GetState(withBackground(context.Background()), light)
+	if idle := shared.idleAddresses(); len(idle) != 0 {
+		t.Errorf("a poll must not expire a link somebody is using, idle=%v", idle)
+	}
+}
