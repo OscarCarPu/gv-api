@@ -39,6 +39,9 @@ type State struct {
 	// failing the whole request.
 	Error     string `json:"error,omitempty"`
 	UpdatedAt int64  `json:"updatedAt"`
+	// Crazy is true while the bulb is sweeping brightness and temperature on its own. It is
+	// server state, not a client toggle: every client reads it, and any manual command ends it.
+	Crazy bool `json:"crazy"`
 }
 
 // Discovered is a bulb the adapter can see right now, whether or not it has been added.
@@ -174,6 +177,9 @@ const (
 	CommandBrightness = "brightness"
 	CommandColor      = "color"
 	CommandColorTemp  = "colorTemp"
+	// CommandCrazy starts or stops crazy mode. The service handles it itself; a driver never
+	// sees it.
+	CommandCrazy = "crazy"
 )
 
 // ErrInvalidCommand is returned by Validate; the handler maps it to 400.
@@ -186,7 +192,7 @@ var ErrInvalidCommand = errors.New("invalid command")
 // the driver, which knows the bulb.
 func (c Command) Validate() error {
 	switch c.Type {
-	case CommandPower:
+	case CommandPower, CommandCrazy:
 		if c.On == nil {
 			return fmt.Errorf(`%w: "on" must be a boolean`, ErrInvalidCommand)
 		}
