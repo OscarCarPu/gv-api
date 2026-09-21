@@ -967,3 +967,243 @@ func TestDiscoverKeepsOnlyDevicesAdvertisingABulbService(t *testing.T) {
 		t.Fatalf("want only the device advertising 0xA100, got %+v", found)
 	}
 }
+
+// --- crazy mode -----------------------------------------------------------------------
+
+func TestCrazySweepStartsAtTheMaximumAndTurnsAtTheMinimum(t *testing.T) {
+	light := bulb(t)
+	at := func(d time.Duration) (int, int) { return crazyBrightness(d), crazyKelvin(light, d) }
+
+	// Brightness: a full round trip every 5s. Temperature: every 4s.
+	cases := []struct {
+		at         time.Duration
+		brightness int
+		kelvin     int
+	}{
+		{0, 100, 6500},
+		{2500 * time.Millisecond, 1, -1}, // brightness bottom; kelvin is mid-sweep
+		{2 * time.Second, -1, 2700},      // kelvin bottom
+		{4 * time.Second, -1, 6500},      // kelvin back at the top
+		{5 * time.Second, 100, -1},       // brightness back at the top
+	}
+	for _, c := range cases {
+		brightness, kelvin := at(c.at)
+		if c.brightness >= 0 && brightness != c.brightness {
+			t.Errorf("brightness at %v = %d, want %d", c.at, brightness, c.brightness)
+		}
+		if c.kelvin >= 0 && kelvin != c.kelvin {
+			t.Errorf("kelvin at %v = %d, want %d", c.at, kelvin, c.kelvin)
+		}
+	}
+
+	// It never leaves the bulb's range: below 1 reads as "off", and past the kelvin bounds
+	// the driver would clamp and hide a wrong wave.
+	for elapsed := time.Duration(0); elapsed < 20*time.Second; elapsed += 37 * time.Millisecond {
+		brightness, kelvin := at(elapsed)
+		if brightness < 1 || brightness > 100 {
+			t.Fatalf("brightness %d out of range at %v", brightness, elapsed)
+		}
+		if kelvin < 2700 || kelvin > 6500 {
+			t.Fatalf("kelvin %d out of range at %v", kelvin, elapsed)
+		}
+	}
+}
+
+// recordingDriver logs what reaches the radio.
+type recordingDriver struct {
+	inner *MockDriver
+
+	mu       sync.Mutex
+	commands []Command
+	reads    int
+	offline  bool
+}
+
+func (d *recordingDriver) Discover(ctx context.Context, window time.Duration) ([]Discovered, error) {
+	return d.inner.Discover(ctx, window)
+}
+
+func (d *recordingDriver) Kind() string { return "recording" }
+
+func (d *recordingDriver) GetState(ctx context.Context, light Light) State {
+	d.mu.Lock()
+	d.reads++
+	d.mu.Unlock()
+	return d.inner.GetState(ctx, light)
+}
+
+func (d *recordingDriver) Apply(ctx context.Context, light Light, cmd Command) State {
+	d.mu.Lock()
+	d.commands = append(d.commands, cmd)
+	offline := d.offline
+	d.mu.Unlock()
+
+	state := d.inner.Apply(ctx, light, cmd)
+	state.Online = !offline
+	return state
+}
+
+func (d *recordingDriver) count(kind string) int {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	n := 0
+	for _, c := range d.commands {
+		if c.Type == kind {
+			n++
+		}
+	}
+	return n
+}
+
+func (d *recordingDriver) total() int {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	return len(d.commands)
+}
+
+func crazyService(t *testing.T, driver Driver) *Service {
+	t.Helper()
+	svc := NewService(newFakeRepo(bulb(t)), driver, 0, 0, 0)
+	svc.crazy.step = 5 * time.Millisecond
+	t.Cleanup(func() { svc.stopCrazy("bedroom") })
+	return svc
+}
+
+func waitFor(t *testing.T, what string, ok func() bool) {
+	t.Helper()
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		if ok() {
+			return
+		}
+		time.Sleep(2 * time.Millisecond)
+	}
+	t.Fatalf("timed out waiting for %s", what)
+}
+
+func TestCrazyModeSweepsAndReportsItself(t *testing.T) {
+	driver := &recordingDriver{inner: NewMockDriver()}
+	svc := crazyService(t, driver)
+	on := true
+
+	state, err := svc.Send(context.Background(), "bedroom", Command{Type: CommandCrazy, On: &on})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !state.Crazy || !state.Power {
+		t.Errorf("starting crazy mode should switch the bulb on and say so: %+v", state)
+	}
+
+	waitFor(t, "the sweep to write brightness and temperature", func() bool {
+		return driver.count(CommandBrightness) > 2 && driver.count(CommandColorTemp) > 2
+	})
+
+	// Reads must not go near the radio: a query would hold the bulb's lock and stall the sweep.
+	states, err := svc.States(context.Background(), true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(states) != 1 || !states[0].Crazy {
+		t.Errorf("a polled read should report the bulb as crazy: %+v", states)
+	}
+	if driver.reads != 0 {
+		t.Errorf("reads during the sweep should be answered from memory, saw %d radio reads", driver.reads)
+	}
+}
+
+func TestCrazyModeStopsOnAnyManualCommand(t *testing.T) {
+	driver := &recordingDriver{inner: NewMockDriver()}
+	svc := crazyService(t, driver)
+	on := true
+	if _, err := svc.Send(context.Background(), "bedroom", Command{Type: CommandCrazy, On: &on}); err != nil {
+		t.Fatal(err)
+	}
+	waitFor(t, "the sweep to run", func() bool { return driver.count(CommandBrightness) > 1 })
+
+	value := 40
+	state, err := svc.Send(context.Background(), "bedroom", Command{Type: CommandBrightness, Value: &value})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if state.Crazy || state.Brightness != 40 {
+		t.Errorf("a manual command should end the mode and win: %+v", state)
+	}
+
+	// Nothing may write after the person's command, or the sweep would undo it.
+	settled := driver.total()
+	time.Sleep(50 * time.Millisecond)
+	if after := driver.total(); after != settled {
+		t.Errorf("the sweep kept writing after it was stopped: %d -> %d", settled, after)
+	}
+	if got, _ := svc.State(context.Background(), "bedroom", true); got.Crazy {
+		t.Errorf("state still reports crazy: %+v", got)
+	}
+}
+
+func TestCrazyModeTurnsOff(t *testing.T) {
+	driver := &recordingDriver{inner: NewMockDriver()}
+	svc := crazyService(t, driver)
+	on, off := true, false
+	if _, err := svc.Send(context.Background(), "bedroom", Command{Type: CommandCrazy, On: &on}); err != nil {
+		t.Fatal(err)
+	}
+	// Starting twice must not stack a second sweep on the same bulb.
+	if _, err := svc.Send(context.Background(), "bedroom", Command{Type: CommandCrazy, On: &on}); err != nil {
+		t.Fatal(err)
+	}
+
+	state, err := svc.Send(context.Background(), "bedroom", Command{Type: CommandCrazy, On: &off})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if state.Crazy {
+		t.Errorf("turning it off should clear the flag: %+v", state)
+	}
+	if driver.count(CommandPower) != 1 {
+		t.Errorf("the second start should have been a no-op, saw %d power commands", driver.count(CommandPower))
+	}
+}
+
+func TestCrazyModeDoesNotStartOnAnUnreachableBulb(t *testing.T) {
+	driver := &recordingDriver{inner: NewMockDriver(), offline: true}
+	svc := crazyService(t, driver)
+	on := true
+
+	state, err := svc.Send(context.Background(), "bedroom", Command{Type: CommandCrazy, On: &on})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if state.Crazy || state.Online {
+		t.Errorf("an unreachable bulb cannot be crazy: %+v", state)
+	}
+	time.Sleep(30 * time.Millisecond)
+	if driver.count(CommandBrightness) != 0 {
+		t.Error("no sweep should run against a bulb that did not answer")
+	}
+}
+
+func TestCrazyModeGivesUpOnABulbThatStopsAnswering(t *testing.T) {
+	driver := &recordingDriver{inner: NewMockDriver()}
+	svc := crazyService(t, driver)
+	on := true
+	if _, err := svc.Send(context.Background(), "bedroom", Command{Type: CommandCrazy, On: &on}); err != nil {
+		t.Fatal(err)
+	}
+	driver.mu.Lock()
+	driver.offline = true
+	driver.mu.Unlock()
+
+	waitFor(t, "the sweep to give up", func() bool {
+		_, running := svc.crazy.get("bedroom")
+		return !running
+	})
+	if got, _ := svc.State(context.Background(), "bedroom", true); got.Crazy {
+		t.Errorf("a sweep that gave up should not keep reporting crazy: %+v", got)
+	}
+}
+
+func TestCrazyCommandNeedsOn(t *testing.T) {
+	if err := (Command{Type: CommandCrazy}).Validate(); !errors.Is(err, ErrInvalidCommand) {
+		t.Errorf("crazy without \"on\" should be invalid, got %v", err)
+	}
+}

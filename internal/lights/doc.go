@@ -9,6 +9,7 @@
 //	POST   /domotics/lights          - register a bulb
 //	GET    /domotics/lights/{id}     - one bulb's current state
 //	POST   /domotics/lights/{id}     - apply one command, returns the new state
+//	                                   ({"type":"crazy","on":true} starts the sweep)
 //	PATCH  /domotics/lights/{id}     - edit a registered bulb
 //	DELETE /domotics/lights/{id}     - unregister a bulb
 //
@@ -23,6 +24,7 @@
 //	light.go       the bulb record
 //	repository.go  which bulbs exist (a table)
 //	service.go     read cache, in-flight collapsing, settle loop
+//	crazy.go       crazy mode: a per-bulb brightness and temperature sweep
 //	driver.go      per-bulb serialisation, last known values, idle disconnect
 //	protocol.go    per-model frame encoding (currently the LEXMAN ZBEK-13)
 //	gatt.go        BlueZ over D-Bus
