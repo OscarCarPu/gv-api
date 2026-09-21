@@ -29,6 +29,7 @@ type Config struct {
 	LightsConnectTimeout time.Duration
 	LightsIdleDisconnect time.Duration
 	LightsCacheTTL       time.Duration
+	LightsPollInterval   time.Duration
 	// These bulbs sometimes land a step off the requested value, so the API re-applies a
 	// write until it holds. 0 attempts disables it.
 	LightsSettleAttempts int
@@ -94,6 +95,7 @@ func Load() (*Config, error) {
 		LightsConnectTimeout: getEnvDuration("LIGHTS_CONNECT_TIMEOUT_MS", 20000),
 		LightsIdleDisconnect: getEnvDuration("LIGHTS_IDLE_DISCONNECT_MS", 90000),
 		LightsCacheTTL:       getEnvDuration("LIGHTS_CACHE_MS", 2000),
+		LightsPollInterval:   getEnvDuration("LIGHTS_POLL_MS", 60000),
 		LightsSettleAttempts: getEnvInt("LIGHTS_SETTLE_ATTEMPTS", 2),
 		LightsSettleDelay:    getEnvDuration("LIGHTS_SETTLE_DELAY_MS", 400),
 
