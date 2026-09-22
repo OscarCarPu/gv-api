@@ -90,9 +90,12 @@ func Load() (*Config, error) {
 
 		LightsDriver:  getEnv("LIGHTS_DRIVER", "mock"),
 		LightsAdapter: getEnv("LIGHTS_ADAPTER", "hci0"),
-		// A cold connect is ~11s when BlueZ has to rediscover the bulb first; anything under
-		// ~20s aborts reads that would have succeeded.
-		LightsConnectTimeout: getEnvDuration("LIGHTS_CONNECT_TIMEOUT_MS", 20000),
+		// Connect retries up to connectRetries times (gatt.go), and each retry that finds no
+		// BlueZ object for the bulb re-scans for discoveryWindow (8s) before trying again —
+		// 3 retries is up to ~24s of scanning alone, before any connect/service-resolve time.
+		// 20s was sized for a single cold rediscovery and cuts that retry loop off mid-scan,
+		// turning a bulb that would have connected into "context deadline exceeded".
+		LightsConnectTimeout: getEnvDuration("LIGHTS_CONNECT_TIMEOUT_MS", 60000),
 		LightsIdleDisconnect: getEnvDuration("LIGHTS_IDLE_DISCONNECT_MS", 90000),
 		LightsCacheTTL:       getEnvDuration("LIGHTS_CACHE_MS", 2000),
 		LightsPollInterval:   getEnvDuration("LIGHTS_POLL_MS", 60000),
