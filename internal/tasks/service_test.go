@@ -79,6 +79,34 @@ func TestService_CreateTask(t *testing.T) {
 		assert.Contains(t, err.Error(), "fk violation")
 	})
 
+	t.Run("takes its project's priority when it has none", func(t *testing.T) {
+		repo := mocks.NewMockRepository(t)
+		repo.EXPECT().GetProject(mock.Anything, int32(7)).Return(tasks.ProjectDetailResponse{ID: 7, Priority: 2}, nil)
+		repo.EXPECT().
+			CreateTask(mock.Anything, ptr(int32(7)), "T", mock.Anything, mock.Anything, "standard", mock.Anything, int32(2), mock.Anything).
+			Return(tasks.TaskResponse{ID: 1, Name: "T", Priority: 2}, nil)
+		repo.EXPECT().GetTaskDependencies(mock.Anything, int32(1)).
+			Return([]tasks.TaskDepRef{}, []tasks.TaskDepRef{}, false, nil)
+
+		svc := tasks.NewService(repo, nil)
+		got, err := svc.CreateTask(context.Background(), tasks.CreateTaskRequest{Name: "T", ProjectID: ptr(int32(7))})
+		require.NoError(t, err)
+		assert.Equal(t, int32(2), got.Priority)
+	})
+
+	t.Run("an explicit priority wins over the project's", func(t *testing.T) {
+		repo := mocks.NewMockRepository(t)
+		repo.EXPECT().
+			CreateTask(mock.Anything, ptr(int32(7)), "T", mock.Anything, mock.Anything, "standard", mock.Anything, int32(3), mock.Anything).
+			Return(tasks.TaskResponse{ID: 1, Name: "T", Priority: 3}, nil)
+		repo.EXPECT().GetTaskDependencies(mock.Anything, int32(1)).
+			Return([]tasks.TaskDepRef{}, []tasks.TaskDepRef{}, false, nil)
+
+		svc := tasks.NewService(repo, nil)
+		_, err := svc.CreateTask(context.Background(), tasks.CreateTaskRequest{Name: "T", ProjectID: ptr(int32(7)), Priority: ptr(int32(3))})
+		require.NoError(t, err)
+	})
+
 	priorityCases := []struct {
 		name  string
 		input *int32
@@ -632,15 +660,49 @@ func TestService_PriorityFilter(t *testing.T) {
 		require.NoError(t, err)
 	})
 
-	t.Run("GetTasksByDueDate forwards min_priority to repo", func(t *testing.T) {
+	t.Run("GetTasksByDueDate filters by min_priority", func(t *testing.T) {
+		due := time.Now().AddDate(0, 0, 3)
 		repo := mocks.NewMockRepository(t)
-		threshold := int32(2)
-		repo.EXPECT().GetTasksByDueDate(mock.Anything, &threshold).Return([]tasks.TaskByDueDateResponse{}, nil)
+		repo.EXPECT().GetTasksByDueDate(mock.Anything).Return([]tasks.TaskByDueDateResponse{
+			{ID: 1, Priority: 1, DueAt: &due},
+			{ID: 2, Priority: 3, DueAt: &due},
+			{ID: 3, Priority: 5, DueAt: &due},
+		}, nil)
 
+		threshold := int32(3)
 		svc := tasks.NewService(repo, nil)
-		_, err := svc.GetTasksByDueDate(context.Background(), &threshold)
+		got, err := svc.GetTasksByDueDate(context.Background(), &threshold)
 		require.NoError(t, err)
+		require.Len(t, got, 2)
+		assert.Equal(t, int32(1), got[0].ID)
+		assert.Equal(t, int32(2), got[1].ID)
 	})
+}
+
+// A multi-level-blocked task stays out of Due Soon until its (effective) due date arrives.
+func TestService_GetTasksByDueDate_HiddenTasks(t *testing.T) {
+	now := time.Now().UTC()
+	day := func(d int) *time.Time {
+		v := time.Date(now.Year(), now.Month(), now.Day()+d, 0, 0, 0, 0, time.UTC)
+		return &v
+	}
+
+	repo := mocks.NewMockRepository(t)
+	repo.EXPECT().GetTasksByDueDate(mock.Anything).Return([]tasks.TaskByDueDateResponse{
+		{ID: 1, Hidden: true, DueAt: day(-1)},
+		{ID: 2, Hidden: true, DueAt: day(0)},
+		{ID: 3, Hidden: true, DueAt: day(30)},
+		{ID: 4, DueAt: day(30)},
+	}, nil)
+
+	svc := tasks.NewService(repo, time.UTC)
+	got, err := svc.GetTasksByDueDate(context.Background(), nil)
+	require.NoError(t, err)
+	ids := []int32{}
+	for _, r := range got {
+		ids = append(ids, r.ID)
+	}
+	assert.Equal(t, []int32{1, 2, 4}, ids)
 }
 
 type stubCapacityProvider struct {
@@ -674,7 +736,7 @@ func TestService_GetTasksByDueDate_UrgencyAgreesAcrossOffset(t *testing.T) {
 
 	repo := mocks.NewMockRepository(t)
 	repo.EXPECT().
-		GetTasksByDueDate(mock.Anything, (*int32)(nil)).
+		GetTasksByDueDate(mock.Anything).
 		Return([]tasks.TaskByDueDateResponse{
 			{ID: 1, TaskType: "standard", DueAt: &dueTomorrow, EstimateHours: &exceedsToday},
 			{ID: 2, TaskType: "standard", DueAt: &dueTomorrow, EstimateHours: &fitsToday},
@@ -711,7 +773,7 @@ func TestService_GetTasksByDueDate_AllEstimatedTasksOverdue(t *testing.T) {
 
 	repo := mocks.NewMockRepository(t)
 	repo.EXPECT().
-		GetTasksByDueDate(mock.Anything, (*int32)(nil)).
+		GetTasksByDueDate(mock.Anything).
 		Return([]tasks.TaskByDueDateResponse{
 			{ID: 1, TaskType: "standard", DueAt: &longAgo, EstimateHours: &estimate},
 			{ID: 2, TaskType: "standard", DueAt: &longAgo},
@@ -768,7 +830,7 @@ func TestService_GetTasksByDueDate_UrgencyAccountsForCompetingTasks(t *testing.T
 
 	repo := mocks.NewMockRepository(t)
 	repo.EXPECT().
-		GetTasksByDueDate(mock.Anything, (*int32)(nil)).
+		GetTasksByDueDate(mock.Anything).
 		Return([]tasks.TaskByDueDateResponse{
 			{ID: 1, Priority: 1, TaskType: "standard", DueAt: &dueIn5Days, EstimateHours: decPtr("16")},
 			{ID: 2, Priority: 3, TaskType: "standard", DueAt: &dueIn5Days, EstimateHours: decPtr("3")},
@@ -791,6 +853,165 @@ func TestService_GetTasksByDueDate_UrgencyAccountsForCompetingTasks(t *testing.T
 
 	assert.Falsef(t, byID[1].Urgent, "higher-priority task: start_by=%v urgent=%v", byID[1].StartBy, byID[1].Urgent)
 	assert.Truef(t, byID[2].Urgent, "lower-priority task starved of shared hours must be urgent: start_by=%v urgent=%v", byID[2].StartBy, byID[2].Urgent)
+}
+
+// A → B → C → D → E, 4h each, E due in 5 days with 4 free hours a day: the chain needs all 20
+// hours, so A has to start today. Checked task by task against E's due date, A and B would only
+// have claimed the two days before it. C, D and E are hidden (multi-level blocked) and must still
+// count, even though only A and B come back in the response.
+func TestService_GetTasksByDueDate_ChainAccumulatesEstimates(t *testing.T) {
+	loc, err := time.LoadLocation("Europe/Madrid")
+	require.NoError(t, err)
+
+	now := time.Now().In(loc)
+	today := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, loc)
+	dueIn5Days := time.Date(today.Year(), today.Month(), today.Day()+5, 0, 0, 0, 0, time.UTC)
+	dayStr := func(d int) string { return today.AddDate(0, 0, d).Format("2006-01-02") }
+
+	run := func(t *testing.T, freePerDay string) map[int32]tasks.TaskByDueDateResponse {
+		days := make([]capacity.DayFreeBusy, 0, 5)
+		for i := 0; i < 5; i++ {
+			days = append(days, capacity.DayFreeBusy{Date: dayStr(i), CapacityHours: decimal.NewFromInt(14), FreeHours: decimal.RequireFromString(freePerDay)})
+		}
+
+		// Listed end-first so the result can't lean on input order. IDs 1..5 = A..E.
+		link := func(id int32, name string) []tasks.TaskDepRef { return []tasks.TaskDepRef{{ID: id, Name: name}} }
+		repo := mocks.NewMockRepository(t)
+		repo.EXPECT().GetTasksByDueDate(mock.Anything).Return([]tasks.TaskByDueDateResponse{
+			{ID: 5, Name: "E", Priority: 3, TaskType: "standard", DueAt: &dueIn5Days, EstimateHours: decPtr("4"), DependsOn: link(4, "D"), Blocked: true, Hidden: true},
+			{ID: 4, Name: "D", Priority: 3, TaskType: "standard", DueAt: &dueIn5Days, EstimateHours: decPtr("4"), DependsOn: link(3, "C"), Blocks: link(5, "E"), Blocked: true, Hidden: true},
+			{ID: 3, Name: "C", Priority: 3, TaskType: "standard", DueAt: &dueIn5Days, EstimateHours: decPtr("4"), DependsOn: link(2, "B"), Blocks: link(4, "D"), Blocked: true, Hidden: true},
+			{ID: 2, Name: "B", Priority: 3, TaskType: "standard", DueAt: &dueIn5Days, EstimateHours: decPtr("4"), DependsOn: link(1, "A"), Blocks: link(3, "C"), Blocked: true},
+			{ID: 1, Name: "A", Priority: 3, TaskType: "standard", DueAt: &dueIn5Days, EstimateHours: decPtr("4"), Blocks: link(2, "B")},
+		}, nil)
+
+		svc := tasks.NewService(repo, loc)
+		svc.SetUrgencyProviders(stubCapacityProvider{days: days}, stubPlannedHoursProvider{})
+		got, err := svc.GetTasksByDueDate(context.Background(), nil)
+		require.NoError(t, err)
+		byID := map[int32]tasks.TaskByDueDateResponse{}
+		for _, r := range got {
+			byID[r.ID] = r
+		}
+		require.Len(t, byID, 2, "only A and B are visible")
+		return byID
+	}
+
+	t.Run("one task per day", func(t *testing.T) {
+		byID := run(t, "4")
+		require.NotNil(t, byID[1].StartBy)
+		require.NotNil(t, byID[2].StartBy)
+		assert.Equal(t, dayStr(0), *byID[1].StartBy, "A must start today: 20h of chain in 5 days of 4h")
+		assert.True(t, byID[1].Urgent)
+		assert.Equal(t, dayStr(1), *byID[2].StartBy)
+		assert.False(t, byID[2].Urgent)
+		require.NotNil(t, byID[1].FinishBy)
+		require.NotNil(t, byID[2].FinishBy)
+		assert.Equal(t, dayStr(1), *byID[1].FinishBy, "A is due the day B starts, not E's due date")
+		assert.Equal(t, dayStr(2), *byID[2].FinishBy)
+	})
+
+	t.Run("a dependency shares the day its dependent starts", func(t *testing.T) {
+		byID := run(t, "8")
+		require.NotNil(t, byID[1].StartBy)
+		require.NotNil(t, byID[2].StartBy)
+		assert.Equal(t, dayStr(2), *byID[1].StartBy, "E+D on day 4, C+B on day 3, A on day 2")
+		assert.Equal(t, dayStr(3), *byID[2].StartBy)
+	})
+}
+
+// Nothing is planned weeks ahead, so a far-off day must not count as the whole daily capacity
+// free: the cap is capacity − 0.5h per day from today, never below 6h. With 14h capacity and
+// nothing busy, days 16+ give 6h, so 20h due in 20 days needs days 19, 18, 17 (6h each) and 2h
+// of day 16.
+func TestService_GetTasksByDueDate_FutureDaysCapped(t *testing.T) {
+	loc, err := time.LoadLocation("Europe/Madrid")
+	require.NoError(t, err)
+
+	now := time.Now().In(loc)
+	today := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, loc)
+	dueIn20Days := time.Date(today.Year(), today.Month(), today.Day()+20, 0, 0, 0, 0, time.UTC)
+
+	days := make([]capacity.DayFreeBusy, 0, 20)
+	for i := 0; i < 20; i++ {
+		days = append(days, capacity.DayFreeBusy{Date: today.AddDate(0, 0, i).Format("2006-01-02"), CapacityHours: decimal.NewFromInt(14), FreeHours: decimal.NewFromInt(14)})
+	}
+	// A busy day keeps its real (smaller) free hours: day 3 caps at 12.5 but only has 2 free.
+	days[3].FreeHours = decimal.NewFromInt(2)
+	dayUTC := func(d int) *time.Time {
+		return ptr(time.Date(today.Year(), today.Month(), today.Day()+d, 0, 0, 0, 0, time.UTC))
+	}
+
+	repo := mocks.NewMockRepository(t)
+	repo.EXPECT().GetTasksByDueDate(mock.Anything).Return([]tasks.TaskByDueDateResponse{
+		{ID: 1, Priority: 3, TaskType: "standard", DueAt: &dueIn20Days, EstimateHours: decPtr("20")},
+		{ID: 2, Priority: 3, TaskType: "standard", DueAt: dayUTC(4), EstimateHours: decPtr("2")},
+		// Days 11 and 10 cap at 8.5 and 9: 17.5h together, so 17h fits in them.
+		{ID: 3, Priority: 3, TaskType: "standard", DueAt: dayUTC(12), EstimateHours: decPtr("17")},
+	}, nil)
+
+	svc := tasks.NewService(repo, loc)
+	svc.SetUrgencyProviders(stubCapacityProvider{days: days}, stubPlannedHoursProvider{})
+	got, err := svc.GetTasksByDueDate(context.Background(), nil)
+	require.NoError(t, err)
+	require.Len(t, got, 3)
+	require.NotNil(t, got[0].StartBy)
+	assert.Equal(t, today.AddDate(0, 0, 16).Format("2006-01-02"), *got[0].StartBy)
+	require.NotNil(t, got[1].StartBy)
+	assert.Equal(t, today.AddDate(0, 0, 3).Format("2006-01-02"), *got[1].StartBy)
+	require.NotNil(t, got[2].StartBy)
+	assert.Equal(t, today.AddDate(0, 0, 10).Format("2006-01-02"), *got[2].StartBy)
+}
+
+// The study tasks behind a p2 exam are left at the default p3. They must still claim hours as p2
+// ahead of an unrelated p3 task with an earlier deadline, and survive a min_priority=2 filter.
+func TestService_GetTasksByDueDate_ChainInheritsPriority(t *testing.T) {
+	loc, err := time.LoadLocation("Europe/Madrid")
+	require.NoError(t, err)
+
+	now := time.Now().In(loc)
+	today := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, loc)
+	dayUTC := func(d int) *time.Time {
+		return ptr(time.Date(today.Year(), today.Month(), today.Day()+d, 0, 0, 0, 0, time.UTC))
+	}
+	dayStr := func(d int) string { return today.AddDate(0, 0, d).Format("2006-01-02") }
+
+	days := make([]capacity.DayFreeBusy, 0, 3)
+	for i := 0; i < 3; i++ {
+		days = append(days, capacity.DayFreeBusy{Date: dayStr(i), CapacityHours: decimal.NewFromInt(14), FreeHours: decimal.NewFromInt(4)})
+	}
+
+	repo := mocks.NewMockRepository(t)
+	repo.EXPECT().GetTasksByDueDate(mock.Anything).Return([]tasks.TaskByDueDateResponse{
+		{ID: 1, Name: "exam", Priority: 2, TaskType: "standard", DueAt: dayUTC(3), EstimateHours: decPtr("4"), DependsOn: []tasks.TaskDepRef{{ID: 2}}, Blocked: true},
+		{ID: 2, Name: "study", Priority: 3, TaskType: "standard", DueAt: dayUTC(3), EstimateHours: decPtr("4"), Blocks: []tasks.TaskDepRef{{ID: 1}}},
+		{ID: 3, Name: "chore", Priority: 3, TaskType: "standard", DueAt: dayUTC(2), EstimateHours: decPtr("4")},
+	}, nil).Times(2)
+
+	svc := tasks.NewService(repo, loc)
+	svc.SetUrgencyProviders(stubCapacityProvider{days: days}, stubPlannedHoursProvider{})
+
+	got, err := svc.GetTasksByDueDate(context.Background(), nil)
+	require.NoError(t, err)
+	byID := map[int32]tasks.TaskByDueDateResponse{}
+	for _, r := range got {
+		byID[r.ID] = r
+	}
+	require.NotNil(t, byID[2].StartBy)
+	assert.Equal(t, dayStr(1), *byID[2].StartBy, "study claims day 1 as p2, before the p3 chore")
+	require.NotNil(t, byID[2].FinishBy)
+	assert.Equal(t, dayStr(2), *byID[2].FinishBy, "study must be done by the day the exam starts")
+	assert.True(t, byID[3].Urgent, "the chore is the one pushed to today")
+	assert.Equal(t, int32(3), byID[2].Priority, "the task's own priority is reported unchanged")
+
+	threshold := int32(2)
+	got, err = svc.GetTasksByDueDate(context.Background(), &threshold)
+	require.NoError(t, err)
+	ids := []int32{}
+	for _, r := range got {
+		ids = append(ids, r.ID)
+	}
+	assert.Equal(t, []int32{1, 2}, ids)
 }
 
 func decPtr(s string) *decimal.Decimal {
@@ -818,7 +1039,7 @@ func TestService_GetTasksByDueDate_RecurringUrgencyIgnoresLifetimeTimeSpent(t *t
 
 	repo := mocks.NewMockRepository(t)
 	repo.EXPECT().
-		GetTasksByDueDate(mock.Anything, (*int32)(nil)).
+		GetTasksByDueDate(mock.Anything).
 		Return([]tasks.TaskByDueDateResponse{
 			{
 				ID:            1,

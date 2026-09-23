@@ -73,6 +73,8 @@ type CreateProjectRequest struct {
 	Description *string    `json:"description"`
 	DueAt       *time.Time `json:"due_at"`
 	ParentID    *int32     `json:"parent_id"`
+	// Priority is the default for tasks created in this project without one of their own.
+	Priority *int32 `json:"priority"`
 }
 
 type ProjectResponse struct {
@@ -83,11 +85,13 @@ type ProjectResponse struct {
 	ParentID    *int32     `json:"parent_id"`
 	StartedAt   *time.Time `json:"started_at"`
 	FinishedAt  *time.Time `json:"finished_at"`
+	Priority    int32      `json:"priority"`
 }
 
 type ProjectFastResponse struct {
-	ID   int32  `json:"id"`
-	Name string `json:"name"`
+	ID       int32  `json:"id"`
+	Name     string `json:"name"`
+	Priority int32  `json:"priority"`
 }
 
 // ProjectParentCandidate is a project that a given project may be moved under.
@@ -203,6 +207,7 @@ type UpdateProjectRequest struct {
 	ParentID    NullableInt32 `json:"parent_id"`
 	StartedAt   NullableTime  `json:"started_at"`
 	FinishedAt  NullableTime  `json:"finished_at"`
+	Priority    *int32        `json:"priority"`
 }
 
 // NullableTime distinguishes between an absent JSON field and an explicit null.
@@ -332,13 +337,19 @@ type TaskByDueDateResponse struct {
 	EstimateHours  *decimal.Decimal `json:"estimate_hours"`
 	RemainingHours *decimal.Decimal `json:"remaining_hours"`
 	StartBy        *string          `json:"start_by"`
-	Urgent         bool             `json:"urgent"`
-	ProjectID      *int32           `json:"project_id"`
-	ProjectName    *string          `json:"project_name"`
-	ProjectDueAt   *time.Time       `json:"project_due_at"`
-	DependsOn      []TaskDepRef     `json:"depends_on"`
-	Blocks         []TaskDepRef     `json:"blocks"`
-	Blocked        bool             `json:"blocked"`
+	// FinishBy is the day the task has to be done by: its own due date, or earlier when a task
+	// it blocks has to start before that. Only set when urgency was computed.
+	FinishBy     *string      `json:"finish_by"`
+	Urgent       bool         `json:"urgent"`
+	ProjectID    *int32       `json:"project_id"`
+	ProjectName  *string      `json:"project_name"`
+	ProjectDueAt *time.Time   `json:"project_due_at"`
+	DependsOn    []TaskDepRef `json:"depends_on"`
+	Blocks       []TaskDepRef `json:"blocks"`
+	Blocked      bool         `json:"blocked"`
+	// Hidden: every unfinished dependency is itself blocked. Still needed to add up a chain's
+	// estimates; GetTasksByDueDate drops it from the response unless it is due today or earlier.
+	Hidden bool `json:"-"`
 }
 
 type TimeEntrySummaryResponse struct {
@@ -402,6 +413,7 @@ type ProjectDetailResponse struct {
 	StartedAt   *time.Time `json:"started_at"`
 	FinishedAt  *time.Time `json:"finished_at"`
 	TimeSpent   int64      `json:"time_spent"`
+	Priority    int32      `json:"priority"`
 }
 
 type ProjectChildNode struct {
