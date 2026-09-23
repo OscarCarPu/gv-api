@@ -39,11 +39,11 @@ func TestIntegration_FinishProjectTreeCascades(t *testing.T) {
 	ctx := context.Background()
 	repo := NewRepo(t)
 
-	root, err := repo.CreateProject(ctx, "root", nil, nil, nil)
+	root, err := repo.CreateProject(ctx, "root", nil, nil, nil, 3)
 	require.NoError(t, err)
-	mid, err := repo.CreateProject(ctx, "mid", nil, nil, &root.ID)
+	mid, err := repo.CreateProject(ctx, "mid", nil, nil, &root.ID, 3)
 	require.NoError(t, err)
-	leaf, err := repo.CreateProject(ctx, "leaf", nil, nil, &mid.ID)
+	leaf, err := repo.CreateProject(ctx, "leaf", nil, nil, &mid.ID, 3)
 	require.NoError(t, err)
 
 	leafTask, err := repo.CreateTask(ctx, &leaf.ID, "t", nil, nil, "standard", nil, 4, nil)
@@ -68,7 +68,7 @@ func chainProjects(t *testing.T, repo *tasks.PostgresRepository, n int) []int32 
 	ids := make([]int32, 0, n)
 	var parent *int32
 	for i := 1; i <= n; i++ {
-		p, err := repo.CreateProject(context.Background(), fmt.Sprintf("P%d", i), nil, nil, parent)
+		p, err := repo.CreateProject(context.Background(), fmt.Sprintf("P%d", i), nil, nil, parent, 3)
 		require.NoError(t, err)
 		ids = append(ids, p.ID)
 		id := p.ID
@@ -86,9 +86,9 @@ func TestIntegration_UpdateProject_MoveParent(t *testing.T) {
 
 	t.Run("moves under another project", func(t *testing.T) {
 		repo := NewRepo(t)
-		a, err := repo.CreateProject(ctx, "a", nil, nil, nil)
+		a, err := repo.CreateProject(ctx, "a", nil, nil, nil, 3)
 		require.NoError(t, err)
-		b, err := repo.CreateProject(ctx, "b", nil, nil, nil)
+		b, err := repo.CreateProject(ctx, "b", nil, nil, nil, 3)
 		require.NoError(t, err)
 
 		got, err := repo.UpdateProject(ctx, tasks.UpdateProjectRequest{ID: b.ID, ParentID: setParent(&a.ID)})
@@ -171,7 +171,7 @@ func TestIntegration_UpdateProject_MoveParent(t *testing.T) {
 	t.Run("moving a mid-chain project takes its whole subtree along", func(t *testing.T) {
 		repo := NewRepo(t)
 		ids := chainProjects(t, repo, 5) // P1 → P2 → P3 → P4 → P5
-		other, err := repo.CreateProject(ctx, "other", nil, nil, nil)
+		other, err := repo.CreateProject(ctx, "other", nil, nil, nil, 3)
 		require.NoError(t, err)
 
 		task, err := repo.CreateTask(ctx, &ids[4], "deep task", nil, nil, "standard", nil, 4, nil)
@@ -208,9 +208,9 @@ func TestIntegration_ListProjectParentCandidates(t *testing.T) {
 	t.Run("excludes the project, all its descendants and finished projects", func(t *testing.T) {
 		repo := NewRepo(t)
 		ids := chainProjects(t, repo, 5) // P1 → P2 → P3 → P4 → P5
-		sibling, err := repo.CreateProject(ctx, "sibling", nil, nil, nil)
+		sibling, err := repo.CreateProject(ctx, "sibling", nil, nil, nil, 3)
 		require.NoError(t, err)
-		done, err := repo.CreateProject(ctx, "done", nil, nil, nil)
+		done, err := repo.CreateProject(ctx, "done", nil, nil, nil, 3)
 		require.NoError(t, err)
 		finished := time.Now()
 		_, err = repo.UpdateProject(ctx, tasks.UpdateProjectRequest{ID: done.ID, FinishedAt: tasks.NullableTime{Value: &finished, Set: true}})
@@ -242,7 +242,7 @@ func TestIntegration_ListProjectParentCandidates(t *testing.T) {
 	t.Run("labels deep candidates with the full ancestor path, ordered by path", func(t *testing.T) {
 		repo := NewRepo(t)
 		ids := chainProjects(t, repo, 5) // P1 → P2 → P3 → P4 → P5
-		leaf, err := repo.CreateProject(ctx, "leaf", nil, nil, nil)
+		leaf, err := repo.CreateProject(ctx, "leaf", nil, nil, nil, 3)
 		require.NoError(t, err)
 
 		got, err := repo.ListProjectParentCandidates(ctx, leaf.ID)
@@ -346,11 +346,11 @@ func TestIntegration_GetProjectChildren_BottomUpTimeAccumulation(t *testing.T) {
 	ctx := context.Background()
 	repo := NewRepo(t)
 
-	root, err := repo.CreateProject(ctx, "root", nil, nil, nil)
+	root, err := repo.CreateProject(ctx, "root", nil, nil, nil, 3)
 	require.NoError(t, err)
-	mid, err := repo.CreateProject(ctx, "mid", nil, nil, &root.ID)
+	mid, err := repo.CreateProject(ctx, "mid", nil, nil, &root.ID, 3)
 	require.NoError(t, err)
-	leaf, err := repo.CreateProject(ctx, "leaf", nil, nil, &mid.ID)
+	leaf, err := repo.CreateProject(ctx, "leaf", nil, nil, &mid.ID, 3)
 	require.NoError(t, err)
 
 	rootTask, err := repo.CreateTask(ctx, &root.ID, "rootTask", nil, nil, "standard", nil, 4, nil)
@@ -383,7 +383,7 @@ func TestIntegration_GetProjectChildren_BlocksOrderBeforeBlocked(t *testing.T) {
 	ctx := context.Background()
 	repo := NewRepo(t)
 
-	proj, err := repo.CreateProject(ctx, "p", nil, nil, nil)
+	proj, err := repo.CreateProject(ctx, "p", nil, nil, nil, 3)
 	require.NoError(t, err)
 
 	// Create in alphabetical order so SQL would naturally sort a, b, c, d.
@@ -416,7 +416,7 @@ func TestIntegration_GetProjectChildren_TodosAggregated(t *testing.T) {
 	ctx := context.Background()
 	repo := NewRepo(t)
 
-	proj, err := repo.CreateProject(ctx, "p", nil, nil, nil)
+	proj, err := repo.CreateProject(ctx, "p", nil, nil, nil, 3)
 	require.NoError(t, err)
 	task, err := repo.CreateTask(ctx, &proj.ID, "t", nil, nil, "standard", nil, 4, nil)
 	require.NoError(t, err)
@@ -507,7 +507,7 @@ func TestIntegration_GetTasksByDueDate_HiddenFilteredAndOrderedByEffective(t *te
 	require.NoError(t, err)
 	require.NoError(t, repo.ReplaceTaskDependencies(ctx, d.ID, []int32{c.ID}))
 
-	rows, err := repo.GetTasksByDueDate(ctx, nil)
+	rows, err := repo.GetTasksByDueDate(ctx)
 	require.NoError(t, err)
 
 	ids := make([]int32, len(rows))
@@ -528,7 +528,9 @@ func TestIntegration_GetTasksByDueDate_HiddenFilteredAndOrderedByEffective(t *te
 	_ = posB
 }
 
-func TestIntegration_GetTasksByDueDate_OverdueShownDespiteMultiLevelBlock(t *testing.T) {
+// Hidden rows come back flagged rather than filtered: the service needs every link of a chain to
+// add up its estimates, and decides visibility itself (see TestService_GetTasksByDueDate_HiddenTasks).
+func TestIntegration_GetTasksByDueDate_FlagsMultiLevelBlockAsHidden(t *testing.T) {
 	ctx := context.Background()
 	repo := NewRepo(t)
 
@@ -559,16 +561,17 @@ func TestIntegration_GetTasksByDueDate_OverdueShownDespiteMultiLevelBlock(t *tes
 	cToday := mkChain("tdy", &today)
 	cFuture := mkChain("fut", &future)
 
-	rows, err := repo.GetTasksByDueDate(ctx, nil)
+	rows, err := repo.GetTasksByDueDate(ctx)
 	require.NoError(t, err)
-	ids := make([]int32, len(rows))
-	for i, r := range rows {
-		ids[i] = r.ID
+	hidden := map[int32]bool{}
+	for _, r := range rows {
+		hidden[r.ID] = r.Hidden
 	}
 
-	require.Contains(t, ids, cOverdue, "c with due_at = yesterday must appear despite multi-level blocking")
-	require.Contains(t, ids, cToday, "c with due_at = today must appear despite multi-level blocking")
-	require.NotContains(t, ids, cFuture, "c with future due_at stays hidden by multi-level blocking")
+	for _, c := range []int32{cOverdue, cToday, cFuture} {
+		require.Contains(t, hidden, c, "every multi-level-blocked c is returned")
+		require.True(t, hidden[c], "c's only dependency is itself blocked")
+	}
 }
 
 func indexOf(ids []int32, target int32) int {
@@ -580,7 +583,8 @@ func indexOf(ids []int32, target int32) int {
 	return -1
 }
 
-func TestIntegration_GetTasksByDueDate_MinPriorityFilter(t *testing.T) {
+// Priority filtering happens in the service, after urgency, so the repository returns every priority.
+func TestIntegration_GetTasksByDueDate_ReturnsAllPriorities(t *testing.T) {
 	ctx := context.Background()
 	repo := NewRepo(t)
 
@@ -594,15 +598,9 @@ func TestIntegration_GetTasksByDueDate_MinPriorityFilter(t *testing.T) {
 	mkP("normal", 3)
 	mkP("low", 5)
 
-	all, err := repo.GetTasksByDueDate(ctx, nil)
+	all, err := repo.GetTasksByDueDate(ctx)
 	require.NoError(t, err)
 	require.Len(t, all, 3)
-
-	threshold := int32(2)
-	filtered, err := repo.GetTasksByDueDate(ctx, &threshold)
-	require.NoError(t, err)
-	require.Len(t, filtered, 1)
-	require.Equal(t, "urgent", filtered[0].Name)
 }
 
 func TestIntegration_GetTasksByDueDate_ReturnsEstimateHours(t *testing.T) {
@@ -616,9 +614,29 @@ func TestIntegration_GetTasksByDueDate_ReturnsEstimateHours(t *testing.T) {
 	require.NotNil(t, task.EstimateHours)
 	require.True(t, task.EstimateHours.Equal(estimate))
 
-	rows, err := repo.GetTasksByDueDate(ctx, nil)
+	rows, err := repo.GetTasksByDueDate(ctx)
 	require.NoError(t, err)
 	require.Len(t, rows, 1)
 	require.NotNil(t, rows[0].EstimateHours)
 	assert.True(t, rows[0].EstimateHours.Equal(estimate))
+}
+
+func TestIntegration_ProjectPriority(t *testing.T) {
+	ctx := context.Background()
+	repo := NewRepo(t)
+
+	p, err := repo.CreateProject(ctx, "degree", nil, nil, nil, 2)
+	require.NoError(t, err)
+	require.Equal(t, int32(2), p.Priority)
+
+	got, err := repo.GetProject(ctx, p.ID)
+	require.NoError(t, err)
+	require.Equal(t, int32(2), got.Priority)
+
+	updated, err := repo.UpdateProject(ctx, tasks.UpdateProjectRequest{ID: p.ID, Priority: ptr(int32(4))})
+	require.NoError(t, err)
+	require.Equal(t, int32(4), updated.Priority)
+
+	_, err = repo.UpdateProject(ctx, tasks.UpdateProjectRequest{ID: p.ID, Priority: ptr(int32(9))})
+	require.Error(t, err, "priority is constrained to 1..5")
 }

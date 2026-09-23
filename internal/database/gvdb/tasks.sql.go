@@ -14,9 +14,9 @@ import (
 )
 
 const createProject = `-- name: CreateProject :one
-INSERT INTO projects (name, description, due_at, parent_id)
-VALUES ($1, $2, $3, $4)
-RETURNING id, name, description, due_at, parent_id
+INSERT INTO projects (name, description, due_at, parent_id, priority)
+VALUES ($1, $2, $3, $4, $5)
+RETURNING id, name, description, due_at, parent_id, priority
 `
 
 type CreateProjectParams struct {
@@ -24,6 +24,7 @@ type CreateProjectParams struct {
 	Description *string     `db:"description" json:"description"`
 	DueAt       pgtype.Date `db:"due_at" json:"due_at"`
 	ParentID    *int32      `db:"parent_id" json:"parent_id"`
+	Priority    int32       `db:"priority" json:"priority"`
 }
 
 type CreateProjectRow struct {
@@ -32,6 +33,7 @@ type CreateProjectRow struct {
 	Description *string     `db:"description" json:"description"`
 	DueAt       pgtype.Date `db:"due_at" json:"due_at"`
 	ParentID    *int32      `db:"parent_id" json:"parent_id"`
+	Priority    int32       `db:"priority" json:"priority"`
 }
 
 func (q *Queries) CreateProject(ctx context.Context, arg CreateProjectParams) (CreateProjectRow, error) {
@@ -40,6 +42,7 @@ func (q *Queries) CreateProject(ctx context.Context, arg CreateProjectParams) (C
 		arg.Description,
 		arg.DueAt,
 		arg.ParentID,
+		arg.Priority,
 	)
 	var i CreateProjectRow
 	err := row.Scan(
@@ -48,6 +51,7 @@ func (q *Queries) CreateProject(ctx context.Context, arg CreateProjectParams) (C
 		&i.Description,
 		&i.DueAt,
 		&i.ParentID,
+		&i.Priority,
 	)
 	return i, err
 }
@@ -356,7 +360,7 @@ project_direct_time AS (
     WHERE t.project_id IN (SELECT id FROM project_tree)
     GROUP BY t.project_id
 )
-SELECT p.id, p.parent_id, p.name, p.description, p.due_at, p.started_at, p.finished_at,
+SELECT p.id, p.parent_id, p.name, p.description, p.due_at, p.started_at, p.finished_at, p.priority,
     COALESCE((SELECT SUM(pdt.direct_time)::bigint FROM project_direct_time pdt), 0)::bigint AS time_spent
 FROM projects p
 WHERE p.id = $1
@@ -370,6 +374,7 @@ type GetProjectByIDRow struct {
 	DueAt       pgtype.Date        `db:"due_at" json:"due_at"`
 	StartedAt   pgtype.Timestamptz `db:"started_at" json:"started_at"`
 	FinishedAt  pgtype.Timestamptz `db:"finished_at" json:"finished_at"`
+	Priority    int32              `db:"priority" json:"priority"`
 	TimeSpent   int64              `db:"time_spent" json:"time_spent"`
 }
 
@@ -384,6 +389,7 @@ func (q *Queries) GetProjectByID(ctx context.Context, id int32) (GetProjectByIDR
 		&i.DueAt,
 		&i.StartedAt,
 		&i.FinishedAt,
+		&i.Priority,
 		&i.TimeSpent,
 	)
 	return i, err
@@ -391,11 +397,11 @@ func (q *Queries) GetProjectByID(ctx context.Context, id int32) (GetProjectByIDR
 
 const getProjectWithDescendants = `-- name: GetProjectWithDescendants :many
 WITH RECURSIVE project_tree AS (
-    SELECT p.id, p.parent_id, p.name, p.description, p.due_at, p.started_at, p.finished_at,
+    SELECT p.id, p.parent_id, p.name, p.description, p.due_at, p.started_at, p.finished_at, p.priority,
         0 AS depth, ARRAY[p.id]::int[] AS path
     FROM projects p WHERE p.id = $1
     UNION ALL
-    SELECT c.id, c.parent_id, c.name, c.description, c.due_at, c.started_at, c.finished_at,
+    SELECT c.id, c.parent_id, c.name, c.description, c.due_at, c.started_at, c.finished_at, c.priority,
         pt.depth + 1, pt.path || c.id
     FROM projects c
     JOIN project_tree pt ON c.parent_id = pt.id
@@ -407,7 +413,7 @@ project_direct_time AS (
     WHERE t.project_id IN (SELECT id FROM project_tree)
     GROUP BY t.project_id
 )
-SELECT pt.id, pt.parent_id, pt.name, pt.description, pt.due_at, pt.started_at, pt.finished_at, pt.depth,
+SELECT pt.id, pt.parent_id, pt.name, pt.description, pt.due_at, pt.started_at, pt.finished_at, pt.priority, pt.depth,
     COALESCE((
         SELECT SUM(pdt.direct_time)::bigint
         FROM project_direct_time pdt
@@ -426,6 +432,7 @@ type GetProjectWithDescendantsRow struct {
 	DueAt       pgtype.Date        `db:"due_at" json:"due_at"`
 	StartedAt   pgtype.Timestamptz `db:"started_at" json:"started_at"`
 	FinishedAt  pgtype.Timestamptz `db:"finished_at" json:"finished_at"`
+	Priority    int32              `db:"priority" json:"priority"`
 	Depth       int32              `db:"depth" json:"depth"`
 	TimeSpent   int64              `db:"time_spent" json:"time_spent"`
 }
@@ -447,6 +454,7 @@ func (q *Queries) GetProjectWithDescendants(ctx context.Context, id int32) ([]Ge
 			&i.DueAt,
 			&i.StartedAt,
 			&i.FinishedAt,
+			&i.Priority,
 			&i.Depth,
 			&i.TimeSpent,
 		); err != nil {
@@ -628,7 +636,8 @@ SELECT
     COALESCE(SUM(EXTRACT(EPOCH FROM (te.finished_at - te.started_at)))::bigint, 0)::bigint AS time_spent,
     COALESCE((SELECT json_agg(json_build_object('id', t2.id, 'name', t2.name, 'due_at', t2.due_at) ORDER BY t2.name) FROM task_dependencies td JOIN tasks t2 ON t2.id = td.depends_on WHERE td.task_id = t.id AND t2.finished_at IS NULL), '[]')::json AS depends_on,
     COALESCE((SELECT json_agg(json_build_object('id', t2.id, 'name', t2.name) ORDER BY t2.name) FROM task_dependencies td JOIN tasks t2 ON t2.id = td.task_id WHERE td.depends_on = t.id), '[]')::json AS blocks,
-    tb.blocked
+    tb.blocked,
+    th.hidden
 FROM tasks t
 JOIN effective e ON e.id = t.id
 JOIN task_blocked tb ON tb.id = t.id
@@ -636,10 +645,8 @@ JOIN task_hidden th ON th.id = t.id
 LEFT JOIN projects p ON p.id = t.project_id
 LEFT JOIN time_entries te ON te.task_id = t.id AND te.finished_at IS NOT NULL
 WHERE t.finished_at IS NULL
-  AND ($1::int IS NULL OR t.priority <= $1::int)
-  AND (NOT th.hidden OR e.effective_due_at <= CURRENT_DATE)
   AND (e.effective_due_at IS NOT NULL OR p.due_at IS NOT NULL)
-GROUP BY t.id, p.id, e.effective_due_at, tb.blocked
+GROUP BY t.id, p.id, e.effective_due_at, tb.blocked, th.hidden
 ORDER BY e.effective_due_at ASC NULLS LAST, p.due_at ASC NULLS LAST, t.name
 `
 
@@ -660,12 +667,15 @@ type GetTasksByDueDateRow struct {
 	DependsOn     []byte             `db:"depends_on" json:"depends_on"`
 	Blocks        []byte             `db:"blocks" json:"blocks"`
 	Blocked       bool               `db:"blocked" json:"blocked"`
+	Hidden        *bool              `db:"hidden" json:"hidden"`
 }
 
 // Returns unfinished tasks that have a due_at (own or inherited from a blocked task) or whose project has one.
-// effective_due_at propagates backward via the "blocks" relation; hidden tasks are filtered out.
-func (q *Queries) GetTasksByDueDate(ctx context.Context, minPriority *int32) ([]GetTasksByDueDateRow, error) {
-	rows, err := q.db.Query(ctx, getTasksByDueDate, minPriority)
+// effective_due_at propagates backward via the "blocks" relation. Hidden tasks (every unfinished
+// dependency is itself blocked) are returned with hidden = true rather than filtered out: the
+// service needs every link of a dependency chain to add up its estimates, and drops them after.
+func (q *Queries) GetTasksByDueDate(ctx context.Context) ([]GetTasksByDueDateRow, error) {
+	rows, err := q.db.Query(ctx, getTasksByDueDate)
 	if err != nil {
 		return nil, err
 	}
@@ -690,6 +700,7 @@ func (q *Queries) GetTasksByDueDate(ctx context.Context, minPriority *int32) ([]
 			&i.DependsOn,
 			&i.Blocks,
 			&i.Blocked,
+			&i.Hidden,
 		); err != nil {
 			return nil, err
 		}
@@ -1195,12 +1206,13 @@ func (q *Queries) ListProjectParentCandidates(ctx context.Context, id int32) ([]
 }
 
 const listProjectsFast = `-- name: ListProjectsFast :many
-SELECT id, name FROM projects WHERE started_at IS NOT NULL AND finished_at IS NULL ORDER BY name
+SELECT id, name, priority FROM projects WHERE started_at IS NOT NULL AND finished_at IS NULL ORDER BY name
 `
 
 type ListProjectsFastRow struct {
-	ID   int32  `db:"id" json:"id"`
-	Name string `db:"name" json:"name"`
+	ID       int32  `db:"id" json:"id"`
+	Name     string `db:"name" json:"name"`
+	Priority int32  `db:"priority" json:"priority"`
 }
 
 func (q *Queries) ListProjectsFast(ctx context.Context) ([]ListProjectsFastRow, error) {
@@ -1212,7 +1224,7 @@ func (q *Queries) ListProjectsFast(ctx context.Context) ([]ListProjectsFastRow, 
 	items := []ListProjectsFastRow{}
 	for rows.Next() {
 		var i ListProjectsFastRow
-		if err := rows.Scan(&i.ID, &i.Name); err != nil {
+		if err := rows.Scan(&i.ID, &i.Name, &i.Priority); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
@@ -1376,9 +1388,10 @@ UPDATE projects SET
     due_at      = CASE WHEN $5::bool THEN NULL WHEN $6::bool THEN $7::date ELSE due_at END,
     parent_id   = CASE WHEN $8::bool THEN NULL WHEN $9::bool THEN $10::int ELSE parent_id END,
     started_at  = CASE WHEN $11::bool THEN NULL WHEN $12::bool THEN $13::timestamptz ELSE started_at END,
-    finished_at = CASE WHEN $14::bool THEN NULL WHEN $15::bool THEN $16::timestamptz ELSE finished_at END
-WHERE id = $17
-RETURNING id, parent_id, name, description, due_at, started_at, finished_at
+    finished_at = CASE WHEN $14::bool THEN NULL WHEN $15::bool THEN $16::timestamptz ELSE finished_at END,
+    priority    = CASE WHEN $17::bool      THEN $18::int           ELSE priority END
+WHERE id = $19
+RETURNING id, parent_id, name, description, due_at, started_at, finished_at, priority
 `
 
 type UpdateProjectParams struct {
@@ -1398,6 +1411,8 @@ type UpdateProjectParams struct {
 	ClearFinishedAt bool               `db:"clear_finished_at" json:"clear_finished_at"`
 	SetFinishedAt   bool               `db:"set_finished_at" json:"set_finished_at"`
 	FinishedAt      pgtype.Timestamptz `db:"finished_at" json:"finished_at"`
+	SetPriority     bool               `db:"set_priority" json:"set_priority"`
+	Priority        int32              `db:"priority" json:"priority"`
 	ID              int32              `db:"id" json:"id"`
 }
 
@@ -1419,6 +1434,8 @@ func (q *Queries) UpdateProject(ctx context.Context, arg UpdateProjectParams) (P
 		arg.ClearFinishedAt,
 		arg.SetFinishedAt,
 		arg.FinishedAt,
+		arg.SetPriority,
+		arg.Priority,
 		arg.ID,
 	)
 	var i Project
@@ -1430,6 +1447,7 @@ func (q *Queries) UpdateProject(ctx context.Context, arg UpdateProjectParams) (P
 		&i.DueAt,
 		&i.StartedAt,
 		&i.FinishedAt,
+		&i.Priority,
 	)
 	return i, err
 }
