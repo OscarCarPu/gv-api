@@ -204,8 +204,8 @@ func (r *PostgresRepository) GetTask(ctx context.Context, id int32) (TaskFullRes
 	}, nil
 }
 
-func (r *PostgresRepository) GetTasksByDueDate(ctx context.Context, minPriority *int32) ([]TaskByDueDateResponse, error) {
-	rows, err := r.q.GetTasksByDueDate(ctx, minPriority)
+func (r *PostgresRepository) GetTasksByDueDate(ctx context.Context) ([]TaskByDueDateResponse, error) {
+	rows, err := r.q.GetTasksByDueDate(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -237,6 +237,7 @@ func (r *PostgresRepository) GetTasksByDueDate(ctx context.Context, minPriority 
 			DependsOn:     dependsOn,
 			Blocks:        blocks,
 			Blocked:       row.Blocked,
+			Hidden:        row.Hidden != nil && *row.Hidden,
 		}
 	}
 	return tasks, nil

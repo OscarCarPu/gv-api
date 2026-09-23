@@ -97,7 +97,7 @@ func BenchmarkGetTasksByDueDate(b *testing.B) {
 			ctx := context.Background()
 			b.ResetTimer()
 			for i := 0; i < b.N; i++ {
-				if _, err := repo.GetTasksByDueDate(ctx, nil); err != nil {
+				if _, err := repo.GetTasksByDueDate(ctx); err != nil {
 					b.Fatal(err)
 				}
 			}
@@ -124,13 +124,13 @@ func BenchmarkGetProjectChildren(b *testing.B) {
 			ctx := context.Background()
 			now := time.Now().UTC()
 
-			rootP, err := repo.CreateProject(ctx, "root", nil, nil, nil)
+			rootP, err := repo.CreateProject(ctx, "root", nil, nil, nil, 3)
 			if err != nil {
 				b.Fatal(err)
 			}
 			parentID := rootP.ID
 			for d := 0; d < tc.depth; d++ {
-				p, err := repo.CreateProject(ctx, fmt.Sprintf("p%d", d), nil, nil, &parentID)
+				p, err := repo.CreateProject(ctx, fmt.Sprintf("p%d", d), nil, nil, &parentID, 3)
 				if err != nil {
 					b.Fatal(err)
 				}

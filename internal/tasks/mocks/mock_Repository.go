@@ -28,9 +28,9 @@ func (_m *MockRepository) EXPECT() *MockRepository_Expecter {
 	return &MockRepository_Expecter{mock: &_m.Mock}
 }
 
-// CreateProject provides a mock function with given fields: ctx, name, description, dueAt, parentID
-func (_m *MockRepository) CreateProject(ctx context.Context, name string, description *string, dueAt *time.Time, parentID *int32) (tasks.ProjectResponse, error) {
-	ret := _m.Called(ctx, name, description, dueAt, parentID)
+// CreateProject provides a mock function with given fields: ctx, name, description, dueAt, parentID, priority
+func (_m *MockRepository) CreateProject(ctx context.Context, name string, description *string, dueAt *time.Time, parentID *int32, priority int32) (tasks.ProjectResponse, error) {
+	ret := _m.Called(ctx, name, description, dueAt, parentID, priority)
 
 	if len(ret) == 0 {
 		panic("no return value specified for CreateProject")
@@ -38,17 +38,17 @@ func (_m *MockRepository) CreateProject(ctx context.Context, name string, descri
 
 	var r0 tasks.ProjectResponse
 	var r1 error
-	if rf, ok := ret.Get(0).(func(context.Context, string, *string, *time.Time, *int32) (tasks.ProjectResponse, error)); ok {
-		return rf(ctx, name, description, dueAt, parentID)
+	if rf, ok := ret.Get(0).(func(context.Context, string, *string, *time.Time, *int32, int32) (tasks.ProjectResponse, error)); ok {
+		return rf(ctx, name, description, dueAt, parentID, priority)
 	}
-	if rf, ok := ret.Get(0).(func(context.Context, string, *string, *time.Time, *int32) tasks.ProjectResponse); ok {
-		r0 = rf(ctx, name, description, dueAt, parentID)
+	if rf, ok := ret.Get(0).(func(context.Context, string, *string, *time.Time, *int32, int32) tasks.ProjectResponse); ok {
+		r0 = rf(ctx, name, description, dueAt, parentID, priority)
 	} else {
 		r0 = ret.Get(0).(tasks.ProjectResponse)
 	}
 
-	if rf, ok := ret.Get(1).(func(context.Context, string, *string, *time.Time, *int32) error); ok {
-		r1 = rf(ctx, name, description, dueAt, parentID)
+	if rf, ok := ret.Get(1).(func(context.Context, string, *string, *time.Time, *int32, int32) error); ok {
+		r1 = rf(ctx, name, description, dueAt, parentID, priority)
 	} else {
 		r1 = ret.Error(1)
 	}
@@ -67,13 +67,14 @@ type MockRepository_CreateProject_Call struct {
 //   - description *string
 //   - dueAt *time.Time
 //   - parentID *int32
-func (_e *MockRepository_Expecter) CreateProject(ctx interface{}, name interface{}, description interface{}, dueAt interface{}, parentID interface{}) *MockRepository_CreateProject_Call {
-	return &MockRepository_CreateProject_Call{Call: _e.mock.On("CreateProject", ctx, name, description, dueAt, parentID)}
+//   - priority int32
+func (_e *MockRepository_Expecter) CreateProject(ctx interface{}, name interface{}, description interface{}, dueAt interface{}, parentID interface{}, priority interface{}) *MockRepository_CreateProject_Call {
+	return &MockRepository_CreateProject_Call{Call: _e.mock.On("CreateProject", ctx, name, description, dueAt, parentID, priority)}
 }
 
-func (_c *MockRepository_CreateProject_Call) Run(run func(ctx context.Context, name string, description *string, dueAt *time.Time, parentID *int32)) *MockRepository_CreateProject_Call {
+func (_c *MockRepository_CreateProject_Call) Run(run func(ctx context.Context, name string, description *string, dueAt *time.Time, parentID *int32, priority int32)) *MockRepository_CreateProject_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].(context.Context), args[1].(string), args[2].(*string), args[3].(*time.Time), args[4].(*int32))
+		run(args[0].(context.Context), args[1].(string), args[2].(*string), args[3].(*time.Time), args[4].(*int32), args[5].(int32))
 	})
 	return _c
 }
@@ -83,7 +84,7 @@ func (_c *MockRepository_CreateProject_Call) Return(_a0 tasks.ProjectResponse, _
 	return _c
 }
 
-func (_c *MockRepository_CreateProject_Call) RunAndReturn(run func(context.Context, string, *string, *time.Time, *int32) (tasks.ProjectResponse, error)) *MockRepository_CreateProject_Call {
+func (_c *MockRepository_CreateProject_Call) RunAndReturn(run func(context.Context, string, *string, *time.Time, *int32, int32) (tasks.ProjectResponse, error)) *MockRepository_CreateProject_Call {
 	_c.Call.Return(run)
 	return _c
 }
@@ -1027,9 +1028,9 @@ func (_c *MockRepository_GetTaskTimeEntries_Call) RunAndReturn(run func(context.
 	return _c
 }
 
-// GetTasksByDueDate provides a mock function with given fields: ctx, minPriority
-func (_m *MockRepository) GetTasksByDueDate(ctx context.Context, minPriority *int32) ([]tasks.TaskByDueDateResponse, error) {
-	ret := _m.Called(ctx, minPriority)
+// GetTasksByDueDate provides a mock function with given fields: ctx
+func (_m *MockRepository) GetTasksByDueDate(ctx context.Context) ([]tasks.TaskByDueDateResponse, error) {
+	ret := _m.Called(ctx)
 
 	if len(ret) == 0 {
 		panic("no return value specified for GetTasksByDueDate")
@@ -1037,19 +1038,19 @@ func (_m *MockRepository) GetTasksByDueDate(ctx context.Context, minPriority *in
 
 	var r0 []tasks.TaskByDueDateResponse
 	var r1 error
-	if rf, ok := ret.Get(0).(func(context.Context, *int32) ([]tasks.TaskByDueDateResponse, error)); ok {
-		return rf(ctx, minPriority)
+	if rf, ok := ret.Get(0).(func(context.Context) ([]tasks.TaskByDueDateResponse, error)); ok {
+		return rf(ctx)
 	}
-	if rf, ok := ret.Get(0).(func(context.Context, *int32) []tasks.TaskByDueDateResponse); ok {
-		r0 = rf(ctx, minPriority)
+	if rf, ok := ret.Get(0).(func(context.Context) []tasks.TaskByDueDateResponse); ok {
+		r0 = rf(ctx)
 	} else {
 		if ret.Get(0) != nil {
 			r0 = ret.Get(0).([]tasks.TaskByDueDateResponse)
 		}
 	}
 
-	if rf, ok := ret.Get(1).(func(context.Context, *int32) error); ok {
-		r1 = rf(ctx, minPriority)
+	if rf, ok := ret.Get(1).(func(context.Context) error); ok {
+		r1 = rf(ctx)
 	} else {
 		r1 = ret.Error(1)
 	}
@@ -1064,14 +1065,13 @@ type MockRepository_GetTasksByDueDate_Call struct {
 
 // GetTasksByDueDate is a helper method to define mock.On call
 //   - ctx context.Context
-//   - minPriority *int32
-func (_e *MockRepository_Expecter) GetTasksByDueDate(ctx interface{}, minPriority interface{}) *MockRepository_GetTasksByDueDate_Call {
-	return &MockRepository_GetTasksByDueDate_Call{Call: _e.mock.On("GetTasksByDueDate", ctx, minPriority)}
+func (_e *MockRepository_Expecter) GetTasksByDueDate(ctx interface{}) *MockRepository_GetTasksByDueDate_Call {
+	return &MockRepository_GetTasksByDueDate_Call{Call: _e.mock.On("GetTasksByDueDate", ctx)}
 }
 
-func (_c *MockRepository_GetTasksByDueDate_Call) Run(run func(ctx context.Context, minPriority *int32)) *MockRepository_GetTasksByDueDate_Call {
+func (_c *MockRepository_GetTasksByDueDate_Call) Run(run func(ctx context.Context)) *MockRepository_GetTasksByDueDate_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].(context.Context), args[1].(*int32))
+		run(args[0].(context.Context))
 	})
 	return _c
 }
@@ -1081,7 +1081,7 @@ func (_c *MockRepository_GetTasksByDueDate_Call) Return(_a0 []tasks.TaskByDueDat
 	return _c
 }
 
-func (_c *MockRepository_GetTasksByDueDate_Call) RunAndReturn(run func(context.Context, *int32) ([]tasks.TaskByDueDateResponse, error)) *MockRepository_GetTasksByDueDate_Call {
+func (_c *MockRepository_GetTasksByDueDate_Call) RunAndReturn(run func(context.Context) ([]tasks.TaskByDueDateResponse, error)) *MockRepository_GetTasksByDueDate_Call {
 	_c.Call.Return(run)
 	return _c
 }

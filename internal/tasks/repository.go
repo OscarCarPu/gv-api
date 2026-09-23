@@ -12,7 +12,7 @@ import (
 )
 
 type Repository interface {
-	CreateProject(ctx context.Context, name string, description *string, dueAt *time.Time, parentID *int32) (ProjectResponse, error)
+	CreateProject(ctx context.Context, name string, description *string, dueAt *time.Time, parentID *int32, priority int32) (ProjectResponse, error)
 	CreateTask(ctx context.Context, projectID *int32, name string, description *string, dueAt *time.Time, taskType string, recurrence *int32, priority int32, estimateHours *decimal.Decimal) (TaskResponse, error)
 	CreateTodo(ctx context.Context, taskID int32, name string) (TodoResponse, error)
 	CreateTimeEntry(ctx context.Context, taskID int32, startedAt time.Time, finishedAt *time.Time, comment *string) (TimeEntryResponse, error)
@@ -30,7 +30,7 @@ type Repository interface {
 	GetTask(ctx context.Context, id int32) (TaskFullResponse, error)
 	GetProjectChildren(ctx context.Context, projectID int32) (ProjectChildrenResponse, error)
 	GetTaskTimeEntries(ctx context.Context, taskID int32) (TaskTimeEntriesResponse, error)
-	GetTasksByDueDate(ctx context.Context, minPriority *int32) ([]TaskByDueDateResponse, error)
+	GetTasksByDueDate(ctx context.Context) ([]TaskByDueDateResponse, error)
 	FinishDescendantProjects(ctx context.Context, projectID int32) error
 	FinishTasksByProjectTree(ctx context.Context, projectID int32) error
 	DeleteProject(ctx context.Context, id int32) error

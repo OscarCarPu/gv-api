@@ -99,6 +99,10 @@ func (h *Handler) CreateProject(w http.ResponseWriter, r *http.Request) {
 		response.Error(w, http.StatusBadRequest, msg)
 		return
 	}
+	if msg := validatePriority(req.Priority); msg != "" {
+		response.Error(w, http.StatusBadRequest, msg)
+		return
+	}
 
 	project, err := h.service.CreateProject(r.Context(), req)
 	if err != nil {
@@ -226,6 +230,10 @@ func (h *Handler) UpdateProject(w http.ResponseWriter, r *http.Request) {
 	req.ID = id
 
 	if msg := validateOptionalName(req.Name); msg != "" {
+		response.Error(w, http.StatusBadRequest, msg)
+		return
+	}
+	if msg := validatePriority(req.Priority); msg != "" {
 		response.Error(w, http.StatusBadRequest, msg)
 		return
 	}

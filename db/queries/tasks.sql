@@ -1,7 +1,7 @@
 -- name: CreateProject :one
-INSERT INTO projects (name, description, due_at, parent_id)
-VALUES ($1, $2, $3, $4)
-RETURNING id, name, description, due_at, parent_id;
+INSERT INTO projects (name, description, due_at, parent_id, priority)
+VALUES ($1, $2, $3, $4, $5)
+RETURNING id, name, description, due_at, parent_id, priority;
 
 -- name: CreateTask :one
 INSERT INTO tasks (project_id, name, description, due_at, task_type, recurrence, priority, estimate_hours)
@@ -50,9 +50,10 @@ UPDATE projects SET
     due_at      = CASE WHEN @clear_due_at::bool THEN NULL WHEN @set_due_at::bool THEN @due_at::date ELSE due_at END,
     parent_id   = CASE WHEN @clear_parent_id::bool THEN NULL WHEN @set_parent_id::bool THEN @parent_id::int ELSE parent_id END,
     started_at  = CASE WHEN @clear_started_at::bool THEN NULL WHEN @set_started_at::bool THEN @started_at::timestamptz ELSE started_at END,
-    finished_at = CASE WHEN @clear_finished_at::bool THEN NULL WHEN @set_finished_at::bool THEN @finished_at::timestamptz ELSE finished_at END
+    finished_at = CASE WHEN @clear_finished_at::bool THEN NULL WHEN @set_finished_at::bool THEN @finished_at::timestamptz ELSE finished_at END,
+    priority    = CASE WHEN @set_priority::bool      THEN @priority::int           ELSE priority END
 WHERE id = @id
-RETURNING id, parent_id, name, description, due_at, started_at, finished_at;
+RETURNING id, parent_id, name, description, due_at, started_at, finished_at, priority;
 
 -- name: LockProjectTree :exec
 -- Serialises parent moves so two concurrent updates can't each pass the cycle check and
@@ -98,7 +99,7 @@ WHERE t.id NOT IN (SELECT id FROM subtree)
 ORDER BY t.path;
 
 -- name: ListProjectsFast :many
-SELECT id, name FROM projects WHERE started_at IS NOT NULL AND finished_at IS NULL ORDER BY name;
+SELECT id, name, priority FROM projects WHERE started_at IS NOT NULL AND finished_at IS NULL ORDER BY name;
 
 -- name: ListTasksFast :many
 WITH RECURSIVE project_tree AS (
@@ -196,11 +197,11 @@ ORDER BY
 
 -- name: GetProjectWithDescendants :many
 WITH RECURSIVE project_tree AS (
-    SELECT p.id, p.parent_id, p.name, p.description, p.due_at, p.started_at, p.finished_at,
+    SELECT p.id, p.parent_id, p.name, p.description, p.due_at, p.started_at, p.finished_at, p.priority,
         0 AS depth, ARRAY[p.id]::int[] AS path
     FROM projects p WHERE p.id = $1
     UNION ALL
-    SELECT c.id, c.parent_id, c.name, c.description, c.due_at, c.started_at, c.finished_at,
+    SELECT c.id, c.parent_id, c.name, c.description, c.due_at, c.started_at, c.finished_at, c.priority,
         pt.depth + 1, pt.path || c.id
     FROM projects c
     JOIN project_tree pt ON c.parent_id = pt.id
@@ -212,7 +213,7 @@ project_direct_time AS (
     WHERE t.project_id IN (SELECT id FROM project_tree)
     GROUP BY t.project_id
 )
-SELECT pt.id, pt.parent_id, pt.name, pt.description, pt.due_at, pt.started_at, pt.finished_at, pt.depth,
+SELECT pt.id, pt.parent_id, pt.name, pt.description, pt.due_at, pt.started_at, pt.finished_at, pt.priority, pt.depth,
     COALESCE((
         SELECT SUM(pdt.direct_time)::bigint
         FROM project_direct_time pdt
@@ -253,7 +254,9 @@ RETURNING id, task_id, name, is_done;
 
 -- name: GetTasksByDueDate :many
 -- Returns unfinished tasks that have a due_at (own or inherited from a blocked task) or whose project has one.
--- effective_due_at propagates backward via the "blocks" relation; hidden tasks are filtered out.
+-- effective_due_at propagates backward via the "blocks" relation. Hidden tasks (every unfinished
+-- dependency is itself blocked) are returned with hidden = true rather than filtered out: the
+-- service needs every link of a dependency chain to add up its estimates, and drops them after.
 WITH RECURSIVE
 unfinished AS (
     SELECT t.id, t.due_at FROM tasks t WHERE t.finished_at IS NULL
@@ -298,7 +301,8 @@ SELECT
     COALESCE(SUM(EXTRACT(EPOCH FROM (te.finished_at - te.started_at)))::bigint, 0)::bigint AS time_spent,
     COALESCE((SELECT json_agg(json_build_object('id', t2.id, 'name', t2.name, 'due_at', t2.due_at) ORDER BY t2.name) FROM task_dependencies td JOIN tasks t2 ON t2.id = td.depends_on WHERE td.task_id = t.id AND t2.finished_at IS NULL), '[]')::json AS depends_on,
     COALESCE((SELECT json_agg(json_build_object('id', t2.id, 'name', t2.name) ORDER BY t2.name) FROM task_dependencies td JOIN tasks t2 ON t2.id = td.task_id WHERE td.depends_on = t.id), '[]')::json AS blocks,
-    tb.blocked
+    tb.blocked,
+    th.hidden
 FROM tasks t
 JOIN effective e ON e.id = t.id
 JOIN task_blocked tb ON tb.id = t.id
@@ -306,10 +310,8 @@ JOIN task_hidden th ON th.id = t.id
 LEFT JOIN projects p ON p.id = t.project_id
 LEFT JOIN time_entries te ON te.task_id = t.id AND te.finished_at IS NOT NULL
 WHERE t.finished_at IS NULL
-  AND (sqlc.narg('min_priority')::int IS NULL OR t.priority <= sqlc.narg('min_priority')::int)
-  AND (NOT th.hidden OR e.effective_due_at <= CURRENT_DATE)
   AND (e.effective_due_at IS NOT NULL OR p.due_at IS NOT NULL)
-GROUP BY t.id, p.id, e.effective_due_at, tb.blocked
+GROUP BY t.id, p.id, e.effective_due_at, tb.blocked, th.hidden
 ORDER BY e.effective_due_at ASC NULLS LAST, p.due_at ASC NULLS LAST, t.name;
 
 -- name: GetTaskByID :one
@@ -491,7 +493,7 @@ project_direct_time AS (
     WHERE t.project_id IN (SELECT id FROM project_tree)
     GROUP BY t.project_id
 )
-SELECT p.id, p.parent_id, p.name, p.description, p.due_at, p.started_at, p.finished_at,
+SELECT p.id, p.parent_id, p.name, p.description, p.due_at, p.started_at, p.finished_at, p.priority,
     COALESCE((SELECT SUM(pdt.direct_time)::bigint FROM project_direct_time pdt), 0)::bigint AS time_spent
 FROM projects p
 WHERE p.id = $1;

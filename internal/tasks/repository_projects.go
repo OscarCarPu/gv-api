@@ -13,7 +13,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-func (r *PostgresRepository) CreateProject(ctx context.Context, name string, description *string, dueAt *time.Time, parentID *int32) (ProjectResponse, error) {
+func (r *PostgresRepository) CreateProject(ctx context.Context, name string, description *string, dueAt *time.Time, parentID *int32, priority int32) (ProjectResponse, error) {
 	var pgDueAt pgtype.Date
 	if dueAt != nil {
 		pgDueAt = pgtype.Date{Time: *dueAt, Valid: true}
@@ -24,6 +24,7 @@ func (r *PostgresRepository) CreateProject(ctx context.Context, name string, des
 		Description: description,
 		DueAt:       pgDueAt,
 		ParentID:    parentID,
+		Priority:    priority,
 	})
 	if err != nil {
 		return ProjectResponse{}, err
@@ -35,6 +36,7 @@ func (r *PostgresRepository) CreateProject(ctx context.Context, name string, des
 		Description: row.Description,
 		DueAt:       pgconv.DatePtr(row.DueAt),
 		ParentID:    row.ParentID,
+		Priority:    row.Priority,
 	}, nil
 }
 
@@ -80,6 +82,10 @@ func (r *PostgresRepository) UpdateProject(ctx context.Context, req UpdateProjec
 			params.FinishedAt = pgtype.Timestamptz{Time: *req.FinishedAt.Value, Valid: true}
 		}
 	}
+	if req.Priority != nil {
+		params.SetPriority = true
+		params.Priority = *req.Priority
+	}
 
 	// The cycle check and the write must be atomic, so they share a transaction.
 	var row gvdb.Project
@@ -108,6 +114,7 @@ func (r *PostgresRepository) UpdateProject(ctx context.Context, req UpdateProjec
 		ParentID:    row.ParentID,
 		StartedAt:   pgconv.TimePtr(row.StartedAt),
 		FinishedAt:  pgconv.TimePtr(row.FinishedAt),
+		Priority:    row.Priority,
 	}, nil
 }
 
@@ -198,6 +205,7 @@ func (r *PostgresRepository) GetProject(ctx context.Context, id int32) (ProjectD
 		DueAt:       pgconv.DatePtr(row.DueAt),
 		StartedAt:   pgconv.TimePtr(row.StartedAt),
 		FinishedAt:  pgconv.TimePtr(row.FinishedAt),
+		Priority:    row.Priority,
 		TimeSpent:   row.TimeSpent,
 	}, nil
 }
@@ -267,6 +275,7 @@ func (r *PostgresRepository) GetProjectChildren(ctx context.Context, projectID i
 		StartedAt:   pgconv.TimePtr(root.StartedAt),
 		FinishedAt:  pgconv.TimePtr(root.FinishedAt),
 		TimeSpent:   root.TimeSpent,
+		Priority:    root.Priority,
 	}
 
 	var children []ProjectChildNode
@@ -416,8 +425,9 @@ func (r *PostgresRepository) ListProjectsFast(ctx context.Context) ([]ProjectFas
 	projects := make([]ProjectFastResponse, len(rows))
 	for i, row := range rows {
 		projects[i] = ProjectFastResponse{
-			ID:   row.ID,
-			Name: row.Name,
+			ID:       row.ID,
+			Name:     row.Name,
+			Priority: row.Priority,
 		}
 	}
 

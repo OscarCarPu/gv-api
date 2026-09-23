@@ -195,6 +195,7 @@ type Project struct {
 	DueAt       pgtype.Date        `db:"due_at" json:"due_at"`
 	StartedAt   pgtype.Timestamptz `db:"started_at" json:"started_at"`
 	FinishedAt  pgtype.Timestamptz `db:"finished_at" json:"finished_at"`
+	Priority    int32              `db:"priority" json:"priority"`
 }
 
 type RecurringCommitment struct {
