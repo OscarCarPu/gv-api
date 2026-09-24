@@ -325,18 +325,21 @@ type TaskFullResponse struct {
 }
 
 type TaskByDueDateResponse struct {
-	ID             int32            `json:"id"`
-	Name           string           `json:"name"`
-	Description    *string          `json:"description"`
-	DueAt          *time.Time       `json:"due_at"`
-	StartedAt      *time.Time       `json:"started_at"`
-	TaskType       string           `json:"task_type"`
-	Recurrence     *int32           `json:"recurrence,omitempty"`
-	Priority       int32            `json:"priority"`
-	TimeSpent      int64            `json:"time_spent"`
-	EstimateHours  *decimal.Decimal `json:"estimate_hours"`
-	RemainingHours *decimal.Decimal `json:"remaining_hours"`
-	StartBy        *string          `json:"start_by"`
+	ID          int32      `json:"id"`
+	Name        string     `json:"name"`
+	Description *string    `json:"description"`
+	DueAt       *time.Time `json:"due_at"`
+	StartedAt   *time.Time `json:"started_at"`
+	TaskType    string     `json:"task_type"`
+	Recurrence  *int32     `json:"recurrence,omitempty"`
+	Priority    int32      `json:"priority"`
+	// EffectivePriority is Priority raised to the highest priority of anything the task
+	// transitively blocks — the one urgency schedules it by.
+	EffectivePriority int32            `json:"effective_priority"`
+	TimeSpent         int64            `json:"time_spent"`
+	EstimateHours     *decimal.Decimal `json:"estimate_hours"`
+	RemainingHours    *decimal.Decimal `json:"remaining_hours"`
+	StartBy           *string          `json:"start_by"`
 	// FinishBy is the day the task has to be done by: its own due date, or earlier when a task
 	// it blocks has to start before that. Only set when urgency was computed.
 	FinishBy     *string      `json:"finish_by"`
