@@ -939,6 +939,16 @@ func TestService_GetTasksByDueDate_ChainAccumulatesEstimates(t *testing.T) {
 		return byID
 	}
 
+	t.Run("work order puts each step before the one depending on it", func(t *testing.T) {
+		// With 8h a day, C and B share day 3: same start, same finish_by. Only the work order
+		// still tells that B comes first.
+		byID := run(t, "8")
+		require.NotNil(t, byID[1].WorkOrder)
+		require.NotNil(t, byID[2].WorkOrder)
+		assert.Less(t, *byID[1].WorkOrder, *byID[2].WorkOrder, "A before B")
+		assert.Equal(t, int32(1), *byID[1].WorkOrder, "A, the head of the chain, is first")
+	})
+
 	t.Run("one task per day", func(t *testing.T) {
 		byID := run(t, "4")
 		require.NotNil(t, byID[1].StartBy)
