@@ -234,6 +234,11 @@ type TaskDependency struct {
 	DependsOn int32 `db:"depends_on" json:"depends_on"`
 }
 
+type TaskEffectiveDue struct {
+	TaskID         int32       `db:"task_id" json:"task_id"`
+	EffectiveDueAt interface{} `db:"effective_due_at" json:"effective_due_at"`
+}
+
 type TimeEntry struct {
 	ID         int32              `db:"id" json:"id"`
 	TaskID     int32              `db:"task_id" json:"task_id"`

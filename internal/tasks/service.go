@@ -301,21 +301,17 @@ func (s *Service) GetTasksByDueDate(ctx context.Context, minPriority *int32) ([]
 	if err != nil {
 		return nil, err
 	}
-	// Urgency runs over the unfiltered set: a hidden task or one below the priority threshold
-	// can still sit at the end of a dependency chain whose visible head has to start early.
+	// Urgency runs over the unfiltered set: a task below the priority threshold can still sit at
+	// the end of a dependency chain whose visible head has to start early.
 	priority := chainPriorities(rows)
 	if err := s.applyUrgency(ctx, rows, priority); err != nil {
 		return nil, err
 	}
 
-	today := s.today()
 	visible := make([]TaskByDueDateResponse, 0, len(rows))
 	for i, t := range rows {
 		t.EffectivePriority = priority[i]
 		if minPriority != nil && priority[i] > *minPriority {
-			continue
-		}
-		if t.Hidden && (t.DueAt == nil || s.localDay(*t.DueAt).After(today)) {
 			continue
 		}
 		visible = append(visible, t)

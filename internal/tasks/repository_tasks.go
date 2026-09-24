@@ -237,7 +237,6 @@ func (r *PostgresRepository) GetTasksByDueDate(ctx context.Context) ([]TaskByDue
 			DependsOn:     dependsOn,
 			Blocks:        blocks,
 			Blocked:       row.Blocked,
-			Hidden:        row.Hidden != nil && *row.Hidden,
 		}
 	}
 	return tasks, nil

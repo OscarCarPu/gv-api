@@ -210,7 +210,7 @@ See [README](README.md) for shared `task_type` / `recurrence` / `priority` seman
 
 - **Method:** `GET`
 - **Endpoint:** `/tasks/tasks/by-due-date`
-- **Description:** Returns unfinished tasks that have a due date (own, project, or inherited from dependencies), ordered by effective `due_at` first, then by project `due_at`, then by name. Tasks hidden by blocked dependencies are excluded. A task's `due_at` in the response reflects its effective due date (minimum of own and dependencies'). Includes time spent from completed time entries, plus urgency fields — see [business_logic/tasks.md](../../business_logic/tasks.md#estimate-and-urgency-due-soon).
+- **Description:** Returns unfinished tasks that have a due date (own, project, or inherited from dependencies), ordered by effective `due_at` first, then by project `due_at`, then by name. A task's `due_at` in the response reflects its effective due date (minimum of own and dependencies'). Includes time spent from completed time entries, plus urgency fields — see [business_logic/tasks.md](../../business_logic/tasks.md#estimate-and-urgency-due-soon).
 - **Query Parameters:**
   - `min_priority` (optional): Integer from 1 to 5. When provided, only tasks with `priority <= min_priority` are returned (1 = highest importance).
 - **Success Response:**
