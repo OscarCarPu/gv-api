@@ -808,12 +808,9 @@ func (stubBusyProvider) BusyHoursByDate(_ context.Context, _, _ time.Time) (map[
 	return map[string]decimal.Decimal{}, nil
 }
 
-// Two tasks sharing the same 5-day, 20-hour due-date window draw from the same freeByDate pool.
-// Checked independently, a task needing only 3 hours would comfortably fit in the day furthest
-// from today and not be urgent — but a higher-priority task claiming 16 of those 20 hours first
-// (everything except today itself) pushes the second task's only remaining room onto today,
-// which must show up as urgent rather than being silently missed because each task's own check
-// looked fine in isolation.
+// Two tasks sharing the same 5-day, 20-hour window draw from the same freeByDate pool. The p1 task
+// is worked on first, so the p3 one takes the last hours and the p1 task — 19 hours into 20 — is
+// the one that has to start today. Checked on its own, it would have fit and not been urgent.
 func TestService_GetTasksByDueDate_UrgencyAccountsForCompetingTasks(t *testing.T) {
 	loc, err := time.LoadLocation("Europe/Madrid")
 	require.NoError(t, err)
@@ -851,8 +848,53 @@ func TestService_GetTasksByDueDate_UrgencyAccountsForCompetingTasks(t *testing.T
 		byID[r.ID] = r
 	}
 
-	assert.Falsef(t, byID[1].Urgent, "higher-priority task: start_by=%v urgent=%v", byID[1].StartBy, byID[1].Urgent)
-	assert.Truef(t, byID[2].Urgent, "lower-priority task starved of shared hours must be urgent: start_by=%v urgent=%v", byID[2].StartBy, byID[2].Urgent)
+	assert.Truef(t, byID[1].Urgent, "higher-priority task goes first and has to start today: start_by=%v", byID[1].StartBy)
+	assert.Falsef(t, byID[2].Urgent, "lower-priority task takes the last hours: start_by=%v", byID[2].StartBy)
+}
+
+// Work is done p1 first, then p2 and so on, each by what falls due soonest. A p2 8h job due day 5,
+// a p3 4h task due day 4 and a p2 8h task due day 3, over five 4h days: the p3 task goes last and
+// keeps day 3, the later p2 job takes days 4 and 2, and the sooner p2 task — first in line — has
+// to start today. The p3 task, though due before the p2 job, is not what turns urgent.
+func TestService_GetTasksByDueDate_UrgencyFollowsPriorityThenDeadline(t *testing.T) {
+	loc, err := time.LoadLocation("Europe/Madrid")
+	require.NoError(t, err)
+
+	now := time.Now().In(loc)
+	today := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, loc)
+	dayUTC := func(d int) *time.Time {
+		return ptr(time.Date(today.Year(), today.Month(), today.Day()+d, 0, 0, 0, 0, time.UTC))
+	}
+	dayStr := func(d int) string { return today.AddDate(0, 0, d).Format("2006-01-02") }
+
+	days := make([]capacity.DayFreeBusy, 0, 5)
+	for i := 0; i < 5; i++ {
+		days = append(days, capacity.DayFreeBusy{Date: dayStr(i), CapacityHours: decimal.NewFromInt(14), FreeHours: decimal.NewFromInt(4)})
+	}
+
+	repo := mocks.NewMockRepository(t)
+	repo.EXPECT().GetTasksByDueDate(mock.Anything).Return([]tasks.TaskByDueDateResponse{
+		{ID: 1, Name: "reforma", Priority: 2, TaskType: "standard", DueAt: dayUTC(5), EstimateHours: decPtr("8")},
+		{ID: 2, Name: "introduccion", Priority: 3, TaskType: "standard", DueAt: dayUTC(4), EstimateHours: decPtr("4")},
+		{ID: 3, Name: "pec", Priority: 2, TaskType: "standard", DueAt: dayUTC(3), EstimateHours: decPtr("8")},
+	}, nil)
+
+	svc := tasks.NewService(repo, loc)
+	svc.SetUrgencyProviders(stubCapacityProvider{days: days}, stubPlannedHoursProvider{})
+	got, err := svc.GetTasksByDueDate(context.Background(), nil)
+	require.NoError(t, err)
+	byID := map[int32]tasks.TaskByDueDateResponse{}
+	for _, r := range got {
+		byID[r.ID] = r
+	}
+
+	for id, want := range map[int32]string{1: dayStr(2), 2: dayStr(3), 3: dayStr(0)} {
+		require.NotNil(t, byID[id].StartBy, "task %d", id)
+		assert.Equal(t, want, *byID[id].StartBy, "task %d", id)
+	}
+	assert.True(t, byID[3].Urgent)
+	assert.False(t, byID[1].Urgent)
+	assert.False(t, byID[2].Urgent)
 }
 
 // A → B → C → D → E, 4h each, E due in 5 days with 4 free hours a day: the chain needs all 20
@@ -963,8 +1005,9 @@ func TestService_GetTasksByDueDate_FutureDaysCapped(t *testing.T) {
 	assert.Equal(t, today.AddDate(0, 0, 10).Format("2006-01-02"), *got[2].StartBy)
 }
 
-// The study tasks behind a p2 exam are left at the default p3. They must still claim hours as p2
-// ahead of an unrelated p3 task with an earlier deadline, and survive a min_priority=2 filter.
+// The study tasks behind a p2 exam are left at the default p3. They are scheduled as p2 work —
+// ahead of an unrelated p3 chore due sooner — and must survive a min_priority=2 filter while the
+// exam stays visible.
 func TestService_GetTasksByDueDate_ChainInheritsPriority(t *testing.T) {
 	loc, err := time.LoadLocation("Europe/Madrid")
 	require.NoError(t, err)
@@ -998,11 +1041,13 @@ func TestService_GetTasksByDueDate_ChainInheritsPriority(t *testing.T) {
 		byID[r.ID] = r
 	}
 	require.NotNil(t, byID[2].StartBy)
-	assert.Equal(t, dayStr(1), *byID[2].StartBy, "study claims day 1 as p2, before the p3 chore")
+	assert.Equal(t, dayStr(0), *byID[2].StartBy, "study is p2 work, done before the p3 chore: today")
+	assert.True(t, byID[2].Urgent)
 	require.NotNil(t, byID[2].FinishBy)
 	assert.Equal(t, dayStr(2), *byID[2].FinishBy, "study must be done by the day the exam starts")
-	assert.True(t, byID[3].Urgent, "the chore is the one pushed to today")
+	assert.False(t, byID[3].Urgent, "the p3 chore goes after and keeps day 1")
 	assert.Equal(t, int32(3), byID[2].Priority, "the task's own priority is reported unchanged")
+	assert.Equal(t, int32(2), byID[2].EffectivePriority, "…and the one it is scheduled by, alongside")
 
 	threshold := int32(2)
 	got, err = svc.GetTasksByDueDate(context.Background(), &threshold)
@@ -1019,11 +1064,10 @@ func decPtr(s string) *decimal.Decimal {
 	return &d
 }
 
-// A recurring task's time_spent accumulates across every past cycle (renewing only reschedules
-// due_at). estimate_hours is a per-cycle target, so a task with a tiny estimate and a huge
-// lifetime time_spent must not read as permanently "done" — the estimate should stay the
-// remaining requirement every cycle, ignoring history.
-func TestService_GetTasksByDueDate_RecurringUrgencyIgnoresLifetimeTimeSpent(t *testing.T) {
+// A recurring task is done on the day it falls due, not started days ahead: it gets no
+// start_by and never turns urgent by back-filling, however little room is left — otherwise every
+// renewal would drag it straight back to "start today". It also leaves the hours to others.
+func TestService_GetTasksByDueDate_RecurringTasksTakeNoPartInUrgency(t *testing.T) {
 	loc, err := time.LoadLocation("Europe/Madrid")
 	require.NoError(t, err)
 
@@ -1041,15 +1085,8 @@ func TestService_GetTasksByDueDate_RecurringUrgencyIgnoresLifetimeTimeSpent(t *t
 	repo.EXPECT().
 		GetTasksByDueDate(mock.Anything).
 		Return([]tasks.TaskByDueDateResponse{
-			{
-				ID:            1,
-				Priority:      3,
-				TaskType:      "recurring",
-				Recurrence:    ptr(int32(10)),
-				DueAt:         &dueIn3Days,
-				EstimateHours: decPtr("1.5"),
-				TimeSpent:     30 * 3600, // 30h accumulated across past cycles
-			},
+			{ID: 1, Priority: 3, TaskType: "recurring", Recurrence: ptr(int32(7)), DueAt: &dueIn3Days, EstimateHours: decPtr("1.5")},
+			{ID: 2, Priority: 3, TaskType: "standard", DueAt: &dueIn3Days, EstimateHours: decPtr("8")},
 		}, nil)
 
 	svc := tasks.NewService(repo, loc)
@@ -1060,11 +1097,12 @@ func TestService_GetTasksByDueDate_RecurringUrgencyIgnoresLifetimeTimeSpent(t *t
 
 	got, err := svc.GetTasksByDueDate(context.Background(), nil)
 	require.NoError(t, err)
-	require.Len(t, got, 1)
+	require.Len(t, got, 2)
 
-	require.NotNil(t, got[0].RemainingHours)
-	assert.Truef(t, got[0].RemainingHours.Equal(decimal.RequireFromString("1.5")),
-		"remaining_hours should be the per-cycle estimate untouched by lifetime time_spent, got %v", got[0].RemainingHours)
+	assert.Nil(t, got[0].StartBy, "recurring: no start_by")
+	assert.False(t, got[0].Urgent, "recurring: never urgent by back-fill")
+	require.NotNil(t, got[1].StartBy)
+	assert.Equal(t, today.AddDate(0, 0, 1).Format("2006-01-02"), *got[1].StartBy, "the 8h task gets days 2 and 1 whole")
 }
 
 func TestService_GetTimeEntrySummary(t *testing.T) {
