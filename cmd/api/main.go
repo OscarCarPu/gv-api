@@ -187,6 +187,7 @@ func main() {
 		r.Use(semiMiddleware.Handle)
 		lightsHandler.RegisterRoutes(r)
 		uptimeHandler.RegisterRoutes(r)
+		rutasHandler.RegisterRoutes(r)
 	})
 
 	// Full private
@@ -196,7 +197,6 @@ func main() {
 		taskHandler.RegisterRoutes(r)
 		planHandler.RegisterRoutes(r)
 		financeHandler.RegisterRoutes(r)
-		rutasHandler.RegisterRoutes(r)
 		calendarHandler.RegisterRoutes(r)
 		capacityHandler.RegisterRoutes(r)
 	})

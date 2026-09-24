@@ -2,7 +2,7 @@
 
 CRUD for concello marks: the record of which councils have been visited and when.
 
-**Auth:** full-private. All endpoints require a `full` token (see [auth.md](auth.md)).
+**Auth:** semiprivate. All endpoints accept a `semi` or `full` token (see [auth.md](auth.md)).
 
 ### Mark fields
 
