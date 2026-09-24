@@ -200,7 +200,7 @@ See [README](README.md) for shared `task_type` / `recurrence` / `priority` seman
 
 - **Method:** `GET`
 - **Endpoint:** `/tasks/tree`
-- **Description:** Returns a nested JSON tree of active projects and tasks. Projects are included if `started_at IS NOT NULL` and `finished_at IS NULL`. Tasks are included if `finished_at IS NULL`. Orphan tasks (no `project_id`) appear at the root level. Ordered: first projects, then tasks with `started_at IS NOT NULL` then tasks with `started_at IS NULL`. Tasks hidden by blocked dependencies are excluded (a task is hidden if all of its dependencies are themselves blocked). Task `due_at` reflects the effective due date (minimum of own and dependencies').
+- **Description:** Returns a nested JSON tree of active projects and tasks. Projects are included if `started_at IS NOT NULL` and `finished_at IS NULL`. Tasks are included if `finished_at IS NULL`. Orphan tasks (no `project_id`) appear at the root level. Ordered: first projects, then tasks with `started_at IS NOT NULL` then tasks with `started_at IS NULL`. Task `due_at` reflects the effective due date (minimum of own and dependencies').
 - **Query Parameters:**
   - `min_priority` (optional): Integer from 1 to 5. When provided, only tasks with `priority <= min_priority` are kept in the tree; projects are always present regardless of their children.
 - **Success Response:**

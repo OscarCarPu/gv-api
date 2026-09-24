@@ -432,7 +432,7 @@ func TestIntegration_GetProjectChildren_TodosAggregated(t *testing.T) {
 	require.Len(t, resp.Children[0].Todos, 2)
 }
 
-func TestIntegration_GetUnfinishedTasks_HiddenAndBlocked(t *testing.T) {
+func TestIntegration_GetUnfinishedTasks_DependencyChainIsListedWhole(t *testing.T) {
 	ctx := context.Background()
 	repo := NewRepo(t)
 
@@ -454,11 +454,12 @@ func TestIntegration_GetUnfinishedTasks_HiddenAndBlocked(t *testing.T) {
 	}
 
 	require.Contains(t, byID, a, "a is not blocked, must appear")
-	require.Contains(t, byID, b, "b is blocked but only by a (a is not blocked itself), so b is not hidden")
-	require.NotContains(t, byID, c, "c is hidden — its only dep b is itself blocked")
+	require.Contains(t, byID, b, "b is blocked by a, still listed")
+	require.Contains(t, byID, c, "c is two levels down the chain, still listed")
 
 	require.False(t, byID[a].Blocked, "a has no deps")
 	require.True(t, byID[b].Blocked, "b depends on unfinished a")
+	require.True(t, byID[c].Blocked, "c depends on unfinished b")
 }
 
 func TestIntegration_GetUnfinishedTasks_EffectiveDueAtPropagatesBackward(t *testing.T) {
@@ -488,7 +489,7 @@ func TestIntegration_GetUnfinishedTasks_EffectiveDueAtPropagatesBackward(t *test
 	require.Equal(t, earlyDue, byID[b.ID].DueAt.UTC(), "b keeps its own earlier due_at")
 }
 
-func TestIntegration_GetTasksByDueDate_HiddenFilteredAndOrderedByEffective(t *testing.T) {
+func TestIntegration_GetTasksByDueDate_OrderedByEffectiveDueAt(t *testing.T) {
 	ctx := context.Background()
 	repo := NewRepo(t)
 
@@ -514,7 +515,7 @@ func TestIntegration_GetTasksByDueDate_HiddenFilteredAndOrderedByEffective(t *te
 	for i, r := range rows {
 		ids[i] = r.ID
 	}
-	require.NotContains(t, ids, d.ID, "d is hidden (only dep c is blocked) and has no own due_at")
+	require.NotContains(t, ids, d.ID, "d has no due_at of its own, nor a project or dependent one")
 	require.Contains(t, ids, a.ID, "a appears with inherited earlier due")
 	require.Contains(t, ids, b.ID)
 	require.Contains(t, ids, c.ID, "c appears (own due_at present) even though blocking d")
@@ -528,50 +529,31 @@ func TestIntegration_GetTasksByDueDate_HiddenFilteredAndOrderedByEffective(t *te
 	_ = posB
 }
 
-// Hidden rows come back flagged rather than filtered: the service needs every link of a chain to
-// add up its estimates, and decides visibility itself (see TestService_GetTasksByDueDate_HiddenTasks).
-func TestIntegration_GetTasksByDueDate_FlagsMultiLevelBlockAsHidden(t *testing.T) {
+// Every link of a dependency chain comes back, however deep it is blocked: nothing is hidden.
+func TestIntegration_GetTasksByDueDate_ReturnsMultiLevelBlockedTasks(t *testing.T) {
 	ctx := context.Background()
 	repo := NewRepo(t)
 
-	now := time.Now().UTC()
-	dayDate := func(d int) time.Time {
-		return time.Date(now.Year(), now.Month(), now.Day()+d, 0, 0, 0, 0, time.UTC)
-	}
-	yesterday := dayDate(-1)
-	today := dayDate(0)
-	future := dayDate(30)
+	future := time.Now().UTC().AddDate(0, 0, 30).Truncate(24 * time.Hour)
 
-	// Chain prefix-a → prefix-b → prefix-c (c depends on b, b depends on a).
-	// a is unblocked; b is blocked at one level (visible); c is hidden by multi-level
-	// blocking (its only dep b is itself blocked).
-	mkChain := func(prefix string, cDue *time.Time) int32 {
-		a, err := repo.CreateTask(ctx, nil, prefix+"-a", nil, &future, "standard", nil, 4, nil)
-		require.NoError(t, err)
-		b, err := repo.CreateTask(ctx, nil, prefix+"-b", nil, &future, "standard", nil, 4, nil)
-		require.NoError(t, err)
-		require.NoError(t, repo.ReplaceTaskDependencies(ctx, b.ID, []int32{a.ID}))
-		c, err := repo.CreateTask(ctx, nil, prefix+"-c", nil, cDue, "standard", nil, 4, nil)
-		require.NoError(t, err)
-		require.NoError(t, repo.ReplaceTaskDependencies(ctx, c.ID, []int32{b.ID}))
-		return c.ID
-	}
-
-	cOverdue := mkChain("ovd", &yesterday)
-	cToday := mkChain("tdy", &today)
-	cFuture := mkChain("fut", &future)
+	// a → b → c: c depends on b, which depends on a.
+	a, err := repo.CreateTask(ctx, nil, "a", nil, &future, "standard", nil, 4, nil)
+	require.NoError(t, err)
+	b, err := repo.CreateTask(ctx, nil, "b", nil, &future, "standard", nil, 4, nil)
+	require.NoError(t, err)
+	require.NoError(t, repo.ReplaceTaskDependencies(ctx, b.ID, []int32{a.ID}))
+	c, err := repo.CreateTask(ctx, nil, "c", nil, &future, "standard", nil, 4, nil)
+	require.NoError(t, err)
+	require.NoError(t, repo.ReplaceTaskDependencies(ctx, c.ID, []int32{b.ID}))
 
 	rows, err := repo.GetTasksByDueDate(ctx)
 	require.NoError(t, err)
-	hidden := map[int32]bool{}
+	blocked := map[int32]bool{}
 	for _, r := range rows {
-		hidden[r.ID] = r.Hidden
+		blocked[r.ID] = r.Blocked
 	}
 
-	for _, c := range []int32{cOverdue, cToday, cFuture} {
-		require.Contains(t, hidden, c, "every multi-level-blocked c is returned")
-		require.True(t, hidden[c], "c's only dependency is itself blocked")
-	}
+	require.Equal(t, map[int32]bool{a.ID: false, b.ID: true, c.ID: true}, blocked)
 }
 
 func indexOf(ids []int32, target int32) int {

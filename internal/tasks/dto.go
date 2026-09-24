@@ -354,9 +354,6 @@ type TaskByDueDateResponse struct {
 	DependsOn    []TaskDepRef `json:"depends_on"`
 	Blocks       []TaskDepRef `json:"blocks"`
 	Blocked      bool         `json:"blocked"`
-	// Hidden: every unfinished dependency is itself blocked. Still needed to add up a chain's
-	// estimates; GetTasksByDueDate drops it from the response unless it is due today or earlier.
-	Hidden bool `json:"-"`
 }
 
 type TimeEntrySummaryResponse struct {

@@ -110,7 +110,7 @@ Only finished entries count toward time calculations.
 - Finished tasks cannot be added as dependencies (silently ignored during create/update).
 - The effective due date of a task is the minimum of its own `due_at` and the effective `due_at` of all tasks that depend on it (recursive, via `blocks`). This propagates deadlines backward: if a task blocks something with an earlier deadline, it inherits that deadline.
 - A task that has at least one unfinished dependency is considered "blocked". All task responses include a `blocked` boolean.
-- A task is hidden from the active tree and due-date list if all of its dependencies are themselves blocked.
+- Blocking never hides a task: every unfinished task is listed in the active tree and (when it has an effective due date) the due-date list, however deep in a dependency chain it sits.
 - A task that inherits a due date from its blockers is returned in the due-date list.
 - Dependency responses include `id` and `name` of the referenced task (not just the ID).
 - The reverse relationship (tasks that depend on this task) is returned as `blocks` in all task responses.

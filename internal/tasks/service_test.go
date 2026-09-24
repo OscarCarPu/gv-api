@@ -679,32 +679,6 @@ func TestService_PriorityFilter(t *testing.T) {
 	})
 }
 
-// A multi-level-blocked task stays out of Due Soon until its (effective) due date arrives.
-func TestService_GetTasksByDueDate_HiddenTasks(t *testing.T) {
-	now := time.Now().UTC()
-	day := func(d int) *time.Time {
-		v := time.Date(now.Year(), now.Month(), now.Day()+d, 0, 0, 0, 0, time.UTC)
-		return &v
-	}
-
-	repo := mocks.NewMockRepository(t)
-	repo.EXPECT().GetTasksByDueDate(mock.Anything).Return([]tasks.TaskByDueDateResponse{
-		{ID: 1, Hidden: true, DueAt: day(-1)},
-		{ID: 2, Hidden: true, DueAt: day(0)},
-		{ID: 3, Hidden: true, DueAt: day(30)},
-		{ID: 4, DueAt: day(30)},
-	}, nil)
-
-	svc := tasks.NewService(repo, time.UTC)
-	got, err := svc.GetTasksByDueDate(context.Background(), nil)
-	require.NoError(t, err)
-	ids := []int32{}
-	for _, r := range got {
-		ids = append(ids, r.ID)
-	}
-	assert.Equal(t, []int32{1, 2, 4}, ids)
-}
-
 type stubCapacityProvider struct {
 	days []capacity.DayFreeBusy
 }
@@ -899,8 +873,7 @@ func TestService_GetTasksByDueDate_UrgencyFollowsPriorityThenDeadline(t *testing
 
 // A → B → C → D → E, 4h each, E due in 5 days with 4 free hours a day: the chain needs all 20
 // hours, so A has to start today. Checked task by task against E's due date, A and B would only
-// have claimed the two days before it. C, D and E are hidden (multi-level blocked) and must still
-// count, even though only A and B come back in the response.
+// have claimed the two days before it.
 func TestService_GetTasksByDueDate_ChainAccumulatesEstimates(t *testing.T) {
 	loc, err := time.LoadLocation("Europe/Madrid")
 	require.NoError(t, err)
@@ -920,9 +893,9 @@ func TestService_GetTasksByDueDate_ChainAccumulatesEstimates(t *testing.T) {
 		link := func(id int32, name string) []tasks.TaskDepRef { return []tasks.TaskDepRef{{ID: id, Name: name}} }
 		repo := mocks.NewMockRepository(t)
 		repo.EXPECT().GetTasksByDueDate(mock.Anything).Return([]tasks.TaskByDueDateResponse{
-			{ID: 5, Name: "E", Priority: 3, TaskType: "standard", DueAt: &dueIn5Days, EstimateHours: decPtr("4"), DependsOn: link(4, "D"), Blocked: true, Hidden: true},
-			{ID: 4, Name: "D", Priority: 3, TaskType: "standard", DueAt: &dueIn5Days, EstimateHours: decPtr("4"), DependsOn: link(3, "C"), Blocks: link(5, "E"), Blocked: true, Hidden: true},
-			{ID: 3, Name: "C", Priority: 3, TaskType: "standard", DueAt: &dueIn5Days, EstimateHours: decPtr("4"), DependsOn: link(2, "B"), Blocks: link(4, "D"), Blocked: true, Hidden: true},
+			{ID: 5, Name: "E", Priority: 3, TaskType: "standard", DueAt: &dueIn5Days, EstimateHours: decPtr("4"), DependsOn: link(4, "D"), Blocked: true},
+			{ID: 4, Name: "D", Priority: 3, TaskType: "standard", DueAt: &dueIn5Days, EstimateHours: decPtr("4"), DependsOn: link(3, "C"), Blocks: link(5, "E"), Blocked: true},
+			{ID: 3, Name: "C", Priority: 3, TaskType: "standard", DueAt: &dueIn5Days, EstimateHours: decPtr("4"), DependsOn: link(2, "B"), Blocks: link(4, "D"), Blocked: true},
 			{ID: 2, Name: "B", Priority: 3, TaskType: "standard", DueAt: &dueIn5Days, EstimateHours: decPtr("4"), DependsOn: link(1, "A"), Blocks: link(3, "C"), Blocked: true},
 			{ID: 1, Name: "A", Priority: 3, TaskType: "standard", DueAt: &dueIn5Days, EstimateHours: decPtr("4"), Blocks: link(2, "B")},
 		}, nil)
@@ -935,7 +908,7 @@ func TestService_GetTasksByDueDate_ChainAccumulatesEstimates(t *testing.T) {
 		for _, r := range got {
 			byID[r.ID] = r
 		}
-		require.Len(t, byID, 2, "only A and B are visible")
+		require.Len(t, byID, 5, "every link of the chain is listed")
 		return byID
 	}
 

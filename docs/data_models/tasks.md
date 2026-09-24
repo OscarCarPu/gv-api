@@ -51,6 +51,16 @@
 **Primary Key:** (task_id, depends_on)
 **Checks:** (task_id != depends_on)
 
+### task_effective_due (view)
+
+| Column           | Type        | Meaning                                                               |
+|------------------|-------------|-----------------------------------------------------------------------|
+| task_id          | INTEGER     | An unfinished task                                                    |
+| effective_due_at | TIMESTAMPTZ | Earliest `due_at` of the task and every unfinished task that transitively depends on it |
+
+Recursive over `task_dependencies`; the single definition of the effective due date used by the
+active tree and the due-date list (migration 031).
+
 ### todos
 
 | Column  | Type    | Constraints                                 |

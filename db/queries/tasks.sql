@@ -135,57 +135,17 @@ WHERE started_at IS NOT NULL AND finished_at IS NULL
 ORDER BY name;
 
 -- name: GetUnfinishedTasks :many
--- effective_due_at = MIN(self.due_at, due_at of every transitive blocks-descendant).
--- A task is "hidden" iff it has at least one unfinished dep AND every unfinished dep is itself blocked.
-WITH RECURSIVE
-unfinished AS (
-    SELECT t.id, t.due_at FROM tasks t WHERE t.finished_at IS NULL
-),
-blocks_closure(root_id, descendant_id, descendant_due) AS (
-    SELECT u.id, u.id, u.due_at FROM unfinished u
-    UNION
-    SELECT bc.root_id, td.task_id, t2.due_at
-    FROM blocks_closure bc
-    JOIN task_dependencies td ON td.depends_on = bc.descendant_id
-    JOIN tasks t2 ON t2.id = td.task_id AND t2.finished_at IS NULL
-),
-effective AS (
-    SELECT root_id AS id, MIN(descendant_due) AS effective_due_at
-    FROM blocks_closure GROUP BY root_id
-),
-task_blocked AS (
-    SELECT u.id,
-        EXISTS(SELECT 1 FROM task_dependencies td
-               JOIN tasks t2 ON t2.id = td.depends_on
-               WHERE td.task_id = u.id AND t2.finished_at IS NULL) AS blocked
-    FROM unfinished u
-),
-task_hidden AS (
-    SELECT u.id,
-        EXISTS(SELECT 1 FROM task_dependencies td
-               JOIN tasks t2 ON t2.id = td.depends_on
-               WHERE td.task_id = u.id AND t2.finished_at IS NULL)
-        AND NOT EXISTS(
-            SELECT 1 FROM task_dependencies td
-            JOIN tasks t2 ON t2.id = td.depends_on
-            JOIN task_blocked tb ON tb.id = t2.id
-            WHERE td.task_id = u.id AND t2.finished_at IS NULL AND NOT tb.blocked
-        ) AS hidden
-    FROM unfinished u
-)
+-- due_at is the effective one (see the task_effective_due view).
 SELECT t.id, t.project_id, t.name, t.description,
     e.effective_due_at AS due_at,
     t.started_at, t.task_type, t.recurrence, t.priority,
     COALESCE((SELECT json_agg(json_build_object('id', t2.id, 'name', t2.name, 'due_at', t2.due_at) ORDER BY t2.name) FROM task_dependencies td JOIN tasks t2 ON t2.id = td.depends_on WHERE td.task_id = t.id AND t2.finished_at IS NULL), '[]')::json AS depends_on,
     COALESCE((SELECT json_agg(json_build_object('id', t2.id, 'name', t2.name) ORDER BY t2.name) FROM task_dependencies td JOIN tasks t2 ON t2.id = td.task_id WHERE td.depends_on = t.id), '[]')::json AS blocks,
-    tb.blocked
+    EXISTS(SELECT 1 FROM task_dependencies td3 JOIN tasks t3 ON t3.id = td3.depends_on WHERE td3.task_id = t.id AND t3.finished_at IS NULL) AS blocked
 FROM tasks t
-JOIN effective e ON e.id = t.id
-JOIN task_blocked tb ON tb.id = t.id
-JOIN task_hidden th ON th.id = t.id
+JOIN task_effective_due e ON e.task_id = t.id
 WHERE t.finished_at IS NULL
   AND (sqlc.narg('min_priority')::int IS NULL OR t.priority <= sqlc.narg('min_priority')::int)
-  AND (NOT th.hidden OR t.priority = 1)
 ORDER BY
   CASE
     WHEN t.task_type = 'standard' AND t.started_at IS NOT NULL THEN 0
@@ -254,45 +214,7 @@ RETURNING id, task_id, name, is_done;
 
 -- name: GetTasksByDueDate :many
 -- Returns unfinished tasks that have a due_at (own or inherited from a blocked task) or whose project has one.
--- effective_due_at propagates backward via the "blocks" relation. Hidden tasks (every unfinished
--- dependency is itself blocked) are returned with hidden = true rather than filtered out: the
--- service needs every link of a dependency chain to add up its estimates, and drops them after.
-WITH RECURSIVE
-unfinished AS (
-    SELECT t.id, t.due_at FROM tasks t WHERE t.finished_at IS NULL
-),
-blocks_closure(root_id, descendant_id, descendant_due) AS (
-    SELECT u.id, u.id, u.due_at FROM unfinished u
-    UNION
-    SELECT bc.root_id, td.task_id, t2.due_at
-    FROM blocks_closure bc
-    JOIN task_dependencies td ON td.depends_on = bc.descendant_id
-    JOIN tasks t2 ON t2.id = td.task_id AND t2.finished_at IS NULL
-),
-effective AS (
-    SELECT root_id AS id, MIN(descendant_due) AS effective_due_at
-    FROM blocks_closure GROUP BY root_id
-),
-task_blocked AS (
-    SELECT u.id,
-        EXISTS(SELECT 1 FROM task_dependencies td
-               JOIN tasks t2 ON t2.id = td.depends_on
-               WHERE td.task_id = u.id AND t2.finished_at IS NULL) AS blocked
-    FROM unfinished u
-),
-task_hidden AS (
-    SELECT u.id,
-        EXISTS(SELECT 1 FROM task_dependencies td
-               JOIN tasks t2 ON t2.id = td.depends_on
-               WHERE td.task_id = u.id AND t2.finished_at IS NULL)
-        AND NOT EXISTS(
-            SELECT 1 FROM task_dependencies td
-            JOIN tasks t2 ON t2.id = td.depends_on
-            JOIN task_blocked tb ON tb.id = t2.id
-            WHERE td.task_id = u.id AND t2.finished_at IS NULL AND NOT tb.blocked
-        ) AS hidden
-    FROM unfinished u
-)
+-- effective_due_at propagates backward via the "blocks" relation.
 SELECT
     t.id, t.name, t.description,
     e.effective_due_at AS due_at,
@@ -301,17 +223,14 @@ SELECT
     COALESCE(SUM(EXTRACT(EPOCH FROM (te.finished_at - te.started_at)))::bigint, 0)::bigint AS time_spent,
     COALESCE((SELECT json_agg(json_build_object('id', t2.id, 'name', t2.name, 'due_at', t2.due_at) ORDER BY t2.name) FROM task_dependencies td JOIN tasks t2 ON t2.id = td.depends_on WHERE td.task_id = t.id AND t2.finished_at IS NULL), '[]')::json AS depends_on,
     COALESCE((SELECT json_agg(json_build_object('id', t2.id, 'name', t2.name) ORDER BY t2.name) FROM task_dependencies td JOIN tasks t2 ON t2.id = td.task_id WHERE td.depends_on = t.id), '[]')::json AS blocks,
-    tb.blocked,
-    th.hidden
+    EXISTS(SELECT 1 FROM task_dependencies td3 JOIN tasks t3 ON t3.id = td3.depends_on WHERE td3.task_id = t.id AND t3.finished_at IS NULL) AS blocked
 FROM tasks t
-JOIN effective e ON e.id = t.id
-JOIN task_blocked tb ON tb.id = t.id
-JOIN task_hidden th ON th.id = t.id
+JOIN task_effective_due e ON e.task_id = t.id
 LEFT JOIN projects p ON p.id = t.project_id
 LEFT JOIN time_entries te ON te.task_id = t.id AND te.finished_at IS NOT NULL
 WHERE t.finished_at IS NULL
   AND (e.effective_due_at IS NOT NULL OR p.due_at IS NOT NULL)
-GROUP BY t.id, p.id, e.effective_due_at, tb.blocked, th.hidden
+GROUP BY t.id, p.id, e.effective_due_at
 ORDER BY e.effective_due_at ASC NULLS LAST, p.due_at ASC NULLS LAST, t.name;
 
 -- name: GetTaskByID :one
