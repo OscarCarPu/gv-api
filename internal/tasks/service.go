@@ -525,6 +525,9 @@ func (s *Service) applyUrgency(ctx context.Context, rows []TaskByDueDateResponse
 				break
 			}
 		}
+		// Claims run in reverse of the work order, so the last task placed is the first to do.
+		workOrder := int32(len(remaining))
+		rows[pick].WorkOrder = &workOrder
 		delete(remaining, pick)
 		for _, d := range rows[pick].DependsOn {
 			if j, ok := idxByID[d.ID]; ok {

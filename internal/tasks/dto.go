@@ -342,7 +342,11 @@ type TaskByDueDateResponse struct {
 	StartBy           *string          `json:"start_by"`
 	// FinishBy is the day the task has to be done by: its own due date, or earlier when a task
 	// it blocks has to start before that. Only set when urgency was computed.
-	FinishBy     *string      `json:"finish_by"`
+	FinishBy *string `json:"finish_by"`
+	// WorkOrder is the task's position (1 = first) in the order work is done: priority, then
+	// soonest deadline, and always a dependency before the task that depends on it. Only set
+	// when urgency was computed.
+	WorkOrder    *int32       `json:"work_order"`
 	Urgent       bool         `json:"urgent"`
 	ProjectID    *int32       `json:"project_id"`
 	ProjectName  *string      `json:"project_name"`
