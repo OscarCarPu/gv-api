@@ -311,6 +311,7 @@ func (s *Service) GetTasksByDueDate(ctx context.Context, minPriority *int32) ([]
 	today := s.today()
 	visible := make([]TaskByDueDateResponse, 0, len(rows))
 	for i, t := range rows {
+		t.EffectivePriority = priority[i]
 		if minPriority != nil && priority[i] > *minPriority {
 			continue
 		}
@@ -399,10 +400,12 @@ func urgencyDayCap(capacityHours decimal.Decimal, daysFromToday int) decimal.Dec
 	return decimal.Max(capacityHours.Sub(urgencyDecayPerDay.Mul(decimal.NewFromInt(int64(daysFromToday)))), urgencyFloorHours)
 }
 
-// applyUrgency fills RemainingHours/StartBy/Urgent on standard and recurring tasks that carry an
-// estimate. Continuous tasks and tasks without an estimate get nothing themselves but still pass
-// their deadline through a dependency chain. Recurring tasks are included, but never have
-// spentHours subtracted from their estimate — see the note at that line for why.
+// applyUrgency fills RemainingHours/StartBy/Urgent on standard tasks that carry an estimate: the
+// latest day each can start so that everything still finishes by its deadline. Other tasks get
+// nothing themselves but still pass their deadline through a dependency chain. Recurring tasks
+// are left out on purpose: a weekly chore is done on the day it falls due, not started days
+// ahead, and its future cycles are already absorbed by urgencyDayCap — back-filling it would
+// only drag it to "start today" again right after every renewal.
 //
 // Tasks are back-filled from the end of each dependency chain: a task's last usable day is the
 // day before its own due date, or the start_by of any task it blocks, whichever is earlier — so
@@ -500,11 +503,13 @@ func (s *Service) applyUrgency(ctx context.Context, rows []TaskByDueDateResponse
 		remaining[i] = true
 	}
 	for len(remaining) > 0 {
-		// Every hour comes out of the same freeByDate pool, so the claim order matters. Among the
-		// tasks whose dependents are all placed, the higher priority claims first and the sooner
-		// deadline breaks ties — a lower-priority task starved by that competition shows up as
-		// urgent even though it would fit if it were the only task due around then. Cycles are
-		// rejected on write; if one slipped through, its members are placed ignoring the edges.
+		// Every hour comes out of the same freeByDate pool, so the claim order matters. Work is
+		// done p1 first, then p2 and so on, each by what falls due soonest; filling backwards,
+		// that order is reversed: among the tasks whose dependents are all placed, the lowest
+		// priority and latest deadline claim first, as late as they can, and the most important,
+		// soonest-due work lands closest to today. With more hours due than free, what turns
+		// urgent is therefore the high-priority work. Cycles are rejected on write; if one slipped
+		// through, its members are placed ignoring the edges.
 		pick, pickLast := -1, time.Time{}
 		for _, readyOnly := range []bool{true, false} {
 			for i := range remaining {
@@ -535,14 +540,7 @@ func (s *Service) applyUrgency(ctx context.Context, rows []TaskByDueDateResponse
 			continue
 		}
 
-		// A recurring task's time_spent accumulates across every past cycle — renewing only
-		// reschedules due_at, it never resets time_spent — so subtracting it here would read
-		// as permanently over-estimate after a couple of renewals. estimate_hours is a
-		// per-cycle target, not a lifetime one, for this task type.
-		spentHours := decimal.Zero
-		if t.TaskType != "recurring" {
-			spentHours = decimal.NewFromInt(t.TimeSpent).Div(decimal.NewFromInt(3600))
-		}
+		spentHours := decimal.NewFromInt(t.TimeSpent).Div(decimal.NewFromInt(3600))
 		rem := t.EstimateHours.Sub(spentHours).Sub(plannedByTask[t.ID])
 		if rem.IsNegative() {
 			rem = decimal.Zero
@@ -580,17 +578,18 @@ func (s *Service) applyUrgency(ctx context.Context, rows []TaskByDueDateResponse
 }
 
 func isEstimated(t TaskByDueDateResponse) bool {
-	return (t.TaskType == "standard" || t.TaskType == "recurring") && t.EstimateHours != nil
+	return t.TaskType == "standard" && t.EstimateHours != nil
 }
 
-// betterClaim orders the tasks competing for the shared hours: (chain) priority first, then the
-// sooner last usable day, then ID so the result never depends on map iteration order.
+// betterClaim orders the tasks competing for the shared hours, in reverse of the order they are
+// worked on (priority, then soonest deadline): lower (chain) priority claims first, then the
+// later last usable day. ID keeps the result independent of map iteration order.
 func betterClaim(aPrio int32, aLast time.Time, aID int32, bPrio int32, bLast time.Time, bID int32) bool {
 	if aPrio != bPrio {
-		return aPrio < bPrio
+		return aPrio > bPrio
 	}
 	if !aLast.Equal(bLast) {
-		return aLast.Before(bLast)
+		return aLast.After(bLast)
 	}
 	return aID < bID
 }
