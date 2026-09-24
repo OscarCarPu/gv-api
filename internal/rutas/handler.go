@@ -29,7 +29,7 @@ func NewHandler(s ServiceInterface) *Handler {
 	return &Handler{service: s}
 }
 
-// RegisterRoutes mounts all rutas endpoints. Requires full auth.
+// RegisterRoutes mounts all rutas endpoints under semiprivate auth (semi or full token).
 func (h *Handler) RegisterRoutes(r chi.Router) {
 	r.Get("/rutas/marks", h.List)
 	r.Get("/rutas/marks/{id}", h.Get)

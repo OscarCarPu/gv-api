@@ -130,8 +130,8 @@ What that boundary implies, and why the code looks different there:
 1. `POST /login` — password check. The private password returns a 5-minute
    `tmp` token; the semiprivate one returns a 30-day `semi` token.
 2. `POST /login/2fa` — tmp token + TOTP code returns a 30-day `full` token.
-3. Routes are grouped by the kinds they accept: `lights` and `uptime` take
-   `semi` or `full`, everything else requires `full`.
+3. Routes are grouped by the kinds they accept: `lights`, `uptime` and `rutas`
+   take `semi` or `full`, everything else requires `full`.
 
 Two endpoints are public because they cannot be otherwise, each with its own
 guard rather than an exemption: `GET /calendar/google/callback` (Google's
