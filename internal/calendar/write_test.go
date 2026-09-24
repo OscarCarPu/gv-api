@@ -138,6 +138,25 @@ func TestWrite_Update_MovingTheStartDragsTheEnd(t *testing.T) {
 		"the length is kept when only the start is given")
 }
 
+func TestWrite_Update_AllDayRefusesAZeroDayRange(t *testing.T) {
+	ctx := context.Background()
+	h := newHarness(t)
+	h.connect(t, "me@example.com", writableEntry(primaryCal, "Personal"))
+	created, err := h.svc.CreateEvent(ctx, calendar.CreateEventRequest{
+		CalendarID: 1, Summary: "Festivo", AllDay: true, StartsAt: "2026-09-26",
+	})
+	require.NoError(t, err)
+
+	// Timed instants on the same day collapse to one date on an all-day event; with an
+	// exclusive end that is zero days, which Google stores and every range query drops.
+	_, err = h.svc.UpdateEvent(ctx, created.InstanceID, calendar.UpdateEventRequest{
+		StartsAt: ptr(madrid(t, 2026, 9, 26, 12, 0).Format(time.RFC3339)),
+		EndsAt:   ptr(madrid(t, 2026, 9, 26, 20, 0).Format(time.RFC3339)),
+	})
+	require.ErrorIs(t, err, calendar.ErrInvalidRange)
+	require.Zero(t, h.gc.CallCount("PatchEvent"))
+}
+
 func TestWrite_Update_StaleEtagIsAConflict(t *testing.T) {
 	ctx := context.Background()
 	h := newHarness(t)
