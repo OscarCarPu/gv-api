@@ -506,7 +506,9 @@ func resolveWriteTimes(req UpdateEventRequest, baseStart, baseEnd time.Time, all
 		}
 		end = parsed
 	}
-	if !end.After(start) && !(allDay && end.Equal(start)) {
+	// All-day ends are exclusive too: an end on the start date is a zero-day event, which
+	// Google accepts but no range query ever returns.
+	if !end.After(start) {
 		return time.Time{}, time.Time{}, fmt.Errorf("%w: end must be after start", ErrInvalidRange)
 	}
 	return start, end, nil
