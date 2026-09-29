@@ -1104,6 +1104,68 @@ func (_c *MockRepository_ListCategories_Call) RunAndReturn(run func(context.Cont
 	return _c
 }
 
+// ListCategoryTransactions provides a mock function with given fields: ctx, categoryIDs, t, from, to
+func (_m *MockRepository) ListCategoryTransactions(ctx context.Context, categoryIDs []int32, t txtype.Type, from time.Time, to time.Time) ([]finance.OverviewTransaction, error) {
+	ret := _m.Called(ctx, categoryIDs, t, from, to)
+
+	if len(ret) == 0 {
+		panic("no return value specified for ListCategoryTransactions")
+	}
+
+	var r0 []finance.OverviewTransaction
+	var r1 error
+	if rf, ok := ret.Get(0).(func(context.Context, []int32, txtype.Type, time.Time, time.Time) ([]finance.OverviewTransaction, error)); ok {
+		return rf(ctx, categoryIDs, t, from, to)
+	}
+	if rf, ok := ret.Get(0).(func(context.Context, []int32, txtype.Type, time.Time, time.Time) []finance.OverviewTransaction); ok {
+		r0 = rf(ctx, categoryIDs, t, from, to)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).([]finance.OverviewTransaction)
+		}
+	}
+
+	if rf, ok := ret.Get(1).(func(context.Context, []int32, txtype.Type, time.Time, time.Time) error); ok {
+		r1 = rf(ctx, categoryIDs, t, from, to)
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
+}
+
+// MockRepository_ListCategoryTransactions_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'ListCategoryTransactions'
+type MockRepository_ListCategoryTransactions_Call struct {
+	*mock.Call
+}
+
+// ListCategoryTransactions is a helper method to define mock.On call
+//   - ctx context.Context
+//   - categoryIDs []int32
+//   - t txtype.Type
+//   - from time.Time
+//   - to time.Time
+func (_e *MockRepository_Expecter) ListCategoryTransactions(ctx interface{}, categoryIDs interface{}, t interface{}, from interface{}, to interface{}) *MockRepository_ListCategoryTransactions_Call {
+	return &MockRepository_ListCategoryTransactions_Call{Call: _e.mock.On("ListCategoryTransactions", ctx, categoryIDs, t, from, to)}
+}
+
+func (_c *MockRepository_ListCategoryTransactions_Call) Run(run func(ctx context.Context, categoryIDs []int32, t txtype.Type, from time.Time, to time.Time)) *MockRepository_ListCategoryTransactions_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].(context.Context), args[1].([]int32), args[2].(txtype.Type), args[3].(time.Time), args[4].(time.Time))
+	})
+	return _c
+}
+
+func (_c *MockRepository_ListCategoryTransactions_Call) Return(_a0 []finance.OverviewTransaction, _a1 error) *MockRepository_ListCategoryTransactions_Call {
+	_c.Call.Return(_a0, _a1)
+	return _c
+}
+
+func (_c *MockRepository_ListCategoryTransactions_Call) RunAndReturn(run func(context.Context, []int32, txtype.Type, time.Time, time.Time) ([]finance.OverviewTransaction, error)) *MockRepository_ListCategoryTransactions_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // ListEffectiveBudgets provides a mock function with given fields: ctx, month
 func (_m *MockRepository) ListEffectiveBudgets(ctx context.Context, month time.Time) ([]finance.EffectiveBudget, error) {
 	ret := _m.Called(ctx, month)

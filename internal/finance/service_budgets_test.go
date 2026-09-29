@@ -288,3 +288,45 @@ func TestService_SetBudget_DefaultsToMonthly(t *testing.T) {
 
 	require.NoError(t, newSvc(repo).SetBudget(context.Background(), finance.SetBudgetRequest{CategoryID: 2}))
 }
+
+func TestService_GetBudgetTransactions(t *testing.T) {
+	month := time.Date(2026, 3, 1, 0, 0, 0, 0, time.UTC)
+	jan := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	cats := []finance.Category{
+		{ID: 1, Name: "Transport", Type: txtype.Expense},
+		{ID: 2, Name: "Car maintenance", ParentID: ptr[int32](1), Type: txtype.Expense},
+		{ID: 3, Name: "Fuel", ParentID: ptr[int32](1), Type: txtype.Expense},
+		{ID: 4, Name: "Refund", ParentID: ptr[int32](1), Type: txtype.Income},
+	}
+	budgets := []finance.EffectiveBudget{budget(1, jan, "80"), yearlyBudget(2, jan, "500")}
+
+	t.Run("monthly leaves out the yearly subtree and other types", func(t *testing.T) {
+		repo := mocks.NewMockRepository(t)
+		repo.EXPECT().ListCategories(mock.Anything).Return(cats, nil)
+		repo.EXPECT().ListEffectiveBudgets(mock.Anything, matchTime(month)).Return(budgets, nil)
+		repo.EXPECT().ListCategoryTransactions(mock.Anything, []int32{1, 3}, txtype.Expense,
+			matchTime(month), matchTime(month.AddDate(0, 1, 0))).Return([]finance.OverviewTransaction{{ID: 7}}, nil)
+
+		out, err := newSvc(repo).GetBudgetTransactions(context.Background(), 1, finance.BudgetPeriodMonthly, month)
+		require.NoError(t, err)
+		require.Len(t, out, 1)
+	})
+
+	t.Run("yearly covers the whole year", func(t *testing.T) {
+		repo := mocks.NewMockRepository(t)
+		repo.EXPECT().ListCategories(mock.Anything).Return(cats, nil)
+		repo.EXPECT().ListEffectiveBudgets(mock.Anything, matchTime(month)).Return(budgets, nil)
+		repo.EXPECT().ListCategoryTransactions(mock.Anything, []int32{2}, txtype.Expense,
+			matchTime(jan), matchTime(jan.AddDate(1, 0, 0))).Return(nil, nil)
+
+		_, err := newSvc(repo).GetBudgetTransactions(context.Background(), 2, finance.BudgetPeriodYearly, month)
+		require.NoError(t, err)
+	})
+
+	t.Run("unknown category", func(t *testing.T) {
+		repo := mocks.NewMockRepository(t)
+		repo.EXPECT().ListCategories(mock.Anything).Return(cats, nil)
+		_, err := newSvc(repo).GetBudgetTransactions(context.Background(), 99, finance.BudgetPeriodMonthly, month)
+		assert.ErrorIs(t, err, finance.ErrNotFound)
+	})
+}

@@ -145,6 +145,44 @@ func (s *Service) GetBudgetMonth(ctx context.Context, month time.Time) (BudgetMo
 	return out, nil
 }
 
+// GetBudgetTransactions lists the transactions a budget counts in the period containing month:
+// the category's and its same-type descendants', leaving out subtrees budgeted with the other
+// period — exactly what GetBudgetMonth rolls up into the budget's actual.
+func (s *Service) GetBudgetTransactions(ctx context.Context, categoryID int32, period BudgetPeriod, month time.Time) ([]OverviewTransaction, error) {
+	if month.IsZero() {
+		month = time.Now().In(s.loc)
+	}
+	start := period.Start(time.Date(month.Year(), month.Month(), 1, 0, 0, 0, 0, s.loc))
+	end := period.Next(start)
+
+	cats, err := s.repo.ListCategories(ctx)
+	if err != nil {
+		return nil, err
+	}
+	tree := newCategoryTree(cats)
+	c, ok := tree.byID[categoryID]
+	if !ok {
+		return nil, ErrNotFound
+	}
+	if c.Type == txtype.Transfer {
+		return nil, ErrBudgetTransfer
+	}
+	budgets, err := s.repo.ListEffectiveBudgets(ctx, time.Date(month.Year(), month.Month(), 1, 0, 0, 0, 0, s.loc))
+	if err != nil {
+		return nil, err
+	}
+	own, other := map[int32]EffectiveBudget{}, map[int32]EffectiveBudget{}
+	for _, b := range budgets {
+		if b.Period == period {
+			own[b.CategoryID] = b
+		} else {
+			other[b.CategoryID] = b
+		}
+	}
+	ids := tree.subtree(categoryID, otherPeriodStop(own, other))
+	return s.repo.ListCategoryTransactions(ctx, ids, c.Type, start, end)
+}
+
 // totalsFor is the monthly totals bucket of a transaction type (nil for transfers).
 func totalsFor(out *BudgetMonth, t txtype.Type) *BudgetTotals {
 	switch t {
@@ -166,11 +204,7 @@ type periodSummary struct {
 // summarize builds the rows and totals of the budgets of one period. other holds the budgets
 // of the other period, whose subtrees are left out of this period's roll-up.
 func (t categoryTree) summarize(period BudgetPeriod, own, other map[int32]EffectiveBudget, totals []CategoryTotal) periodSummary {
-	actual := t.rollUp(totals, func(id int32) bool {
-		_, mine := own[id]
-		_, theirs := other[id]
-		return theirs && !mine
-	})
+	actual := t.rollUp(totals, otherPeriodStop(own, other))
 	out := periodSummary{items: []BudgetItem{}, totals: map[txtype.Type]BudgetTotals{}}
 
 	// Depth-first in category order, counting the budgeted ancestors of the same type so a
@@ -215,6 +249,16 @@ func (t categoryTree) summarize(period BudgetPeriod, own, other map[int32]Effect
 	exp.Overspent = overspent
 	out.totals[txtype.Expense] = exp
 	return out
+}
+
+// otherPeriodStop is the roll-up boundary of a period's budgets: a subtree whose root has a
+// budget of the other period (and none of this one) is that budget's business, not ours.
+func otherPeriodStop(own, other map[int32]EffectiveBudget) func(id int32) bool {
+	return func(id int32) bool {
+		_, mine := own[id]
+		_, theirs := other[id]
+		return theirs && !mine
+	}
 }
 
 func budgetItem(period BudgetPeriod, c Category, b EffectiveBudget, actual decimal.Decimal, depth int) BudgetItem {
@@ -324,6 +368,31 @@ func (t categoryTree) rollUp(totals []CategoryTotal, stop func(id int32) bool) m
 	for id, c := range t.byID {
 		out[id] = sum(id, c.Type, map[int32]bool{})
 	}
+	return out
+}
+
+// subtree lists a category and its descendants of the same type, not descending into children
+// for which stop returns true.
+func (t categoryTree) subtree(id int32, stop func(id int32) bool) []int32 {
+	typ := t.byID[id].Type
+	out := []int32{}
+	seen := map[int32]bool{}
+	var walk func(id int32)
+	walk = func(id int32) {
+		if seen[id] {
+			return
+		}
+		seen[id] = true
+		if t.byID[id].Type == typ {
+			out = append(out, id)
+		}
+		for _, child := range t.children[id] {
+			if !stop(child) {
+				walk(child)
+			}
+		}
+	}
+	walk(id)
 	return out
 }
 

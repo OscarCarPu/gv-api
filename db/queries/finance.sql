@@ -284,3 +284,25 @@ WHERE occurred_at >= sqlc.arg('from_at')::timestamptz
   AND occurred_at <  sqlc.arg('to_at')::timestamptz
   AND type IN ('income'::transaction_type, 'expense'::transaction_type)
 GROUP BY category_id, type;
+
+-- name: ListCategoryTransactions :many
+-- Transactions of one type in a set of categories within [from_at, to_at), joined with account
+-- and category names for display. Used to list what a budget counted.
+SELECT
+    t.id,
+    t.type,
+    t.amount,
+    a.name  AS account_name,
+    ta.name AS to_account_name,
+    c.name  AS category_name,
+    t.description,
+    t.occurred_at
+FROM transactions t
+JOIN accounts a       ON a.id  = t.account_id
+LEFT JOIN accounts ta ON ta.id = t.to_account_id
+LEFT JOIN categories c ON c.id = t.category_id
+WHERE t.category_id = ANY(sqlc.arg('category_ids')::int[])
+  AND t.type = sqlc.arg('type')::transaction_type
+  AND t.occurred_at >= sqlc.arg('from_at')::timestamptz
+  AND t.occurred_at <  sqlc.arg('to_at')::timestamptz
+ORDER BY t.occurred_at DESC, t.id DESC;

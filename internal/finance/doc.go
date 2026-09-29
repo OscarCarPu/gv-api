@@ -23,6 +23,7 @@
 //	GET    /finance/stats/monthly           - monthly totals
 //	GET    /finance/stats/estimation        - net worth projection
 //	GET    /finance/budgets                 - a month's monthly + yearly budgets vs actuals
+//	GET    /finance/budgets/{category_id}/transactions - what a budget counted in a period
 //	PUT    /finance/budgets/{category_id}   - set a category's budget (this period / onwards)
 //	DELETE /finance/budgets/{category_id}   - remove a category's budget (this period / onwards)
 package finance

@@ -85,6 +85,38 @@ func (h *Handler) GetBudgets(w http.ResponseWriter, r *http.Request) {
 	response.JSON(w, http.StatusOK, out)
 }
 
+// GetBudgetTransactions -> GET /finance/budgets/{category_id}/transactions?month=YYYY-MM&period=monthly|yearly
+func (h *Handler) GetBudgetTransactions(w http.ResponseWriter, r *http.Request) {
+	categoryID, err := httputil.ParseIDParam(r, "category")
+	if err != nil {
+		response.Error(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	period, err := parseBudgetPeriod(BudgetPeriod(r.URL.Query().Get("period")))
+	if err != nil {
+		response.Error(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	month, err := parseBudgetMonth(r.URL.Query().Get("month"), false)
+	if err != nil {
+		response.Error(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	out, err := h.service.GetBudgetTransactions(r.Context(), categoryID, period, month)
+	if err != nil {
+		switch {
+		case errors.Is(err, ErrNotFound):
+			response.Error(w, http.StatusNotFound, "category not found")
+		case errors.Is(err, ErrBudgetTransfer):
+			response.Error(w, http.StatusBadRequest, "transfer categories cannot be budgeted")
+		default:
+			response.InternalError(w, r, err, "Failed to list budget transactions")
+		}
+		return
+	}
+	response.JSON(w, http.StatusOK, out)
+}
+
 // SetBudget -> PUT /finance/budgets/{category_id}
 func (h *Handler) SetBudget(w http.ResponseWriter, r *http.Request) {
 	categoryID, err := httputil.ParseIDParam(r, "category")

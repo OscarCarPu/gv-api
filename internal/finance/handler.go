@@ -40,6 +40,7 @@ type ServiceInterface interface {
 
 	GetBudgetMonth(ctx context.Context, month time.Time) (BudgetMonth, error)
 	SetBudget(ctx context.Context, req SetBudgetRequest) error
+	GetBudgetTransactions(ctx context.Context, categoryID int32, period BudgetPeriod, month time.Time) ([]OverviewTransaction, error)
 }
 
 type Handler struct {
@@ -79,6 +80,7 @@ func (h *Handler) RegisterRoutes(r chi.Router) {
 	r.Get("/finance/stats/estimation", h.GetEstimation)
 
 	r.Get("/finance/budgets", h.GetBudgets)
+	r.Get("/finance/budgets/{id}/transactions", h.GetBudgetTransactions)
 	r.Put("/finance/budgets/{id}", h.SetBudget)
 	r.Delete("/finance/budgets/{id}", h.DeleteBudget)
 }

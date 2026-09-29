@@ -127,3 +127,32 @@ func TestHandler_DeleteBudget_Yearly(t *testing.T) {
 	finance.NewHandler(svc).DeleteBudget(rec, req)
 	assert.Equal(t, http.StatusNoContent, rec.Code)
 }
+
+func TestHandler_GetBudgetTransactions(t *testing.T) {
+	svc := mocks.NewMockServiceInterface(t)
+	svc.EXPECT().GetBudgetTransactions(mock.Anything, int32(3), finance.BudgetPeriodYearly,
+		mock.MatchedBy(func(m time.Time) bool { return m.Year() == 2026 && m.Month() == 9 })).
+		Return([]finance.OverviewTransaction{{ID: 1}}, nil)
+
+	rec := httptest.NewRecorder()
+	req := withFinIDParam(newFinReq(http.MethodGet, "/?month=2026-09&period=yearly", ""), "id", "3")
+	finance.NewHandler(svc).GetBudgetTransactions(rec, req)
+	assert.Equal(t, http.StatusOK, rec.Code)
+}
+
+func TestHandler_GetBudgetTransactions_Errors(t *testing.T) {
+	for _, target := range []string{"/?period=weekly", "/?month=2026-9"} {
+		rec := httptest.NewRecorder()
+		req := withFinIDParam(newFinReq(http.MethodGet, target, ""), "id", "3")
+		finance.NewHandler(mocks.NewMockServiceInterface(t)).GetBudgetTransactions(rec, req)
+		assert.Equal(t, http.StatusBadRequest, rec.Code, target)
+	}
+
+	svc := mocks.NewMockServiceInterface(t)
+	svc.EXPECT().GetBudgetTransactions(mock.Anything, mock.Anything, mock.Anything, mock.Anything).
+		Return(nil, finance.ErrNotFound)
+	rec := httptest.NewRecorder()
+	req := withFinIDParam(newFinReq(http.MethodGet, "/", ""), "id", "3")
+	finance.NewHandler(svc).GetBudgetTransactions(rec, req)
+	assert.Equal(t, http.StatusNotFound, rec.Code)
+}

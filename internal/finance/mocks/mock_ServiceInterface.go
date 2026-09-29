@@ -450,6 +450,67 @@ func (_c *MockServiceInterface_GetBudgetMonth_Call) RunAndReturn(run func(contex
 	return _c
 }
 
+// GetBudgetTransactions provides a mock function with given fields: ctx, categoryID, period, month
+func (_m *MockServiceInterface) GetBudgetTransactions(ctx context.Context, categoryID int32, period finance.BudgetPeriod, month time.Time) ([]finance.OverviewTransaction, error) {
+	ret := _m.Called(ctx, categoryID, period, month)
+
+	if len(ret) == 0 {
+		panic("no return value specified for GetBudgetTransactions")
+	}
+
+	var r0 []finance.OverviewTransaction
+	var r1 error
+	if rf, ok := ret.Get(0).(func(context.Context, int32, finance.BudgetPeriod, time.Time) ([]finance.OverviewTransaction, error)); ok {
+		return rf(ctx, categoryID, period, month)
+	}
+	if rf, ok := ret.Get(0).(func(context.Context, int32, finance.BudgetPeriod, time.Time) []finance.OverviewTransaction); ok {
+		r0 = rf(ctx, categoryID, period, month)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).([]finance.OverviewTransaction)
+		}
+	}
+
+	if rf, ok := ret.Get(1).(func(context.Context, int32, finance.BudgetPeriod, time.Time) error); ok {
+		r1 = rf(ctx, categoryID, period, month)
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
+}
+
+// MockServiceInterface_GetBudgetTransactions_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'GetBudgetTransactions'
+type MockServiceInterface_GetBudgetTransactions_Call struct {
+	*mock.Call
+}
+
+// GetBudgetTransactions is a helper method to define mock.On call
+//   - ctx context.Context
+//   - categoryID int32
+//   - period finance.BudgetPeriod
+//   - month time.Time
+func (_e *MockServiceInterface_Expecter) GetBudgetTransactions(ctx interface{}, categoryID interface{}, period interface{}, month interface{}) *MockServiceInterface_GetBudgetTransactions_Call {
+	return &MockServiceInterface_GetBudgetTransactions_Call{Call: _e.mock.On("GetBudgetTransactions", ctx, categoryID, period, month)}
+}
+
+func (_c *MockServiceInterface_GetBudgetTransactions_Call) Run(run func(ctx context.Context, categoryID int32, period finance.BudgetPeriod, month time.Time)) *MockServiceInterface_GetBudgetTransactions_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].(context.Context), args[1].(int32), args[2].(finance.BudgetPeriod), args[3].(time.Time))
+	})
+	return _c
+}
+
+func (_c *MockServiceInterface_GetBudgetTransactions_Call) Return(_a0 []finance.OverviewTransaction, _a1 error) *MockServiceInterface_GetBudgetTransactions_Call {
+	_c.Call.Return(_a0, _a1)
+	return _c
+}
+
+func (_c *MockServiceInterface_GetBudgetTransactions_Call) RunAndReturn(run func(context.Context, int32, finance.BudgetPeriod, time.Time) ([]finance.OverviewTransaction, error)) *MockServiceInterface_GetBudgetTransactions_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // GetCategory provides a mock function with given fields: ctx, id
 func (_m *MockServiceInterface) GetCategory(ctx context.Context, id int32) (finance.Category, error) {
 	ret := _m.Called(ctx, id)

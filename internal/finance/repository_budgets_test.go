@@ -187,3 +187,32 @@ func TestIntegration_Budgets_Yearly(t *testing.T) {
 	setPeriodBudget(t, repo, yearly, cat.ID, y(2026, 1), "", finance.BudgetScopeForward)
 	require.Equal(t, "", periodBudgetAt(t, repo, yearly, cat.ID, y(2027, 5)))
 }
+
+func TestIntegration_ListCategoryTransactions(t *testing.T) {
+	ctx := context.Background()
+	repo := newFinRepo(t)
+	acc, err := repo.CreateAccount(ctx, finance.CreateAccountRequest{Name: "Main"})
+	require.NoError(t, err)
+	food, err := repo.CreateCategory(ctx, finance.CreateCategoryRequest{Name: "Food", Type: txtype.Expense})
+	require.NoError(t, err)
+	rent, err := repo.CreateCategory(ctx, finance.CreateCategoryRequest{Name: "Rent", Type: txtype.Expense})
+	require.NoError(t, err)
+
+	add := func(cat int32, amount int64, at time.Time) {
+		_, err := repo.CreateTransaction(ctx, finance.CreateTransactionRequest{
+			Type: txtype.Expense, Amount: decimal.NewFromInt(amount), AccountID: acc.ID, CategoryID: &cat, OccurredAt: &at,
+		})
+		require.NoError(t, err)
+	}
+	add(food.ID, 10, utc(2026, 3, 2, 9, 0, 0))
+	add(food.ID, 20, utc(2026, 3, 20, 9, 0, 0))
+	add(food.ID, 99, utc(2026, 4, 1, 0, 0, 0))  // next month: excluded
+	add(rent.ID, 800, utc(2026, 3, 1, 9, 0, 0)) // other category: excluded
+
+	out, err := repo.ListCategoryTransactions(ctx, []int32{food.ID}, txtype.Expense, month(3), month(4))
+	require.NoError(t, err)
+	require.Len(t, out, 2)
+	require.Equal(t, "20", out[0].Amount.String()) // newest first
+	require.Equal(t, "Main", out[0].AccountName)
+	require.Equal(t, "Food", *out[0].CategoryName)
+}

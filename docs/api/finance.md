@@ -411,6 +411,14 @@ Months and years are calendar periods in the server's configured timezone (same 
   - `previous_year` — per category, the previous calendar year's total (rolled up), to suggest a yearly amount.
 - **Error Responses:** `400` `month must be YYYY-MM` · `500` `Failed to get budgets`
 
+### Budget transactions
+
+- **Method:** `GET`
+- **Endpoint:** `/finance/budgets/{category_id}/transactions?month=YYYY-MM&period=monthly|yearly`
+- **Description:** The transactions a budget counts in the month (or, for `yearly`, in the whole year containing `month`): those of the category and its same-type descendants, leaving out subtrees budgeted with the other period — exactly what the budget's `actual` sums. Newest first, in the same shape as `recent_transactions` in `/finance/overview`. `month` defaults to the current month, `period` to `monthly`. Works for any income / expense category, budgeted or not.
+- **Success Response:** `200 OK` with an array of `{ id, type, amount, account_name, to_account_name, category_name, description, occurred_at }`.
+- **Error Responses:** `400` (`month must be YYYY-MM`, `period must be monthly or yearly`, `transfer categories cannot be budgeted`) · `404` `category not found` · `500` `Failed to list budget transactions`
+
 ### Set a budget
 
 - **Method:** `PUT`

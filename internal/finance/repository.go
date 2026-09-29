@@ -47,6 +47,7 @@ type Repository interface {
 	SetBudget(ctx context.Context, req SetBudgetRequest) error
 	ListEffectiveBudgets(ctx context.Context, month time.Time) ([]EffectiveBudget, error)
 	GetCategoryTotals(ctx context.Context, from, to time.Time) ([]CategoryTotal, error)
+	ListCategoryTransactions(ctx context.Context, categoryIDs []int32, t txtype.Type, from, to time.Time) ([]OverviewTransaction, error)
 }
 
 type PostgresRepository struct {
@@ -552,6 +553,32 @@ func (r *PostgresRepository) GetCategoryTotals(ctx context.Context, from, to tim
 	out := make([]CategoryTotal, len(rows))
 	for i, row := range rows {
 		out[i] = CategoryTotal{CategoryID: row.CategoryID, Type: row.Type, Amount: row.Amount}
+	}
+	return out, nil
+}
+
+func (r *PostgresRepository) ListCategoryTransactions(ctx context.Context, categoryIDs []int32, t txtype.Type, from, to time.Time) ([]OverviewTransaction, error) {
+	rows, err := r.q.ListCategoryTransactions(ctx, gvdb.ListCategoryTransactionsParams{
+		CategoryIds: categoryIDs,
+		Type:        t,
+		FromAt:      pgtype.Timestamptz{Time: from, Valid: true},
+		ToAt:        pgtype.Timestamptz{Time: to, Valid: true},
+	})
+	if err != nil {
+		return nil, err
+	}
+	out := make([]OverviewTransaction, len(rows))
+	for i, row := range rows {
+		out[i] = OverviewTransaction{
+			ID:            row.ID,
+			Type:          row.Type,
+			Amount:        row.Amount,
+			AccountName:   row.AccountName,
+			ToAccountName: row.ToAccountName,
+			CategoryName:  row.CategoryName,
+			Description:   row.Description,
+			OccurredAt:    row.OccurredAt.Time,
+		}
 	}
 	return out, nil
 }

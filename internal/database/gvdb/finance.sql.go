@@ -655,6 +655,81 @@ func (q *Queries) ListCategories(ctx context.Context) ([]Category, error) {
 	return items, nil
 }
 
+const listCategoryTransactions = `-- name: ListCategoryTransactions :many
+SELECT
+    t.id,
+    t.type,
+    t.amount,
+    a.name  AS account_name,
+    ta.name AS to_account_name,
+    c.name  AS category_name,
+    t.description,
+    t.occurred_at
+FROM transactions t
+JOIN accounts a       ON a.id  = t.account_id
+LEFT JOIN accounts ta ON ta.id = t.to_account_id
+LEFT JOIN categories c ON c.id = t.category_id
+WHERE t.category_id = ANY($1::int[])
+  AND t.type = $2::transaction_type
+  AND t.occurred_at >= $3::timestamptz
+  AND t.occurred_at <  $4::timestamptz
+ORDER BY t.occurred_at DESC, t.id DESC
+`
+
+type ListCategoryTransactionsParams struct {
+	CategoryIds []int32            `db:"category_ids" json:"category_ids"`
+	Type        txtype.Type        `db:"type" json:"type"`
+	FromAt      pgtype.Timestamptz `db:"from_at" json:"from_at"`
+	ToAt        pgtype.Timestamptz `db:"to_at" json:"to_at"`
+}
+
+type ListCategoryTransactionsRow struct {
+	ID            int32              `db:"id" json:"id"`
+	Type          txtype.Type        `db:"type" json:"type"`
+	Amount        decimal.Decimal    `db:"amount" json:"amount"`
+	AccountName   string             `db:"account_name" json:"account_name"`
+	ToAccountName *string            `db:"to_account_name" json:"to_account_name"`
+	CategoryName  *string            `db:"category_name" json:"category_name"`
+	Description   *string            `db:"description" json:"description"`
+	OccurredAt    pgtype.Timestamptz `db:"occurred_at" json:"occurred_at"`
+}
+
+// Transactions of one type in a set of categories within [from_at, to_at), joined with account
+// and category names for display. Used to list what a budget counted.
+func (q *Queries) ListCategoryTransactions(ctx context.Context, arg ListCategoryTransactionsParams) ([]ListCategoryTransactionsRow, error) {
+	rows, err := q.db.Query(ctx, listCategoryTransactions,
+		arg.CategoryIds,
+		arg.Type,
+		arg.FromAt,
+		arg.ToAt,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListCategoryTransactionsRow{}
+	for rows.Next() {
+		var i ListCategoryTransactionsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Type,
+			&i.Amount,
+			&i.AccountName,
+			&i.ToAccountName,
+			&i.CategoryName,
+			&i.Description,
+			&i.OccurredAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listEffectiveBudgets = `-- name: ListEffectiveBudgets :many
 SELECT e.category_id, e.period, e.since, e.amount::numeric AS amount
 FROM (
