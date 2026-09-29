@@ -68,7 +68,7 @@ A comprehensive life orchestrator built in Go, designed to centralize data from 
 | **Habits** | Daily habit definitions with per-day logging and history. | [habits](docs/api/habits.md) |
 | **Tasks** | Hierarchical project/task tree with todos, due dates, and Pomodoro time entries. | [tasks](docs/api/tasks/README.md) |
 | **Plan** | Daily time-block planner that schedules tasks from the task tree. | [plan](docs/api/plan.md) |
-| **Finance** | Accounts, categories, transactions, and spending stats (net worth, by-category, monthly, estimation). | [finance](docs/api/finance.md) |
+| **Finance** | Accounts, categories, transactions, monthly budgets per category, and spending stats (net worth, by-category, monthly, estimation). | [finance](docs/api/finance.md) |
 | **Rutas** | Concello marks: which municipalities were visited and when. | [rutas](docs/api/rutas.md) |
 | **Lights** | Bluetooth bulbs driven over BlueZ, with discovery and a registry. Semiprivate auth. | [lights](docs/api/lights.md) |
 | **Calendar** | Google calendars mirrored locally and editable from here: OAuth per account, incremental sync, push notifications, recurring series expanded on read. | [calendar](docs/api/calendar.md) |

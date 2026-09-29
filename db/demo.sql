@@ -5,7 +5,7 @@
 -- CLEAN SLATE
 -- =============================================================================
 -- Delete in dependency order (children before parents)
-TRUNCATE plan_blocks, recurring_commitment_skips, recurring_commitments, time_entries, todos, task_dependencies, tasks, projects, habit_logs, habits, transactions, accounts, categories RESTART IDENTITY CASCADE;
+TRUNCATE budgets, plan_blocks, recurring_commitment_skips, recurring_commitments, time_entries, todos, task_dependencies, tasks, projects, habit_logs, habits, transactions, accounts, categories RESTART IDENTITY CASCADE;
 
 -- =============================================================================
 -- HABITS
@@ -1167,6 +1167,31 @@ INSERT INTO categories (name, parent_id, type) VALUES
     ('Savings deposit',     NULL, 'transfer'),  -- 27
     ('Cash withdrawal',     NULL, 'transfer'),  -- 28
     ('Investment transfer', NULL, 'transfer');  -- 29
+
+-- =============================================================================
+-- FINANCE: BUDGETS
+-- =============================================================================
+-- Each row is effective from its month until the next row of the same category (NULL ends the
+-- budget). Relative to the current month so the demo always shows history: a raise (Food), a
+-- one-month exception (Shopping), an ended budget (Subscriptions) and nested budgets
+-- (Food > Eating out > Coffee). Amounts sit around the demo spending, so the current month mixes
+-- ok / warning / over expenses and met / pending income.
+INSERT INTO budgets (category_id, month, amount) VALUES
+    (1,  (date_trunc('month', CURRENT_DATE) - INTERVAL '6 months')::date, 2900.00), -- Salary
+    (2,  (date_trunc('month', CURRENT_DATE) - INTERVAL '3 months')::date,  300.00), -- Freelance
+    (6,  (date_trunc('month', CURRENT_DATE) - INTERVAL '6 months')::date,  700.00), -- Food
+    (6,  (date_trunc('month', CURRENT_DATE) - INTERVAL '2 months')::date,  750.00), --   raised
+    (12, (date_trunc('month', CURRENT_DATE) - INTERVAL '6 months')::date,  350.00), -- Eating out
+    (17, (date_trunc('month', CURRENT_DATE) - INTERVAL '4 months')::date,   40.00), -- Coffee
+    (7,  (date_trunc('month', CURRENT_DATE) - INTERVAL '6 months')::date, 1050.00), -- Bills
+    (22, (date_trunc('month', CURRENT_DATE) - INTERVAL '6 months')::date,   30.00), -- Subscriptions
+    (22, (date_trunc('month', CURRENT_DATE) - INTERVAL '1 month')::date,     NULL), --   ended
+    (8,  (date_trunc('month', CURRENT_DATE) - INTERVAL '6 months')::date,  200.00), -- Shopping
+    (8,  (date_trunc('month', CURRENT_DATE) - INTERVAL '1 month')::date,   350.00), --   one-month exception
+    (8,  date_trunc('month', CURRENT_DATE)::date,                          200.00), --   back to normal
+    (23, (date_trunc('month', CURRENT_DATE) - INTERVAL '5 months')::date,  150.00), -- Clothing
+    (9,  (date_trunc('month', CURRENT_DATE) - INTERVAL '6 months')::date,   60.00), -- Health
+    (10, (date_trunc('month', CURRENT_DATE) - INTERVAL '6 months')::date,   80.00); -- Transport
 
 -- =============================================================================
 -- FINANCE: TRANSACTIONS (~24 months of procedurally generated activity)

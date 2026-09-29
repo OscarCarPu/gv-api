@@ -9,4 +9,5 @@ var (
 	ErrCategoryInUse    = errors.New("category is referenced")
 	ErrInvalidInput     = errors.New("invalid input")
 	ErrCategoryMismatch = errors.New("category type does not match transaction type")
+	ErrBudgetTransfer   = errors.New("transfer categories cannot be budgeted")
 )

@@ -37,6 +37,9 @@ type ServiceInterface interface {
 	GetCategoryStats(ctx context.Context, q CategoryStatsQuery) ([]CategoryStat, error)
 	GetMonthlyStats(ctx context.Context, q MonthlyStatsQuery) ([]MonthlyStat, error)
 	GetEstimation(ctx context.Context, q EstimationQuery) (EstimationResult, error)
+
+	GetBudgetMonth(ctx context.Context, month time.Time) (BudgetMonth, error)
+	SetBudget(ctx context.Context, req SetBudgetRequest) error
 }
 
 type Handler struct {
@@ -74,6 +77,10 @@ func (h *Handler) RegisterRoutes(r chi.Router) {
 	r.Get("/finance/stats/by-category", h.GetCategoryStats)
 	r.Get("/finance/stats/monthly", h.GetMonthlyStats)
 	r.Get("/finance/stats/estimation", h.GetEstimation)
+
+	r.Get("/finance/budgets", h.GetBudgets)
+	r.Put("/finance/budgets/{id}", h.SetBudget)
+	r.Delete("/finance/budgets/{id}", h.DeleteBudget)
 }
 
 func parseDateParam(s string) (time.Time, error) {

@@ -7,12 +7,56 @@ package gvdb
 
 import (
 	"context"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/shopspring/decimal"
 	txtype "gv-api/internal/finance/txtype"
 )
+
+const budgetRowExists = `-- name: BudgetRowExists :one
+SELECT EXISTS (
+    SELECT 1 FROM budgets
+    WHERE category_id = $1::int AND month = $2::date
+)::boolean AS found
+`
+
+type BudgetRowExistsParams struct {
+	CategoryID int32     `db:"category_id" json:"category_id"`
+	Month      time.Time `db:"month" json:"month"`
+}
+
+func (q *Queries) BudgetRowExists(ctx context.Context, arg BudgetRowExistsParams) (bool, error) {
+	row := q.db.QueryRow(ctx, budgetRowExists, arg.CategoryID, arg.Month)
+	var found bool
+	err := row.Scan(&found)
+	return found, err
+}
+
+const collapseBudgets = `-- name: CollapseBudgets :exec
+DELETE FROM budgets b
+USING (
+    SELECT bb.id,
+           bb.amount,
+           LAG(bb.amount) OVER (ORDER BY bb.month)  AS prev_amount,
+           ROW_NUMBER() OVER (ORDER BY bb.month)    AS rn
+    FROM budgets bb
+    WHERE bb.category_id = $1::int
+) x
+WHERE b.id = x.id
+  AND (
+      (x.rn = 1 AND x.amount IS NULL)
+      OR (x.rn > 1 AND x.amount IS NOT DISTINCT FROM x.prev_amount)
+  )
+`
+
+// Drops rows that change nothing: a row equal to the one before it, and a leading NULL row
+// (ending a budget that never started). Keeps the table a minimal list of changes.
+func (q *Queries) CollapseBudgets(ctx context.Context, categoryID int32) error {
+	_, err := q.db.Exec(ctx, collapseBudgets, categoryID)
+	return err
+}
 
 const createAccount = `-- name: CreateAccount :one
 INSERT INTO accounts (name)
@@ -108,6 +152,21 @@ func (q *Queries) DeleteAccount(ctx context.Context, id int32) error {
 	return err
 }
 
+const deleteBudgetsAfter = `-- name: DeleteBudgetsAfter :exec
+DELETE FROM budgets
+WHERE category_id = $1::int AND month > $2::date
+`
+
+type DeleteBudgetsAfterParams struct {
+	CategoryID int32     `db:"category_id" json:"category_id"`
+	Month      time.Time `db:"month" json:"month"`
+}
+
+func (q *Queries) DeleteBudgetsAfter(ctx context.Context, arg DeleteBudgetsAfterParams) error {
+	_, err := q.db.Exec(ctx, deleteBudgetsAfter, arg.CategoryID, arg.Month)
+	return err
+}
+
 const deleteCategory = `-- name: DeleteCategory :exec
 DELETE FROM categories
 WHERE id = $1
@@ -155,6 +214,27 @@ func (q *Queries) GetAccountsTotal(ctx context.Context) (decimal.Decimal, error)
 	var total decimal.Decimal
 	err := row.Scan(&total)
 	return total, err
+}
+
+const getBudgetAt = `-- name: GetBudgetAt :one
+SELECT amount
+FROM budgets
+WHERE category_id = $1::int AND month <= $2::date
+ORDER BY month DESC
+LIMIT 1
+`
+
+type GetBudgetAtParams struct {
+	CategoryID int32     `db:"category_id" json:"category_id"`
+	Month      time.Time `db:"month" json:"month"`
+}
+
+// The budget row in effect for a category at a month (greatest month <= the given one).
+func (q *Queries) GetBudgetAt(ctx context.Context, arg GetBudgetAtParams) (*decimal.Decimal, error) {
+	row := q.db.QueryRow(ctx, getBudgetAt, arg.CategoryID, arg.Month)
+	var amount *decimal.Decimal
+	err := row.Scan(&amount)
+	return amount, err
 }
 
 const getCategory = `-- name: GetCategory :one
@@ -247,6 +327,47 @@ func (q *Queries) GetCategoryStats(ctx context.Context, arg GetCategoryStatsPara
 			&i.TxCount,
 			&i.Share,
 		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const getCategoryTotals = `-- name: GetCategoryTotals :many
+SELECT category_id, type, SUM(amount)::numeric AS amount
+FROM transactions
+WHERE occurred_at >= $1::timestamptz
+  AND occurred_at <  $2::timestamptz
+  AND type IN ('income'::transaction_type, 'expense'::transaction_type)
+GROUP BY category_id, type
+`
+
+type GetCategoryTotalsParams struct {
+	FromAt pgtype.Timestamptz `db:"from_at" json:"from_at"`
+	ToAt   pgtype.Timestamptz `db:"to_at" json:"to_at"`
+}
+
+type GetCategoryTotalsRow struct {
+	CategoryID *int32          `db:"category_id" json:"category_id"`
+	Type       txtype.Type     `db:"type" json:"type"`
+	Amount     decimal.Decimal `db:"amount" json:"amount"`
+}
+
+// Income and expense summed per category (NULL = uncategorized) in [from_at, to_at).
+func (q *Queries) GetCategoryTotals(ctx context.Context, arg GetCategoryTotalsParams) ([]GetCategoryTotalsRow, error) {
+	rows, err := q.db.Query(ctx, getCategoryTotals, arg.FromAt, arg.ToAt)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []GetCategoryTotalsRow{}
+	for rows.Next() {
+		var i GetCategoryTotalsRow
+		if err := rows.Scan(&i.CategoryID, &i.Type, &i.Amount); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
@@ -518,6 +639,44 @@ func (q *Queries) ListCategories(ctx context.Context) ([]Category, error) {
 	return items, nil
 }
 
+const listEffectiveBudgets = `-- name: ListEffectiveBudgets :many
+SELECT e.category_id, e.since, e.amount::numeric AS amount
+FROM (
+    SELECT DISTINCT ON (b.category_id) b.category_id, b.month AS since, b.amount
+    FROM budgets b
+    WHERE b.month <= $1::date
+    ORDER BY b.category_id, b.month DESC
+) e
+WHERE e.amount IS NOT NULL
+`
+
+type ListEffectiveBudgetsRow struct {
+	CategoryID int32           `db:"category_id" json:"category_id"`
+	Since      time.Time       `db:"since" json:"since"`
+	Amount     decimal.Decimal `db:"amount" json:"amount"`
+}
+
+// The budget in effect for every category at a month, skipping ended ones (NULL amount).
+func (q *Queries) ListEffectiveBudgets(ctx context.Context, month time.Time) ([]ListEffectiveBudgetsRow, error) {
+	rows, err := q.db.Query(ctx, listEffectiveBudgets, month)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListEffectiveBudgetsRow{}
+	for rows.Next() {
+		var i ListEffectiveBudgetsRow
+		if err := rows.Scan(&i.CategoryID, &i.Since, &i.Amount); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listRecentTransactions = `-- name: ListRecentTransactions :many
 SELECT
     t.id,
@@ -736,4 +895,21 @@ func (q *Queries) UpdateTransaction(ctx context.Context, arg UpdateTransactionPa
 		&i.CategoryID,
 	)
 	return i, err
+}
+
+const upsertBudget = `-- name: UpsertBudget :exec
+INSERT INTO budgets (category_id, month, amount)
+VALUES ($1::int, $2::date, $3::numeric)
+ON CONFLICT (category_id, month) DO UPDATE SET amount = EXCLUDED.amount
+`
+
+type UpsertBudgetParams struct {
+	CategoryID int32            `db:"category_id" json:"category_id"`
+	Month      time.Time        `db:"month" json:"month"`
+	Amount     *decimal.Decimal `db:"amount" json:"amount"`
+}
+
+func (q *Queries) UpsertBudget(ctx context.Context, arg UpsertBudgetParams) error {
+	_, err := q.db.Exec(ctx, upsertBudget, arg.CategoryID, arg.Month, arg.Amount)
+	return err
 }

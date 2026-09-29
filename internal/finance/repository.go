@@ -43,14 +43,31 @@ type Repository interface {
 	GetCategoryStats(ctx context.Context, q CategoryStatsQuery) ([]CategoryStat, error)
 	GetMonthlyStats(ctx context.Context, q MonthlyStatsQuery) ([]MonthlyStat, error)
 	GetEarliestTransactionDate(ctx context.Context) (time.Time, bool, error)
+
+	SetBudget(ctx context.Context, req SetBudgetRequest) error
+	ListEffectiveBudgets(ctx context.Context, month time.Time) ([]EffectiveBudget, error)
+	GetCategoryTotals(ctx context.Context, from, to time.Time) ([]CategoryTotal, error)
 }
 
 type PostgresRepository struct {
-	q *gvdb.Queries
+	pool *pgxpool.Pool
+	q    *gvdb.Queries
 }
 
 func NewRepository(pool *pgxpool.Pool) *PostgresRepository {
-	return &PostgresRepository{q: gvdb.New(pool)}
+	return &PostgresRepository{pool: pool, q: gvdb.New(pool)}
+}
+
+func (r *PostgresRepository) withTx(ctx context.Context, fn func(*gvdb.Queries) error) error {
+	tx, err := r.pool.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback(ctx) //nolint:errcheck
+	if err := fn(r.q.WithTx(tx)); err != nil {
+		return err
+	}
+	return tx.Commit(ctx)
 }
 
 func accountToDTO(a gvdb.Account) Account {
@@ -442,6 +459,86 @@ func (r *PostgresRepository) GetMonthlyStats(ctx context.Context, q MonthlyStats
 			Expense: row.Expense,
 			Balance: row.Income.Sub(row.Expense),
 		}
+	}
+	return out, nil
+}
+
+// --- Budgets ---
+
+// dbMonth normalizes a month to midnight UTC on its first day, which is how a DATE column
+// round-trips through pgx.
+func dbMonth(t time.Time) time.Time {
+	return time.Date(t.Year(), t.Month(), 1, 0, 0, 0, 0, time.UTC)
+}
+
+// SetBudget writes a budget change in one transaction. Rows are "effective from this month":
+//   - scope=month restores the value that was in effect at M on M+1 (unless M+1 already has
+//     its own row), so the change stays confined to M;
+//   - scope=forward drops every later row, so M's value carries on indefinitely.
+//
+// A nil Amount ends the budget. Redundant rows are collapsed afterwards.
+func (r *PostgresRepository) SetBudget(ctx context.Context, req SetBudgetRequest) error {
+	month := dbMonth(req.Month)
+	next := month.AddDate(0, 1, 0)
+	return r.withTx(ctx, func(q *gvdb.Queries) error {
+		switch req.Scope {
+		case BudgetScopeMonth:
+			exists, err := q.BudgetRowExists(ctx, gvdb.BudgetRowExistsParams{CategoryID: req.CategoryID, Month: next})
+			if err != nil {
+				return err
+			}
+			if !exists {
+				prev, err := q.GetBudgetAt(ctx, gvdb.GetBudgetAtParams{CategoryID: req.CategoryID, Month: month})
+				if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+					return err
+				}
+				if err := q.UpsertBudget(ctx, gvdb.UpsertBudgetParams{
+					CategoryID: req.CategoryID, Month: next, Amount: prev,
+				}); err != nil {
+					return err
+				}
+			}
+		case BudgetScopeForward:
+			if err := q.DeleteBudgetsAfter(ctx, gvdb.DeleteBudgetsAfterParams{CategoryID: req.CategoryID, Month: month}); err != nil {
+				return err
+			}
+		}
+		if err := q.UpsertBudget(ctx, gvdb.UpsertBudgetParams{
+			CategoryID: req.CategoryID, Month: month, Amount: req.Amount,
+		}); err != nil {
+			var pgErr *pgconn.PgError
+			if errors.As(err, &pgErr) && pgErr.Code == "23503" {
+				return ErrNotFound
+			}
+			return err
+		}
+		return q.CollapseBudgets(ctx, req.CategoryID)
+	})
+}
+
+func (r *PostgresRepository) ListEffectiveBudgets(ctx context.Context, month time.Time) ([]EffectiveBudget, error) {
+	rows, err := r.q.ListEffectiveBudgets(ctx, dbMonth(month))
+	if err != nil {
+		return nil, err
+	}
+	out := make([]EffectiveBudget, len(rows))
+	for i, row := range rows {
+		out[i] = EffectiveBudget{CategoryID: row.CategoryID, Since: row.Since, Amount: row.Amount}
+	}
+	return out, nil
+}
+
+func (r *PostgresRepository) GetCategoryTotals(ctx context.Context, from, to time.Time) ([]CategoryTotal, error) {
+	rows, err := r.q.GetCategoryTotals(ctx, gvdb.GetCategoryTotalsParams{
+		FromAt: pgtype.Timestamptz{Time: from, Valid: true},
+		ToAt:   pgtype.Timestamptz{Time: to, Valid: true},
+	})
+	if err != nil {
+		return nil, err
+	}
+	out := make([]CategoryTotal, len(rows))
+	for i, row := range rows {
+		out[i] = CategoryTotal{CategoryID: row.CategoryID, Type: row.Type, Amount: row.Amount}
 	}
 	return out, nil
 }

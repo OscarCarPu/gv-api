@@ -343,3 +343,68 @@ Four read-only endpoints power the chart sheets in the web client (`/money` page
     }
     ```
 - **Error Responses:** `400` (`start_month is required (YYYY-MM)`, `end_month is required (YYYY-MM)`, `end_month must be on or after start_month`, `mode must be rate or saving`) · `500` `Failed to compute estimation`
+
+---
+
+## Budgets
+
+Monthly budgets per income or expense category, compared with what actually came in and went out.
+
+**Model — "effective from this month":** a budget set for month M applies to M and every later month until it is changed. Every change picks a `scope`:
+
+- `forward` (default) — M and every later month take the new value; later changes are discarded.
+- `month` — only M changes; M+1 goes back to whatever was in effect before (unless M+1 already had its own value).
+
+Removing a budget takes the same scopes (`forward` ends it, `month` skips one month). `0` is a real budget ("spend nothing"), distinct from having none. Transfer categories cannot be budgeted.
+
+**Roll-up:** a budget on a category covers the transactions of the category and all its descendants of the same type. Parent and child can both be budgeted; the child is reported nested (`depth`) and is not counted twice in the totals.
+
+Months are calendar months in the server's configured timezone (same as `/finance/overview`).
+
+### Get a month
+
+- **Method:** `GET`
+- **Endpoint:** `/finance/budgets?month=YYYY-MM`
+- **Query:** `month` — optional, defaults to the current month.
+- **Success Response:** `200 OK`
+  ```json
+  {
+    "month": "2026-09",
+    "month_progress": 0.95,
+    "expense": { "budgeted": "2140.00", "actual": "1973.67", "unbudgeted": "0", "overspent": "74.60" },
+    "income":  { "budgeted": "3200.00", "actual": "3067.06", "unbudgeted": "86.53", "overspent": "0" },
+    "items": [
+      {
+        "category_id": 12, "name": "Eating out", "parent_id": 6, "type": "expense", "depth": 1,
+        "budget": "350.00", "actual": "424.60", "remaining": "-74.60",
+        "progress": 1.213, "status": "over", "since": "2026-03"
+      }
+    ],
+    "averages": [ { "category_id": 6, "amount": "739.12" } ]
+  }
+  ```
+- **Fields:**
+  - `month_progress` — elapsed share of the month: `1` for past months, `0` for future ones, in between for the current one (clients draw a pace marker with it).
+  - `budgeted` — sum of the outermost budgets only (a budgeted child under a budgeted parent is not added again).
+  - `actual` — every income / expense transaction of the month, budgeted or not.
+  - `unbudgeted` — the part of `actual` in categories no budget covers, including uncategorized transactions.
+  - `overspent` — expenses beyond the budgets. A budget contributes the larger of its own excess and the combined excess of the budgets nested in it, so a euro over a child budget counts once. Always `0` for income.
+  - `items` — every budget in effect, depth-first in category order. `depth` is the number of budgeted ancestors of the same type; `remaining = budget − actual` (negative when over); `progress = actual / budget` (a `0` budget reports `1` when anything was spent); `since` is the month the value in effect started.
+  - `status` — expenses: `ok` (< 80%), `warning` (≥ 80%), `over` (> 100%). Income: `pending` / `met` (actual ≥ budget).
+  - `averages` — for every income / expense category with activity, the average of the last 3 complete months before `month` (rolled up like `actual`). Used to suggest an amount.
+- **Error Responses:** `400` `month must be YYYY-MM` · `500` `Failed to get budgets`
+
+### Set a budget
+
+- **Method:** `PUT`
+- **Endpoint:** `/finance/budgets/{category_id}`
+- **Request Body:** `{ "month": "2026-09", "amount": "400.00", "scope": "forward" }` — `scope` is optional (`forward`). `amount` is 0–9999999999999.99, rounded to cents.
+- **Success Response:** `204 No Content`
+- **Error Responses:** `400` (`Invalid Body`, `month is required (YYYY-MM)`, `month must be YYYY-MM`, `scope must be forward or month`, amount out of range, `transfer categories cannot be budgeted`) · `404` `category not found` · `500` `Failed to save budget`
+
+### Remove a budget
+
+- **Method:** `DELETE`
+- **Endpoint:** `/finance/budgets/{category_id}?month=YYYY-MM&scope=forward|month`
+- **Success Response:** `204 No Content` (also when there was nothing to remove).
+- **Error Responses:** same as Set.

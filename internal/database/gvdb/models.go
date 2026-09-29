@@ -31,6 +31,14 @@ type AssistantUsage struct {
 	CostUsd          decimal.Decimal    `db:"cost_usd" json:"cost_usd"`
 }
 
+type Budget struct {
+	ID         int32              `db:"id" json:"id"`
+	CategoryID int32              `db:"category_id" json:"category_id"`
+	Month      time.Time          `db:"month" json:"month"`
+	Amount     *decimal.Decimal   `db:"amount" json:"amount"`
+	CreatedAt  pgtype.Timestamptz `db:"created_at" json:"created_at"`
+}
+
 type Calendar struct {
 	ID                 int32              `db:"id" json:"id"`
 	AccountID          int32              `db:"account_id" json:"account_id"`

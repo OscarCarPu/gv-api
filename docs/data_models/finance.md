@@ -70,6 +70,26 @@ OR (type IN ('income','expense') AND to_account_id IS NULL)
 - `idx_transactions_to_account` on `(to_account_id, occurred_at DESC) WHERE to_account_id IS NOT NULL`.
 - `idx_transactions_category` on `(category_id, occurred_at DESC)`.
 
+### budgets
+
+| Column      | Type          | Constraints                                                          |
+|-------------|---------------|----------------------------------------------------------------------|
+| id          | SERIAL        | PRIMARY KEY                                                          |
+| category_id | INT           | NOT NULL, REFERENCES `categories(id)` ON DELETE CASCADE              |
+| month       | DATE          | NOT NULL, CHECK (first day of the month)                             |
+| amount      | NUMERIC(15,2) | nullable, CHECK (`amount IS NULL OR amount >= 0`)                    |
+| created_at  | TIMESTAMPTZ   | NOT NULL, DEFAULT `now()`                                            |
+|             |               | UNIQUE (`category_id`, `month`)                                      |
+
+A row means "from this month on, the budget is `amount`": the budget in effect at month M is the
+row with the greatest `month <= M`. `NULL` ends the budget from that month; `0` is a real budget.
+A one-month exception is two rows (the exception at M, the previous value restored at M+1).
+
+Writes run in one transaction and finish with `CollapseBudgets`, which deletes rows that change
+nothing (equal to the previous row, or a leading `NULL`), so the table is always the minimal list
+of changes. Deleting a category deletes its budgets instead of blocking with 409. Transfer
+categories are rejected by the API, not the schema.
+
 ## Trigger: `transactions_apply_total`
 
 `AFTER INSERT OR UPDATE OR DELETE ON transactions FOR EACH ROW`. The handler function `transactions_apply_total_fn`:

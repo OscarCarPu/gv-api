@@ -569,6 +569,66 @@ func (_c *MockRepository_GetCategoryStats_Call) RunAndReturn(run func(context.Co
 	return _c
 }
 
+// GetCategoryTotals provides a mock function with given fields: ctx, from, to
+func (_m *MockRepository) GetCategoryTotals(ctx context.Context, from time.Time, to time.Time) ([]finance.CategoryTotal, error) {
+	ret := _m.Called(ctx, from, to)
+
+	if len(ret) == 0 {
+		panic("no return value specified for GetCategoryTotals")
+	}
+
+	var r0 []finance.CategoryTotal
+	var r1 error
+	if rf, ok := ret.Get(0).(func(context.Context, time.Time, time.Time) ([]finance.CategoryTotal, error)); ok {
+		return rf(ctx, from, to)
+	}
+	if rf, ok := ret.Get(0).(func(context.Context, time.Time, time.Time) []finance.CategoryTotal); ok {
+		r0 = rf(ctx, from, to)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).([]finance.CategoryTotal)
+		}
+	}
+
+	if rf, ok := ret.Get(1).(func(context.Context, time.Time, time.Time) error); ok {
+		r1 = rf(ctx, from, to)
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
+}
+
+// MockRepository_GetCategoryTotals_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'GetCategoryTotals'
+type MockRepository_GetCategoryTotals_Call struct {
+	*mock.Call
+}
+
+// GetCategoryTotals is a helper method to define mock.On call
+//   - ctx context.Context
+//   - from time.Time
+//   - to time.Time
+func (_e *MockRepository_Expecter) GetCategoryTotals(ctx interface{}, from interface{}, to interface{}) *MockRepository_GetCategoryTotals_Call {
+	return &MockRepository_GetCategoryTotals_Call{Call: _e.mock.On("GetCategoryTotals", ctx, from, to)}
+}
+
+func (_c *MockRepository_GetCategoryTotals_Call) Run(run func(ctx context.Context, from time.Time, to time.Time)) *MockRepository_GetCategoryTotals_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].(context.Context), args[1].(time.Time), args[2].(time.Time))
+	})
+	return _c
+}
+
+func (_c *MockRepository_GetCategoryTotals_Call) Return(_a0 []finance.CategoryTotal, _a1 error) *MockRepository_GetCategoryTotals_Call {
+	_c.Call.Return(_a0, _a1)
+	return _c
+}
+
+func (_c *MockRepository_GetCategoryTotals_Call) RunAndReturn(run func(context.Context, time.Time, time.Time) ([]finance.CategoryTotal, error)) *MockRepository_GetCategoryTotals_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // GetCategoryType provides a mock function with given fields: ctx, id
 func (_m *MockRepository) GetCategoryType(ctx context.Context, id int32) (txtype.Type, error) {
 	ret := _m.Called(ctx, id)
@@ -1044,6 +1104,65 @@ func (_c *MockRepository_ListCategories_Call) RunAndReturn(run func(context.Cont
 	return _c
 }
 
+// ListEffectiveBudgets provides a mock function with given fields: ctx, month
+func (_m *MockRepository) ListEffectiveBudgets(ctx context.Context, month time.Time) ([]finance.EffectiveBudget, error) {
+	ret := _m.Called(ctx, month)
+
+	if len(ret) == 0 {
+		panic("no return value specified for ListEffectiveBudgets")
+	}
+
+	var r0 []finance.EffectiveBudget
+	var r1 error
+	if rf, ok := ret.Get(0).(func(context.Context, time.Time) ([]finance.EffectiveBudget, error)); ok {
+		return rf(ctx, month)
+	}
+	if rf, ok := ret.Get(0).(func(context.Context, time.Time) []finance.EffectiveBudget); ok {
+		r0 = rf(ctx, month)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).([]finance.EffectiveBudget)
+		}
+	}
+
+	if rf, ok := ret.Get(1).(func(context.Context, time.Time) error); ok {
+		r1 = rf(ctx, month)
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
+}
+
+// MockRepository_ListEffectiveBudgets_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'ListEffectiveBudgets'
+type MockRepository_ListEffectiveBudgets_Call struct {
+	*mock.Call
+}
+
+// ListEffectiveBudgets is a helper method to define mock.On call
+//   - ctx context.Context
+//   - month time.Time
+func (_e *MockRepository_Expecter) ListEffectiveBudgets(ctx interface{}, month interface{}) *MockRepository_ListEffectiveBudgets_Call {
+	return &MockRepository_ListEffectiveBudgets_Call{Call: _e.mock.On("ListEffectiveBudgets", ctx, month)}
+}
+
+func (_c *MockRepository_ListEffectiveBudgets_Call) Run(run func(ctx context.Context, month time.Time)) *MockRepository_ListEffectiveBudgets_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].(context.Context), args[1].(time.Time))
+	})
+	return _c
+}
+
+func (_c *MockRepository_ListEffectiveBudgets_Call) Return(_a0 []finance.EffectiveBudget, _a1 error) *MockRepository_ListEffectiveBudgets_Call {
+	_c.Call.Return(_a0, _a1)
+	return _c
+}
+
+func (_c *MockRepository_ListEffectiveBudgets_Call) RunAndReturn(run func(context.Context, time.Time) ([]finance.EffectiveBudget, error)) *MockRepository_ListEffectiveBudgets_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // ListRecentTransactions provides a mock function with given fields: ctx, since
 func (_m *MockRepository) ListRecentTransactions(ctx context.Context, since time.Time) ([]finance.OverviewTransaction, error) {
 	ret := _m.Called(ctx, since)
@@ -1158,6 +1277,53 @@ func (_c *MockRepository_ListTransactions_Call) Return(_a0 []finance.Transaction
 }
 
 func (_c *MockRepository_ListTransactions_Call) RunAndReturn(run func(context.Context, finance.ListTransactionsQuery) ([]finance.Transaction, error)) *MockRepository_ListTransactions_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// SetBudget provides a mock function with given fields: ctx, req
+func (_m *MockRepository) SetBudget(ctx context.Context, req finance.SetBudgetRequest) error {
+	ret := _m.Called(ctx, req)
+
+	if len(ret) == 0 {
+		panic("no return value specified for SetBudget")
+	}
+
+	var r0 error
+	if rf, ok := ret.Get(0).(func(context.Context, finance.SetBudgetRequest) error); ok {
+		r0 = rf(ctx, req)
+	} else {
+		r0 = ret.Error(0)
+	}
+
+	return r0
+}
+
+// MockRepository_SetBudget_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'SetBudget'
+type MockRepository_SetBudget_Call struct {
+	*mock.Call
+}
+
+// SetBudget is a helper method to define mock.On call
+//   - ctx context.Context
+//   - req finance.SetBudgetRequest
+func (_e *MockRepository_Expecter) SetBudget(ctx interface{}, req interface{}) *MockRepository_SetBudget_Call {
+	return &MockRepository_SetBudget_Call{Call: _e.mock.On("SetBudget", ctx, req)}
+}
+
+func (_c *MockRepository_SetBudget_Call) Run(run func(ctx context.Context, req finance.SetBudgetRequest)) *MockRepository_SetBudget_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].(context.Context), args[1].(finance.SetBudgetRequest))
+	})
+	return _c
+}
+
+func (_c *MockRepository_SetBudget_Call) Return(_a0 error) *MockRepository_SetBudget_Call {
+	_c.Call.Return(_a0)
+	return _c
+}
+
+func (_c *MockRepository_SetBudget_Call) RunAndReturn(run func(context.Context, finance.SetBudgetRequest) error) *MockRepository_SetBudget_Call {
 	_c.Call.Return(run)
 	return _c
 }

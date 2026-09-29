@@ -214,3 +214,64 @@ WHERE occurred_at >= sqlc.arg('from_at')::timestamptz
   )
 GROUP BY date_trunc('month', occurred_at)
 ORDER BY date_trunc('month', occurred_at);
+
+-- name: GetBudgetAt :one
+-- The budget row in effect for a category at a month (greatest month <= the given one).
+SELECT amount
+FROM budgets
+WHERE category_id = sqlc.arg('category_id')::int AND month <= sqlc.arg('month')::date
+ORDER BY month DESC
+LIMIT 1;
+
+-- name: BudgetRowExists :one
+SELECT EXISTS (
+    SELECT 1 FROM budgets
+    WHERE category_id = sqlc.arg('category_id')::int AND month = sqlc.arg('month')::date
+)::boolean AS found;
+
+-- name: UpsertBudget :exec
+INSERT INTO budgets (category_id, month, amount)
+VALUES (sqlc.arg('category_id')::int, sqlc.arg('month')::date, sqlc.narg('amount')::numeric)
+ON CONFLICT (category_id, month) DO UPDATE SET amount = EXCLUDED.amount;
+
+-- name: DeleteBudgetsAfter :exec
+DELETE FROM budgets
+WHERE category_id = sqlc.arg('category_id')::int AND month > sqlc.arg('month')::date;
+
+-- name: CollapseBudgets :exec
+-- Drops rows that change nothing: a row equal to the one before it, and a leading NULL row
+-- (ending a budget that never started). Keeps the table a minimal list of changes.
+DELETE FROM budgets b
+USING (
+    SELECT bb.id,
+           bb.amount,
+           LAG(bb.amount) OVER (ORDER BY bb.month)  AS prev_amount,
+           ROW_NUMBER() OVER (ORDER BY bb.month)    AS rn
+    FROM budgets bb
+    WHERE bb.category_id = sqlc.arg('category_id')::int
+) x
+WHERE b.id = x.id
+  AND (
+      (x.rn = 1 AND x.amount IS NULL)
+      OR (x.rn > 1 AND x.amount IS NOT DISTINCT FROM x.prev_amount)
+  );
+
+-- name: ListEffectiveBudgets :many
+-- The budget in effect for every category at a month, skipping ended ones (NULL amount).
+SELECT e.category_id, e.since, e.amount::numeric AS amount
+FROM (
+    SELECT DISTINCT ON (b.category_id) b.category_id, b.month AS since, b.amount
+    FROM budgets b
+    WHERE b.month <= sqlc.arg('month')::date
+    ORDER BY b.category_id, b.month DESC
+) e
+WHERE e.amount IS NOT NULL;
+
+-- name: GetCategoryTotals :many
+-- Income and expense summed per category (NULL = uncategorized) in [from_at, to_at).
+SELECT category_id, type, SUM(amount)::numeric AS amount
+FROM transactions
+WHERE occurred_at >= sqlc.arg('from_at')::timestamptz
+  AND occurred_at <  sqlc.arg('to_at')::timestamptz
+  AND type IN ('income'::transaction_type, 'expense'::transaction_type)
+GROUP BY category_id, type;
