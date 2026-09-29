@@ -18,17 +18,20 @@ import (
 const budgetRowExists = `-- name: BudgetRowExists :one
 SELECT EXISTS (
     SELECT 1 FROM budgets
-    WHERE category_id = $1::int AND month = $2::date
+    WHERE category_id = $1::int
+      AND period = $2::text
+      AND month = $3::date
 )::boolean AS found
 `
 
 type BudgetRowExistsParams struct {
 	CategoryID int32     `db:"category_id" json:"category_id"`
+	Period     string    `db:"period" json:"period"`
 	Month      time.Time `db:"month" json:"month"`
 }
 
 func (q *Queries) BudgetRowExists(ctx context.Context, arg BudgetRowExistsParams) (bool, error) {
-	row := q.db.QueryRow(ctx, budgetRowExists, arg.CategoryID, arg.Month)
+	row := q.db.QueryRow(ctx, budgetRowExists, arg.CategoryID, arg.Period, arg.Month)
 	var found bool
 	err := row.Scan(&found)
 	return found, err
@@ -43,6 +46,7 @@ USING (
            ROW_NUMBER() OVER (ORDER BY bb.month)    AS rn
     FROM budgets bb
     WHERE bb.category_id = $1::int
+      AND bb.period = $2::text
 ) x
 WHERE b.id = x.id
   AND (
@@ -51,10 +55,16 @@ WHERE b.id = x.id
   )
 `
 
+type CollapseBudgetsParams struct {
+	CategoryID int32  `db:"category_id" json:"category_id"`
+	Period     string `db:"period" json:"period"`
+}
+
 // Drops rows that change nothing: a row equal to the one before it, and a leading NULL row
-// (ending a budget that never started). Keeps the table a minimal list of changes.
-func (q *Queries) CollapseBudgets(ctx context.Context, categoryID int32) error {
-	_, err := q.db.Exec(ctx, collapseBudgets, categoryID)
+// (ending a budget that never started). Keeps each (category, period) series a minimal list of
+// changes.
+func (q *Queries) CollapseBudgets(ctx context.Context, arg CollapseBudgetsParams) error {
+	_, err := q.db.Exec(ctx, collapseBudgets, arg.CategoryID, arg.Period)
 	return err
 }
 
@@ -154,16 +164,19 @@ func (q *Queries) DeleteAccount(ctx context.Context, id int32) error {
 
 const deleteBudgetsAfter = `-- name: DeleteBudgetsAfter :exec
 DELETE FROM budgets
-WHERE category_id = $1::int AND month > $2::date
+WHERE category_id = $1::int
+  AND period = $2::text
+  AND month > $3::date
 `
 
 type DeleteBudgetsAfterParams struct {
 	CategoryID int32     `db:"category_id" json:"category_id"`
+	Period     string    `db:"period" json:"period"`
 	Month      time.Time `db:"month" json:"month"`
 }
 
 func (q *Queries) DeleteBudgetsAfter(ctx context.Context, arg DeleteBudgetsAfterParams) error {
-	_, err := q.db.Exec(ctx, deleteBudgetsAfter, arg.CategoryID, arg.Month)
+	_, err := q.db.Exec(ctx, deleteBudgetsAfter, arg.CategoryID, arg.Period, arg.Month)
 	return err
 }
 
@@ -219,19 +232,22 @@ func (q *Queries) GetAccountsTotal(ctx context.Context) (decimal.Decimal, error)
 const getBudgetAt = `-- name: GetBudgetAt :one
 SELECT amount
 FROM budgets
-WHERE category_id = $1::int AND month <= $2::date
+WHERE category_id = $1::int
+  AND period = $2::text
+  AND month <= $3::date
 ORDER BY month DESC
 LIMIT 1
 `
 
 type GetBudgetAtParams struct {
 	CategoryID int32     `db:"category_id" json:"category_id"`
+	Period     string    `db:"period" json:"period"`
 	Month      time.Time `db:"month" json:"month"`
 }
 
-// The budget row in effect for a category at a month (greatest month <= the given one).
+// The budget row in effect for a category and period at a month (greatest month <= the given one).
 func (q *Queries) GetBudgetAt(ctx context.Context, arg GetBudgetAtParams) (*decimal.Decimal, error) {
-	row := q.db.QueryRow(ctx, getBudgetAt, arg.CategoryID, arg.Month)
+	row := q.db.QueryRow(ctx, getBudgetAt, arg.CategoryID, arg.Period, arg.Month)
 	var amount *decimal.Decimal
 	err := row.Scan(&amount)
 	return amount, err
@@ -640,23 +656,25 @@ func (q *Queries) ListCategories(ctx context.Context) ([]Category, error) {
 }
 
 const listEffectiveBudgets = `-- name: ListEffectiveBudgets :many
-SELECT e.category_id, e.since, e.amount::numeric AS amount
+SELECT e.category_id, e.period, e.since, e.amount::numeric AS amount
 FROM (
-    SELECT DISTINCT ON (b.category_id) b.category_id, b.month AS since, b.amount
+    SELECT DISTINCT ON (b.category_id, b.period) b.category_id, b.period, b.month AS since, b.amount
     FROM budgets b
     WHERE b.month <= $1::date
-    ORDER BY b.category_id, b.month DESC
+    ORDER BY b.category_id, b.period, b.month DESC
 ) e
 WHERE e.amount IS NOT NULL
 `
 
 type ListEffectiveBudgetsRow struct {
 	CategoryID int32           `db:"category_id" json:"category_id"`
+	Period     string          `db:"period" json:"period"`
 	Since      time.Time       `db:"since" json:"since"`
 	Amount     decimal.Decimal `db:"amount" json:"amount"`
 }
 
-// The budget in effect for every category at a month, skipping ended ones (NULL amount).
+// The budget in effect for every category and period at a month, skipping ended ones (NULL
+// amount). Yearly rows sit on January 1st, so "month <= M" also picks the right year.
 func (q *Queries) ListEffectiveBudgets(ctx context.Context, month time.Time) ([]ListEffectiveBudgetsRow, error) {
 	rows, err := q.db.Query(ctx, listEffectiveBudgets, month)
 	if err != nil {
@@ -666,7 +684,12 @@ func (q *Queries) ListEffectiveBudgets(ctx context.Context, month time.Time) ([]
 	items := []ListEffectiveBudgetsRow{}
 	for rows.Next() {
 		var i ListEffectiveBudgetsRow
-		if err := rows.Scan(&i.CategoryID, &i.Since, &i.Amount); err != nil {
+		if err := rows.Scan(
+			&i.CategoryID,
+			&i.Period,
+			&i.Since,
+			&i.Amount,
+		); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
@@ -898,18 +921,24 @@ func (q *Queries) UpdateTransaction(ctx context.Context, arg UpdateTransactionPa
 }
 
 const upsertBudget = `-- name: UpsertBudget :exec
-INSERT INTO budgets (category_id, month, amount)
-VALUES ($1::int, $2::date, $3::numeric)
-ON CONFLICT (category_id, month) DO UPDATE SET amount = EXCLUDED.amount
+INSERT INTO budgets (category_id, period, month, amount)
+VALUES ($1::int, $2::text, $3::date, $4::numeric)
+ON CONFLICT (category_id, period, month) DO UPDATE SET amount = EXCLUDED.amount
 `
 
 type UpsertBudgetParams struct {
 	CategoryID int32            `db:"category_id" json:"category_id"`
+	Period     string           `db:"period" json:"period"`
 	Month      time.Time        `db:"month" json:"month"`
 	Amount     *decimal.Decimal `db:"amount" json:"amount"`
 }
 
 func (q *Queries) UpsertBudget(ctx context.Context, arg UpsertBudgetParams) error {
-	_, err := q.db.Exec(ctx, upsertBudget, arg.CategoryID, arg.Month, arg.Amount)
+	_, err := q.db.Exec(ctx, upsertBudget,
+		arg.CategoryID,
+		arg.Period,
+		arg.Month,
+		arg.Amount,
+	)
 	return err
 }

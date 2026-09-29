@@ -471,40 +471,48 @@ func dbMonth(t time.Time) time.Time {
 	return time.Date(t.Year(), t.Month(), 1, 0, 0, 0, 0, time.UTC)
 }
 
-// SetBudget writes a budget change in one transaction. Rows are "effective from this month":
-//   - scope=month restores the value that was in effect at M on M+1 (unless M+1 already has
-//     its own row), so the change stays confined to M;
-//   - scope=forward drops every later row, so M's value carries on indefinitely.
+// SetBudget writes a budget change in one transaction. Rows are "effective from this period"
+// and each (category, period) is its own series:
+//   - scope=once restores the value that was in effect on the next period (unless that one
+//     already has its own row), so the change stays confined to this period;
+//   - scope=forward drops every later row, so this value carries on indefinitely.
 //
 // A nil Amount ends the budget. Redundant rows are collapsed afterwards.
 func (r *PostgresRepository) SetBudget(ctx context.Context, req SetBudgetRequest) error {
-	month := dbMonth(req.Month)
-	next := month.AddDate(0, 1, 0)
+	period := string(req.Period)
+	start := req.Period.Start(dbMonth(req.Month))
+	next := req.Period.Next(start)
 	return r.withTx(ctx, func(q *gvdb.Queries) error {
 		switch req.Scope {
-		case BudgetScopeMonth:
-			exists, err := q.BudgetRowExists(ctx, gvdb.BudgetRowExistsParams{CategoryID: req.CategoryID, Month: next})
+		case BudgetScopeOnce, BudgetScopeMonth:
+			exists, err := q.BudgetRowExists(ctx, gvdb.BudgetRowExistsParams{
+				CategoryID: req.CategoryID, Period: period, Month: next,
+			})
 			if err != nil {
 				return err
 			}
 			if !exists {
-				prev, err := q.GetBudgetAt(ctx, gvdb.GetBudgetAtParams{CategoryID: req.CategoryID, Month: month})
+				prev, err := q.GetBudgetAt(ctx, gvdb.GetBudgetAtParams{
+					CategoryID: req.CategoryID, Period: period, Month: start,
+				})
 				if err != nil && !errors.Is(err, pgx.ErrNoRows) {
 					return err
 				}
 				if err := q.UpsertBudget(ctx, gvdb.UpsertBudgetParams{
-					CategoryID: req.CategoryID, Month: next, Amount: prev,
+					CategoryID: req.CategoryID, Period: period, Month: next, Amount: prev,
 				}); err != nil {
 					return err
 				}
 			}
 		case BudgetScopeForward:
-			if err := q.DeleteBudgetsAfter(ctx, gvdb.DeleteBudgetsAfterParams{CategoryID: req.CategoryID, Month: month}); err != nil {
+			if err := q.DeleteBudgetsAfter(ctx, gvdb.DeleteBudgetsAfterParams{
+				CategoryID: req.CategoryID, Period: period, Month: start,
+			}); err != nil {
 				return err
 			}
 		}
 		if err := q.UpsertBudget(ctx, gvdb.UpsertBudgetParams{
-			CategoryID: req.CategoryID, Month: month, Amount: req.Amount,
+			CategoryID: req.CategoryID, Period: period, Month: start, Amount: req.Amount,
 		}); err != nil {
 			var pgErr *pgconn.PgError
 			if errors.As(err, &pgErr) && pgErr.Code == "23503" {
@@ -512,7 +520,7 @@ func (r *PostgresRepository) SetBudget(ctx context.Context, req SetBudgetRequest
 			}
 			return err
 		}
-		return q.CollapseBudgets(ctx, req.CategoryID)
+		return q.CollapseBudgets(ctx, gvdb.CollapseBudgetsParams{CategoryID: req.CategoryID, Period: period})
 	})
 }
 
@@ -523,7 +531,12 @@ func (r *PostgresRepository) ListEffectiveBudgets(ctx context.Context, month tim
 	}
 	out := make([]EffectiveBudget, len(rows))
 	for i, row := range rows {
-		out[i] = EffectiveBudget{CategoryID: row.CategoryID, Since: row.Since, Amount: row.Amount}
+		out[i] = EffectiveBudget{
+			CategoryID: row.CategoryID,
+			Period:     BudgetPeriod(row.Period),
+			Since:      row.Since,
+			Amount:     row.Amount,
+		}
 	}
 	return out, nil
 }

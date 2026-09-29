@@ -19,6 +19,7 @@ type setBudgetBody struct {
 	Month  string          `json:"month"`
 	Amount decimal.Decimal `json:"amount"`
 	Scope  BudgetScope     `json:"scope"`
+	Period BudgetPeriod    `json:"period"`
 }
 
 // parseBudgetMonth reads a YYYY-MM month. Empty means the current month (zero time).
@@ -36,15 +37,37 @@ func parseBudgetMonth(s string, required bool) (time.Time, error) {
 	return t, nil
 }
 
+// parseBudgetPeriodMonth reads the month a budget change applies to. A yearly change also
+// takes a bare YYYY; either way the service uses only the year.
+func parseBudgetPeriodMonth(s string, period BudgetPeriod) (time.Time, error) {
+	if period == BudgetPeriodYearly {
+		if t, err := time.Parse("2006", s); err == nil {
+			return t, nil
+		}
+	}
+	return parseBudgetMonth(s, true)
+}
+
 // parseBudgetScope defaults to forward when empty.
 func parseBudgetScope(s BudgetScope) (BudgetScope, error) {
 	if s == "" {
 		return BudgetScopeForward, nil
 	}
 	if !s.Valid() {
-		return "", errors.New("scope must be forward or month")
+		return "", errors.New("scope must be forward or once")
 	}
 	return s, nil
+}
+
+// parseBudgetPeriod defaults to monthly when empty.
+func parseBudgetPeriod(p BudgetPeriod) (BudgetPeriod, error) {
+	if p == "" {
+		return BudgetPeriodMonthly, nil
+	}
+	if !p.Valid() {
+		return "", errors.New("period must be monthly or yearly")
+	}
+	return p, nil
 }
 
 // GetBudgets -> GET /finance/budgets?month=YYYY-MM
@@ -74,7 +97,12 @@ func (h *Handler) SetBudget(w http.ResponseWriter, r *http.Request) {
 		response.Error(w, http.StatusBadRequest, "Invalid Body")
 		return
 	}
-	month, err := parseBudgetMonth(body.Month, true)
+	period, err := parseBudgetPeriod(body.Period)
+	if err != nil {
+		response.Error(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	month, err := parseBudgetPeriodMonth(body.Month, period)
 	if err != nil {
 		response.Error(w, http.StatusBadRequest, err.Error())
 		return
@@ -89,17 +117,24 @@ func (h *Handler) SetBudget(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	amount := body.Amount.Round(2)
-	h.writeBudget(w, r, SetBudgetRequest{CategoryID: categoryID, Month: month, Amount: &amount, Scope: scope})
+	h.writeBudget(w, r, SetBudgetRequest{
+		CategoryID: categoryID, Period: period, Month: month, Amount: &amount, Scope: scope,
+	})
 }
 
-// DeleteBudget -> DELETE /finance/budgets/{category_id}?month=YYYY-MM&scope=forward|month
+// DeleteBudget -> DELETE /finance/budgets/{category_id}?month=YYYY-MM&scope=forward|once&period=monthly|yearly
 func (h *Handler) DeleteBudget(w http.ResponseWriter, r *http.Request) {
 	categoryID, err := httputil.ParseIDParam(r, "category")
 	if err != nil {
 		response.Error(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	month, err := parseBudgetMonth(r.URL.Query().Get("month"), true)
+	period, err := parseBudgetPeriod(BudgetPeriod(r.URL.Query().Get("period")))
+	if err != nil {
+		response.Error(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	month, err := parseBudgetPeriodMonth(r.URL.Query().Get("month"), period)
 	if err != nil {
 		response.Error(w, http.StatusBadRequest, err.Error())
 		return
@@ -109,7 +144,7 @@ func (h *Handler) DeleteBudget(w http.ResponseWriter, r *http.Request) {
 		response.Error(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	h.writeBudget(w, r, SetBudgetRequest{CategoryID: categoryID, Month: month, Scope: scope})
+	h.writeBudget(w, r, SetBudgetRequest{CategoryID: categoryID, Period: period, Month: month, Scope: scope})
 }
 
 func (h *Handler) writeBudget(w http.ResponseWriter, r *http.Request, req SetBudgetRequest) {

@@ -1166,7 +1166,11 @@ INSERT INTO categories (name, parent_id, type) VALUES
     -- ===== transfer (flat: each is a root) =====
     ('Savings deposit',     NULL, 'transfer'),  -- 27
     ('Cash withdrawal',     NULL, 'transfer'),  -- 28
-    ('Investment transfer', NULL, 'transfer');  -- 29
+    ('Investment transfer', NULL, 'transfer'),  -- 29
+
+    -- ===== yearly / irregular expenses (budgeted per year) =====
+    ('Property tax (IBI)',  NULL, 'expense'),   -- 30  paid once a year
+    ('Car maintenance',     10,   'expense');   -- 31  tyres, ITV, service: irregular
 
 -- =============================================================================
 -- FINANCE: BUDGETS
@@ -1192,6 +1196,20 @@ INSERT INTO budgets (category_id, month, amount) VALUES
     (23, (date_trunc('month', CURRENT_DATE) - INTERVAL '5 months')::date,  150.00), -- Clothing
     (9,  (date_trunc('month', CURRENT_DATE) - INTERVAL '6 months')::date,   60.00), -- Health
     (10, (date_trunc('month', CURRENT_DATE) - INTERVAL '6 months')::date,   80.00); -- Transport
+
+-- Yearly budgets: the row sits on January 1st and the budget is compared with the whole year.
+-- Car maintenance is under the monthly Transport budget but keeps its tyres out of it.
+INSERT INTO budgets (category_id, period, month, amount) VALUES
+    (30, 'yearly', (date_trunc('year', CURRENT_DATE) - INTERVAL '1 year')::date, 450.00), -- IBI
+    (31, 'yearly', date_trunc('year', CURRENT_DATE)::date,                       500.00); -- Car maintenance
+
+-- The payments those yearly budgets cover: IBI once a year, car maintenance at odd times.
+INSERT INTO transactions (type, amount, account_id, category_id, description, occurred_at) VALUES
+    ('expense', 438.10, 2, 30, 'IBI',          date_trunc('month', now()) - INTERVAL '14 months' + INTERVAL '4 days 10 hours'),
+    ('expense', 452.30, 2, 30, 'IBI',          date_trunc('month', now()) - INTERVAL '2 months'  + INTERVAL '4 days 10 hours'),
+    ('expense', 160.00, 2, 31, 'Car service',  date_trunc('month', now()) - INTERVAL '13 months' + INTERVAL '9 days 12 hours'),
+    ('expense', 380.00, 2, 31, 'Tyres',        date_trunc('month', now()) - INTERVAL '5 months'  + INTERVAL '11 days 17 hours'),
+    ('expense',  45.50, 2, 31, 'ITV',          date_trunc('month', now()) - INTERVAL '1 month'   + INTERVAL '20 days 9 hours');
 
 -- =============================================================================
 -- FINANCE: TRANSACTIONS (~24 months of procedurally generated activity)

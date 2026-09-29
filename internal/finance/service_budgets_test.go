@@ -46,7 +46,21 @@ func total(cat int32, typ txtype.Type, amount string) finance.CategoryTotal {
 }
 
 func budget(cat int32, since time.Time, amount string) finance.EffectiveBudget {
-	return finance.EffectiveBudget{CategoryID: cat, Since: since, Amount: dec(amount)}
+	return finance.EffectiveBudget{CategoryID: cat, Period: finance.BudgetPeriodMonthly, Since: since, Amount: dec(amount)}
+}
+
+func yearlyBudget(cat int32, since time.Time, amount string) finance.EffectiveBudget {
+	return finance.EffectiveBudget{CategoryID: cat, Period: finance.BudgetPeriodYearly, Since: since, Amount: dec(amount)}
+}
+
+// expectTotals wires the four GetCategoryTotals calls of GetBudgetMonth for a month:
+// the month, its year, the 3 months before and the previous year.
+func expectTotals(repo *mocks.MockRepository, month time.Time, monthRows, yearRows, pastRows, prevYearRows []finance.CategoryTotal) {
+	year := time.Date(month.Year(), time.January, 1, 0, 0, 0, 0, month.Location())
+	repo.EXPECT().GetCategoryTotals(mock.Anything, matchTime(month), matchTime(month.AddDate(0, 1, 0))).Return(monthRows, nil)
+	repo.EXPECT().GetCategoryTotals(mock.Anything, matchTime(year), matchTime(year.AddDate(1, 0, 0))).Return(yearRows, nil)
+	repo.EXPECT().GetCategoryTotals(mock.Anything, matchTime(month.AddDate(0, -3, 0)), matchTime(month)).Return(pastRows, nil)
+	repo.EXPECT().GetCategoryTotals(mock.Anything, matchTime(year.AddDate(-1, 0, 0)), matchTime(year)).Return(prevYearRows, nil)
 }
 
 func TestService_GetBudgetMonth(t *testing.T) {
@@ -62,20 +76,22 @@ func TestService_GetBudgetMonth(t *testing.T) {
 		budget(4, month, "20"),
 		budget(7, since, "50"), // transfer: ignored
 	}, nil)
-	repo.EXPECT().GetCategoryTotals(mock.Anything, matchTime(month), matchTime(month.AddDate(0, 1, 0))).
-		Return([]finance.CategoryTotal{
+	expectTotals(repo, month,
+		[]finance.CategoryTotal{
 			total(1, txtype.Income, "2100"),
 			total(3, txtype.Expense, "90"),
 			total(4, txtype.Expense, "35"),
 			total(5, txtype.Expense, "200"),
 			total(6, txtype.Expense, "40"),
 			{CategoryID: nil, Type: txtype.Expense, Amount: dec("10")},
-		}, nil)
-	repo.EXPECT().GetCategoryTotals(mock.Anything, matchTime(month.AddDate(0, -3, 0)), matchTime(month)).
-		Return([]finance.CategoryTotal{
+		},
+		nil,
+		[]finance.CategoryTotal{
 			total(5, txtype.Expense, "300"),
 			total(6, txtype.Expense, "90"),
-		}, nil)
+		},
+		[]finance.CategoryTotal{total(6, txtype.Expense, "700")},
+	)
 
 	out, err := newSvc(repo).GetBudgetMonth(context.Background(), month)
 	require.NoError(t, err)
@@ -128,6 +144,80 @@ func TestService_GetBudgetMonth(t *testing.T) {
 		avg[a.CategoryID] = a.Amount.String()
 	}
 	assert.Equal(t, map[int32]string{2: "100", 5: "100", 6: "30"}, avg)
+
+	require.Len(t, out.PreviousYear, 1)
+	requireDec(t, "700", out.PreviousYear[0].Amount)
+	requireDec(t, "1500", out.PlannedBalance)
+	assert.Equal(t, "2026", out.Yearly.Year)
+	assert.Empty(t, out.Yearly.Items)
+}
+
+// Monthly Transport with a yearly Car maintenance under it, and a yearly property tax.
+func TestService_GetBudgetMonth_Yearly(t *testing.T) {
+	month := time.Date(2026, 3, 1, 0, 0, 0, 0, time.UTC)
+	jan := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+
+	repo := mocks.NewMockRepository(t)
+	repo.EXPECT().ListCategories(mock.Anything).Return([]finance.Category{
+		{ID: 1, Name: "Transport", Type: txtype.Expense},
+		{ID: 2, Name: "Car maintenance", ParentID: ptr[int32](1), Type: txtype.Expense},
+		{ID: 3, Name: "Fuel", ParentID: ptr[int32](1), Type: txtype.Expense},
+		{ID: 4, Name: "Property tax", Type: txtype.Expense},
+		{ID: 5, Name: "Bonus", Type: txtype.Income},
+	}, nil)
+	repo.EXPECT().ListEffectiveBudgets(mock.Anything, matchTime(month)).Return([]finance.EffectiveBudget{
+		budget(1, jan, "80"),
+		yearlyBudget(2, jan, "500"),
+		yearlyBudget(4, jan, "450"),
+		yearlyBudget(5, jan, "1200"),
+	}, nil)
+	expectTotals(repo, month,
+		[]finance.CategoryTotal{
+			total(2, txtype.Expense, "380"), // tyres this month
+			total(3, txtype.Expense, "60"),
+			total(4, txtype.Expense, "452"),
+		},
+		[]finance.CategoryTotal{
+			total(2, txtype.Expense, "425"),
+			total(3, txtype.Expense, "170"),
+			total(4, txtype.Expense, "452"),
+		},
+		nil, nil,
+	)
+
+	out, err := newSvc(repo).GetBudgetMonth(context.Background(), month)
+	require.NoError(t, err)
+
+	// The monthly Transport budget leaves the yearly-budgeted car maintenance out.
+	require.Len(t, out.Items, 1)
+	requireDec(t, "60", out.Items[0].Actual)
+	assert.Equal(t, finance.BudgetPeriodMonthly, out.Items[0].Period)
+	assert.Equal(t, finance.BudgetStatusOK, out.Items[0].Status)
+
+	// The month took 892, all of it covered by some budget.
+	requireDec(t, "892", out.Expense.Actual)
+	requireDec(t, "0", out.Expense.Unbudgeted)
+	requireDec(t, "0", out.Expense.Overspent)
+
+	y := out.Yearly
+	assert.Equal(t, "2026", y.Year)
+	require.Len(t, y.Items, 3)
+	car, tax, bonus := y.Items[0], y.Items[1], y.Items[2]
+	assert.Equal(t, "Car maintenance", car.Name)
+	assert.Equal(t, 0, car.Depth) // depth only counts budgets of the same period
+	requireDec(t, "425", car.Actual)
+	assert.Equal(t, finance.BudgetStatusWarning, car.Status)
+	assert.Equal(t, "2026", car.Since)
+	assert.Equal(t, finance.BudgetStatusOver, tax.Status)
+	assert.Equal(t, finance.BudgetStatusPending, bonus.Status)
+
+	requireDec(t, "950", y.Expense.Budgeted)
+	requireDec(t, "877", y.Expense.Actual)
+	requireDec(t, "2", y.Expense.Overspent)
+	requireDec(t, "1200", y.Income.Budgeted)
+
+	// -80 monthly + (1200 - 950) / 12 yearly.
+	requireDec(t, "-59.17", out.PlannedBalance)
 }
 
 func TestService_GetBudgetMonth_StatusThresholds(t *testing.T) {
@@ -143,12 +233,11 @@ func TestService_GetBudgetMonth_StatusThresholds(t *testing.T) {
 		budget(2, month, "0"),
 		budget(3, month, "100"),
 	}, nil)
-	repo.EXPECT().GetCategoryTotals(mock.Anything, matchTime(month), mock.Anything).Return([]finance.CategoryTotal{
+	expectTotals(repo, month, []finance.CategoryTotal{
 		total(1, txtype.Expense, "80"),
 		total(2, txtype.Expense, "5"),
 		total(3, txtype.Income, "40"),
-	}, nil)
-	repo.EXPECT().GetCategoryTotals(mock.Anything, mock.Anything, matchTime(month)).Return(nil, nil)
+	}, nil, nil, nil)
 
 	out, err := newSvc(repo).GetBudgetMonth(context.Background(), month)
 	require.NoError(t, err)
@@ -180,10 +269,22 @@ func TestService_SetBudget_CategoryNotFound(t *testing.T) {
 }
 
 func TestService_SetBudget_Delegates(t *testing.T) {
-	req := finance.SetBudgetRequest{CategoryID: 2, Month: time.Now(), Amount: ptr(dec("10")), Scope: finance.BudgetScopeMonth}
+	req := finance.SetBudgetRequest{
+		CategoryID: 2, Period: finance.BudgetPeriodYearly, Month: time.Now(), Amount: ptr(dec("10")), Scope: finance.BudgetScopeOnce,
+	}
 	repo := mocks.NewMockRepository(t)
 	repo.EXPECT().GetCategoryType(mock.Anything, int32(2)).Return(txtype.Expense, nil)
 	repo.EXPECT().SetBudget(mock.Anything, req).Return(nil)
 
 	require.NoError(t, newSvc(repo).SetBudget(context.Background(), req))
+}
+
+func TestService_SetBudget_DefaultsToMonthly(t *testing.T) {
+	repo := mocks.NewMockRepository(t)
+	repo.EXPECT().GetCategoryType(mock.Anything, int32(2)).Return(txtype.Expense, nil)
+	repo.EXPECT().SetBudget(mock.Anything, mock.MatchedBy(func(req finance.SetBudgetRequest) bool {
+		return req.Period == finance.BudgetPeriodMonthly
+	})).Return(nil)
+
+	require.NoError(t, newSvc(repo).SetBudget(context.Background(), finance.SetBudgetRequest{CategoryID: 2}))
 }

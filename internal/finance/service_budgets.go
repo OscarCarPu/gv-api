@@ -13,7 +13,7 @@ import (
 const budgetWarningShare = 0.8
 
 // budgetAverageMonths is how many complete months before the viewed one feed the suggested
-// average shown when setting a budget.
+// average shown when setting a monthly budget.
 const budgetAverageMonths = 3
 
 // SetBudget sets or removes a category's budget. Only income and expense categories can be
@@ -26,12 +26,19 @@ func (s *Service) SetBudget(ctx context.Context, req SetBudgetRequest) error {
 	if t == txtype.Transfer {
 		return ErrBudgetTransfer
 	}
+	if req.Period == "" {
+		req.Period = BudgetPeriodMonthly
+	}
 	return s.repo.SetBudget(ctx, req)
 }
 
-// GetBudgetMonth compares every budget in effect at a month with what actually came in and
-// went out that month. Actuals roll up the category tree: a budget on a parent covers the
-// transactions of all its descendants of the same type.
+// GetBudgetMonth compares every budget in effect at a month with the actuals: monthly budgets
+// against that month, yearly budgets against the whole calendar year containing it.
+//
+// Actuals roll up the category tree: a budget on a parent covers the transactions of all its
+// descendants of the same type, except those under a descendant budgeted with the other period
+// (a yearly "Car maintenance" under a monthly "Transport" keeps its tyres out of the monthly
+// budget, and the other way round).
 func (s *Service) GetBudgetMonth(ctx context.Context, month time.Time) (BudgetMonth, error) {
 	now := time.Now().In(s.loc)
 	if month.IsZero() {
@@ -39,6 +46,8 @@ func (s *Service) GetBudgetMonth(ctx context.Context, month time.Time) (BudgetMo
 	}
 	start := time.Date(month.Year(), month.Month(), 1, 0, 0, 0, 0, s.loc)
 	end := start.AddDate(0, 1, 0)
+	yearStart := time.Date(month.Year(), time.January, 1, 0, 0, 0, 0, s.loc)
+	yearEnd := yearStart.AddDate(1, 0, 0)
 
 	cats, err := s.repo.ListCategories(ctx)
 	if err != nil {
@@ -48,38 +57,121 @@ func (s *Service) GetBudgetMonth(ctx context.Context, month time.Time) (BudgetMo
 	if err != nil {
 		return BudgetMonth{}, err
 	}
-	totals, err := s.repo.GetCategoryTotals(ctx, start, end)
+	monthTotals, err := s.repo.GetCategoryTotals(ctx, start, end)
 	if err != nil {
 		return BudgetMonth{}, err
 	}
-	past, err := s.repo.GetCategoryTotals(ctx, start.AddDate(0, -budgetAverageMonths, 0), start)
+	yearTotals, err := s.repo.GetCategoryTotals(ctx, yearStart, yearEnd)
+	if err != nil {
+		return BudgetMonth{}, err
+	}
+	pastMonths, err := s.repo.GetCategoryTotals(ctx, start.AddDate(0, -budgetAverageMonths, 0), start)
+	if err != nil {
+		return BudgetMonth{}, err
+	}
+	prevYear, err := s.repo.GetCategoryTotals(ctx, yearStart.AddDate(-1, 0, 0), yearStart)
 	if err != nil {
 		return BudgetMonth{}, err
 	}
 
 	tree := newCategoryTree(cats)
-	actual := tree.rollUp(totals)
-
-	budgetByCat := make(map[int32]EffectiveBudget, len(budgets))
+	byPeriod := map[BudgetPeriod]map[int32]EffectiveBudget{
+		BudgetPeriodMonthly: {},
+		BudgetPeriodYearly:  {},
+	}
 	for _, b := range budgets {
 		if c, ok := tree.byID[b.CategoryID]; ok && c.Type != txtype.Transfer {
-			budgetByCat[b.CategoryID] = b
+			if set, ok := byPeriod[b.Period]; ok {
+				set[b.CategoryID] = b
+			}
 		}
 	}
+	monthly, yearly := byPeriod[BudgetPeriodMonthly], byPeriod[BudgetPeriodYearly]
+
+	m := tree.summarize(BudgetPeriodMonthly, monthly, yearly, monthTotals)
+	y := tree.summarize(BudgetPeriodYearly, yearly, monthly, yearTotals)
 
 	out := BudgetMonth{
 		Month:         start.Format("2006-01"),
-		MonthProgress: monthProgress(now, start, end),
-		Items:         []BudgetItem{},
-		Averages:      []BudgetAmount{},
+		MonthProgress: periodProgress(now, start, end),
+		Expense:       m.totals[txtype.Expense],
+		Income:        m.totals[txtype.Income],
+		Items:         m.items,
+		Yearly: BudgetYear{
+			Year:         yearStart.Format("2006"),
+			YearProgress: periodProgress(now, yearStart, yearEnd),
+			Expense:      y.totals[txtype.Expense],
+			Income:       y.totals[txtype.Income],
+			Items:        y.items,
+		},
+		Averages:     []BudgetAmount{},
+		PreviousYear: []BudgetAmount{},
 	}
-	byType := map[txtype.Type]*BudgetTotals{txtype.Income: &out.Income, txtype.Expense: &out.Expense}
-	for _, t := range totals {
-		if bt, ok := byType[t.Type]; ok {
-			bt.Actual = bt.Actual.Add(t.Amount)
+
+	// The monthly view reports everything the month took: all of it as actual (not only what
+	// the budgets covered), and as unbudgeted whatever no budget of either period covers.
+	out.Expense.Actual, out.Income.Actual = decimal.Zero, decimal.Zero
+	covered := tree.covered(monthly, yearly)
+	for _, t := range monthTotals {
+		bt := totalsFor(&out, t.Type)
+		if bt == nil {
+			continue
+		}
+		bt.Actual = bt.Actual.Add(t.Amount)
+		if t.CategoryID == nil || !covered[*t.CategoryID] {
+			bt.Unbudgeted = bt.Unbudgeted.Add(t.Amount)
 		}
 	}
-	covered := map[txtype.Type]decimal.Decimal{}
+
+	twelve := decimal.NewFromInt(12)
+	out.PlannedBalance = out.Income.Budgeted.Sub(out.Expense.Budgeted).
+		Add(out.Yearly.Income.Budgeted.Sub(out.Yearly.Expense.Budgeted).Div(twelve)).
+		Round(2)
+
+	months := decimal.NewFromInt(budgetAverageMonths)
+	pastActual := tree.rollUp(pastMonths, nil)
+	prevYearActual := tree.rollUp(prevYear, nil)
+	for _, c := range cats {
+		if c.Type == txtype.Transfer {
+			continue
+		}
+		if sum := pastActual[c.ID]; sum.IsPositive() {
+			out.Averages = append(out.Averages, BudgetAmount{CategoryID: c.ID, Amount: sum.Div(months).Round(2)})
+		}
+		if sum := prevYearActual[c.ID]; sum.IsPositive() {
+			out.PreviousYear = append(out.PreviousYear, BudgetAmount{CategoryID: c.ID, Amount: sum})
+		}
+	}
+	return out, nil
+}
+
+// totalsFor is the monthly totals bucket of a transaction type (nil for transfers).
+func totalsFor(out *BudgetMonth, t txtype.Type) *BudgetTotals {
+	switch t {
+	case txtype.Income:
+		return &out.Income
+	case txtype.Expense:
+		return &out.Expense
+	}
+	return nil
+}
+
+// periodSummary is one period's budget rows and per-type totals. Totals carry Budgeted
+// (outermost budgets only), Actual (what the outermost budgets' categories took) and Overspent.
+type periodSummary struct {
+	items  []BudgetItem
+	totals map[txtype.Type]BudgetTotals
+}
+
+// summarize builds the rows and totals of the budgets of one period. other holds the budgets
+// of the other period, whose subtrees are left out of this period's roll-up.
+func (t categoryTree) summarize(period BudgetPeriod, own, other map[int32]EffectiveBudget, totals []CategoryTotal) periodSummary {
+	actual := t.rollUp(totals, func(id int32) bool {
+		_, mine := own[id]
+		_, theirs := other[id]
+		return theirs && !mine
+	})
+	out := periodSummary{items: []BudgetItem{}, totals: map[txtype.Type]BudgetTotals{}}
 
 	// Depth-first in category order, counting the budgeted ancestors of the same type so a
 	// budgeted child nests under its budgeted parent and is not counted twice in the totals.
@@ -88,16 +180,17 @@ func (s *Service) GetBudgetMonth(ctx context.Context, month time.Time) (BudgetMo
 	// child budget is counted once however many budgets it is over.
 	var walk func(id int32, depth map[txtype.Type]int) decimal.Decimal
 	walk = func(id int32, depth map[txtype.Type]int) decimal.Decimal {
-		c := tree.byID[id]
+		c := t.byID[id]
 		next := depth
-		b, budgeted := budgetByCat[id]
+		b, budgeted := own[id]
 		if budgeted {
 			d := depth[c.Type]
-			out.Items = append(out.Items, budgetItem(c, b, actual[id], d))
+			out.items = append(out.items, budgetItem(period, c, b, actual[id], d))
 			if d == 0 {
-				bt := byType[c.Type]
+				bt := out.totals[c.Type]
 				bt.Budgeted = bt.Budgeted.Add(b.Amount)
-				covered[c.Type] = covered[c.Type].Add(actual[id])
+				bt.Actual = bt.Actual.Add(actual[id])
+				out.totals[c.Type] = bt
 			}
 			next = make(map[txtype.Type]int, len(depth)+1)
 			for k, v := range depth {
@@ -106,7 +199,7 @@ func (s *Service) GetBudgetMonth(ctx context.Context, month time.Time) (BudgetMo
 			next[c.Type] = d + 1
 		}
 		over := decimal.Zero
-		for _, child := range tree.children[id] {
+		for _, child := range t.children[id] {
 			over = over.Add(walk(child, next))
 		}
 		if budgeted && c.Type == txtype.Expense {
@@ -114,29 +207,20 @@ func (s *Service) GetBudgetMonth(ctx context.Context, month time.Time) (BudgetMo
 		}
 		return over
 	}
-	for _, root := range tree.roots {
-		out.Expense.Overspent = out.Expense.Overspent.Add(walk(root, map[txtype.Type]int{}))
+	overspent := decimal.Zero
+	for _, root := range t.roots {
+		overspent = overspent.Add(walk(root, map[txtype.Type]int{}))
 	}
-	for t, bt := range byType {
-		bt.Unbudgeted = bt.Actual.Sub(covered[t])
-	}
-
-	months := decimal.NewFromInt(budgetAverageMonths)
-	pastActual := tree.rollUp(past)
-	for _, c := range cats {
-		if c.Type == txtype.Transfer {
-			continue
-		}
-		if sum := pastActual[c.ID]; sum.IsPositive() {
-			out.Averages = append(out.Averages, BudgetAmount{CategoryID: c.ID, Amount: sum.Div(months).Round(2)})
-		}
-	}
-	return out, nil
+	exp := out.totals[txtype.Expense]
+	exp.Overspent = overspent
+	out.totals[txtype.Expense] = exp
+	return out
 }
 
-func budgetItem(c Category, b EffectiveBudget, actual decimal.Decimal, depth int) BudgetItem {
+func budgetItem(period BudgetPeriod, c Category, b EffectiveBudget, actual decimal.Decimal, depth int) BudgetItem {
 	item := BudgetItem{
 		CategoryID: c.ID,
+		Period:     period,
 		Name:       c.Name,
 		ParentID:   c.ParentID,
 		Type:       c.Type,
@@ -144,7 +228,7 @@ func budgetItem(c Category, b EffectiveBudget, actual decimal.Decimal, depth int
 		Budget:     b.Amount,
 		Actual:     actual,
 		Remaining:  b.Amount.Sub(actual),
-		Since:      b.Since.Format("2006-01"),
+		Since:      period.Label(b.Since),
 	}
 	switch {
 	case b.Amount.IsPositive():
@@ -170,8 +254,8 @@ func budgetItem(c Category, b EffectiveBudget, actual decimal.Decimal, depth int
 	return item
 }
 
-// monthProgress is the elapsed share of [start, end) at now, clamped to [0, 1].
-func monthProgress(now, start, end time.Time) float64 {
+// periodProgress is the elapsed share of [start, end) at now, clamped to [0, 1].
+func periodProgress(now, start, end time.Time) float64 {
 	switch {
 	case !now.After(start):
 		return 0
@@ -208,9 +292,10 @@ func newCategoryTree(cats []Category) categoryTree {
 	return t
 }
 
-// rollUp sums the totals of each category and all its descendants of the same type.
+// rollUp sums the totals of each category and its descendants of the same type, not
+// descending into children for which stop returns true (nil = descend everywhere).
 // Uncategorized totals are ignored (no category to attribute them to).
-func (t categoryTree) rollUp(totals []CategoryTotal) map[int32]decimal.Decimal {
+func (t categoryTree) rollUp(totals []CategoryTotal, stop func(id int32) bool) map[int32]decimal.Decimal {
 	direct := map[int32]decimal.Decimal{}
 	for _, row := range totals {
 		if row.CategoryID != nil {
@@ -229,12 +314,50 @@ func (t categoryTree) rollUp(totals []CategoryTotal) map[int32]decimal.Decimal {
 			total = direct[id]
 		}
 		for _, child := range t.children[id] {
+			if stop != nil && stop(child) {
+				continue
+			}
 			total = total.Add(sum(child, typ, seen))
 		}
 		return total
 	}
 	for id, c := range t.byID {
 		out[id] = sum(id, c.Type, map[int32]bool{})
+	}
+	return out
+}
+
+// covered reports, per category, whether a budget of any of the given sets applies to it: the
+// category itself or an ancestor of the same type is budgeted.
+func (t categoryTree) covered(sets ...map[int32]EffectiveBudget) map[int32]bool {
+	out := make(map[int32]bool, len(t.byID))
+	var walk func(id int32, inherited map[txtype.Type]bool)
+	walk = func(id int32, inherited map[txtype.Type]bool) {
+		if _, done := out[id]; done {
+			return
+		}
+		c := t.byID[id]
+		here := inherited[c.Type]
+		for _, set := range sets {
+			if _, ok := set[id]; ok {
+				here = true
+			}
+		}
+		out[id] = here
+		next := inherited
+		if here != inherited[c.Type] {
+			next = make(map[txtype.Type]bool, len(inherited)+1)
+			for k, v := range inherited {
+				next[k] = v
+			}
+			next[c.Type] = here
+		}
+		for _, child := range t.children[id] {
+			walk(child, next)
+		}
+	}
+	for _, root := range t.roots {
+		walk(root, map[txtype.Type]bool{})
 	}
 	return out
 }

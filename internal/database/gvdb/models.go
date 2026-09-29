@@ -37,6 +37,7 @@ type Budget struct {
 	Month      time.Time          `db:"month" json:"month"`
 	Amount     *decimal.Decimal   `db:"amount" json:"amount"`
 	CreatedAt  pgtype.Timestamptz `db:"created_at" json:"created_at"`
+	Period     string             `db:"period" json:"period"`
 }
 
 type Calendar struct {

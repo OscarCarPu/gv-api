@@ -76,19 +76,22 @@ OR (type IN ('income','expense') AND to_account_id IS NULL)
 |-------------|---------------|----------------------------------------------------------------------|
 | id          | SERIAL        | PRIMARY KEY                                                          |
 | category_id | INT           | NOT NULL, REFERENCES `categories(id)` ON DELETE CASCADE              |
-| month       | DATE          | NOT NULL, CHECK (first day of the month)                             |
+| period      | TEXT          | NOT NULL, DEFAULT `'monthly'`, CHECK (`monthly` or `yearly`)         |
+| month       | DATE          | NOT NULL, CHECK (first day of the month; January 1st when yearly)    |
 | amount      | NUMERIC(15,2) | nullable, CHECK (`amount IS NULL OR amount >= 0`)                    |
 | created_at  | TIMESTAMPTZ   | NOT NULL, DEFAULT `now()`                                            |
-|             |               | UNIQUE (`category_id`, `month`)                                      |
+|             |               | UNIQUE (`category_id`, `period`, `month`)                            |
 
-A row means "from this month on, the budget is `amount`": the budget in effect at month M is the
-row with the greatest `month <= M`. `NULL` ends the budget from that month; `0` is a real budget.
-A one-month exception is two rows (the exception at M, the previous value restored at M+1).
+A row means "from this period on, the budget is `amount`": the budget of a period in effect at
+month M is the row of that (category, period) with the greatest `month <= M`. Yearly rows sit on
+January 1st, so the same lookup picks the right year. `NULL` ends the budget from that period;
+`0` is a real budget. A one-period exception is two rows (the exception, and the previous value
+restored in the next period).
 
-Writes run in one transaction and finish with `CollapseBudgets`, which deletes rows that change
-nothing (equal to the previous row, or a leading `NULL`), so the table is always the minimal list
-of changes. Deleting a category deletes its budgets instead of blocking with 409. Transfer
-categories are rejected by the API, not the schema.
+Writes run in one transaction and finish with `CollapseBudgets`, which deletes rows of the series
+that change nothing (equal to the previous row, or a leading `NULL`), so each series is always
+the minimal list of changes. Deleting a category deletes its budgets instead of blocking with
+409. Transfer categories are rejected by the API, not the schema.
 
 ## Trigger: `transactions_apply_total`
 

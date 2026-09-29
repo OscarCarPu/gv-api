@@ -205,17 +205,56 @@ type EstimationResult struct {
 
 // --- Budgets ---
 
-// BudgetScope says how far a budget change reaches: from the month on (every later month
-// carries it), or that month only (the previous value comes back the month after).
+// BudgetPeriod is what a budget is measured against: one calendar month, or one calendar year
+// (for expenses that come once a year or irregularly).
+type BudgetPeriod string
+
+const (
+	BudgetPeriodMonthly BudgetPeriod = "monthly"
+	BudgetPeriodYearly  BudgetPeriod = "yearly"
+)
+
+func (p BudgetPeriod) Valid() bool {
+	return p == BudgetPeriodMonthly || p == BudgetPeriodYearly
+}
+
+// Start is the first day of the period containing t, in t's location.
+func (p BudgetPeriod) Start(t time.Time) time.Time {
+	if p == BudgetPeriodYearly {
+		return time.Date(t.Year(), time.January, 1, 0, 0, 0, 0, t.Location())
+	}
+	return time.Date(t.Year(), t.Month(), 1, 0, 0, 0, 0, t.Location())
+}
+
+// Next is the start of the period after the one starting at start.
+func (p BudgetPeriod) Next(start time.Time) time.Time {
+	if p == BudgetPeriodYearly {
+		return start.AddDate(1, 0, 0)
+	}
+	return start.AddDate(0, 1, 0)
+}
+
+// Label formats a period start the way the API reports it: YYYY-MM or YYYY.
+func (p BudgetPeriod) Label(start time.Time) string {
+	if p == BudgetPeriodYearly {
+		return start.Format("2006")
+	}
+	return start.Format("2006-01")
+}
+
+// BudgetScope says how far a budget change reaches: from its period on (every later period
+// carries it), or that period only (the previous value comes back in the next one).
 type BudgetScope string
 
 const (
 	BudgetScopeForward BudgetScope = "forward"
-	BudgetScopeMonth   BudgetScope = "month"
+	BudgetScopeOnce    BudgetScope = "once"
+	// BudgetScopeMonth is the original name of BudgetScopeOnce, still accepted.
+	BudgetScopeMonth BudgetScope = "month"
 )
 
 func (s BudgetScope) Valid() bool {
-	return s == BudgetScopeForward || s == BudgetScopeMonth
+	return s == BudgetScopeForward || s == BudgetScopeOnce || s == BudgetScopeMonth
 }
 
 // BudgetStatus is how a budgeted category is doing: ok / warning / over for expenses,
@@ -230,19 +269,21 @@ const (
 	BudgetStatusMet     BudgetStatus = "met"
 )
 
-// SetBudgetRequest sets (Amount non-nil) or removes (Amount nil) a category's budget at
-// Month, which is always the first day of the month.
+// SetBudgetRequest sets (Amount non-nil) or removes (Amount nil) a category's budget for the
+// period containing Month.
 type SetBudgetRequest struct {
 	CategoryID int32
+	Period     BudgetPeriod
 	Month      time.Time
 	Amount     *decimal.Decimal
 	Scope      BudgetScope
 }
 
-// EffectiveBudget is the budget in effect for a category at some month and the month that
-// row started.
+// EffectiveBudget is the budget in effect for a category and period at some month, and the
+// start of the period that row began.
 type EffectiveBudget struct {
 	CategoryID int32
+	Period     BudgetPeriod
 	Since      time.Time
 	Amount     decimal.Decimal
 }
@@ -258,11 +299,30 @@ type BudgetMonth struct {
 	Month string `json:"month"`
 	// MonthProgress is the share of the month already elapsed: 1 for past months, 0 for
 	// future ones, and in between for the current one.
-	MonthProgress float64        `json:"month_progress"`
-	Expense       BudgetTotals   `json:"expense"`
-	Income        BudgetTotals   `json:"income"`
-	Items         []BudgetItem   `json:"items"`
-	Averages      []BudgetAmount `json:"averages"`
+	MonthProgress float64      `json:"month_progress"`
+	Expense       BudgetTotals `json:"expense"`
+	Income        BudgetTotals `json:"income"`
+	Items         []BudgetItem `json:"items"`
+	// PlannedBalance is budgeted income − budgeted expenses for the month, plus a twelfth of
+	// the yearly budgets' net: what the plan expects to save in an average month.
+	PlannedBalance decimal.Decimal `json:"planned_balance"`
+	Yearly         BudgetYear      `json:"yearly"`
+	// Averages is the last 3 complete months' average per category, to suggest monthly budgets.
+	Averages []BudgetAmount `json:"averages"`
+	// PreviousYear is the previous calendar year's total per category, to suggest yearly budgets.
+	PreviousYear []BudgetAmount `json:"previous_year"`
+}
+
+// BudgetYear is the yearly budgets of the year containing the viewed month, against that
+// whole year's actuals.
+type BudgetYear struct {
+	Year         string  `json:"year"`
+	YearProgress float64 `json:"year_progress"`
+	// Totals of the yearly budgets only: Actual is what their categories took this year and
+	// Unbudgeted is always 0 (the monthly view reports unbudgeted spending).
+	Expense BudgetTotals `json:"expense"`
+	Income  BudgetTotals `json:"income"`
+	Items   []BudgetItem `json:"items"`
 }
 
 type BudgetTotals struct {
@@ -280,6 +340,7 @@ type BudgetTotals struct {
 
 type BudgetItem struct {
 	CategoryID int32           `json:"category_id"`
+	Period     BudgetPeriod    `json:"period"`
 	Name       string          `json:"name"`
 	ParentID   *int32          `json:"parent_id"`
 	Type       txtype.Type     `json:"type"`
