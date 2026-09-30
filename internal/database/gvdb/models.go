@@ -19,18 +19,6 @@ type Account struct {
 	CreatedAt pgtype.Timestamptz `db:"created_at" json:"created_at"`
 }
 
-type AssistantUsage struct {
-	ID               int32              `db:"id" json:"id"`
-	CreatedAt        pgtype.Timestamptz `db:"created_at" json:"created_at"`
-	Model            string             `db:"model" json:"model"`
-	Phase            string             `db:"phase" json:"phase"`
-	InputTokens      int32              `db:"input_tokens" json:"input_tokens"`
-	OutputTokens     int32              `db:"output_tokens" json:"output_tokens"`
-	CacheReadTokens  int32              `db:"cache_read_tokens" json:"cache_read_tokens"`
-	CacheWriteTokens int32              `db:"cache_write_tokens" json:"cache_write_tokens"`
-	CostUsd          decimal.Decimal    `db:"cost_usd" json:"cost_usd"`
-}
-
 type Budget struct {
 	ID         int32              `db:"id" json:"id"`
 	CategoryID int32              `db:"category_id" json:"category_id"`
