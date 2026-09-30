@@ -197,3 +197,24 @@ RETURNING *;
 
 -- name: DeleteCommitment :exec
 DELETE FROM recurring_commitments WHERE id = $1;
+
+-- name: RescheduleCommitmentBlocks :exec
+-- Re-applies a commitment's start/end to its already-generated blocks from @from_date on, as
+-- wall-clock time in @timezone (same as combineDateTime in generate.go). Earlier blocks are
+-- history and stay as they were.
+UPDATE plan_blocks SET
+    started_at = (plan_date + @start_time::time) AT TIME ZONE @timezone::text,
+    ended_at   = (plan_date + @end_time::time)   AT TIME ZONE @timezone::text
+WHERE commitment_id = @commitment_id AND plan_date >= @from_date::date;
+
+-- name: DeleteCommitmentBlocksOffDays :exec
+-- Generated blocks from @from_date on whose weekday is no longer in the commitment's days.
+DELETE FROM plan_blocks
+WHERE commitment_id = @commitment_id
+  AND plan_date >= @from_date::date
+  AND NOT (EXTRACT(DOW FROM plan_date)::smallint = ANY(@days_of_week::smallint[]));
+
+-- name: DeleteFutureCommitmentBlocks :exec
+-- Generated blocks that have not started yet. Used when a commitment is paused or deleted.
+DELETE FROM plan_blocks
+WHERE commitment_id = @commitment_id AND started_at >= @from_time::timestamptz;

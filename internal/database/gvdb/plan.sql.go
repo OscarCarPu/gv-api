@@ -207,6 +207,41 @@ func (q *Queries) DeleteCommitment(ctx context.Context, id int32) error {
 	return err
 }
 
+const deleteCommitmentBlocksOffDays = `-- name: DeleteCommitmentBlocksOffDays :exec
+DELETE FROM plan_blocks
+WHERE commitment_id = $1
+  AND plan_date >= $2::date
+  AND NOT (EXTRACT(DOW FROM plan_date)::smallint = ANY($3::smallint[]))
+`
+
+type DeleteCommitmentBlocksOffDaysParams struct {
+	CommitmentID *int32    `db:"commitment_id" json:"commitment_id"`
+	FromDate     time.Time `db:"from_date" json:"from_date"`
+	DaysOfWeek   []int16   `db:"days_of_week" json:"days_of_week"`
+}
+
+// Generated blocks from @from_date on whose weekday is no longer in the commitment's days.
+func (q *Queries) DeleteCommitmentBlocksOffDays(ctx context.Context, arg DeleteCommitmentBlocksOffDaysParams) error {
+	_, err := q.db.Exec(ctx, deleteCommitmentBlocksOffDays, arg.CommitmentID, arg.FromDate, arg.DaysOfWeek)
+	return err
+}
+
+const deleteFutureCommitmentBlocks = `-- name: DeleteFutureCommitmentBlocks :exec
+DELETE FROM plan_blocks
+WHERE commitment_id = $1 AND started_at >= $2::timestamptz
+`
+
+type DeleteFutureCommitmentBlocksParams struct {
+	CommitmentID *int32             `db:"commitment_id" json:"commitment_id"`
+	FromTime     pgtype.Timestamptz `db:"from_time" json:"from_time"`
+}
+
+// Generated blocks that have not started yet. Used when a commitment is paused or deleted.
+func (q *Queries) DeleteFutureCommitmentBlocks(ctx context.Context, arg DeleteFutureCommitmentBlocksParams) error {
+	_, err := q.db.Exec(ctx, deleteFutureCommitmentBlocks, arg.CommitmentID, arg.FromTime)
+	return err
+}
+
 const deletePlanBlock = `-- name: DeletePlanBlock :exec
 DELETE FROM plan_blocks WHERE id = $1
 `
@@ -644,6 +679,35 @@ func (q *Queries) ListRecurringCommitmentSkips(ctx context.Context, arg ListRecu
 		return nil, err
 	}
 	return items, nil
+}
+
+const rescheduleCommitmentBlocks = `-- name: RescheduleCommitmentBlocks :exec
+UPDATE plan_blocks SET
+    started_at = (plan_date + $2::time) AT TIME ZONE $1::text,
+    ended_at   = (plan_date + $3::time)   AT TIME ZONE $1::text
+WHERE commitment_id = $4 AND plan_date >= $5::date
+`
+
+type RescheduleCommitmentBlocksParams struct {
+	Timezone     string      `db:"timezone" json:"timezone"`
+	StartTime    pgtype.Time `db:"start_time" json:"start_time"`
+	EndTime      pgtype.Time `db:"end_time" json:"end_time"`
+	CommitmentID *int32      `db:"commitment_id" json:"commitment_id"`
+	FromDate     time.Time   `db:"from_date" json:"from_date"`
+}
+
+// Re-applies a commitment's start/end to its already-generated blocks from @from_date on, as
+// wall-clock time in @timezone (same as combineDateTime in generate.go). Earlier blocks are
+// history and stay as they were.
+func (q *Queries) RescheduleCommitmentBlocks(ctx context.Context, arg RescheduleCommitmentBlocksParams) error {
+	_, err := q.db.Exec(ctx, rescheduleCommitmentBlocks,
+		arg.Timezone,
+		arg.StartTime,
+		arg.EndTime,
+		arg.CommitmentID,
+		arg.FromDate,
+	)
+	return err
 }
 
 const sumBusyHoursByDate = `-- name: SumBusyHoursByDate :many

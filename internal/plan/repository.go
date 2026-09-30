@@ -57,6 +57,13 @@ type Repository interface {
 	ListPlanBlockDatesByCommitment(ctx context.Context, commitmentID int32, from, to time.Time) (map[string]bool, error)
 	ListCommitmentSkips(ctx context.Context, commitmentID int32, from, to time.Time) (map[string]bool, error)
 	InsertCommitmentSkip(ctx context.Context, commitmentID int32, skipDate time.Time) error
+	// ApplyCommitmentSchedule brings the commitment's already-generated blocks from fromDate on
+	// in line with its current days and times: blocks on a weekday it no longer runs are
+	// deleted, the rest are moved to its start/end (wall-clock in timezone).
+	ApplyCommitmentSchedule(ctx context.Context, c RecurringCommitmentResponse, fromDate time.Time, timezone string) error
+	// DeleteFutureCommitmentBlocks removes the commitment's generated blocks that start at or
+	// after from.
+	DeleteFutureCommitmentBlocks(ctx context.Context, commitmentID int32, from time.Time) error
 }
 
 type PostgresRepository struct {
@@ -515,5 +522,37 @@ func (r *PostgresRepository) InsertCommitmentSkip(ctx context.Context, commitmen
 	return r.q.InsertRecurringCommitmentSkip(ctx, gvdb.InsertRecurringCommitmentSkipParams{
 		CommitmentID: commitmentID,
 		SkipDate:     skipDate,
+	})
+}
+
+func (r *PostgresRepository) ApplyCommitmentSchedule(ctx context.Context, c RecurringCommitmentResponse, fromDate time.Time, timezone string) error {
+	start, err := timeOfDayToPg(c.StartTime)
+	if err != nil {
+		return err
+	}
+	end, err := timeOfDayToPg(c.EndTime)
+	if err != nil {
+		return err
+	}
+	if err := r.q.DeleteCommitmentBlocksOffDays(ctx, gvdb.DeleteCommitmentBlocksOffDaysParams{
+		CommitmentID: &c.ID,
+		FromDate:     fromDate,
+		DaysOfWeek:   daysOfWeekToInt16(c.DaysOfWeek),
+	}); err != nil {
+		return err
+	}
+	return r.q.RescheduleCommitmentBlocks(ctx, gvdb.RescheduleCommitmentBlocksParams{
+		CommitmentID: &c.ID,
+		FromDate:     fromDate,
+		StartTime:    start,
+		EndTime:      end,
+		Timezone:     timezone,
+	})
+}
+
+func (r *PostgresRepository) DeleteFutureCommitmentBlocks(ctx context.Context, commitmentID int32, from time.Time) error {
+	return r.q.DeleteFutureCommitmentBlocks(ctx, gvdb.DeleteFutureCommitmentBlocksParams{
+		CommitmentID: &commitmentID,
+		FromTime:     pgtype.Timestamptz{Time: from, Valid: true},
 	})
 }

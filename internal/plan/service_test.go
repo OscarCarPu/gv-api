@@ -328,3 +328,44 @@ func TestService_CreateCommitment(t *testing.T) {
 		assert.Equal(t, "Work", got.Label)
 	})
 }
+
+func TestService_UpdateCommitment_SyncsGeneratedBlocks(t *testing.T) {
+	t.Run("a time change re-applies the schedule to future blocks", func(t *testing.T) {
+		repo := mocks.NewMockRepository(t)
+		updated := plan.RecurringCommitmentResponse{ID: 7, Active: true, StartTime: "15:30", EndTime: "19:30", DaysOfWeek: []int32{1}}
+		repo.EXPECT().UpdateCommitment(mock.Anything, mock.Anything).Return(updated, nil)
+		repo.EXPECT().ApplyCommitmentSchedule(mock.Anything, updated, mock.Anything, "UTC").Return(nil)
+		svc := plan.NewService(repo, stubTasksSummary{}, time.UTC)
+
+		_, err := svc.UpdateCommitment(context.Background(), plan.UpdateCommitmentRequest{ID: 7, StartTime: ptr("15:30")})
+		require.NoError(t, err)
+	})
+
+	t.Run("pausing deletes future blocks", func(t *testing.T) {
+		repo := mocks.NewMockRepository(t)
+		repo.EXPECT().UpdateCommitment(mock.Anything, mock.Anything).Return(plan.RecurringCommitmentResponse{ID: 7}, nil)
+		repo.EXPECT().DeleteFutureCommitmentBlocks(mock.Anything, int32(7), mock.Anything).Return(nil)
+		svc := plan.NewService(repo, stubTasksSummary{}, time.UTC)
+
+		_, err := svc.UpdateCommitment(context.Background(), plan.UpdateCommitmentRequest{ID: 7, Active: ptr(false)})
+		require.NoError(t, err)
+	})
+
+	t.Run("a label-only edit touches no blocks", func(t *testing.T) {
+		repo := mocks.NewMockRepository(t)
+		repo.EXPECT().UpdateCommitment(mock.Anything, mock.Anything).Return(plan.RecurringCommitmentResponse{ID: 7, Active: true}, nil)
+		svc := plan.NewService(repo, stubTasksSummary{}, time.UTC)
+
+		_, err := svc.UpdateCommitment(context.Background(), plan.UpdateCommitmentRequest{ID: 7, Label: ptr("Work")})
+		require.NoError(t, err)
+	})
+}
+
+func TestService_DeleteCommitment_DeletesFutureBlocksFirst(t *testing.T) {
+	repo := mocks.NewMockRepository(t)
+	repo.EXPECT().DeleteFutureCommitmentBlocks(mock.Anything, int32(7), mock.Anything).Return(nil)
+	repo.EXPECT().DeleteCommitment(mock.Anything, int32(7)).Return(nil)
+	svc := plan.NewService(repo, stubTasksSummary{}, time.UTC)
+
+	require.NoError(t, svc.DeleteCommitment(context.Background(), 7))
+}

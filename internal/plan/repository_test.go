@@ -253,3 +253,65 @@ func TestIntegration_GetByEventRef_UniqueConstraint(t *testing.T) {
 	})
 	assert.Error(t, err, "a second block with the same event_ref must be rejected")
 }
+
+func TestIntegration_UpdateCommitment_MovesGeneratedBlocksAndCleansUpOnPauseAndDelete(t *testing.T) {
+	repo, taskRepo := newPlanRepo(t)
+	ctx := context.Background()
+	loc := madrid(t)
+	taskID := mustCreateTask(t, taskRepo, "Work")
+	svc := plan.NewService(repo, stubTasksSummary{}, loc)
+
+	c, err := svc.CreateCommitment(ctx, plan.CreateCommitmentRequest{
+		TaskID: taskID, Label: "Work", DaysOfWeek: []int32{1, 2, 3, 4, 5},
+		StartTime: "07:30", EndTime: "11:30",
+	})
+	require.NoError(t, err)
+
+	now := time.Now().In(loc)
+	from := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, loc).AddDate(0, 0, 1)
+	to := from.AddDate(0, 0, 14)
+	require.NoError(t, svc.EnsureRecurringBlocks(ctx, from, to))
+
+	// Time change: every future block follows, on its own local date (DST-safe).
+	_, err = svc.UpdateCommitment(ctx, plan.UpdateCommitmentRequest{
+		ID: c.ID, StartTime: ptr("15:30"), EndTime: ptr("19:30"),
+	})
+	require.NoError(t, err)
+	blocks, err := repo.ListByDateRange(ctx, from, to)
+	require.NoError(t, err)
+	require.NotEmpty(t, blocks)
+	for _, b := range blocks {
+		assert.Equal(t, "15:30", b.StartedAt.In(loc).Format("15:04"))
+		assert.Equal(t, "19:30", b.EndedAt.In(loc).Format("15:04"))
+	}
+
+	// Dropping weekdays removes the blocks on them.
+	_, err = svc.UpdateCommitment(ctx, plan.UpdateCommitmentRequest{ID: c.ID, DaysOfWeek: ptr([]int32{1})})
+	require.NoError(t, err)
+	blocks, err = repo.ListByDateRange(ctx, from, to)
+	require.NoError(t, err)
+	require.NotEmpty(t, blocks)
+	for _, b := range blocks {
+		assert.Equal(t, time.Monday, b.StartedAt.In(loc).Weekday())
+	}
+
+	// Pausing removes the future blocks; resuming regenerates them.
+	_, err = svc.UpdateCommitment(ctx, plan.UpdateCommitmentRequest{ID: c.ID, Active: ptr(false)})
+	require.NoError(t, err)
+	blocks, err = repo.ListByDateRange(ctx, from, to)
+	require.NoError(t, err)
+	assert.Empty(t, blocks)
+
+	_, err = svc.UpdateCommitment(ctx, plan.UpdateCommitmentRequest{ID: c.ID, Active: ptr(true)})
+	require.NoError(t, err)
+	require.NoError(t, svc.EnsureRecurringBlocks(ctx, from, to))
+	blocks, err = repo.ListByDateRange(ctx, from, to)
+	require.NoError(t, err)
+	assert.NotEmpty(t, blocks)
+
+	// Deleting the commitment does not leave orphaned future blocks behind.
+	require.NoError(t, svc.DeleteCommitment(ctx, c.ID))
+	blocks, err = repo.ListByDateRange(ctx, from, to)
+	require.NoError(t, err)
+	assert.Empty(t, blocks)
+}

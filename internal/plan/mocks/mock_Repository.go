@@ -26,6 +26,55 @@ func (_m *MockRepository) EXPECT() *MockRepository_Expecter {
 	return &MockRepository_Expecter{mock: &_m.Mock}
 }
 
+// ApplyCommitmentSchedule provides a mock function with given fields: ctx, c, fromDate, timezone
+func (_m *MockRepository) ApplyCommitmentSchedule(ctx context.Context, c plan.RecurringCommitmentResponse, fromDate time.Time, timezone string) error {
+	ret := _m.Called(ctx, c, fromDate, timezone)
+
+	if len(ret) == 0 {
+		panic("no return value specified for ApplyCommitmentSchedule")
+	}
+
+	var r0 error
+	if rf, ok := ret.Get(0).(func(context.Context, plan.RecurringCommitmentResponse, time.Time, string) error); ok {
+		r0 = rf(ctx, c, fromDate, timezone)
+	} else {
+		r0 = ret.Error(0)
+	}
+
+	return r0
+}
+
+// MockRepository_ApplyCommitmentSchedule_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'ApplyCommitmentSchedule'
+type MockRepository_ApplyCommitmentSchedule_Call struct {
+	*mock.Call
+}
+
+// ApplyCommitmentSchedule is a helper method to define mock.On call
+//   - ctx context.Context
+//   - c plan.RecurringCommitmentResponse
+//   - fromDate time.Time
+//   - timezone string
+func (_e *MockRepository_Expecter) ApplyCommitmentSchedule(ctx interface{}, c interface{}, fromDate interface{}, timezone interface{}) *MockRepository_ApplyCommitmentSchedule_Call {
+	return &MockRepository_ApplyCommitmentSchedule_Call{Call: _e.mock.On("ApplyCommitmentSchedule", ctx, c, fromDate, timezone)}
+}
+
+func (_c *MockRepository_ApplyCommitmentSchedule_Call) Run(run func(ctx context.Context, c plan.RecurringCommitmentResponse, fromDate time.Time, timezone string)) *MockRepository_ApplyCommitmentSchedule_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].(context.Context), args[1].(plan.RecurringCommitmentResponse), args[2].(time.Time), args[3].(string))
+	})
+	return _c
+}
+
+func (_c *MockRepository_ApplyCommitmentSchedule_Call) Return(_a0 error) *MockRepository_ApplyCommitmentSchedule_Call {
+	_c.Call.Return(_a0)
+	return _c
+}
+
+func (_c *MockRepository_ApplyCommitmentSchedule_Call) RunAndReturn(run func(context.Context, plan.RecurringCommitmentResponse, time.Time, string) error) *MockRepository_ApplyCommitmentSchedule_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // ClearEventRef provides a mock function with given fields: ctx, id
 func (_m *MockRepository) ClearEventRef(ctx context.Context, id int32) error {
 	ret := _m.Called(ctx, id)
@@ -381,6 +430,54 @@ func (_c *MockRepository_DeleteEndingAfter_Call) Return(_a0 error) *MockReposito
 }
 
 func (_c *MockRepository_DeleteEndingAfter_Call) RunAndReturn(run func(context.Context, time.Time) error) *MockRepository_DeleteEndingAfter_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// DeleteFutureCommitmentBlocks provides a mock function with given fields: ctx, commitmentID, from
+func (_m *MockRepository) DeleteFutureCommitmentBlocks(ctx context.Context, commitmentID int32, from time.Time) error {
+	ret := _m.Called(ctx, commitmentID, from)
+
+	if len(ret) == 0 {
+		panic("no return value specified for DeleteFutureCommitmentBlocks")
+	}
+
+	var r0 error
+	if rf, ok := ret.Get(0).(func(context.Context, int32, time.Time) error); ok {
+		r0 = rf(ctx, commitmentID, from)
+	} else {
+		r0 = ret.Error(0)
+	}
+
+	return r0
+}
+
+// MockRepository_DeleteFutureCommitmentBlocks_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'DeleteFutureCommitmentBlocks'
+type MockRepository_DeleteFutureCommitmentBlocks_Call struct {
+	*mock.Call
+}
+
+// DeleteFutureCommitmentBlocks is a helper method to define mock.On call
+//   - ctx context.Context
+//   - commitmentID int32
+//   - from time.Time
+func (_e *MockRepository_Expecter) DeleteFutureCommitmentBlocks(ctx interface{}, commitmentID interface{}, from interface{}) *MockRepository_DeleteFutureCommitmentBlocks_Call {
+	return &MockRepository_DeleteFutureCommitmentBlocks_Call{Call: _e.mock.On("DeleteFutureCommitmentBlocks", ctx, commitmentID, from)}
+}
+
+func (_c *MockRepository_DeleteFutureCommitmentBlocks_Call) Run(run func(ctx context.Context, commitmentID int32, from time.Time)) *MockRepository_DeleteFutureCommitmentBlocks_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].(context.Context), args[1].(int32), args[2].(time.Time))
+	})
+	return _c
+}
+
+func (_c *MockRepository_DeleteFutureCommitmentBlocks_Call) Return(_a0 error) *MockRepository_DeleteFutureCommitmentBlocks_Call {
+	_c.Call.Return(_a0)
+	return _c
+}
+
+func (_c *MockRepository_DeleteFutureCommitmentBlocks_Call) RunAndReturn(run func(context.Context, int32, time.Time) error) *MockRepository_DeleteFutureCommitmentBlocks_Call {
 	_c.Call.Return(run)
 	return _c
 }

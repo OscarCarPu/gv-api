@@ -272,10 +272,34 @@ func (s *Service) UpdateCommitment(ctx context.Context, req UpdateCommitmentRequ
 	if req.DaysOfWeek != nil && len(*req.DaysOfWeek) == 0 {
 		return RecurringCommitmentResponse{}, ErrDaysOfWeekRequired
 	}
-	return s.repo.UpdateCommitment(ctx, req)
+	updated, err := s.repo.UpdateCommitment(ctx, req)
+	if err != nil {
+		return RecurringCommitmentResponse{}, err
+	}
+
+	now := time.Now().In(s.location)
+	switch {
+	case req.Active != nil && !updated.Active:
+		// Paused: its not-yet-started blocks go away. Turning it back on regenerates them on the
+		// next range read, and skips are kept so days the user deleted stay deleted.
+		if err := s.repo.DeleteFutureCommitmentBlocks(ctx, updated.ID, now); err != nil {
+			return RecurringCommitmentResponse{}, err
+		}
+	case updated.Active && (req.DaysOfWeek != nil || req.StartTime != nil || req.EndTime != nil):
+		today := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, s.location)
+		if err := s.repo.ApplyCommitmentSchedule(ctx, updated, today, s.location.String()); err != nil {
+			return RecurringCommitmentResponse{}, err
+		}
+	}
+	return updated, nil
 }
 
 func (s *Service) DeleteCommitment(ctx context.Context, id int32) error {
+	// The FK only nulls commitment_id on delete, which would leave every future occurrence
+	// behind as a plain block nothing regenerates or cleans up. Past ones stay as history.
+	if err := s.repo.DeleteFutureCommitmentBlocks(ctx, id, time.Now()); err != nil {
+		return err
+	}
 	return s.repo.DeleteCommitment(ctx, id)
 }
 
