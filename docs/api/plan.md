@@ -1,6 +1,6 @@
 # Plan
 
-CRUD for the user's day plan: time-boxed blocks scheduled across a day (or, via `GET /plan/range`, several). Each block is either linked to a task (`task_id` set), a calendar event (`event_ref` set — see [calendar.md](calendar.md)), both, or stands alone as a free-time block (`label` only). The plan is read-only with respect to `tasks` and `time_entries` — the UI's ▶/✓ buttons on a linked block call the existing task / time-entry endpoints directly. Recurring commitments (a weekly work/class schedule) generate real plan_blocks on demand — see below.
+The user's day plan: time-boxed blocks linked to a task (`task_id`), a calendar event (`event_ref`, see [calendar.md](calendar.md)), both, or neither (free-time, `label` only). The plan never writes to tasks or time entries. Recurring commitments generate blocks on demand.
 
 **Auth:** full-private. All endpoints require a `full` token (see [auth.md](auth.md)).
 
@@ -25,7 +25,7 @@ CRUD for the user's day plan: time-boxed blocks scheduled across a day (or, via 
 | `task_started_at`  | string \| null   | Joined from `tasks.started_at`. RFC3339 timestamp.                                   |
 | `task_finished_at` | string \| null   | Joined from `tasks.finished_at`. RFC3339 timestamp.                                  |
 
-The `task_*` fields are always present on every `PlanBlock` response. They are `null` for free-time blocks (`task_id IS NULL`) and for any joined column whose task value is itself `NULL` (`recurrence`, `started_at`, or `finished_at` on a task that has not been started or has no recurrence). They are read-only — they reflect the joined task state at fetch time and never affect persistence.
+The read-only `task_*` fields are always present: the joined task state at fetch time, `null` for free-time blocks or unset task columns.
 
 ---
 
@@ -167,7 +167,7 @@ The `task_*` fields are always present on every `PlanBlock` response. They are `
 
 - **Method:** `DELETE`
 - **Endpoint:** `/plan/blocks/{id}`
-- **Description:** Permanently deletes a plan block. Hard delete; no soft-delete column. If the block was generated from a recurring commitment, registers a skip for that date first so it is not regenerated.
+- **Description:** Hard delete. A generated block records a skip for its date first, so it is not regenerated.
 - **Success Response:**
   - **Code:** `204 No Content`
 - **Error Responses:**
@@ -180,7 +180,7 @@ The `task_*` fields are always present on every `PlanBlock` response. They are `
 
 - **Method:** `GET`
 - **Endpoint:** `/plan/range`
-- **Description:** Returns plan blocks over an arbitrary date range (not just today), including any that were generated from active recurring commitments — commitment blocks for the requested range are materialized on read if they don't already exist. Any block whose interval touches the range is included, even a multi-day block that only partially overlaps it.
+- **Description:** Plan blocks touching the range (multi-day blocks included), generating any missing blocks from active commitments first.
 - **Query Parameters:**
   - `from` (required): `YYYY-MM-DD`.
   - `to` (required): `YYYY-MM-DD`, exclusive, must be after `from`.
@@ -287,7 +287,7 @@ The `task_*` fields are always present on every `PlanBlock` response. They are `
     "active": false
   }
   ```
-  - All fields optional; same validation as Create when present. `active: false` pauses generation without deleting the commitment or its already-generated blocks.
+  - All fields optional; same validation as Create. Changing days or times moves the generated blocks from today on; `active: false` removes the unstarted ones.
   - `task_id` cannot be changed — there is no field for it. Delete and recreate the commitment to point it at a different task.
 - **Success Response:**
   - **Code:** `200 OK`
@@ -304,7 +304,7 @@ The `task_*` fields are always present on every `PlanBlock` response. They are `
 
 - **Method:** `DELETE`
 - **Endpoint:** `/plan/commitments/{id}`
-- **Description:** Deletes the commitment. Already-generated plan_blocks are not deleted — they become ordinary manual blocks (`commitment_id` set to `NULL`).
+- **Description:** Deletes the commitment and its unstarted blocks. Past blocks stay as ordinary blocks.
 - **Success Response:**
   - **Code:** `204 No Content`
 - **Error Responses:**

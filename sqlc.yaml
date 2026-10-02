@@ -1,8 +1,6 @@
 version: "2"
 sql:
-  # One package for the whole schema: every domain's queries land in their own
-  # <domain>.sql.go, but the models and the pool wiring are shared instead of
-  # being regenerated identically once per domain.
+  # One package for the whole schema; each domain's queries land in <domain>.sql.go.
   - schema: "db/migrations"
     queries: "db/queries"
     engine: "postgresql"

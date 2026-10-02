@@ -1,9 +1,6 @@
 # Calendar - Data Models
 
-Three levels, because that is the shape Google's model has and flattening it would lose what
-the sync needs: an **account** holds the OAuth grant (one per Google login), a **calendar**
-holds the sync cursor (Google issues one `syncToken` per calendar, not per account), and an
-**event** is the mirrored row.
+Three levels, matching Google: an **account** holds the OAuth grant, a **calendar** the sync cursor (`syncToken` is per calendar), an **event** the mirrored row.
 
 ## Tables
 
@@ -24,9 +21,7 @@ holds the sync cursor (Google issues one `syncToken` per calendar, not per accou
 | last_sync_error | TEXT | nullable |
 | created_at / updated_at | TIMESTAMPTZ | NOT NULL, DEFAULT now() (updated touched by trigger) |
 
-The refresh token is the whole feature's key: it grants read and write access to the account's
-calendars and does not expire. It is encrypted because the database is backed up, and a
-plaintext token in a backup is a copy of the grant.
+The refresh token grants full, non-expiring calendar access, so it is encrypted at rest.
 
 ### calendars
 
@@ -57,17 +52,11 @@ plaintext token in a backup is a copy of the grant.
 - `idx_calendars_watch_channel` UNIQUE on (`watch_channel_id`) WHERE NOT NULL — the webhook's
   only lookup key
 
-`watch_token` is a secret this app generates. Google echoes it back in `X-Goog-Channel-Token`,
-and it is the only thing authenticating a webhook that by necessity is public.
+`watch_token` is generated here; Google echoes it in `X-Goog-Channel-Token` to authenticate the public webhook.
 
-The three columns Google owns (`summary`, colours, `access_role`) are refreshed on every
-calendar-list pass; the three the user owns (`sync_enabled`, `visible`, `color_override`)
-deliberately are not.
+Google's columns (`summary`, colours, `access_role`) are refreshed on every calendar-list pass; the user's (`sync_enabled`, `visible`, `color_override`) never are.
 
-The colour clients actually paint with is **not stored**: it is assigned when the list is read,
-by creation order through a fixed palette. Storing it would mean a migration to change the
-palette and a column that can drift from it; deriving it costs nothing and cannot go stale.
-Google's `background_color` is useless as identity — every primary calendar shares one value.
+The display colour is **not stored**: it is assigned on read by creation order through a fixed palette, so it cannot drift. Google's `background_color` is the same for every primary calendar.
 
 ### calendar_events
 
@@ -113,19 +102,11 @@ Three kinds of row live here:
 | series master | `recurrence IS NOT NULL` |
 | override of one occurrence | `recurring_event_id IS NOT NULL` (+ `original_starts_at`) |
 
-`starts_at`/`ends_at` are always set, so a range query is a plain B-tree scan. An all-day event
-is stored as midnight-to-midnight *in `start_tz`* with an exclusive end — Google's
-`start.date`/`end.date` convention pinned to a zone, which is what makes one code path work for
-every range query.
+`starts_at`/`ends_at` are always set, so range queries are plain B-tree scans. All-day events are midnight-to-midnight in `start_tz`, end exclusive.
 
-`start_tz` is what makes that lossless: the original dates are recovered by rendering `starts_at`
-in it, and the API returns them as `start_date`/`end_date`. It matters because the zone is not the
-same for every calendar — Google reports some as `UTC` and some as `Europe/Madrid` — so the
-instant alone does not say which day an all-day event is on.
+`start_tz` recovers the original dates (returned as `start_date`/`end_date`); it is needed because calendars disagree on zones (`UTC` vs `Europe/Madrid`).
 
-Masters have no upper bound to index on (a series can be endless), so a range read fetches every
-master of the selected calendars whose start is before the window's end and expands them in the
-service.
+Masters have no upper bound, so a range read fetches every master starting before the window's end and expands it in the service.
 
 ### calendar_sync_runs
 
@@ -142,8 +123,7 @@ service.
 
 **Indexes:** `idx_calendar_sync_runs_calendar` on (`calendar_id`, `started_at DESC`)
 
-Push channels die quietly and sync tokens expire in the middle of the night. Without this table
-the only evidence of either is a calendar that stopped changing.
+Makes dead push channels and expired sync tokens visible.
 
 ## Relationships
 
@@ -154,20 +134,11 @@ google_accounts (1) --< (many) calendars (1) --< (many) calendar_events
 calendar_events (1 master) --< (many overrides)   [master_id, self-FK, ON DELETE CASCADE]
 ```
 
-Every FK cascades. Disconnecting an account is meant to leave nothing behind, and an override
-means nothing without its master.
+Every FK cascades: disconnecting an account leaves nothing behind, and overrides go with their master.
 
 ## Notes
 
-- **Why not store the expansion of a series**: an endless series has no row count, and picking
-  a horizon means the calendar silently ends somewhere. The master plus its overrides is the
-  complete description; the window is a read concern.
-- **Why cancelled overrides are never purged**: they are the holes in a live series. Purging one
-  makes the occurrence reappear. `PurgeCancelledEvents` only removes cancelled rows that have no
-  `recurring_event_id`.
-- **Why `updated_at` drives the purge**: it means "cancelled and untouched for 90 days". The
-  touch trigger keeps it honest, which is also why a test has to disable that trigger to age a
-  row.
-- **Why `deleted_at` on calendars instead of a delete**: a calendar that stops being shared
-  should not take a month of visible events with it without explanation, and a re-share keeps
-  the local preferences.
+- **Series are not expanded in storage**: endless series have no row count, and a horizon would silently cut the calendar.
+- **Cancelled overrides are never purged**: they are holes in a live series. `PurgeCancelledEvents` only removes cancelled rows without `recurring_event_id`.
+- **Purge uses `updated_at`**: cancelled and untouched for 90 days, kept accurate by the touch trigger.
+- **Calendars are soft-deleted** (`deleted_at`): an unshared calendar keeps its events visible, and a re-share keeps its local preferences.

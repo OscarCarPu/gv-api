@@ -3,7 +3,7 @@
 
 - **Method:** `GET`
 - **Endpoint:** `/habits`
-- **Description:** Retrieves all habits with their logged status for a specific date. Returns today's log value, the accumulated period value (based on each habit's frequency), targets, and streak information.
+- **Description:** All habits for a date: the day's log value, the period value, targets and streaks.
 - **Query Parameters:**
   - `date` (optional): The date for which to retrieve habits, in `YYYY-MM-DD` format. Defaults to today.
 - **Success Response:**
@@ -183,7 +183,7 @@
 
 - **Method:** `GET`
 - **Endpoint:** `/habits/{id}/history`
-- **Description:** Returns aggregated habit log values over a date range, bucketed by a chosen frequency. When the requested frequency is coarser than the habit's native frequency (e.g. viewing a daily habit as weekly), values are averaged instead of summed. For habits with `recording_required=true`, missing periods are filled with zero values.
+- **Description:** Log values per period over a range. Averaged when coarser than the habit's frequency, summed otherwise; zero-filled when `recording_required=true`.
 - **Path Parameters:**
   - `id` (required): The habit ID.
 - **Query Parameters:**

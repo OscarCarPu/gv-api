@@ -2,158 +2,85 @@
 
 ### Description
 
-Domain for managing projects, tasks, todos, and time tracking. Projects form a hierarchy (self-referencing parent/child). Tasks belong to a project or exist as orphans. Todos are lightweight checklist items under a task. Time entries track work duration per task and roll up through the project hierarchy.
+Projects (a hierarchy), tasks (in a project or orphan), todos (checklists under a task) and time entries (rolled up through the hierarchy).
 
 ### States / Lifecycle
 
-**Project**
-```
-created (started_at=NULL, finished_at=NULL)
-  → started (started_at=timestamp, finished_at=NULL)
-    → finished (finished_at=timestamp)
-```
-
-**Task**
-```
-created (started_at=NULL, finished_at=NULL)
-  → started (started_at=timestamp, finished_at=NULL)
-    → finished (finished_at=timestamp)
-```
-
-**Todo**
-```
-created (is_done=false) → done (is_done=true)
-```
-Togglable — can go back to false.
-
-**Time Entry**
-```
-open (finished_at=NULL) → finished (finished_at=timestamp)
-```
-Only finished entries count toward time calculations.
+Projects and tasks: `created` → `started` (`started_at`) → `finished` (`finished_at`).
+Todos toggle `is_done`. Time entries are open until `finished_at` is set; only finished entries count.
 
 ### Business Rules
 
 **Project Hierarchy**
-- Root projects have `parent_id = NULL`.
-- Sub-projects reference a parent project via `parent_id`.
-- No depth limit enforced.
-- A project's parent can be changed at any time via PATCH `parent_id` (`null` moves it to the root; omitting the field leaves it unchanged). The whole subtree below the moved project follows it, and `time_spent` roll-ups are recomputed on read.
-- The hierarchy must stay a forest: a project cannot be moved under itself or under any of its descendants, at any depth (409). The parent must exist (400). The check and the write happen in one transaction under an advisory lock, so concurrent moves cannot create a cycle together.
-- `GET /projects/{id}/parent-candidates` lists the valid new parents: every project except the project itself, its descendants and finished projects (the current parent is always kept so it can still be displayed).
+- Root projects have `parent_id = NULL`; no depth limit.
+- PATCH `parent_id` moves a project with its subtree (`null` = root, omitted = unchanged).
+- A project cannot move under itself or a descendant (409); the parent must exist (400). The check and write share a transaction under an advisory lock.
+- `GET /projects/{id}/parent-candidates` lists valid new parents: not itself, a descendant or finished (the current parent is always listed).
 
 **Orphan Tasks**
-- Tasks with `project_id = NULL` are orphans — not assigned to any project.
-- Orphans appear at the root level in the active tree.
-- Can be assigned to a project later via PATCH.
+- `project_id = NULL`; shown at the root of the active tree and assignable later.
 
 **Task Types**
-- Tasks have a `task_type` field: `standard` (default), `continuous`, or `recurring`.
-- `standard`: a one-off task with a clear start and finish.
-- `continuous`: ongoing work that doesn't have a natural end (e.g. "quick fixes").
-- `recurring`: a task that repeats on a fixed interval (e.g. "clean kitchen").
-- Recurring tasks require a `recurrence` field: a positive integer representing the number of days between occurrences.
-- The backend stores these fields but does not enforce any special behavior on finish. All task types can have `finished_at` set freely. The frontend is responsible for recurring logic (advancing `due_at`, clearing `finished_at`, etc.).
-- When `task_type` is changed from `recurring` to another type via update, `recurrence` is automatically cleared to NULL.
+- `standard` (default, one-off), `continuous` (no natural end) or `recurring` (every `recurrence` days, a positive integer).
+- The backend does nothing special on finish; the frontend handles recurrence (advancing `due_at`, clearing `finished_at`).
+- Changing away from `recurring` clears `recurrence`.
 
 **Active Tree**
-- Shows the user's current work: active projects + unfinished tasks.
-- Active projects: `started_at IS NOT NULL AND finished_at IS NULL`.
-- Unfinished tasks: `finished_at IS NULL`.
-- Ordering: sub-projects prepended before tasks within a project. Started tasks before unstarted. Root level: projects → orphan started → orphan unstarted.
+- Active projects (started, unfinished) and unfinished tasks.
+- Within a project: sub-projects, then started tasks, then unstarted. Root: projects, then started orphans, then unstarted orphans.
 
 **Time Tracking**
-- Time entries are created against a task with `started_at` and optionally `finished_at`.
-- `time_spent = SUM(finished_at - started_at)` for finished entries only. Open entries excluded.
-- A task's `time_spent` is computed from its time entries.
-- A project's `time_spent` = its direct tasks' time + all descendant sub-projects' time (recursive, bottom-up accumulation).
+- `time_spent = SUM(finished_at - started_at)` over finished entries. A project's includes all descendants.
 
 **Time Entry Summary**
-- Returns total seconds for two rolling windows: today and current week (Monday-based).
-- Entries that span a boundary are clamped: `finished_at - GREATEST(started_at, boundary_start)`. An entry started yesterday but finished today only counts today's portion.
+- Seconds for today and the current week (Monday-based); entries crossing the boundary only count the part inside it.
 
 **Finish Cascade**
-- When a project is finished (via PATCH `finished_at`):
-  1. All descendant projects get `finished_at = NOW()`.
-  2. All tasks under the project and its descendants get `finished_at = NOW()`.
-- Application-layer logic, not database cascades.
-- Only affects unfinished items (`finished_at IS NULL`).
+- Finishing a project finishes every unfinished descendant project and task (in the service, not the DB).
 
-**Partial Updates (PATCH)**
-- All update endpoints use PATCH semantics: only provided fields are modified.
-- Implemented via SQL `CASE WHEN @set_field THEN @value ELSE field END`.
-- Omitted fields are untouched.
+**Partial Updates**
+- Updates only touch provided fields (`CASE WHEN @set_field ...` in SQL).
 
 **Todos**
-- Checklist items under a task. No time tracking.
-- Ordered by completion status (incomplete first), then by ID.
-- Cascade deleted when their parent task is deleted.
+- Incomplete first, then by ID. Deleted with their task.
 
 **History**
-- Aggregates finished time entries into periodic buckets (daily/weekly/monthly).
-- Values are in decimal hours (seconds / 3600).
-- Missing periods within the range are zero-filled.
-- Timezone-aware: uses the server's configured timezone (Europe/Madrid) for period boundaries.
-- Entries spanning a period boundary are split: the portion before midnight (or Monday, or 1st of month) counts toward the earlier period, the portion after counts toward the later one.
+- Finished time entries in decimal hours per day/week/month in the server timezone, zero-filled, with entries split at period boundaries.
 
 **Estimate and urgency (Due Soon)**
-- `estimate_hours` is an optional decimal hours estimate on a task. It only produces urgency on `task_type = 'standard'` and `task_type = 'recurring'` tasks — `continuous` ignores it even if set, since a continuous task has no real deadline to count back from.
-- `GetTasksByDueDate` computes, for each eligible task: `remaining_hours = max(estimate_hours − time_spent_hours − already_planned_hours, 0)`, where `already_planned_hours` is the sum of that task's own `plan_blocks` not yet in the past (see [business_logic/plan.md](plan.md)) — a task already fully scheduled is not urgent even if untouched.
-- **For a `recurring` task, `time_spent_hours` is always zero in that formula** — `remaining_hours` is just `estimate_hours − already_planned_hours`. A recurring task's `time_spent` accumulates across *every* past cycle (renewing only reschedules `due_at`, it never resets `time_spent`), so subtracting it would read as permanently over-estimate after a couple of renewals; `estimate_hours` is a per-cycle target, not a lifetime one, for this task type.
-- The effective due date (own `due_at`, falling back to the project's) is re-anchored to the server's own location before any comparison against "today": `due_at` is a conceptual date (midnight UTC for that calendar day), not a real moment, and comparing it as-is against a `today` built from `time.Now().In(location)` would put the day boundary in the wrong place by the server's UTC offset — the exact case where a task due tomorrow could read as both urgent and not depending on how the backward-fill loop happened to terminate.
-- If `remaining_hours > 0`, the service walks backward day by day from that anchored due date, accumulating the daily free hours reported by the capacity domain (`GET /capacity/free-busy`), until the accumulated free time covers `remaining_hours`. The day that threshold is crossed is `start_by`. `urgent = start_by <= today` — i.e. the task should already have been started to make its deadline.
-- **Tasks compete for the same shared free hours, not just against their own deadline.** Every eligible task's backward-fill draws from one `freeByDate` pool built once for the whole batch; left unordered, two tasks racing for the same day's hours would each assume they had all of it to themselves and could both under-report urgency even though the combined demand exceeds what's actually free. To prevent that, tasks are processed in a fixed claim order — **priority ascending, then due date ascending as a tie-break** — and each task decrements the pool by exactly the hours it actually consumes (partial-day amounts, not the whole day) before the next task in line sees what's left. A lower-priority task can therefore show `urgent: true` purely because a higher-priority task claimed the days it needed first, even though it would comfortably fit if it were the only task due around then.
-- One batched capacity call and one batched planned-hours call cover every eligible task in the response, never one call per task.
+- Only `standard` tasks with `estimate_hours` get urgency. Recurring tasks are done on their due day, not started ahead, so they get none.
+- `remaining_hours = max(estimate_hours − time_spent − planned_hours, 0)`, where `planned_hours` are the task's plan blocks not yet past ([plan](plan.md)).
+- Due dates (own or the project's) are stored as midnight UTC and re-anchored to the server timezone before comparing with today.
+- Free hours per day come from capacity (`GET /capacity/free-busy`) in one batched call. Day `n` from today is capped at capacity − 0.5h·n, never below 6h, to absorb unplanned work.
+- Each task's **effective priority** is its own, raised to the highest priority of anything it transitively blocks. It drives scheduling and the `min_priority` filter, which runs after urgency.
+- Tasks are back-filled from the end of each dependency chain: a task's last usable day is the day before its due date, or the day a dependent starts. In A → B → C, A must fit A+B+C's hours before C's deadline.
+- All tasks draw from one shared pool of free hours. Work order is priority, then soonest deadline; filling backwards reverses it, so lower priority and later deadlines claim first and the most important work lands closest to today.
+- Each task gets `start_by` (the day its hours are covered), `urgent = start_by <= today`, `finish_by` and `work_order` (1 = first).
 
 **Task dependencies**
-- A task can depend on other tasks. Dependencies are managed via the `depends_on` field on create/update task (list of task IDs). Setting `depends_on` replaces all existing dependencies. Omitting it leaves them unchanged.
-- Finished tasks cannot be added as dependencies (silently ignored during create/update).
-- The effective due date of a task is the minimum of its own `due_at` and the effective `due_at` of all tasks that depend on it (recursive, via `blocks`). This propagates deadlines backward: if a task blocks something with an earlier deadline, it inherits that deadline.
-- A task that has at least one unfinished dependency is considered "blocked". All task responses include a `blocked` boolean.
-- Blocking never hides a task: every unfinished task is listed in the active tree and (when it has an effective due date) the due-date list, however deep in a dependency chain it sits.
-- A task that inherits a due date from its blockers is returned in the due-date list.
-- Dependency responses include `id` and `name` of the referenced task (not just the ID).
-- The reverse relationship (tasks that depend on this task) is returned as `blocks` in all task responses.
-- Project children (GET /projects/{id}/children) include `depends_on`, `blocks`, and `blocked` for task-type children (omitted for sub-project children).
-- Project children are ordered: sub-projects first, then started tasks, then unstarted tasks, then finished tasks. Ties within each group are broken by `due_at` ascending (nulls last), then name.
+- `depends_on` (task IDs) on create/update replaces all dependencies; omitted leaves them. Finished tasks are silently ignored.
+- The effective due date is the minimum of the task's own and those of everything it blocks (recursive).
+- A task with an unfinished dependency is `blocked`, but is still listed everywhere.
+- Responses carry `depends_on` and `blocks` as `{id, name}`, plus `blocked`; project children include them for tasks only.
+- Project children order: sub-projects, started tasks, unstarted tasks, finished tasks; ties by `due_at` (nulls last), then name.
 
 ### Validations
 
-**Create project**
-- `name` required.
-
-**Create task**
-- `name` required.
-- `task_type` (optional): must be `standard`, `continuous`, or `recurring`.
-- `recurrence` required when `task_type` is `recurring` (positive integer, days). Rejected when `task_type` is not `recurring`.
-
-**Create todo**
-- `task_id` required.
-- `name` required.
-
-**Create time entry**
-- `task_id` required.
-- `started_at` required.
-
-**Time entry history**
-- `frequency` required, must be `daily`, `weekly`, or `monthly`.
-
-**All update endpoints**
-- `id` (URL param) must parse as int.
-- Returns 404 if entity not found.
+- Projects, tasks and todos need a `name`; todos and time entries a `task_id`; time entries a `started_at`.
+- `task_type` must be `standard`, `continuous` or `recurring`; `recurrence` is required for `recurring` and rejected otherwise.
+- History `frequency` must be `daily`, `weekly` or `monthly`.
+- Updates return 400 for a bad id and 404 if the entity does not exist.
 
 ### Side Effects
 
-- **On project finish** → cascade finishes all descendant projects and their tasks.
-- **On project move** (PATCH `parent_id`) → tasks and sub-projects move with it; `time_spent` on the old and new ancestors changes accordingly.
-- **On task delete** → cascade deletes todos and time entries (FK ON DELETE CASCADE).
-- **On task move** (PATCH `project_id`) → time entries move with the task, affecting `time_spent` on both source and destination projects.
+- **Project finished** → descendants finished.
+- **Project or task moved** → `time_spent` of old and new ancestors changes.
+- **Task deleted** → todos and time entries deleted (FK cascade).
 
 ### Decisions / Why
 
-- **Finish cascade at application layer, not DB**: deletion does NOT cascade to child projects or tasks. Only finishing does. This is intentional — deleting a project shouldn't silently destroy all nested work. Finishing is the safe "archive" operation.
-- **Time accumulation computed at query time, not stored**: avoids stale denormalized totals. The recursive CTE + bottom-up accumulation in GetProjectChildren is fast enough since project trees are small.
-- **Time entry summary clamps with GREATEST**: an entry started at 23:00 yesterday and finished at 02:00 today should count 2 hours for today, not 3. GREATEST(started_at, today_start) handles this.
-- **Unique active time entry constraint**: a partial unique index (`idx_time_entries_one_active`) ensures at most one time entry with `finished_at IS NULL` can exist. Creating a second active entry returns `409 Conflict`.
-- **Orphan tasks in active tree**: tasks without a project still appear so nothing gets lost. They sit at the root level as a visual cue to organize them.
-- **History splits entries at period boundaries**: an entry from Sunday 23:00 to Monday 02:00 (Madrid) counts 1h toward the Sunday's week and 2h toward Monday's week. Without this, the entire 3h would land on the week of `started_at`, misrepresenting which week the work actually happened in. Uses `generate_series` + `GREATEST`/`LEAST` to clip each entry to its period segments.
+- **Only finishing cascades, not deleting**: deleting a project must not silently destroy nested work; finishing is the safe archive.
+- **Time computed on read**: no stale totals; project trees are small.
+- **One active time entry**: a partial unique index (`idx_time_entries_one_active`); a second one returns 409.
+- **Orphans stay visible** at the root so nothing gets lost.
+- **Entries split at period boundaries**: Sunday 23:00–Monday 02:00 counts 1h to one week and 2h to the next.

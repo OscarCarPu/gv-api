@@ -1,13 +1,12 @@
-
 ## Finance
 
-CRUD for personal accounts, the categories that classify money flows, and the transactions that move money in, out, and between accounts.
+Accounts, categories, transactions, budgets and stats.
 
 **Auth:** full-private. All endpoints require a `full` token (see [auth.md](auth.md)).
 
-**Total:** every account has a `total` column maintained by a Postgres trigger on `transactions`. Income increases the total, expense decreases it, and a transfer simultaneously decreases the source account and increases the destination. The total is read-only via the API; it is never accepted in a request body.
+**Total:** each account's `total` is maintained by a trigger on `transactions` (income adds, expense subtracts, a transfer moves it between accounts). It is read-only.
 
-**Transaction type:** `income`, `expense`, and `transfer` are values of a Postgres `transaction_type` enum reused on both `transactions.type` and `categories.type`. The matching Go enum lives in `internal/finance/txtype` and is wired through sqlc via an override, so every layer (DB row, generated params, DTO, handler validation) shares the same `txtype.Type` value. A transaction's category must have the same type as the transaction itself; the API rejects mismatches with 400.
+**Transaction type:** `income`, `expense` or `transfer` (Postgres `transaction_type`, Go `txtype.Type`). A transaction's category must have the same type, or the API answers 400.
 
 ### Account fields
 
@@ -48,11 +47,11 @@ CRUD for personal accounts, the categories that classify money flows, and the tr
 
 - **Method:** `GET`
 - **Endpoint:** `/finance/overview`
-- **Description:** Single roll-up used by dashboards. Returns the sum of every account's balance, this-month income/expense/balance (computed in the server's configured timezone, starting at midnight on the 1st), the equivalent figures for the previous calendar month, and every transaction from the last 30 days joined with account and category names.
+- **Description:** Sum of all account totals, this and last month's income/expense/balance (server timezone), and the last 30 days of transactions with account and category names.
 - **Notes:**
   - `accounts_total` sums `accounts.total` directly. If accounts use multiple currencies the sum is naive — clients must show the breakdown themselves if that matters.
   - `month.balance = month.income - month.expense`. Transfers are excluded because they net out across accounts.
-  - `previous_month` has the same shape as `month`. It is computed by summing transactions from the start of last month to the start of this month and lets clients render savings rate / month-over-month deltas without a second request.
+  - `previous_month` has the same shape as `month`.
   - `to_account_name` and `category_name` are nullable: the former is `null` for `income` / `expense`, the latter is `null` for legacy rows where the schema column is unset.
 - **Success Response:**
   - **Code:** `200 OK`
@@ -215,7 +214,7 @@ CRUD for personal accounts, the categories that classify money flows, and the tr
 
 - **Method:** `PUT`
 - **Endpoint:** `/finance/transactions/{id}`
-- **Description:** Replaces all editable fields. The trigger reverses the prior effect on account totals and applies the new one, so changing `type`, `amount`, `account_id`, `to_account_id`, or `category_id` keeps balances consistent. `occurred_at` is required.
+- **Description:** Replaces all editable fields; the trigger keeps account totals consistent. `occurred_at` is required.
 - **Request Body:** same shape as Create, plus an explicit `occurred_at`.
 - **Success Response:** `200 OK` with the updated transaction.
 - **Error Responses:** same validation as Create, plus `400` `invalid transaction id` / `occurred_at is required`, `404` `transaction not found`.
@@ -232,11 +231,11 @@ CRUD for personal accounts, the categories that classify money flows, and the tr
 
 ## Stats
 
-Four read-only endpoints power the chart sheets in the web client (`/money` page). The first three share the same date-range conventions:
+Four read-only endpoints. The first three share these date-range conventions:
 
 - `from` and `to` are optional `YYYY-MM-DD` (or RFC3339) strings interpreted in the server's timezone.
 - `to` defaults to *now*.
-- `from` defaults to **the date of the earliest transaction** (`MIN(occurred_at)`), or, when there are no transactions yet, *now − 6 months*. Clients use this to implement an "All time" range simply by omitting `from`.
+- `from` defaults to the earliest transaction (or now − 6 months if none), so omitting it means "all time".
 - All money values are returned as JSON strings (`NUMERIC(15,2)`).
 
 ### Net-worth series
@@ -246,10 +245,9 @@ Four read-only endpoints power the chart sheets in the web client (`/money` page
 - **Query Parameters:**
   - `from`, `to` — date range (see conventions above).
   - `granularity` — one of `day` | `week` | `month`. Defaults to `day`.
-- **Description:** Reconstructs net worth at the end of each period in the range. The current `SUM(accounts.total)` snapshot is the anchor; the value for each bucket is computed by walking back through transaction deltas (`+income`, `-expense`, `0` for transfers because they net within the user's portfolio). Buckets are aligned to `date_trunc(granularity, from)` and emitted by `generate_series(...)`.
+- **Description:** Net worth at the end of each period, walking back from the current `SUM(accounts.total)` through income and expense (transfers net out). Buckets align to `date_trunc(granularity, from)`.
 - **Notes:**
-  - The trigger-maintained `accounts.total` is the source of truth, so opening balances seeded directly on `accounts.total` (not as `income` rows) are correctly reflected as the starting net worth, while monthly income/expense aggregations stay clean.
-  - Granularities other than `day` use the chart axis's "data points are already period-aligned" rule on the client side.
+  - Opening balances seeded directly on `accounts.total` show up as the starting net worth.
 - **Success Response:**
   - **Code:** `200 OK`
   - **Content:**
@@ -269,7 +267,7 @@ Four read-only endpoints power the chart sheets in the web client (`/money` page
   - `type` (**required**) — one of `income` | `expense` | `transfer`.
   - `from`, `to` — date range (see conventions above).
   - `account_id` (optional) — filter to transactions where this account is the source *or* destination.
-- **Description:** Sums `amount` and counts transactions of the given `type` in the date range, grouped by `category_id`. Returns one row per leaf category with that type. Clients render the parent/child tree client-side using `/finance/categories`; this endpoint never aggregates up the parent chain.
+- **Description:** Sums and counts transactions of `type` per category in the range. Never aggregates up the parent chain; clients build the tree from `/finance/categories`.
 - **Notes:**
   - `share` is each row's amount divided by the sum across all rows in the response (range-relative, not all-time). It is `0` when the range total is `0`.
   - `category_id` is `null` for transactions whose category was deleted before the schema required it; `name` falls back to `"Sin categoría"` in that case.
@@ -293,7 +291,7 @@ Four read-only endpoints power the chart sheets in the web client (`/money` page
   - `from`, `to` — date range.
   - `account_id` (optional) — filter to transactions touching this account.
   - `category_id` (optional) — filter to transactions tagged with this exact category id.
-- **Description:** Returns one row per calendar month in the range with summed `income`, `expense`, and computed `balance = income - expense`. Transfers are excluded by the `type IN ('income','expense')` filter — they net out across the user's accounts.
+- **Description:** One row per calendar month with `income`, `expense` and `balance = income - expense`. Transfers are excluded.
 - **Notes:**
   - The `month` field is the `YYYY-MM` form of `date_trunc('month', occurred_at)`.
   - Sorting: `month ASC`.
@@ -313,17 +311,17 @@ Four read-only endpoints power the chart sheets in the web client (`/money` page
 - **Method:** `GET`
 - **Endpoint:** `/finance/stats/estimation`
 - **Query Parameters:**
-  - `start_month` (**required**) — `YYYY-MM` (or `YYYY-MM-DD`). Lower bound for the historical (actual) series. **Clamped server-side to the month of the earliest transaction** when there is data, so passing an earlier month is harmless (and equivalent to "all available history"). Without this clamp, the underlying `generate_series` in `/finance/stats/networth` would emit flat pre-data buckets equal to `SUM(accounts.total)`, pinning `firstTotal` to the present value and yielding a near-zero rate.
+  - `start_month` (**required**) — `YYYY-MM` (or `YYYY-MM-DD`). Clamped to the earliest transaction's month, so an earlier value means "all history".
   - `end_month` (**required**) — `YYYY-MM` (or `YYYY-MM-DD`). The last month included in the projected series. Must be on or after `start_month`.
   - `mode` (**required**) — one of `rate` | `saving`. Selects how the projection factor is derived and applied.
-- **Description:** Returns a monthly time series from `start_month` through `end_month`, split into actual and projected points. Actuals come from the same net-worth reconstruction used by `/finance/stats/networth` with `granularity=month`, covering `start_month` through the end of the **previous** calendar month (the most recent fully-completed month relative to the server's clock). Estimated points start from the current month and extend through `end_month`. The projection factor is derived from the actuals, **not** taken from a query parameter:
-  - `mode=rate`: the implied compound monthly rate `r` such that `last_actual = first_actual × (1 + r)^n`, where `n` is the number of monthly steps between the first and last actual points. Returned as a percentage (e.g. `1.25` = 1.25%/month). Each projected month is computed as `prev × (1 + r/100)`.
-  - `mode=saving`: the implied average monthly delta `(last_actual − first_actual) / n`, returned in the same currency unit as account totals. Each projected month is computed as `prev + saving`.
-  - When there is fewer than two actual points (e.g. `start_month` ≥ current month, or no transactions in the window so the reconstruction yields a single bucket), `rate` and `saving` are `0` and projections stay flat at the last known total.
+- **Description:** Monthly series from `start_month` to `end_month`: actual points (the `networth` reconstruction, up to last month) then projected ones from the current month. The projection factor is derived from the actuals:
+  - `mode=rate`: compound monthly rate `r` with `last = first × (1 + r)^n`, as a percentage (`1.25` = 1.25%/month). Projection: `prev × (1 + r/100)`.
+  - `mode=saving`: average monthly delta `(last − first) / n`. Projection: `prev + saving`.
+  - With fewer than two actual points, `rate` and `saving` are `0` and the projection stays flat.
 - **Notes:**
-  - The response object — not a bare array — carries `points`, `rate`, and `saving` so clients can label the projection with the derived factor without recomputing it. `rate` and `saving` are *always* present; the field that doesn't correspond to the requested `mode` is `0`.
+  - `rate` and `saving` are always present; the one not matching `mode` is `0`.
   - Each point's `date` is the first day of the bucket month (same convention as `/finance/stats/networth` with `granularity=month`).
-  - `estimated` is `false` for actual buckets and `true` for projected ones. The two segments are contiguous: if the current month is May, the last actual point is April and the first estimated point is May.
+  - `estimated` marks projected points. The segments are contiguous (last actual = previous month).
 - **Success Response:**
   - **Code:** `200 OK`
   - **Content:**
@@ -348,16 +346,16 @@ Four read-only endpoints power the chart sheets in the web client (`/money` page
 
 ## Budgets
 
-Budgets per income or expense category, compared with what actually came in and went out. A budget is either **monthly** (compared with one calendar month) or **yearly** (compared with the whole calendar year — for expenses that come once a year or irregularly, like property tax or car maintenance).
+Budgets per income or expense category, compared with actuals. A budget is **monthly** or **yearly** (for annual or irregular expenses).
 
-**Model — "effective from this period":** a budget set for a period applies to it and every later period until it is changed. Each (category, period) pair is its own series, so a category can have a monthly and a yearly budget independently. Every change picks a `scope`:
+**Model:** a budget applies to its period and every later one until changed. Each (category, period) pair is its own series. Every change has a `scope`:
 
 - `forward` (default) — this period and every later one take the new value; later changes are discarded.
 - `once` — only this period changes; the next one goes back to whatever was in effect before (unless it already had its own value). `month` is still accepted as an alias.
 
 Removing a budget takes the same scopes (`forward` ends it, `once` skips one period). `0` is a real budget ("spend nothing"), distinct from having none. Transfer categories cannot be budgeted.
 
-**Roll-up:** a budget on a category covers the transactions of the category and all its descendants of the same type, except subtrees budgeted with the other period (a yearly "Car maintenance" under a monthly "Transport" keeps its spending out of the monthly budget, and vice versa). Parent and child budgets of the same period can coexist; the child is reported nested (`depth`) and is not counted twice in the totals.
+**Roll-up:** a budget covers its category and same-type descendants, except subtrees budgeted with the other period. Nested budgets of the same period are reported with `depth` and not counted twice.
 
 Months and years are calendar periods in the server's configured timezone (same as `/finance/overview`).
 
@@ -399,11 +397,11 @@ Months and years are calendar periods in the server's configured timezone (same 
   }
   ```
 - **Fields:**
-  - `month_progress` / `yearly.year_progress` — elapsed share of the month / year: `1` for past periods, `0` for future ones, in between for the current one (clients draw a pace marker with it).
+  - `month_progress` / `yearly.year_progress` — elapsed share of the period (`1` past, `0` future).
   - `budgeted` — sum of the outermost budgets only (a budgeted child under a budgeted parent is not added again).
   - `actual` — monthly: every income / expense transaction of the month, budgeted or not. Yearly: what the yearly budgets' categories took in the year.
-  - `unbudgeted` — monthly only (always `0` in `yearly`): the part of `actual` in categories no budget of either period covers, including uncategorized transactions. Spending covered by a yearly budget is not unbudgeted.
-  - `overspent` — expenses beyond the budgets of that period. A budget contributes the larger of its own excess and the combined excess of the budgets nested in it, so a euro over a child budget counts once. Always `0` for income.
+  - `unbudgeted` — monthly only: the part of `actual` no budget of either period covers, uncategorized included.
+  - `overspent` — expenses beyond the period's budgets, counting each euro once across nested budgets. `0` for income.
   - `items` — every budget in effect, depth-first in category order. `depth` is the number of budgeted ancestors of the same type and period; `remaining = budget − actual` (negative when over); `progress = actual / budget` (a `0` budget reports `1` when anything was spent); `since` is when the value in effect started (`YYYY-MM` monthly, `YYYY` yearly).
   - `status` — expenses: `ok` (< 80%), `warning` (≥ 80%), `over` (> 100%). Income: `pending` / `met` (actual ≥ budget).
   - `planned_balance` — monthly budgeted income − expenses, plus a twelfth of the yearly budgeted net: what the plan expects to save in an average month.
@@ -415,7 +413,7 @@ Months and years are calendar periods in the server's configured timezone (same 
 
 - **Method:** `GET`
 - **Endpoint:** `/finance/budgets/{category_id}/transactions?month=YYYY-MM&period=monthly|yearly`
-- **Description:** The transactions a budget counts in the month (or, for `yearly`, in the whole year containing `month`): those of the category and its same-type descendants, leaving out subtrees budgeted with the other period — exactly what the budget's `actual` sums. Newest first, in the same shape as `recent_transactions` in `/finance/overview`. `month` defaults to the current month, `period` to `monthly`. Works for any income / expense category, budgeted or not.
+- **Description:** The transactions behind a budget's `actual` in the month (or year, for `yearly`), newest first, shaped like `recent_transactions` in `/finance/overview`. Defaults: current month, `monthly`. Works for any income/expense category.
 - **Success Response:** `200 OK` with an array of `{ id, type, amount, account_name, to_account_name, category_name, description, occurred_at }`.
 - **Error Responses:** `400` (`month must be YYYY-MM`, `period must be monthly or yearly`, `transfer categories cannot be budgeted`) · `404` `category not found` · `500` `Failed to list budget transactions`
 

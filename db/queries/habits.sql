@@ -104,10 +104,8 @@ WHERE
   id = $1;
 
 -- name: RecalculateHabitStreak :exec
--- Computes current_streak and longest_streak from this habit's logs (see
--- migration 012's recalculate_habit_streak function) and writes them back.
--- @today_in is the user's "today" snapped to UTC midnight (caller decides
--- the location), used to determine the current period.
+-- Recomputes current_streak and longest_streak (migration 012). @today_in is the
+-- user's today as UTC midnight.
 UPDATE
   habits AS h
 SET
@@ -119,9 +117,8 @@ WHERE
   h.id = $1;
 
 -- name: GetHabitHistory :many
--- When @fill_zeros is true, every period in the inclusive [start_at, end_at]
--- range is returned with COALESCE(SUM, 0); otherwise only periods with logs
--- appear. Caller is responsible for snapping start/end to period boundaries.
+-- @fill_zeros returns every period in [start_at, end_at] (inclusive), not only logged
+-- ones. The caller snaps start/end to period boundaries.
 SELECT
   s.date::date AS date,
   COALESCE((

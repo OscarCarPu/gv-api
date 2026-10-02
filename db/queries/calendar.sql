@@ -1,10 +1,5 @@
--- ---------------------------------------------------------------------------
--- Accounts
--- ---------------------------------------------------------------------------
-
 -- name: UpsertGoogleAccount :one
--- Re-connecting an already connected account replaces its tokens instead of failing: the
--- user re-runs the consent flow precisely when the old grant stopped working.
+-- Re-connecting an account replaces its tokens.
 INSERT INTO google_accounts (email, refresh_token, access_token, access_token_expires_at, scopes, status)
 VALUES (@email, @refresh_token, @access_token, @access_token_expires_at, @scopes, 'connected')
 ON CONFLICT (email) DO UPDATE
@@ -43,13 +38,8 @@ UPDATE google_accounts SET last_sync_at = now(), last_sync_error = @last_sync_er
 -- name: DeleteGoogleAccount :execrows
 DELETE FROM google_accounts WHERE id = $1;
 
--- ---------------------------------------------------------------------------
--- Calendars
--- ---------------------------------------------------------------------------
-
 -- name: UpsertCalendar :one
--- Google's metadata (name, colors, role) is refreshed on every calendarList pass; the local
--- preferences (sync_enabled, visible, color_override) deliberately are not.
+-- Refreshes Google's metadata but never the local preferences.
 INSERT INTO calendars (account_id, google_calendar_id, summary, description, time_zone,
                        background_color, foreground_color, access_role, is_primary, sync_enabled)
 VALUES (@account_id, @google_calendar_id, @summary, @description, @time_zone,
@@ -134,8 +124,7 @@ SET watch_channel_id = NULL, watch_resource_id = NULL, watch_token = NULL, watch
 WHERE id = $1;
 
 -- name: ListCalendarsNeedingWatch :many
--- No channel at all, or one close enough to expiry that it must be replaced now. A channel
--- cannot be renewed in place: watch() again, then stop the old one.
+-- No channel, or one close enough to expiry that it must be replaced.
 SELECT c.* FROM calendars c
 JOIN google_accounts a ON a.id = c.account_id
 WHERE c.sync_enabled AND c.deleted_at IS NULL AND a.status = 'connected'
@@ -144,10 +133,6 @@ ORDER BY c.id;
 
 -- name: ListWatchedCalendars :many
 SELECT * FROM calendars WHERE watch_channel_id IS NOT NULL;
-
--- ---------------------------------------------------------------------------
--- Events
--- ---------------------------------------------------------------------------
 
 -- name: UpsertCalendarEvent :one
 INSERT INTO calendar_events (
@@ -206,12 +191,11 @@ DELETE FROM calendar_events WHERE id = $1;
 DELETE FROM calendar_events WHERE calendar_id = @calendar_id AND google_event_id = @google_event_id;
 
 -- name: DeleteCalendarEventsForCalendar :execrows
--- Used on 410 Gone: the client store for that calendar is wiped and rebuilt from scratch.
+-- Used on 410 Gone, before a full rebuild.
 DELETE FROM calendar_events WHERE calendar_id = $1;
 
 -- name: LinkCalendarEventMasters :exec
--- An exception can arrive in an earlier page than its master, so the link is resolved after
--- each pass rather than per row.
+-- Runs after each pass: an exception can arrive before its master.
 UPDATE calendar_events e
 SET master_id = m.id
 FROM calendar_events m
@@ -222,8 +206,7 @@ WHERE e.calendar_id = @calendar_id
   AND m.google_event_id = e.recurring_event_id;
 
 -- name: ListEventsInRange :many
--- One-off events (and single instances of nothing) that overlap the window. Masters and
--- their exceptions are fetched separately because a series has no end to compare against.
+-- One-off events overlapping the window. Series are fetched separately.
 SELECT * FROM calendar_events
 WHERE calendar_id = ANY(@calendar_ids::int[])
   AND recurrence IS NULL
@@ -250,17 +233,12 @@ ORDER BY original_starts_at;
 SELECT * FROM calendar_events WHERE master_id = $1 ORDER BY original_starts_at;
 
 -- name: PurgeCancelledEvents :execrows
--- A cancelled one-off is of no interest once it is old; a cancelled *instance* is a hole in
--- a live series and must outlive it, so it is never purged here.
+-- Purges old cancelled one-offs. Cancelled instances are holes in a series and are kept.
 DELETE FROM calendar_events
 WHERE status = 'cancelled' AND recurring_event_id IS NULL AND updated_at < @older_than;
 
 -- name: CountCalendarEvents :one
 SELECT count(*) FROM calendar_events WHERE calendar_id = $1;
-
--- ---------------------------------------------------------------------------
--- Sync runs
--- ---------------------------------------------------------------------------
 
 -- name: CreateSyncRun :one
 INSERT INTO calendar_sync_runs (calendar_id, trigger, kind)
@@ -276,9 +254,7 @@ WHERE id = @id;
 SELECT * FROM calendar_sync_runs ORDER BY started_at DESC LIMIT $1;
 
 -- name: ListOrphanOverridesInRange :many
--- Overrides whose master has not been synced (or no longer exists). They are rare — the link
--- is resolved after every pass — but without this they would be invisible rather than merely
--- detached, and an invisible event is worse than an odd-looking one.
+-- Overrides whose master is missing, so they are shown rather than lost.
 SELECT * FROM calendar_events
 WHERE calendar_id = ANY(@calendar_ids::int[])
   AND recurring_event_id IS NOT NULL

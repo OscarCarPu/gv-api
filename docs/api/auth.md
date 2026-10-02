@@ -29,7 +29,7 @@ Error responses are JSON: `{"error": "<message>"}`.
 
 - **Method:** `POST`
 - **Endpoint:** `/login`
-- **Description:** Authenticates with a password. Returns a `tmp` token for the private password (use it with `/login/2fa`) or a `semi` token for the semi-private password (use it directly on semi-private endpoints).
+- **Description:** Password login. The private password returns a `tmp` token for `/login/2fa`; the semiprivate one a ready-to-use `semi` token.
 - **Request Body:**
   ```json
   { "password": "your-password" }

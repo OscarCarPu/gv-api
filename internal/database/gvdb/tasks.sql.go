@@ -630,8 +630,7 @@ type GetTasksByDueDateRow struct {
 	Blocked       bool               `db:"blocked" json:"blocked"`
 }
 
-// Returns unfinished tasks that have a due_at (own or inherited from a blocked task) or whose project has one.
-// effective_due_at propagates backward via the "blocks" relation.
+// Unfinished tasks with a due_at (own, inherited from a blocked task, or the project's).
 func (q *Queries) GetTasksByDueDate(ctx context.Context) ([]GetTasksByDueDateRow, error) {
 	rows, err := q.db.Query(ctx, getTasksByDueDate)
 	if err != nil {
@@ -945,9 +944,7 @@ type GetTimeEntryHistoryRow struct {
 	Value float32   `db:"value" json:"value"`
 }
 
-// Each entry is split at period boundaries (in @timezone) and the resulting
-// segments are summed per period. Empty periods in [start_at, end_at] are
-// zero-filled via the outer LEFT JOIN against generate_series.
+// Entries are split at period boundaries in @timezone and summed; empty periods are zero.
 func (q *Queries) GetTimeEntryHistory(ctx context.Context, arg GetTimeEntryHistoryParams) ([]GetTimeEntryHistoryRow, error) {
 	rows, err := q.db.Query(ctx, getTimeEntryHistory,
 		arg.StartAt,
@@ -1099,9 +1096,8 @@ type ListProjectParentCandidatesRow struct {
 	Path string `db:"path" json:"path"`
 }
 
-// Every valid new parent for project @id: not the project itself, not any of its descendants
-// (any depth) and not finished — except its current parent, which stays listed so a select can
-// still show the current value. path is the ancestor chain, used for labels and ordering.
+// Valid new parents for project @id: not itself, a descendant or finished (the current
+// parent is always listed). path is the ancestor chain.
 func (q *Queries) ListProjectParentCandidates(ctx context.Context, id int32) ([]ListProjectParentCandidatesRow, error) {
 	rows, err := q.db.Query(ctx, listProjectParentCandidates, id)
 	if err != nil {
@@ -1216,8 +1212,7 @@ const lockProjectTree = `-- name: LockProjectTree :exec
 SELECT pg_advisory_xact_lock(hashtext('projects_tree'))
 `
 
-// Serialises parent moves so two concurrent updates can't each pass the cycle check and
-// together create a cycle.
+// Serialises parent moves so concurrent ones cannot jointly create a cycle.
 func (q *Queries) LockProjectTree(ctx context.Context) error {
 	_, err := q.db.Exec(ctx, lockProjectTree)
 	return err
@@ -1248,8 +1243,7 @@ type ProjectSubtreeContainsParams struct {
 	RootID      int32 `db:"root_id" json:"root_id"`
 }
 
-// True when @candidate_id is @root_id itself or any descendant of it, at any depth.
-// UNION (not UNION ALL) keeps the walk terminating even on already-corrupt data.
+// True when @candidate_id is @root_id or any descendant. UNION terminates even on cycles.
 func (q *Queries) ProjectSubtreeContains(ctx context.Context, arg ProjectSubtreeContainsParams) (bool, error) {
 	row := q.db.QueryRow(ctx, projectSubtreeContains, arg.CandidateID, arg.RootID)
 	var contains bool
@@ -1269,9 +1263,7 @@ type TaskBlocksWouldCycleParams struct {
 	TaskID int32   `db:"task_id" json:"task_id"`
 }
 
-// Returns true if any of the @blocks tasks depending on @task_id would
-// create a cycle. Reuses task_dependency_would_cycle by checking each
-// (block -> task_id) edge in a single query.
+// True if any @blocks task depending on @task_id would create a cycle.
 func (q *Queries) TaskBlocksWouldCycle(ctx context.Context, arg TaskBlocksWouldCycleParams) (bool, error) {
 	row := q.db.QueryRow(ctx, taskBlocksWouldCycle, arg.Blocks, arg.TaskID)
 	var has_cycle bool
@@ -1288,9 +1280,7 @@ type TaskDependencyWouldCycleParams struct {
 	NewDeps []int32 `db:"new_deps" json:"new_deps"`
 }
 
-// Wraps the task_dependency_would_cycle SQL function (see migration 011).
-// Returns true if replacing @task_id's outgoing dep edges with @new_deps
-// would create a cycle.
+// True if replacing @task_id's dependencies with @new_deps would create a cycle.
 func (q *Queries) TaskDependencyWouldCycle(ctx context.Context, arg TaskDependencyWouldCycleParams) (bool, error) {
 	row := q.db.QueryRow(ctx, taskDependencyWouldCycle, arg.TaskID, arg.NewDeps)
 	var has_cycle bool

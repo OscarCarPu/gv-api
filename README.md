@@ -1,13 +1,10 @@
 # gv-api
 
-A comprehensive life orchestrator built in Go, designed to centralize data from multiple web services, platforms, and devices.
+Single-user Go API that centralises personal data from services and devices.
 
 ## Tech Stack
 
-- **Go** — system core
-- **`go-chi/chi/v5`** — lightweight, idiomatic HTTP router
-- **`pgx/v5` & `sqlc`** — efficient PostgreSQL interaction with auto-generated type-safe queries
-- **`testify` & `mockery`** — testing assertions and auto-generated interface mocks with type-safe expecters
+Go, chi, PostgreSQL via pgx + sqlc, testify + mockery. See [architecture](docs/architecture.md).
 
 ## Setup
 
@@ -26,7 +23,7 @@ A comprehensive life orchestrator built in Go, designed to centralize data from 
    make setup-project
    ```
 
-2. **Edit `.env`** with your database credentials and secrets.
+2. **Edit `.env`** (every variable is listed in `.env.example`).
 
 3. **Start the database and run:**
    ```bash
@@ -36,27 +33,10 @@ A comprehensive life orchestrator built in Go, designed to centralize data from 
 
 ## Environment Variables
 
-| Variable | Required | Default | Description |
-|---|---|---|---|
-| `DATABASE_URL` | **Yes** | — | PostgreSQL connection string. |
-| `PASSWORD` | **Yes** | — | Login password for full-access tokens. |
-| `SEMIPRIVATE_PASSWORD` | **Yes** | — | Login password for read-only tokens. |
-| `JWT_SECRET` | **Yes** | — | Secret used to sign JWTs. Generate with `openssl rand -hex 32`. |
-| `TOTP_SECRET` | **Yes** | — | Base32 secret for TOTP 2FA. Generate with `openssl rand -base32 20`. |
-| `ALLOWED_ORIGINS` | **Yes** | — | Comma-separated CORS origins. |
-| `PORT` | No | `8080` | HTTP listen port. |
-| `TIMEZONE` | No | `Europe/Madrid` | IANA timezone for date arithmetic. |
-| `LIGHTS_DRIVER` | No | `mock` | `bluez` to drive real bulbs; anything else uses the in-memory mock. |
-| `LIGHTS_*` | No | — | Adapter, timeouts, cache TTL and settle retries. See `.env.example`. |
-| `PIPELINE_DATABASE_URL` | No | — | Connection string for **central-pipeline's** PostgreSQL, which owns the marts the Uptime domain reads. A second database, not gv's: read-only, never migrated from here. Unset means those endpoints answer 503. |
-| `PIPELINE_STALE_AFTER_MS` | No | `7200000` | How old a mart may be before the API reports it as stale. Every mart carries the dbt run time, not `now()`. |
-| `GOOGLE_CLIENT_ID` | No | — | OAuth client for the Calendar domain. Unset means no account can be connected; everything else still runs. |
-| `GOOGLE_CLIENT_SECRET` | No | — | Its secret. |
-| `GOOGLE_OAUTH_REDIRECT_URL` | No | — | Must match the client's redirect URI exactly, e.g. `https://gv-api.lab-ocp.com/calendar/google/callback`. |
-| `GOOGLE_TOKEN_KEY` | If client set | — | 32 bytes of hex encrypting the stored refresh tokens. Generate with `openssl rand -hex 32`. The server refuses to start without it once a client id is set. |
-| `CALENDAR_WEB_APP_URL` | No | first `ALLOWED_ORIGINS` | Where the OAuth callback sends the browser back to. |
-| `CALENDAR_WEBHOOK_URL` | No | — | Public HTTPS address Google posts change notifications to. Unset means polling only. |
-| `CALENDAR_*` | No | — | Webhook toggle, channel TTL and renewal window, poll interval, notification debounce. See `.env.example`. |
+All variables are in `.env.example` with their defaults. Required: `DATABASE_URL`, `PASSWORD`,
+`SEMIPRIVATE_PASSWORD`, `JWT_SECRET`, `TOTP_SECRET`, `ALLOWED_ORIGINS`, plus `GOOGLE_TOKEN_KEY`
+once `GOOGLE_CLIENT_ID` is set. Optional integrations (lights, central-pipeline, Google Calendar)
+degrade gracefully when unset.
 
 ## API
 
@@ -64,30 +44,31 @@ A comprehensive life orchestrator built in Go, designed to centralize data from 
 
 | Domain | Description | Docs |
 |---|---|---|
-| **Auth** | JWT login with optional TOTP 2FA. Two token tiers: full-access and semiprivate (read-only). | [auth](docs/api/auth.md) |
-| **Habits** | Daily habit definitions with per-day logging and history. | [habits](docs/api/habits.md) |
+| **Auth** | JWT login with TOTP 2FA. Two token tiers: full and semiprivate. | [auth](docs/api/auth.md) |
+| **Habits** | Habits with daily/weekly/monthly targets, logs, streaks and history. | [habits](docs/api/habits.md) |
 | **Tasks** | Hierarchical project/task tree with todos, due dates, and Pomodoro time entries. | [tasks](docs/api/tasks/README.md) |
-| **Plan** | Daily time-block planner that schedules tasks from the task tree. | [plan](docs/api/plan.md) |
-| **Finance** | Accounts, categories, transactions, monthly budgets per category, and spending stats (net worth, by-category, monthly, estimation). | [finance](docs/api/finance.md) |
-| **Rutas** | Concello marks: which municipalities were visited and when. | [rutas](docs/api/rutas.md) |
+| **Plan** | Daily time blocks, linked to tasks, events or recurring commitments. | [plan](docs/api/plan.md) |
+| **Capacity** | Free and busy hours per day. | [capacity](docs/api/capacity.md) |
+| **Finance** | Accounts, categories, transactions, monthly/yearly budgets and stats. | [finance](docs/api/finance.md) |
+| **Rutas** | Concello marks: which municipalities were visited and when. Semiprivate auth. | [rutas](docs/api/rutas.md) |
 | **Lights** | Bluetooth bulbs driven over BlueZ, with discovery and a registry. Semiprivate auth. | [lights](docs/api/lights.md) |
-| **Calendar** | Google calendars mirrored locally and editable from here: OAuth per account, incremental sync, push notifications, recurring series expanded on read. | [calendar](docs/api/calendar.md) |
-| **Uptime** | How much of the time the lab and its ESP32 watchdog have been reachable, read from central-pipeline's marts. Semiprivate auth. | [uptime](docs/api/uptime.md) |
+| **Calendar** | Google calendars mirrored locally and editable: OAuth, incremental sync, push notifications. | [calendar](docs/api/calendar.md) |
+| **Uptime** | Lab and ESP32 watchdog uptime from central-pipeline's marts. Semiprivate auth. | [uptime](docs/api/uptime.md) |
 
 ### Infrastructure
 
 | Method | Path | Auth | Description |
 |---|---|---|---|
-| `GET` | `/health` | None | Returns `200 OK`. Use for liveness probes. |
-| `GET` | `/calendar/google/callback` | Signed state | Where Google's consent redirect lands. Cannot carry a bearer token: it is a browser redirect to the API host. |
-| `POST` | `/calendar/google/webhook` | Channel token | Google's push notifications. Cannot carry a bearer token: Google sends no credentials. |
+| `GET` | `/health` | None | Liveness probe. |
+| `GET` | `/calendar/google/callback` | Signed state | Google's OAuth redirect. |
+| `POST` | `/calendar/google/webhook` | Channel token | Google's push notifications. |
 
 ### Request / Response Headers
 
 | Header | Direction | Description |
 |---|---|---|
-| `X-Request-ID` | Request & Response | Optional on request; auto-generated (random 8-byte hex) if absent. Echoed back in the response and propagated through logs for correlation. |
-| `X-Device-ID` | Request | Optional stable per-browser UUID sent by gv-web. Nothing reads it yet, but it is CORS-allowlisted: an unlisted header makes the browser's preflight fail, which blocks the request outright. |
+| `X-Request-ID` | Request & Response | Optional; generated if absent, echoed back and logged. |
+| `X-Device-ID` | Request | Per-browser UUID from gv-web. Unused, but must stay CORS-allowlisted or preflights fail. |
 
 ## Testing
 
@@ -104,21 +85,8 @@ The test database is created and dropped per run.
 
 ## Code Generation
 
-### sqlc
-
-Generates type-safe Go code from SQL queries:
-
 ```bash
-make sqlc
+make sqlc            # db/queries -> internal/database/gvdb
+make generate-mocks  # interfaces -> internal/*/mocks (typed .EXPECT() helpers)
 ```
-
-### mockery
-
-Generates mock implementations from Go interfaces for testing. Configured in `.mockery.yaml` with `with-expecter: true`, which provides type-safe `.EXPECT().MethodName()` helpers instead of raw string-based `.On("MethodName")` calls — giving compile-time safety if interface methods are renamed.
-
-```bash
-make generate-mocks
-```
-
-Mocks are generated into `internal/*/mocks/` directories and used by handler and service tests.
 

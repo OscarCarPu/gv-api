@@ -122,9 +122,8 @@ WHERE t.occurred_at >= $1
 ORDER BY t.occurred_at DESC, t.id DESC;
 
 -- name: GetNetWorthSeries :many
--- Reconstructs net worth at the end of each period (day/week/month) by walking
--- back from the current accounts.total snapshot.
--- Granularity must be one of 'day' | 'week' | 'month'.
+-- Net worth at the end of each period ('day' | 'week' | 'month'), walking back from
+-- the current accounts.total.
 WITH
 current_total AS (
     SELECT COALESCE(SUM(total), 0)::numeric AS total FROM accounts
@@ -158,9 +157,8 @@ FROM buckets b
 ORDER BY b.bucket_start;
 
 -- name: GetCategoryStats :many
--- Sums and counts transactions of a given type per category in a date range,
--- optionally filtered by account_id (matches account_id OR to_account_id for
--- transfers).
+-- Sums and counts transactions of a type per category in a date range. account_id
+-- matches source or destination.
 WITH filtered AS (
     SELECT t.category_id, t.amount
     FROM transactions t
@@ -192,9 +190,7 @@ GROUP BY f.category_id, c.name
 ORDER BY SUM(f.amount) DESC, name ASC;
 
 -- name: GetMonthlyStats :many
--- Returns one row per calendar month with summed income, expense in the date
--- range. Optional account_id (matches source or destination) and category_id
--- filters.
+-- Income and expense per calendar month. account_id matches source or destination.
 SELECT
     to_char(date_trunc('month', occurred_at), 'YYYY-MM')::text AS month,
     COALESCE(SUM(amount) FILTER (WHERE type = 'income'::transaction_type),  0::numeric)::numeric AS income,
@@ -245,9 +241,7 @@ WHERE category_id = sqlc.arg('category_id')::int
   AND month > sqlc.arg('month')::date;
 
 -- name: CollapseBudgets :exec
--- Drops rows that change nothing: a row equal to the one before it, and a leading NULL row
--- (ending a budget that never started). Keeps each (category, period) series a minimal list of
--- changes.
+-- Drops rows that change nothing: one equal to its predecessor, or a leading NULL row.
 DELETE FROM budgets b
 USING (
     SELECT bb.id,
@@ -265,8 +259,8 @@ WHERE b.id = x.id
   );
 
 -- name: ListEffectiveBudgets :many
--- The budget in effect for every category and period at a month, skipping ended ones (NULL
--- amount). Yearly rows sit on January 1st, so "month <= M" also picks the right year.
+-- The budget in effect for every category and period at a month, skipping ended ones.
+-- Yearly rows sit on January 1st.
 SELECT e.category_id, e.period, e.since, e.amount::numeric AS amount
 FROM (
     SELECT DISTINCT ON (b.category_id, b.period) b.category_id, b.period, b.month AS since, b.amount
@@ -286,8 +280,7 @@ WHERE occurred_at >= sqlc.arg('from_at')::timestamptz
 GROUP BY category_id, type;
 
 -- name: ListCategoryTransactions :many
--- Transactions of one type in a set of categories within [from_at, to_at), joined with account
--- and category names for display. Used to list what a budget counted.
+-- Transactions of one type in a set of categories within [from_at, to_at), with names.
 SELECT
     t.id,
     t.type,

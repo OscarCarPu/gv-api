@@ -161,9 +161,8 @@ type GetHabitHistoryRow struct {
 	Value float32   `db:"value" json:"value"`
 }
 
-// When @fill_zeros is true, every period in the inclusive [start_at, end_at]
-// range is returned with COALESCE(SUM, 0); otherwise only periods with logs
-// appear. Caller is responsible for snapping start/end to period boundaries.
+// @fill_zeros returns every period in [start_at, end_at] (inclusive), not only logged
+// ones. The caller snaps start/end to period boundaries.
 func (q *Queries) GetHabitHistory(ctx context.Context, arg GetHabitHistoryParams) ([]GetHabitHistoryRow, error) {
 	rows, err := q.db.Query(ctx, getHabitHistory,
 		arg.HabitID,
@@ -377,10 +376,8 @@ type RecalculateHabitStreakParams struct {
 	TodayIn time.Time `db:"today_in" json:"today_in"`
 }
 
-// Computes current_streak and longest_streak from this habit's logs (see
-// migration 012's recalculate_habit_streak function) and writes them back.
-// @today_in is the user's "today" snapped to UTC midnight (caller decides
-// the location), used to determine the current period.
+// Recomputes current_streak and longest_streak (migration 012). @today_in is the
+// user's today as UTC midnight.
 func (q *Queries) RecalculateHabitStreak(ctx context.Context, arg RecalculateHabitStreakParams) error {
 	_, err := q.db.Exec(ctx, recalculateHabitStreak, arg.ID, arg.TodayIn)
 	return err

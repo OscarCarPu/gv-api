@@ -62,15 +62,14 @@ recurring_commitments (1) --< (many) plan_blocks         [via commitment_id, nul
 recurring_commitments (1) --< (many) recurring_commitment_skips  [ON DELETE CASCADE]
 ```
 
-- `task_id` is nullable: a block with `task_id IS NULL` is a free-time block (e.g. "comer", "paseo") and stands alone with its `label`.
-- A block with `task_id` set is a linked block; the UI uses the join with `tasks` to surface task state (`task_type`, `recurrence`, `started_at`, `finished_at`) for inline action buttons.
-- `ON DELETE SET NULL` on the FK means deleting the linked task converts the block into a free-time block with the original `label` intact — the day's plan is never wiped by an unrelated task delete.
-- `event_ref` links a plan_block to a calendar event (`instance_id` — see [data_models/calendar.md](calendar.md)). Purely a local reference: no FK to any calendar table, since a recurring event occurrence may never have a row of its own there.
-- `commitment_id` marks a plan_block as generated from a `recurring_commitments` row. `ON DELETE SET NULL` means deleting the commitment leaves already-generated blocks in place as ordinary manual blocks. The partial unique index on `(commitment_id, plan_date)` guards against generating the same occurrence twice when two range reads race — see [business_logic/plan.md](plan.md).
-- Plan blocks never write to `tasks` or `time_entries`. Reads only.
+- `task_id IS NULL` is a free-time block, standing alone with its `label`.
+- A linked block's task state (`task_type`, `recurrence`, `started_at`, `finished_at`) is joined for the UI.
+- Deleting the task turns the block into a free-time block with its `label`.
+- `event_ref` links a block to a calendar event's `instance_id` ([calendar](calendar.md)). No FK: an occurrence may have no row of its own.
+- `commitment_id` marks a block generated from a commitment. Pausing or deleting the commitment removes its unstarted blocks; past ones stay (the FK then nulls `commitment_id`). The partial unique index on `(commitment_id, plan_date)` stops concurrent reads generating an occurrence twice.
 
 ## Notes
 
-- `plan_date` is redundant with `started_at::date` but stored separately so the index can be a plain B-tree on `(plan_date, started_at)` without timezone gymnastics. The service derives `plan_date` from `started_at` (UTC date) on every insert/update. It only reflects the **start** day — a multi-day block's overlap and busy-hours computations use the `[started_at, ended_at)` interval directly, not `plan_date`, precisely because a multi-day block's later days aren't `plan_date`.
-- There is no overlap exclusion constraint at the DB level; the service performs a `COUNT(*)` overlap check on every Create/Update and returns `400` (`ErrOverlap`) if any other block anywhere has an overlapping `[started_at, ended_at)` interval (not scoped to `plan_date`, so a multi-day block is checked against its whole span).
-- `recurring_commitment_skips` exists so that deleting (or moving to a different day) a commitment-generated block doesn't get silently recreated the next time the range is regenerated — see [business_logic/plan.md](../business_logic/plan.md).
+- `plan_date` is the start day (UTC date of `started_at`), stored for a plain B-tree index on `(plan_date, started_at)`. Overlap and busy hours use `[started_at, ended_at)`, not `plan_date`.
+- Overlap is a service-side `COUNT(*)` check, not a DB constraint.
+- `recurring_commitment_skips` keeps a deleted or moved generated block from being regenerated ([business logic](../business_logic/plan.md)).

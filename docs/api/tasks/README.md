@@ -7,11 +7,9 @@ Endpoints are grouped by resource:
 - [Todos](todos.md) — todos under a task
 - [Time Entries](time-entries.md) — time tracking, active entry, history, summary
 
-The shared `task_type`, `recurrence`, and `priority` semantics are documented below and apply to every endpoint that returns task data.
+Shared `task_type`, `recurrence` and `priority` semantics:
 
 ## Task Types
-
-Tasks have a `task_type` field that determines their behavior:
 
 | Type | Description | `recurrence` |
 |------|-------------|--------------|
@@ -22,10 +20,10 @@ Tasks have a `task_type` field that determines their behavior:
 - `task_type` defaults to `"standard"` when not provided.
 - `recurrence` is an integer representing the number of days between recurrences (e.g. `1` = daily, `7` = weekly, `30` = monthly).
 - `recurrence` is required when `task_type` is `"recurring"` and must not be provided otherwise.
-- The backend does not enforce any special behavior on finish for any task type. `finished_at` can be set freely on all types. The frontend is responsible for handling recurrence logic (e.g. advancing `due_at` and clearing `finished_at`).
+- The backend does nothing special on finish; the frontend handles recurrence (advancing `due_at`, clearing `finished_at`).
 - `task_type` and `recurrence` are returned on all endpoints that include task information.
 - `recurrence` is omitted from JSON responses when `null` (non-recurring tasks).
 
 ## Task Priority
 
-Tasks have a `priority` field with values from `1` (highest) to `5` (lowest). It defaults to `3` when not provided. Priority is returned on all endpoints that include task information.
+`priority` is `1` (highest) to `5` (lowest), default `3`, returned everywhere.

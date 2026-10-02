@@ -3,19 +3,13 @@
 A local mirror of the user's Google calendars, editable from here. **Full auth**, except the
 two endpoints Google itself has to reach.
 
-Google stays the source of truth. Reads are served from the mirror; writes go to Google first
-and are stored only once it accepts them, so a row here always corresponds to an event over
-there.
+Google stays the source of truth: reads come from the mirror, writes go to Google first and are stored once accepted.
 
 ## Setup
 
-The domain mounts and answers with no Google credentials configured: accounts and calendars
-come back empty, reads work, and anything that needs Google answers `503`. `GET
-/calendar/sync/status` reports `configured: false`, which is the one place that says why
-nothing is syncing.
+Without Google credentials the domain still mounts: reads work and come back empty, anything needing Google answers `503`, and `GET /calendar/sync/status` reports `configured: false`.
 
-To configure it, see the environment variables in the [README](../../README.md) and the
-one-time Google Cloud setup in [business_logic/calendar.md](../business_logic/calendar.md).
+Configuration: the `GOOGLE_*`/`CALENDAR_*` variables in `.env.example` and the one-time setup in [business_logic/calendar.md](../business_logic/calendar.md).
 
 ## References
 
@@ -26,9 +20,7 @@ An event reference is either an event id or one occurrence of a recurring series
 | `12` | the event with local id 12 (a one-off, or the series as a whole) |
 | `12@2026-08-20T07:00:00Z` | the occurrence of series 12 whose **original** start is that instant |
 
-The suffix is the original start, not the current one: an override can move an occurrence to
-another day, and the slot it came from is the only stable name it has. It is what `instance_id`
-returns and what `PATCH`/`DELETE` accept.
+The suffix is the occurrence's original start, which stays stable when an override moves it. It is what `instance_id` returns and what `PATCH`/`DELETE` accept.
 
 ## Accounts
 

@@ -90,7 +90,7 @@ See [README](README.md) for shared `task_type` / `recurrence` / `priority` seman
 
 - **Method:** `GET`
 - **Endpoint:** `/tasks/projects/{id}`
-- **Description:** Returns a single project with its `time_spent` (recursive sum across all nested tasks). Does not include children — use `/tasks/projects/{id}/children` for that.
+- **Description:** One project with its recursive `time_spent`. Children are at `/tasks/projects/{id}/children`.
 - **Success Response:**
   - **Code:** `200 OK`
   - **Content:**
@@ -133,7 +133,7 @@ See [README](README.md) for shared `task_type` / `recurrence` / `priority` seman
   - `name` (optional): New name.
   - `description` (optional): New description.
   - `due_at` (optional): New due date. Pass `null` to clear the due date. Omitting the field leaves it unchanged.
-  - `parent_id` (optional): New parent project ID. Pass `null` to move the project to the root. Omitting the field leaves it unchanged. The project's whole subtree moves with it. A project cannot be moved under itself or under any of its descendants (any depth).
+  - `parent_id` (optional): new parent; `null` moves it to the root, omitted leaves it. The subtree moves too. Cannot be the project itself or a descendant.
   - `started_at` (optional): Start timestamp.
   - `finished_at` (optional): Finish timestamp.
 - **Success Response:**
@@ -164,7 +164,7 @@ See [README](README.md) for shared `task_type` / `recurrence` / `priority` seman
 
 - **Method:** `GET`
 - **Endpoint:** `/tasks/projects/{id}/parent-candidates`
-- **Description:** Returns every project that project `{id}` may be moved under: all projects except itself, its descendants (at any depth) and finished projects. The project's current parent is always included, even when finished, so a picker can still show the current value. Ordered by `path`.
+- **Description:** Projects `{id}` may be moved under: all except itself, its descendants and finished ones. The current parent is always included. Ordered by `path`.
 - **Success Response:**
   - **Code:** `200 OK`
   - **Content:**
@@ -187,7 +187,7 @@ See [README](README.md) for shared `task_type` / `recurrence` / `priority` seman
 
 - **Method:** `DELETE`
 - **Endpoint:** `/tasks/projects/{id}`
-- **Description:** Deletes a project. Note: deleting a project does **not** cascade to its tasks at the database level; use the application's finish flow to clean up descendants if needed.
+- **Description:** Deletes a project. Its tasks are not deleted with it; finish the project first to close its descendants.
 - **Success Response:**
   - **Code:** `204 No Content`
 - **Error Responses:**
@@ -200,9 +200,9 @@ See [README](README.md) for shared `task_type` / `recurrence` / `priority` seman
 
 - **Method:** `GET`
 - **Endpoint:** `/tasks/tree`
-- **Description:** Returns a nested JSON tree of active projects and tasks. Projects are included if `started_at IS NOT NULL` and `finished_at IS NULL`. Tasks are included if `finished_at IS NULL`. Orphan tasks (no `project_id`) appear at the root level. Ordered: first projects, then tasks with `started_at IS NOT NULL` then tasks with `started_at IS NULL`. Task `due_at` reflects the effective due date (minimum of own and dependencies').
+- **Description:** Nested tree of active projects (started, unfinished) and unfinished tasks, orphans at the root. Projects first, then started tasks, then unstarted. `due_at` is the effective due date.
 - **Query Parameters:**
-  - `min_priority` (optional): Integer from 1 to 5. When provided, only tasks with `priority <= min_priority` are kept in the tree; projects are always present regardless of their children.
+  - `min_priority` (optional): 1–5. Keeps tasks with `priority <= min_priority`; projects are always kept.
 - **Success Response:**
   - **Code:** `200 OK`
   - **Content:**
@@ -251,7 +251,7 @@ See [README](README.md) for shared `task_type` / `recurrence` / `priority` seman
 
 - **Method:** `GET`
 - **Endpoint:** `/tasks/projects/{id}/children`
-- **Description:** Returns sub-projects and tasks belonging to the given project. Results are ordered: sub-projects first, then started tasks, then unstarted tasks, then finished tasks. Ties within each group are broken by `due_at` ascending (nulls last), then name. Tasks include their `todos` array and `time_spent` (total seconds from time entries). Sub-projects include `time_spent` (recursive sum across all nested tasks).
+- **Description:** Sub-projects and tasks of the project: sub-projects, started tasks, unstarted tasks, finished tasks; ties by `due_at` (nulls last), then name. Tasks include `todos` and `time_spent`; sub-projects a recursive `time_spent`.
 - **Success Response:**
   - **Code:** `200 OK`
   - **Content:**

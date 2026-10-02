@@ -52,7 +52,6 @@ func (q *Queries) CountCalendarEvents(ctx context.Context, calendarID int32) (in
 }
 
 const createSyncRun = `-- name: CreateSyncRun :one
-
 INSERT INTO calendar_sync_runs (calendar_id, trigger, kind)
 VALUES ($1, $2, $3)
 RETURNING id, calendar_id, trigger, kind, started_at, finished_at, pages, upserted, deleted, error
@@ -64,9 +63,6 @@ type CreateSyncRunParams struct {
 	Kind       string `db:"kind" json:"kind"`
 }
 
-// ---------------------------------------------------------------------------
-// Sync runs
-// ---------------------------------------------------------------------------
 func (q *Queries) CreateSyncRun(ctx context.Context, arg CreateSyncRunParams) (CalendarSyncRun, error) {
 	row := q.db.QueryRow(ctx, createSyncRun, arg.CalendarID, arg.Trigger, arg.Kind)
 	var i CalendarSyncRun
@@ -118,7 +114,7 @@ const deleteCalendarEventsForCalendar = `-- name: DeleteCalendarEventsForCalenda
 DELETE FROM calendar_events WHERE calendar_id = $1
 `
 
-// Used on 410 Gone: the client store for that calendar is wiped and rebuilt from scratch.
+// Used on 410 Gone, before a full rebuild.
 func (q *Queries) DeleteCalendarEventsForCalendar(ctx context.Context, calendarID int32) (int64, error) {
 	result, err := q.db.Exec(ctx, deleteCalendarEventsForCalendar, calendarID)
 	if err != nil {
@@ -411,8 +407,7 @@ WHERE e.calendar_id = $1
   AND m.google_event_id = e.recurring_event_id
 `
 
-// An exception can arrive in an earlier page than its master, so the link is resolved after
-// each pass rather than per row.
+// Runs after each pass: an exception can arrive before its master.
 func (q *Queries) LinkCalendarEventMasters(ctx context.Context, calendarID int32) error {
 	_, err := q.db.Exec(ctx, linkCalendarEventMasters, calendarID)
 	return err
@@ -566,8 +561,7 @@ WHERE c.sync_enabled AND c.deleted_at IS NULL AND a.status = 'connected'
 ORDER BY c.id
 `
 
-// No channel at all, or one close enough to expiry that it must be replaced now. A channel
-// cannot be renewed in place: watch() again, then stop the old one.
+// No channel, or one close enough to expiry that it must be replaced.
 func (q *Queries) ListCalendarsNeedingWatch(ctx context.Context, renewBefore pgtype.Timestamptz) ([]Calendar, error) {
 	rows, err := q.db.Query(ctx, listCalendarsNeedingWatch, renewBefore)
 	if err != nil {
@@ -749,8 +743,7 @@ type ListEventsInRangeParams struct {
 	RangeStart  pgtype.Timestamptz `db:"range_start" json:"range_start"`
 }
 
-// One-off events (and single instances of nothing) that overlap the window. Masters and
-// their exceptions are fetched separately because a series has no end to compare against.
+// One-off events overlapping the window. Series are fetched separately.
 func (q *Queries) ListEventsInRange(ctx context.Context, arg ListEventsInRangeParams) ([]CalendarEvent, error) {
 	rows, err := q.db.Query(ctx, listEventsInRange, arg.CalendarIds, arg.RangeEnd, arg.RangeStart)
 	if err != nil {
@@ -860,9 +853,7 @@ type ListOrphanOverridesInRangeParams struct {
 	RangeStart  pgtype.Timestamptz `db:"range_start" json:"range_start"`
 }
 
-// Overrides whose master has not been synced (or no longer exists). They are rare — the link
-// is resolved after every pass — but without this they would be invisible rather than merely
-// detached, and an invisible event is worse than an odd-looking one.
+// Overrides whose master is missing, so they are shown rather than lost.
 func (q *Queries) ListOrphanOverridesInRange(ctx context.Context, arg ListOrphanOverridesInRangeParams) ([]CalendarEvent, error) {
 	rows, err := q.db.Query(ctx, listOrphanOverridesInRange, arg.CalendarIds, arg.RangeEnd, arg.RangeStart)
 	if err != nil {
@@ -1147,8 +1138,7 @@ DELETE FROM calendar_events
 WHERE status = 'cancelled' AND recurring_event_id IS NULL AND updated_at < $1
 `
 
-// A cancelled one-off is of no interest once it is old; a cancelled *instance* is a hole in
-// a live series and must outlive it, so it is never purged here.
+// Purges old cancelled one-offs. Cancelled instances are holes in a series and are kept.
 func (q *Queries) PurgeCancelledEvents(ctx context.Context, olderThan pgtype.Timestamptz) (int64, error) {
 	result, err := q.db.Exec(ctx, purgeCancelledEvents, olderThan)
 	if err != nil {
@@ -1352,7 +1342,6 @@ func (q *Queries) UpdateGoogleAccountStatus(ctx context.Context, arg UpdateGoogl
 }
 
 const upsertCalendar = `-- name: UpsertCalendar :one
-
 INSERT INTO calendars (account_id, google_calendar_id, summary, description, time_zone,
                        background_color, foreground_color, access_role, is_primary, sync_enabled)
 VALUES ($1, $2, $3, $4, $5,
@@ -1382,11 +1371,7 @@ type UpsertCalendarParams struct {
 	SyncEnabled      bool   `db:"sync_enabled" json:"sync_enabled"`
 }
 
-// ---------------------------------------------------------------------------
-// Calendars
-// ---------------------------------------------------------------------------
-// Google's metadata (name, colors, role) is refreshed on every calendarList pass; the local
-// preferences (sync_enabled, visible, color_override) deliberately are not.
+// Refreshes Google's metadata but never the local preferences.
 func (q *Queries) UpsertCalendar(ctx context.Context, arg UpsertCalendarParams) (Calendar, error) {
 	row := q.db.QueryRow(ctx, upsertCalendar,
 		arg.AccountID,
@@ -1432,7 +1417,6 @@ func (q *Queries) UpsertCalendar(ctx context.Context, arg UpsertCalendarParams) 
 }
 
 const upsertCalendarEvent = `-- name: UpsertCalendarEvent :one
-
 INSERT INTO calendar_events (
     calendar_id, google_event_id, ical_uid, etag, sequence, status, event_type,
     summary, description, location, all_day, starts_at, ends_at, start_tz, end_tz,
@@ -1509,9 +1493,6 @@ type UpsertCalendarEventParams struct {
 	GoogleUpdatedAt  pgtype.Timestamptz `db:"google_updated_at" json:"google_updated_at"`
 }
 
-// ---------------------------------------------------------------------------
-// Events
-// ---------------------------------------------------------------------------
 func (q *Queries) UpsertCalendarEvent(ctx context.Context, arg UpsertCalendarEventParams) (CalendarEvent, error) {
 	row := q.db.QueryRow(ctx, upsertCalendarEvent,
 		arg.CalendarID,
@@ -1584,7 +1565,6 @@ func (q *Queries) UpsertCalendarEvent(ctx context.Context, arg UpsertCalendarEve
 }
 
 const upsertGoogleAccount = `-- name: UpsertGoogleAccount :one
-
 INSERT INTO google_accounts (email, refresh_token, access_token, access_token_expires_at, scopes, status)
 VALUES ($1, $2, $3, $4, $5, 'connected')
 ON CONFLICT (email) DO UPDATE
@@ -1605,11 +1585,7 @@ type UpsertGoogleAccountParams struct {
 	Scopes               string             `db:"scopes" json:"scopes"`
 }
 
-// ---------------------------------------------------------------------------
-// Accounts
-// ---------------------------------------------------------------------------
-// Re-connecting an already connected account replaces its tokens instead of failing: the
-// user re-runs the consent flow precisely when the old grant stopped working.
+// Re-connecting an account replaces its tokens.
 func (q *Queries) UpsertGoogleAccount(ctx context.Context, arg UpsertGoogleAccountParams) (GoogleAccount, error) {
 	row := q.db.QueryRow(ctx, upsertGoogleAccount,
 		arg.Email,

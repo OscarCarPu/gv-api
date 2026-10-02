@@ -1,38 +1,28 @@
 # Lights (Domotics)
 
-Control for the house's Bluetooth bulbs. **Semiprivate auth** — either the full or the
-semiprivate token gets in, because this is house control rather than personal data.
+Control for the house's Bluetooth bulbs. **Semiprivate auth** (full or semiprivate token).
 
-## Where the Bluetooth happens
+## How it connects
 
-Here. The API talks to the bulbs itself, over BlueZ on the host it runs on:
+The API drives the bulbs through BlueZ on its own host:
 
 ```
 client → gv-api → BlueZ → bulb
 ```
 
-The container needs one thing: the host's D-Bus socket, bind-mounted (see
-`docker-compose.yaml`). No host networking, no extra capabilities, no root — BlueZ's default
-policy lets any local uid send to `org.bluez`. Without the mount the API still runs and every
-bulb reads `online: false`.
-
-This replaced a Python daemon on a second machine, from back when the server had no radio. The
-hop cost a process to keep alive, a shared secret, and an outage every time that laptop slept.
+The container only needs the host's D-Bus socket bind-mounted (see `docker-compose.yaml`); no host networking or extra capabilities. Without it the API still runs and every bulb reads `online: false`.
 
 ## Which bulbs exist
 
-A table, managed from the Lights tab: scan for what is in range, pick one, give it a name. The
-id is a slug of that name (`bedroom`, `bedroom-2`), assigned once and kept through renames, so
-a client holding state under it never has the ground move.
+A table, managed from the Lights tab (scan, pick, name). The id is a slug of the name (`bedroom`, `bedroom-2`), assigned once and kept through renames.
 
-BLE addresses stay server-side. The one exception is `/discover`, where the address is the
-only handle a person has for telling two nameless lamps apart.
+BLE addresses stay server-side, except in `/discover`, where they are the only way to tell nameless lamps apart.
 
 ## Endpoints
 
 ### `GET /domotics/lights`
 
-Configured bulbs and their capabilities. Touches no hardware, so it is always fast.
+Registered bulbs and their capabilities, without touching hardware or exposing addresses.
 
 ```json
 [
@@ -78,8 +68,7 @@ Every bulb's current state. `?force=1` skips the read cache.
 }
 ```
 
-`brightness` is 0-100, normalised from whatever scale the bulb uses. Field names are camelCase
-rather than this API's usual snake_case, which is what three clients already model.
+`brightness` is 0-100. Fields are camelCase, unlike the rest of the API.
 
 ### `GET /domotics/lights/{id}`
 
@@ -99,52 +88,27 @@ Apply one command; the response is the resulting state.
 
 `400` for a malformed command, `404` for an unknown bulb.
 
-**A write is verified and corrected.** These bulbs do not always land where they are told —
-a value arrives late, or the lamp settles on a neighbouring step and stays there. Rather than
-leave each client to notice and nudge it, the API closes the loop: it writes, waits
-`LIGHTS_SETTLE_DELAY_MS` for the lamp to transition, reads back, and re-applies if the value
-drifted, up to `LIGHTS_SETTLE_ATTEMPTS` times. The state you get back is therefore what the
-bulb actually holds, not what was requested.
+**Writes are verified.** These bulbs sometimes land on a neighbouring step, so the API waits `LIGHTS_SETTLE_DELAY_MS`, reads back and re-applies up to `LIGHTS_SETTLE_ATTEMPTS` times. The response is what the bulb actually holds.
 
-Only brightness and colour temperature are settled — power is a boolean with no "near enough"
-to chase, so it costs no extra read. A bulb that goes offline mid-correction is reported as
-offline rather than as the value we hoped for.
+Only brightness and colour temperature are settled. A bulb lost mid-correction is reported offline.
 
-**Commands are independent.** Setting brightness or colour does *not* switch a bulb on: on the
-real hardware those are separate frames, so dimming a bulb that is off only changes how it will
-look when switched on. Do not infer power from them — a client that did reported "on" over a
-dark room, and turned its "All on" button into a no-op.
+**Commands are independent.** Brightness and colour do not switch a bulb on; they are separate frames on the hardware. Clients must not infer power from them.
 
-**Crazy mode.** `{"type":"crazy","on":true}` switches the bulb on and sweeps it on its own:
-brightness from 100 down to 1 and back every 5 s, colour temperature from the bulb's coolest
-to its warmest and back every 4 s. It runs in the API, so it outlives the tab that started it,
-and `state.crazy` says whether it is running. Any other command for that bulb ends it, as does
-`{"type":"crazy","on":false}`, editing or deleting the bulb, or five frames in a row that the
-bulb does not take. While it runs `GET /state` answers with what the sweep last wrote instead
-of querying the bulb, because a query would stall the sweep. Frames go out about every 600 ms
-(roughly 3 writes a second): a faster sweep was followed by a bulb that returned ATT errors
-and stopped advertising until it was power-cycled.
+**Crazy mode.** `{"type":"crazy","on":true}` switches the bulb on and sweeps brightness 100 → 1 → 100 every 5 s and colour temperature across its range every 4 s. It runs server-side (`state.crazy`) and ends on any other command for the bulb, `{"type":"crazy","on":false}`, editing or deleting the bulb, or five failed frames in a row. While it runs, `GET /state` returns the last frame instead of querying the bulb. Frames go out every 600 ms; faster sweeps crashed a bulb until power-cycled.
 
 ## Errors are per-bulb
 
-`/state` covers several bulbs, so a single unreachable one must not fail the request. Drivers
-never return an error for an unreachable bulb; they return `online: false` with `error` set,
-inside a `200`. A missing adapter therefore degrades to "everything offline", not a 500.
+An unreachable bulb is `online: false` with `error` set, inside a `200`, so one dead bulb (or no adapter) never fails the request.
 
-The message is deliberately vague about the cause ("bulb not found — is it powered and in
-range?"). BlueZ's own errors embed the D-Bus object path, which contains the bulb's MAC; that
-is meaningless to a person and needless exposure of the house's hardware, so it stays in the
-log.
+Messages are generic ("bulb not found — is it powered and in range?"): BlueZ errors embed the bulb's MAC, so they stay in the log.
 
-`/discover` is the exception: it fails with `503` rather than an empty list, because "no bulbs
-here" and "this host cannot look" are not the same answer.
+`/discover` is the exception: it answers `503` rather than an empty list when the host cannot scan.
 
 ## Adding and removing bulbs
 
 ### `GET /domotics/lights/discover?seconds=8`
 
-Scans for bulbs in range and holds the request open for the length of the scan — the answer
-does not exist until the radio has been listening for a while. Capped at 30s.
+Scans for bulbs in range, holding the request open for the scan (capped at 30s).
 
 ```json
 {
@@ -154,17 +118,13 @@ does not exist until the radio has been listening for a while. Capped at 30s.
 }
 ```
 
-Strongest signal first: the bulb someone is standing next to is the one they mean. `known` is
-true for an address already registered, so the UI can show it as added rather than offering it
-twice. `503` when this host has no Bluetooth.
+Strongest signal first. `known` marks addresses already registered. `503` when the host has no Bluetooth.
 
-A bulb the vendor app is connected to on a phone will **not** appear — these lamps take one
-central at a time and stop advertising while another holds them.
+A bulb held by the vendor phone app will not appear: these lamps take one connection at a time and stop advertising.
 
 ### `GET /domotics/lights/protocols`
 
-The bulb families this API can drive, with what each model can do. The add form uses it to
-offer a model and prefill capabilities, so nobody has to know a lamp's kelvin range.
+Supported bulb families and their capabilities, used by the add form to prefill them.
 
 ```json
 [
@@ -181,21 +141,17 @@ offer a model and prefill capabilities, so nobody has to know a lamp's kelvin ra
 
 ### `POST /domotics/lights`
 
-Adds a bulb. `name`, `address` and `protocol` are required; the capability fields are optional
-overrides of what the protocol already says the model can do.
+Adds a bulb. `name`, `address` and `protocol` are required; capability fields override the protocol's defaults.
 
 ```json
 { "name": "Bedroom", "address": "08:6B:D7:F6:B0:D0", "protocol": "lexman" }
 ```
 
-`201` with the new bulb. `400` for a missing field or an unknown protocol, `409` when that
-address is already registered — two cards for one lamp would fight over a radio link that
-takes one conversation at a time.
+`201` with the new bulb. `400` for a missing field or unknown protocol, `409` if the address is already registered.
 
 ### `PATCH /domotics/lights/{id}`
 
-Edits name, model, protocol or capabilities. Omitted fields keep their value. The address is
-not editable: a different address is a different lamp.
+Edits name, model, protocol or capabilities; omitted fields keep their value. The address cannot change.
 
 ### `DELETE /domotics/lights/{id}`
 
@@ -214,27 +170,12 @@ LIGHTS_SETTLE_ATTEMPTS=2           # re-apply a drifting write this many times (
 LIGHTS_SETTLE_DELAY_MS=400         # let the lamp transition before checking
 ```
 
-The mock driver answers `/discover` too, with invented bulbs, so the whole add flow is
-developable on a machine with no radio.
+The mock driver also answers `/discover` with invented bulbs, so the add flow works without a radio.
 
-**If every bulb reads offline on a host that does have Bluetooth**, check the container's uid
-before anything else. The reference `dbus-daemon` resolves the connecting uid to a host user
-and resets the connection when it cannot; this image runs as uid 100, which typically exists
-on no host. The symptom is `cannot reach the system bus` in the log with the socket plainly
-mounted, and the fix is a `user:` line naming a uid the host knows. Running the API outside
-Docker does not hit this, because your own uid is real.
+**Every bulb offline on a host with Bluetooth?** Check the container's uid: `dbus-daemon` resets connections from uids unknown on the host (the image's default 100 usually is). The log says `cannot reach the system bus`; the fix is a `user:` line with a real host uid.
 
-**Idle disconnect is worth understanding.** These lamps accept one central, so holding a link
-forever locks out their own remote and the vendor app. A bulb nobody has touched for
-`LIGHTS_IDLE_DISCONNECT_MS` is released.
+**Idle disconnect.** These lamps accept one connection, so a bulb untouched for `LIGHTS_IDLE_DISCONNECT_MS` is released for its remote and app.
 
-**Status is polled in the background.** Every `LIGHTS_POLL_MS` the API reads each bulb itself,
-so `GET /state` answers from memory (the cache is trusted for two poll intervals) instead of
-waiting on a cold BLE read, which takes several seconds. `?force=1` still goes to the bulb. A
-background check does not count as use for the idle sweep: it connects, reads, and the bulb is
-released right after, so the poll does not lock out the wall remote. Commands do count.
+**Background polling.** Every `LIGHTS_POLL_MS` each bulb is read, so `GET /state` answers from memory (trusted for two intervals; `?force=1` bypasses it). Polls do not count as use, so the bulb is released right after.
 
-Adding a bulb family means implementing `protocol` in `internal/lights/protocol.go` — the
-frames for on/off, brightness and colour, and optionally a readback. Use any BLE scanner
-(`bluetoothctl scan le`, then `gatt list-attributes`) to find the write characteristic: it is
-almost always the single write handle on a vendor service.
+New bulb families implement `protocol` in `internal/lights/protocol.go`. Find the write characteristic with `bluetoothctl scan le` and `gatt list-attributes`.

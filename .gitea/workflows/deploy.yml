@@ -20,15 +20,13 @@ jobs:
       - name: Backup database
         run: |
           cd /home/ocp/docker/gv/gv-api
-          # Best-effort: db-backup won't exist yet on the very first deploy after it's
-          # introduced, and a deploy shouldn't fail just because the safety net isn't up.
+          # Best-effort: a failed backup must not block the deploy.
           docker compose exec -T db-backup /backup.sh || echo "::warning::pre-deploy backup skipped or failed"
 
       - name: Deploy
         run: |
           cd /home/ocp/docker/gv/gv-api
-          # --wait-timeout bounds the restart-backoff loop; without it a
-          # crash-looping container just hangs the job instead of failing it.
+          # --wait-timeout makes a crash-looping container fail the job instead of hanging it.
           if ! docker compose up --build --wait --wait-timeout 90 -d; then
             echo "::error::gv_api did not become healthy - deploy failed"
             docker compose ps

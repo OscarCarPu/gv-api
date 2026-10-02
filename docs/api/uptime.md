@@ -1,52 +1,34 @@
 # Uptime (Domotics)
 
-How much of the time the home lab and its ESP32 watchdog have been reachable. **Semiprivate
-auth** — either token gets in, same as lights: house state, not personal data.
+How much of the time the home lab and its ESP32 watchdog have been reachable. **Semiprivate auth**.
 
 ## Where the numbers come from
 
-Not from here. Each device publishes an up/down event to MQTT
-(`events/uptime/lab`, `events/uptime/watchdog`), [central-pipeline][cp] consumes them, and
-dbt models them into two marts in **its own PostgreSQL instance**:
+Each device publishes up/down events to MQTT (`events/uptime/lab`, `events/uptime/watchdog`); [central-pipeline][cp] models them with dbt into two marts in its own PostgreSQL:
 
 ```
 device → MQTT → central-pipeline (raw → staging → marts) → gv-api → client
 ```
 
-gv-api only reads them, over a second connection with its own DSN
-(`PIPELINE_DATABASE_URL`), read-only on the connection itself. That schema belongs to dbt,
-which drops and recreates it on every run, so nothing here is migrated from gv-api and no
-gv-side view or foreign key is built on top of it. See `internal/pipeline` — the connection
-is shared by every domain that reads a mart, not owned by this one.
+gv-api reads them over a separate read-only connection (`PIPELINE_DATABASE_URL`, `internal/pipeline`). dbt owns that schema and recreates it every run, so nothing is migrated or built on top of it.
 
-With no DSN configured both endpoints answer **503**. That is a deployment state, not a
-fault: the rest of the API is unaffected.
+With no DSN configured both endpoints answer **503**; nothing else is affected.
 
 [cp]: https://github.com/OscarCarPu/central-pipeline
 
 ## What the numbers are not
 
-- **Not live.** `computed_at` is when dbt last ran, not now, and dbt is a batch job. Anything
-  older than `PIPELINE_STALE_AFTER_MS` (2h by default) comes back with `stale: true`. Show
-  the timestamp; never present these percentages as the present.
-- **Not a heartbeat.** Events are edge-triggered, so `since` being days old means "nothing
-  has changed", not "nothing is alive". The open window counts as up right up to
-  `computed_at`, which means a device that dies without publishing `down` keeps reading as up
-  until its peer reports it. If both die, uptime stays high and nothing here flags it.
-- **Not anchored to today - 1 year.** Every range is floored at the device's first event, so
-  a young device reports its real history instead of ~0%. Read `range_start` rather than
-  recomputing it.
+- **Not live.** `computed_at` is when dbt last ran. Older than `PIPELINE_STALE_AFTER_MS` (2h) means `stale: true`.
+- **Not a heartbeat.** Events are edge-triggered: an old `since` means nothing changed. The open window counts as up until `computed_at`, so a device that dies without publishing `down` reads as up until its peer reports it.
+- **Floored at the first event.** A young device reports its real history; read `range_start`.
 
 ## Endpoints
 
 ### `GET /domotics/uptime`
 
-The dashboard read: where both devices stand now, plus the four percentages the pipeline
-precomputed for each. One indexed read per table, no date maths.
+Both devices' current state plus the four precomputed percentages for each.
 
-Both devices always appear, in a fixed order (`lab`, `watchdog`), and their ranges are
-ordered shortest lookback first. A device the pipeline has never heard from comes back with
-`state: "unknown"`, `since: null` and no ranges rather than being dropped.
+Both devices always appear (`lab`, `watchdog`), ranges shortest first. A device never heard from has `state: "unknown"`, `since: null` and no ranges.
 
 ```json
 {
@@ -88,9 +70,7 @@ Only those four lookbacks are served. Anything else goes to `/windows`.
 
 ### `GET /domotics/uptime/windows`
 
-State changes over an arbitrary range, with the percentage computed for exactly that range
-instead of read off a precomputed row. This is the endpoint for timelines, incident lists and
-"when did it last go down".
+State changes over an arbitrary range, with the percentage computed for exactly that range. For timelines and incident lists.
 
 | Query | Default | Meaning |
 |---|---|---|
@@ -126,12 +106,8 @@ instead of read off a precomputed row. This is the endpoint for timelines, incid
 }
 ```
 
-- `uptime` divides by `up_seconds + down_seconds`, **not** by the length of the range: before
-  a device's first event there is nothing to call up or down, and charging that gap as
-  downtime would report a young device as mostly dead. `null` when no window overlaps at all.
-  `covered_from`/`covered_to` bound the part of the range the windows actually span.
-- `windows` are newest first, so a `truncated: true` list keeps the recent history and drops
-  the distant past. `end_time: null` is the open window — the state the device is in now.
+- `uptime` divides by `up_seconds + down_seconds`, not the range length, so time before the first event is not downtime. `null` when no window overlaps; `covered_from`/`covered_to` bound what the windows span.
+- `windows` are newest first (`truncated: true` drops the oldest). `end_time: null` is the open window.
 - `seconds` is the part of that window inside the queried range, with an open window counted
   up to `to`.
 - `outages` counts the `down` windows overlapping the range.
@@ -144,13 +120,11 @@ instead of read off a precomputed row. This is the endpoint for timelines, incid
 | `401` | No token, or a token of the wrong tier. |
 | `503` | `PIPELINE_DATABASE_URL` is not configured. |
 
-A read that lands in the middle of a dbt rebuild (the relation momentarily does not exist) is
-retried twice before it becomes a 500 — see `internal/pipeline`.
+Reads hitting a dbt rebuild are retried twice before becoming a 500.
 
 ## Granting access
 
-The role gv-api connects with needs `USAGE` on `marts` and `SELECT` on its tables, granted so
-that it **survives a dbt run**:
+The role gv-api connects with needs `USAGE` on `marts` and `SELECT` on its tables, granted so it **survives a dbt run**:
 
 ```sql
 GRANT USAGE ON SCHEMA marts TO gv_api;
@@ -160,35 +134,18 @@ GRANT SELECT ON ALL TABLES IN SCHEMA marts TO gv_api;
 ALTER DEFAULT PRIVILEGES IN SCHEMA marts GRANT SELECT ON TABLES TO gv_api;
 ```
 
-Both halves are needed. A bare `GRANT SELECT ON marts.uptime_windows` dies with the table the
-next time dbt drops and recreates it; `ALTER DEFAULT PRIVILEGES` alone covers only tables
-created after it, so nothing is readable until the next run.
+Both are needed: a per-table grant dies when dbt recreates the table, and `ALTER DEFAULT PRIVILEGES` only covers future tables.
 
-**Run that last statement as the role dbt connects with.** Default privileges attach to the
-granting role, not to the schema: run as a different superuser it silently applies to *that*
-role's future tables and does nothing for dbt's. Use `FOR ROLE <dbt role>` if you are not that
-role. The grant then looks correct and starts failing one dbt run later.
+**Run the last statement as dbt's role** (or use `FOR ROLE <dbt role>`): default privileges attach to the granting role, not the schema.
 
-Every way of getting this wrong fails identically: the rebuild retry above absorbs the first
-attempts, so a permanently broken grant reads as an intermittent one.
+A broken grant looks intermittent, because the rebuild retry absorbs the first failures.
 
 ## Events can be lost, which flatters the numbers
 
-The producer publishes at QoS 0, non-retained. Delivery is `min(publish QoS, subscribe QoS)`,
-so anything published while the pipeline's consumer is down is **lost, not delayed**. The loss
-is invisible from here and biased one way: a missing `down` means the outage never becomes a
-window, so uptime reads higher than it was, and the windows stay contiguous either way — there
-is no gap for gv-api to detect.
+The producer publishes at QoS 0, non-retained, so events published while the consumer is down are **lost**. A lost `down` means the outage never becomes a window and uptime reads high; there is no gap to detect.
 
-Two things follow. Nothing here interpolates or reconciles: this API reports what the marts
-say, and the fix belongs in the producer. And a freshly deployed consumer learns nothing about
-current state until the next transition — on a stable device that can be days, so
-`state: "unknown"` with no ranges is the expected first answer after a deploy rather than a
-wiring fault.
+This API reports what the marts say; the fix belongs in the producer. After a consumer deploy, `state: "unknown"` is expected until the next transition.
 
 ## No liveness signal
 
-There is deliberately none. `watchdog/ping` exists in the pipeline's topic contract but nothing
-publishes to it yet, so nothing here can distinguish "up and quiet" from "died without saying
-so". `stale` and `computed_at` are the honest ceiling; when a real heartbeat lands it will
-arrive as an additive column, not a change to these responses.
+`watchdog/ping` exists in the topic contract but nothing publishes to it, so "up and quiet" and "died silently" look the same. `stale` and `computed_at` are the limit for now.

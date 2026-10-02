@@ -6,7 +6,7 @@ See [README](README.md) for shared `task_type` / `recurrence` / `priority` seman
 
 - **Method:** `GET`
 - **Endpoint:** `/tasks/tasks/list-fast`
-- **Description:** Returns all unfinished tasks (where `finished_at` is null) with `id`, `name`, `project_id`, and `project_name`. Tasks are ordered by project tree (DFS pre-order): for a tree A → B → C, A → D, E the order is A, B, C, D, E. Tasks without project appear at the end. Within each project group, tasks are sorted by name.
+- **Description:** Unfinished tasks (`id`, `name`, `project_id`, `project_name`) in project-tree pre-order (A → B → C, A → D, E gives A, B, C, D, E), by name within a project, orphans last.
 - **Success Response:**
   - **Code:** `200 OK`
   - **Content:**
@@ -62,7 +62,7 @@ See [README](README.md) for shared `task_type` / `recurrence` / `priority` seman
   - `task_type` (optional): One of `"standard"` (default), `"continuous"`, or `"recurring"`.
   - `recurrence` (required when `task_type` is `"recurring"`, rejected otherwise): Number of days between recurrences (positive integer).
   - `priority` (optional): Integer from 1 (highest) to 5 (lowest). Defaults to 3.
-  - `estimate_hours` (optional): Decimal hours string, > 0. Only used for urgency when `task_type` is `"standard"` — see [business_logic/tasks.md](../../business_logic/tasks.md).
+  - `estimate_hours` (optional): decimal hours string, > 0. Drives urgency for `standard` tasks.
 - **Success Response:**
   - **Code:** `201 Created`
   - **Content:**
@@ -158,10 +158,10 @@ See [README](README.md) for shared `task_type` / `recurrence` / `priority` seman
   - `project_id` (optional): New parent project ID.
   - `started_at` (optional): Start timestamp.
   - `finished_at` (optional): Finish timestamp.
-  - `depends_on` (optional): List of task IDs this task depends on. Replaces all existing dependencies. Omitting the field leaves dependencies unchanged. Pass `[]` to clear all dependencies.
-  - `blocks` (optional): List of task IDs that depend on this task (reverse edges). Replaces all existing reverse dependencies. Omitting the field leaves them unchanged. Pass `[]` to clear all reverse dependencies.
-  - `task_type` (optional): One of `"standard"`, `"continuous"`, or `"recurring"`. When changing to `"recurring"`, `recurrence` must be provided. When changing to a non-recurring type, `recurrence` is automatically cleared.
-  - `recurrence` (optional): Number of days between recurrences (positive integer). Required when `task_type` is set to `"recurring"`. Rejected when `task_type` is set to a non-recurring type. Can be sent alone to change the interval of an already-recurring task.
+  - `depends_on` (optional): task IDs this task depends on. Replaces all; omitted leaves them; `[]` clears.
+  - `blocks` (optional): task IDs that depend on this task. Replaces all; omitted leaves them; `[]` clears.
+  - `task_type` (optional): `standard`, `continuous` or `recurring`. Switching to `recurring` needs `recurrence`; switching away clears it.
+  - `recurrence` (optional): days between occurrences. Required for `recurring`, rejected otherwise; can be sent alone to change the interval.
   - `priority` (optional): Integer from 1 (highest) to 5 (lowest).
   - `estimate_hours` (optional): Decimal hours string, > 0. Pass `null` to clear it. Omitting the field leaves it unchanged.
 - **Success Response:**
@@ -210,9 +210,9 @@ See [README](README.md) for shared `task_type` / `recurrence` / `priority` seman
 
 - **Method:** `GET`
 - **Endpoint:** `/tasks/tasks/by-due-date`
-- **Description:** Returns unfinished tasks that have a due date (own, project, or inherited from dependencies), ordered by effective `due_at` first, then by project `due_at`, then by name. A task's `due_at` in the response reflects its effective due date (minimum of own and dependencies'). Includes time spent from completed time entries, plus urgency fields — see [business_logic/tasks.md](../../business_logic/tasks.md#estimate-and-urgency-due-soon).
+- **Description:** Unfinished tasks with a due date (own, project's, or inherited from tasks they block), ordered by effective `due_at`, then project `due_at`, then name. `due_at` is the effective due date. Includes `time_spent` and urgency fields; see [business_logic/tasks.md](../../business_logic/tasks.md).
 - **Query Parameters:**
-  - `min_priority` (optional): Integer from 1 to 5. When provided, only tasks with `priority <= min_priority` are returned (1 = highest importance).
+  - `min_priority` (optional): 1–5. Only tasks with `effective_priority <= min_priority` are returned (1 = highest). Urgency is computed before filtering.
 - **Success Response:**
   - **Code:** `200 OK`
   - **Content:**
@@ -225,11 +225,14 @@ See [README](README.md) for shared `task_type` / `recurrence` / `priority` seman
         "due_at": "2025-06-01",
         "started_at": "2025-02-15T08:00:00Z",
         "task_type": "standard",
-        "priority": 2,
+        "priority": 3,
+        "effective_priority": 2,
         "time_spent": 5400,
         "estimate_hours": "6",
         "remaining_hours": "4.5",
         "start_by": "2025-05-30",
+        "finish_by": "2025-06-01",
+        "work_order": 4,
         "urgent": false,
         "project_id": 1,
         "project_name": "My Project",
@@ -240,8 +243,10 @@ See [README](README.md) for shared `task_type` / `recurrence` / `priority` seman
       }
     ]
     ```
-  - `estimate_hours`, `remaining_hours`, `start_by`: all `null` when the task has no estimate, or is `continuous` (`standard` and `recurring` tasks compute urgency; for `recurring`, `remaining_hours` ignores the task's lifetime `time_spent` — see [business_logic/tasks.md](../../business_logic/tasks.md)).
-  - `urgent`: `true` when there is not enough free capacity left between today and the effective due date to cover `remaining_hours` — the task should already have been started.
+  - `effective_priority`: `priority` raised to the highest priority of anything the task transitively blocks.
+  - `remaining_hours`, `start_by`: `null` unless the task is `standard` with an estimate.
+  - `finish_by`: the due date, or earlier when a task it blocks must start first. `work_order`: position in the order work should be done (1 = first).
+  - `urgent`: `start_by` is today or earlier.
 - **Error Responses:**
   - **Code:** `500 Internal Server Error`
     - **Content:** `Failed to get tasks by due date`

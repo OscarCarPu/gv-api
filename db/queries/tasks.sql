@@ -56,16 +56,14 @@ WHERE id = @id
 RETURNING id, parent_id, name, description, due_at, started_at, finished_at, priority;
 
 -- name: LockProjectTree :exec
--- Serialises parent moves so two concurrent updates can't each pass the cycle check and
--- together create a cycle.
+-- Serialises parent moves so concurrent ones cannot jointly create a cycle.
 SELECT pg_advisory_xact_lock(hashtext('projects_tree'));
 
 -- name: ProjectExists :one
 SELECT EXISTS (SELECT 1 FROM projects WHERE id = @id::int) AS exists;
 
 -- name: ProjectSubtreeContains :one
--- True when @candidate_id is @root_id itself or any descendant of it, at any depth.
--- UNION (not UNION ALL) keeps the walk terminating even on already-corrupt data.
+-- True when @candidate_id is @root_id or any descendant. UNION terminates even on cycles.
 WITH RECURSIVE subtree AS (
     SELECT id FROM projects WHERE id = @root_id::int
     UNION
@@ -74,9 +72,8 @@ WITH RECURSIVE subtree AS (
 SELECT EXISTS (SELECT 1 FROM subtree WHERE id = @candidate_id::int) AS contains;
 
 -- name: ListProjectParentCandidates :many
--- Every valid new parent for project @id: not the project itself, not any of its descendants
--- (any depth) and not finished — except its current parent, which stays listed so a select can
--- still show the current value. path is the ancestor chain, used for labels and ordering.
+-- Valid new parents for project @id: not itself, a descendant or finished (the current
+-- parent is always listed). path is the ancestor chain.
 WITH RECURSIVE
 subtree AS (
     SELECT id FROM projects WHERE id = @id::int
@@ -213,8 +210,7 @@ WHERE id = @id
 RETURNING id, task_id, name, is_done;
 
 -- name: GetTasksByDueDate :many
--- Returns unfinished tasks that have a due_at (own or inherited from a blocked task) or whose project has one.
--- effective_due_at propagates backward via the "blocks" relation.
+-- Unfinished tasks with a due_at (own, inherited from a blocked task, or the project's).
 SELECT
     t.id, t.name, t.description,
     e.effective_due_at AS due_at,
@@ -298,9 +294,7 @@ WHERE finished_at IS NOT NULL
   AND finished_at >= @week_start::timestamptz;
 
 -- name: GetTimeEntryHistory :many
--- Each entry is split at period boundaries (in @timezone) and the resulting
--- segments are summed per period. Empty periods in [start_at, end_at] are
--- zero-filled via the outer LEFT JOIN against generate_series.
+-- Entries are split at period boundaries in @timezone and summed; empty periods are zero.
 WITH all_periods AS (
     SELECT period_start::date AS date
     FROM generate_series(@start_at::date, @end_at::date, ('1 ' || @frequency::text)::interval) AS period_start
@@ -366,15 +360,11 @@ WHERE array_length(@depends_on::int[], 1) IS NOT NULL
 ON CONFLICT (task_id, depends_on) DO NOTHING;
 
 -- name: TaskDependencyWouldCycle :one
--- Wraps the task_dependency_would_cycle SQL function (see migration 011).
--- Returns true if replacing @task_id's outgoing dep edges with @new_deps
--- would create a cycle.
+-- True if replacing @task_id's dependencies with @new_deps would create a cycle.
 SELECT task_dependency_would_cycle(@task_id::int, @new_deps::int[]) AS has_cycle;
 
 -- name: TaskBlocksWouldCycle :one
--- Returns true if any of the @blocks tasks depending on @task_id would
--- create a cycle. Reuses task_dependency_would_cycle by checking each
--- (block -> task_id) edge in a single query.
+-- True if any @blocks task depending on @task_id would create a cycle.
 SELECT EXISTS(
     SELECT 1 FROM unnest(@blocks::int[]) AS b(id)
     WHERE task_dependency_would_cycle(b.id, ARRAY[@task_id::int]::int[])

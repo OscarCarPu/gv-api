@@ -2,262 +2,161 @@
 
 ### Description
 
-Domain for the user's calendars, mirrored from Google and editable from here. It exists to
-replace the Google Calendar UI without giving up Google: the phone, the invitations other
-people send, and everything else that already points at those calendars keeps working, while
-the day-to-day view and editing happen in gv.
-
-Four Google accounts are connected, each with its own OAuth grant. Every event carries the
-account it came from, which is what makes one view of four accounts legible.
+The user's Google calendars, mirrored locally and editable from gv. Google stays the backend, so
+the phone, invitations and everything else that uses those calendars keep working. Four accounts
+are connected, each with its own OAuth grant; every event carries its account.
 
 ### States / Lifecycle
 
-**Account**: `connected` → `needs_reauth` when Google answers `invalid_grant` (the grant is
-gone; only a person can restore it, by connecting the account again) → `connected` when they
-do. Disconnecting revokes the grant at Google and deletes the account's data.
+**Account**: `connected` → `needs_reauth` on `invalid_grant` → `connected` once reconnected.
+Disconnecting revokes the grant and deletes the account's data.
 
-**Calendar**: discovered from the account's calendar list, then either synced or not
-(`sync_enabled`). Each calendar independently holds a sync cursor and a push channel. A
-calendar that disappears from Google is marked deleted, not removed.
+**Calendar**: discovered from the account's calendar list, synced or not (`sync_enabled`), each
+with its own sync cursor and push channel. A calendar that disappears from Google is marked
+deleted, not removed.
 
-**Event**: has no lifecycle of its own here — it is whatever Google says it is. A recurring
-series is a master plus one row per modified or cancelled occurrence.
+**Event**: whatever Google says. A recurring series is a master plus one row per modified or
+cancelled occurrence.
 
 ### Business rules
 
 **Google is the source of truth**
-- Reads are served from the mirror. Writes go to Google first and are stored only once it
-  accepts them, so a row in `calendar_events` always corresponds to an event over there.
-- There is no outbox. If Google refuses or is unreachable, the request fails (`502`) and
-  nothing is stored: the two copies never disagree, and there is no queue to be stuck.
-- Every write sends `If-Match` with the stored etag. A `412` becomes a `409` for the client —
-  the event changed elsewhere, refetch and retry — rather than an overwrite of someone else's
-  change.
+- Reads come from the mirror. Writes go to Google first and are stored only once accepted.
+- No outbox: if Google refuses or is unreachable the request fails (`502`) and nothing is stored.
+- Writes send `If-Match` with the stored etag; a `412` becomes a `409` (refetch and retry).
 
 **Sync**
-- One `syncToken` per calendar, persisted. A full sync earns one, incrementals spend it.
-- `410 Gone` (a spent token, or an ACL change) wipes that calendar's local events and rebuilds
-  them. This is Google's documented recovery and holiday calendars go through it regularly.
-- Listing parameters are fixed: `singleEvents=false`, `showDeleted=true`, `maxResults=2500`,
-  and **no time bounds at all**. Google forbids `timeMin`/`timeMax`/`updatedMin`/`q`/`orderBy`
-  next to a sync token and treats any other difference from the initial full sync as undefined,
-  so using them once would break every incremental sync that followed. The cost is that the
-  initial import cannot be bounded by date; the mitigation is that huge calendars start
-  disabled.
-- A cancelled one-off is deleted locally. A cancelled *override* is kept: it is the hole in a
-  live series, and dropping it makes the occurrence reappear on the next expansion.
-- Overrides can arrive in an earlier page than their master, so the master link is resolved
-  after each pass rather than per row.
-- `invalid_grant` parks the account instead of retrying: nothing but a person can fix it.
-- Google sends no notification when a calendar is created, shared or unshared, so each pass
-  re-reads every account's calendar list.
+- One persisted `syncToken` per calendar: a full sync earns one, incrementals spend it.
+- `410 Gone` wipes that calendar's local events and rebuilds them (common for holiday calendars).
+- Listing uses `singleEvents=false`, `showDeleted=true`, `maxResults=2500` and no time bounds:
+  Google forbids them next to a sync token. The initial import is therefore unbounded, so huge
+  calendars start disabled.
+- A cancelled one-off is deleted; a cancelled override is kept as the hole in its series.
+- Overrides can arrive before their master, so master links are resolved after each pass.
+- `invalid_grant` parks the account instead of retrying.
+- Each pass re-reads every calendar list, since Google does not notify calendar list changes.
 
-**Freshness: push first, poll as the safety net**
-- A push channel per synced calendar makes a change in Google visible here in seconds.
-- Channels expire (about a week in practice) and **cannot be renewed in place**: a replacement
-  is created a day before expiry and the old one is stopped afterwards, in that order, so a
-  failure to store the new one never leaves the calendar with no channel at all.
-- Notifications are coalesced for two seconds per calendar. One change in Google produces
-  several notifications, and one per attendee who responds; without the debounce each would
-  spend a sync round-trip.
-- The poll (15 minutes by default) is not decoration: Google states plainly that push
-  notifications are not 100% reliable, and a channel can die without a sound. Everything the
-  push path does, the poll does again.
-- The webhook never syncs inline. Google retries a slow POST and eventually drops the channel.
+**Freshness: push, with polling as the safety net**
+- A push channel per synced calendar delivers changes in seconds.
+- Channels expire (about a week) and cannot be renewed: a replacement is created a day before
+  expiry, then the old one is stopped.
+- Notifications are debounced for two seconds per calendar.
+- Polling (15 minutes) repeats everything push does, since push is not fully reliable.
+- The webhook never syncs inline; Google drops channels that answer slowly.
 
 **Recurring events**
-- Stored the way Google stores them — master with `RRULE` plus overrides — and expanded on
-  read. Storing the expansion would mean either unbounded rows for an endless series or a
-  horizon that quietly truncates the calendar.
-- Expansion happens in the event's own IANA zone, so a weekly 09:00 stays 09:00 across a DST
-  change, and an all-day event is advanced in whole local days (the day of a DST change is 23
-  or 25 hours long).
-- An occurrence is identified by its **original** start. An override that moves an occurrence
-  to another day still belongs to the slot it came from, which is how Google identifies it and
-  the only stable name a client can hold.
-- Both directions of a move are handled: an occurrence whose override moved it out of the
-  queried window disappears from it, and one moved in from outside appears.
+- Stored as Google stores them (master `RRULE` plus overrides) and expanded on read.
+- Expansion uses the event's IANA zone, so 09:00 stays 09:00 across DST; all-day events advance
+  in whole local days.
+- An occurrence is identified by its **original** start, even after an override moves it.
+- Occurrences moved out of the queried window disappear from it; ones moved in appear.
 
 **Editing a series**
-- `scope=instance` edits one occurrence. If Google has no override for it yet, one is
-  materialised — by asking Google for the instance rather than constructing its id, because
-  that format is documented loosely and getting it wrong writes to the wrong event.
-- `scope=following` splits: the original series is ended just before the occurrence
-  (`UNTIL`, minus a second because `UNTIL` is inclusive, with any `COUNT` dropped) and a new
-  series starts at it. When the rule counted occurrences, the leftover count is worked out from
-  how many the old series keeps — otherwise the series would get longer with every edit.
-  The original is truncated first: if creating the tail then fails, the visible result is a
-  series that stops early rather than two overlapping ones.
-- `scope=instance`/`following` without an occurrence reference is refused. Guessing there
-  rewrites a whole series.
+- `scope=instance` edits one occurrence. If it has no override yet, the instance id is fetched
+  from Google rather than constructed.
+- `scope=following` ends the original series one second before the occurrence (`UNTIL` is
+  inclusive; `COUNT` is dropped) and starts a new series there, with any `COUNT` reduced by what
+  the old series keeps. The original is truncated first, so a failure leaves a series that stops
+  early rather than two overlapping ones.
+- `scope=instance`/`following` without an occurrence reference is refused.
 
 **All-day events are dates**
-- Google sends them as `start.date`/`end.date` with no zone. They are stored as instants —
-  midnight to midnight in the calendar's zone, with that zone in `start_tz` — so one index serves
-  every range query, and the dates are handed back on read as `start_date`/`end_date`.
-- Clients must place them by those dates. The zone is not consistent across calendars (Google
-  reports some as `UTC`), so converting the instants into the viewer's zone puts a one-day event
-  on two local days, which looks like a duplicated event and was reported as one.
+- Stored as midnight-to-midnight instants in the calendar's zone (`start_tz`) for indexing, and
+  returned as `start_date`/`end_date`.
+- Clients must place them by those dates: calendars disagree on zones (some report `UTC`), so
+  converting the instants shows a one-day event on two days.
 
 **Colours**
-- Google's colours are ignored for display: it returns the same pale cyan for every account's
-  primary calendar and the same green for every holiday calendar, so four connected accounts
-  would be indistinguishable, and a pastel picked for a white UI vanishes on a dark one.
-- gv assigns one instead, by creation order through a 12-colour palette. Going by id rather than
-  by a hash of the name means a new calendar takes the next free colour instead of possibly
-  colliding with an existing one, and nothing already on screen is repainted.
-- An explicit `color_override` always wins. Which ink to write on top of a colour is the
-  client's call, computed from its luminance.
+- Google's colours are ignored: every primary calendar gets the same cyan and every holiday
+  calendar the same green.
+- gv assigns colours by creation order from a 12-colour palette, so new calendars never repaint
+  existing ones. `color_override` always wins. Text colour is the client's call.
 
 **What cannot be written**
-- Calendars with the `reader` or `freeBusyReader` role, and the event kinds Google generates
-  itself (`birthday`, `fromGmail`, `workingLocation`). Both are refused here, before the
-  request is sent, and both are flagged as `editable: false` on reads so a client can grey the
-  buttons out instead of discovering it on submit.
+- Calendars with the `reader` or `freeBusyReader` role, and Google-generated events (`birthday`,
+  `fromGmail`, `workingLocation`). Writes are refused before reaching Google, and reads mark them
+  `editable: false`.
 
 **Moving between calendars**
-- Same account: Google's `move`, which keeps the event id.
-- Different accounts: no such operation exists, so the event is recreated on the destination
-  and deleted from the source. The id changes and attendee responses are lost, and the response
-  says `recreated: true`. If the delete fails after the copy exists, the copy is kept and the
-  failure is reported: deleting it to "roll back" could destroy the only remaining version.
+- Same account: Google's `move`, keeping the event id.
+- Across accounts: the event is recreated on the destination and deleted from the source; the id
+  changes, attendee responses are lost, and the response says `recreated: true`. If the delete
+  fails, the copy is kept and the error reported.
 
 **Tokens**
-- Refresh tokens are stored encrypted (AES-256-GCM, key from the environment). The database
-  gets backed up; a plaintext refresh token in a backup is a copy of full calendar access.
-- Access tokens are cached and refreshed a minute before expiry — a token that expires mid-sync
-  turns a clean pass into a 401 halfway through.
-- `access_type=offline` **and** `prompt=consent` on every consent URL. Google only issues a
-  refresh token on the first authorisation, so without `prompt=consent` a reconnect returns an
-  access token alone and appears to work until it expires an hour later. A consent that comes
-  back without a refresh token is rejected rather than stored.
+- Refresh tokens are encrypted at rest (AES-256-GCM, key from the environment).
+- Access tokens are cached and refreshed a minute before expiry.
+- Consent URLs use `access_type=offline` and `prompt=consent`, since Google only issues a refresh
+  token on first authorisation otherwise. A consent without a refresh token is rejected.
 
-**Isolation**
-- Nothing here touches `tasks` or `habits`. A unified view of those is a later decision,
-  deliberately not made now.
-- The one exception is a single narrow hook toward `plan_blocks`, described next — the calendar
-  domain still never reads or writes `tasks`/`habits`, and it does not read `plan_blocks` either,
-  only tells `plan` when an event it might be linked to changed.
-
-**Keeping a linked plan_block in step (`plan_blocks.event_ref`)**
-- A plan_block can optionally link to an event via its `instance_id` (owned and validated by the
-  `plan` domain — see [business_logic/plan.md](plan.md)). This domain does not know that link
-  exists; it just calls a small interface (`planBlockSyncer`) after a write succeeds:
-  - `UpdateEvent` that changes `starts_at`/`ends_at`: re-resolves the ref afterward and pushes the
-    confirmed new times. If the ref no longer resolves (a `scope=following` split moved the
-    occurrence under a new series master), it asks `plan` to detach the link instead of pushing
-    stale times.
-  - `DeleteEvent`: always asks `plan` to detach the ref, regardless of scope.
-  - `MoveEvent`: whenever the event's local id actually changes (moving to a different calendar
-    recreates the local row even within the same Google account — see above), asks `plan` to
-    detach the old ref. The no-op case (`dest.ID == source.ID`) does not.
-- This call is best-effort and never fails the request: the event write already succeeded in
-  Google by the time it happens, and a plan_block a day out of sync is a much smaller problem
-  than losing an already-accepted calendar write over it. Errors are logged, not surfaced.
+**Isolation and linked plan blocks**
+- The domain never touches `tasks`, `habits` or `plan_blocks` directly. After a successful write
+  it calls `planBlockSyncer`, which `plan` implements (see [plan](plan.md)):
+  - `UpdateEvent` changing times: re-resolves the ref and pushes the new times, or detaches the
+    link if a `scope=following` split moved the occurrence to a new series.
+  - `DeleteEvent`: detaches the ref.
+  - `MoveEvent`: detaches the old ref whenever the local id changes.
+- These calls are best-effort: errors are logged and never fail the already-accepted write.
 
 ### Validations
 
-**Create (`POST /calendar/events`)** — `calendar_id` and a non-empty `summary` required;
-`starts_at` required (RFC3339, or `YYYY-MM-DD` when `all_day`); `ends_at` optional (one day
-for all-day, one hour otherwise) and must be after the start; the calendar must be writable.
+**Create (`POST /calendar/events`)** — `calendar_id` and a non-empty `summary`; `starts_at`
+(RFC3339, or `YYYY-MM-DD` when `all_day`); `ends_at` optional (defaults to one day for all-day,
+one hour otherwise) and after the start; the calendar must be writable.
 
-**Update (`PATCH /calendar/events/{ref}`)** — at least one field; the scope must be legal for
-the reference (see above); `recurrence` only with `scope=all`; the resulting interval must have
-the end after the start.
+**Update (`PATCH /calendar/events/{ref}`)** — at least one field; a scope legal for the
+reference; `recurrence` only with `scope=all`; end after start.
 
-**Range (`GET /calendar/events`)** — `from` and `to` required, `to` strictly after `from`,
-span at most two years. Unbounded expansion of endless series is the reason for the cap.
+**Range (`GET /calendar/events`)** — `from` and `to` required, `to` after `from`, at most two
+years apart.
 
 ### Side effects
 
-- **A successful write** publishes on the SSE stream and queues an incremental sync of that
-  calendar. The sync is what reconciles what a write does beyond its own response: a
-  materialised override, a bumped sequence on the master, a cancelled sibling.
-- **Disabling a calendar** deletes its local events and stops its push channel. Stale rows that
-  look current are worse than no rows.
-- **Disconnecting an account** stops its channels, revokes the grant, and cascades the delete
-  through calendars, events and sync runs.
-- **A 412 or a 404 from Google** queues a sync of that calendar: both mean the local copy is
-  behind.
+- **A successful write** publishes on the SSE stream and queues an incremental sync of the
+  calendar to pick up side effects (new overrides, bumped sequences).
+- **Disabling a calendar** deletes its local events and stops its push channel.
+- **Disconnecting an account** stops its channels, revokes the grant and cascades the delete.
+- **A 412 or 404 from Google** queues a sync of that calendar.
 
 ### Decisions / Why
 
-- **Why mirror at all, instead of proxying Google per request**: a month view is one query
-  here and dozens of paginated requests there, it works when Google or the network does not,
-  and the range/expansion logic lives in one place for gv-web and gv-android both. The price is
-  a sync, and the sync is the feature.
-- **Why write-through and not an outbox**: the outbox in gv-android was removed for exactly
-  this reason — the queue's failure modes (stuck, reordered, retried after the user changed
-  their mind) cost more than the offline writes were worth. Failing loudly beats diverging
-  quietly.
-- **Why push *and* poll**: push alone is not reliable (Google says so) and its channels expire
-  silently; poll alone means minutes of staleness. Together, one covers the other's failure.
-- **Why the poll is 15 minutes rather than 1**: it is the safety net, not the mechanism. With
-  webhooks working, a shorter interval buys nothing but quota; four accounts at 15 minutes is
-  about a thousand requests a day against a million-a-day limit.
-- **Why the sync worker lives in the API process**: it needs the same repository, tokens and
-  shutdown as everything else. An external cron would have to authenticate against this API to
-  ask it to do what it already knows how to do, and the real trigger is a webhook anyway.
-- **Why the state parameter is signed rather than stored**: it needs no cleanup and survives a
-  restart in the middle of a consent flow, which a value in memory would not. It is bounded by
-  time (30 minutes) rather than by use, which is what lets one URL connect four accounts in a
-  row — the flow a person actually goes through.
-- **Why the callback and the webhook are public**: they have to be. Google's redirect lands on
-  the API host, where the web app's session cookie does not exist, and Google's notification
-  POST carries no credentials at all. Each gets a guard of its own — a signed state, a
-  per-channel secret — rather than an exemption.
-- **Why expansion is server-side**: two clients would otherwise each grow their own half-right
-  version of DST handling and override precedence.
+- **Mirror instead of proxying Google**: a month view is one local query instead of many
+  paginated requests, it works offline from Google, and expansion lives in one place for all
+  clients.
+- **Write-through, no outbox**: a queue's failure modes (stuck, reordered, stale retries) cost
+  more than offline writes are worth; gv-android removed its outbox for the same reason.
+- **Push and poll**: push alone is unreliable and channels expire silently; poll alone is slow.
+- **15-minute poll**: it is the safety net. Four accounts at 15 minutes is about a thousand
+  requests a day.
+- **Worker inside the API**: it shares the repository, tokens and shutdown.
+- **Signed OAuth state, not stored**: no cleanup, survives restarts. Valid for 30 minutes rather
+  than single-use, so one URL can connect several accounts in a row.
+- **Public callback and webhook**: Google's redirect and notifications carry no bearer token, so
+  each has its own guard (signed state, per-channel token).
+- **Server-side expansion**: one implementation of DST and override handling.
 
-### Alternatives considered and rejected
+### Alternatives rejected
 
-**Keeping four browser sessions logged in and scraping Google Calendar's own frontend.** The
-idea was to avoid "logging in every 7 days" — but that expiry is exclusively a property of the
-*Testing* consent screen, and publishing the app removes it. What the approach would cost
-instead: cookies Google invalidates on a password change, a security event or a new IP, each
-time needing a manual re-login with no warning; no automated login at all (headless browsers
-are blocked); no sync tokens, so full snapshot diffs instead of incremental changes; **no push
-notifications, so no near-real-time**, which is the requirement that started this; writes that
-mean forging internal RPCs against real calendars; `/u/0`, `/u/1` indices that reorder when an
-account is added; and automated access outside the published APIs, on four accounts in daily
-use. It trades a stable credential for a fragile one and loses the two features that matter.
-
-**CalDAV with an app password.** Closed off: Google has required OAuth for CalDAV/CardDAV since
-2023–2025, and app passwords no longer work there. CalDAV has no push either, so it could not
-deliver near-real-time updates regardless.
-
-**The secret `.ics` URL per calendar.** No login needed, but read-only and cached by Google for
-hours. Fails both requirements.
-
-**A service account with domain-wide delegation.** Google Workspace only; these are personal
-accounts.
-
-**Self-hosting CalDAV (Radicale/Baikal) as the source of truth and dropping Google.** The only
-architecture that genuinely removes the dependency. It also means DAVx⁵ on the phone and
-invitations from other people still landing in Gmail. A different project, not a shortcut for
-this one.
-
-**If Google ever pushes back on the unverified app**: with only *sensitive* scopes (Calendar's
-are), verification asks for branding, a justification and a demo video — not the third-party
-security assessment that *restricted* scopes require. It is a route, not a wall.
+- **Scraping Google Calendar's web UI with logged-in sessions**: fragile cookies, no automated
+  login, no sync tokens, no push, forged write RPCs. The 7-day expiry it aimed to avoid only
+  applies to unpublished consent screens.
+- **CalDAV with an app password**: Google requires OAuth for CalDAV now, and CalDAV has no push.
+- **Secret `.ics` URLs**: read-only and cached for hours.
+- **Service account with domain-wide delegation**: Workspace only.
+- **Self-hosted CalDAV instead of Google**: a different project.
+- **Verification**: if Google ever requires it, sensitive scopes only need branding, a
+  justification and a demo video, not a security assessment.
 
 ### One-time Google Cloud setup
 
-1. A Google Cloud project with the **Google Calendar API** enabled.
-2. Consent screen: **External**, and **published to production**. This is not cosmetic: while
-   the app is in *Testing*, refresh tokens expire after **7 days** and every account has to be
-   reconnected weekly. Published-but-unverified shows a "Google hasn't verified this app"
-   warning, which is passed with *Advanced → Go to app*; the 100-user cap is irrelevant for one
-   person. With Calendar scopes the grant then only dies on revoke, six months unused, or more
-   than 100 live tokens for the client — a password change does **not** revoke it (that only
-   applies to Gmail scopes).
+1. A project with the **Google Calendar API** enabled.
+2. Consent screen **External** and **published to production**; in *Testing*, refresh tokens
+   expire after 7 days. The "unverified app" warning is passed via *Advanced → Go to app*. Grants
+   then only die on revoke, six months unused, or over 100 live tokens.
 3. Scopes: `https://www.googleapis.com/auth/calendar` and
-   `https://www.googleapis.com/auth/userinfo.email` (the second is only used to learn which
-   account was connected).
-4. A **Web application** client whose redirect URI is `GOOGLE_OAUTH_REDIRECT_URL`, i.e.
-   `https://gv-api.lab-ocp.com/calendar/google/callback` in production and
-   `http://localhost:8080/calendar/google/callback` for development. Google requires HTTPS for
-   everything except localhost, so a LAN IP is not a usable redirect.
-5. For push notifications: the webhook's domain must be **verified** (Search Console) and
-   registered with the Cloud project. Without that step `events.watch` is refused and the
-   feature runs on the poll alone.
+   `https://www.googleapis.com/auth/userinfo.email` (to identify the account).
+4. A **Web application** client with redirect URI `GOOGLE_OAUTH_REDIRECT_URL`:
+   `https://gv-api.lab-ocp.com/calendar/google/callback` in production,
+   `http://localhost:8080/calendar/google/callback` locally. Only localhost may use HTTP.
+5. For push: verify the webhook domain in Search Console and register it with the project, or
+   `events.watch` is refused and only polling runs.

@@ -3,7 +3,7 @@
 How many hours are free on each of the next few days, so Due Soon can tell a task that
 genuinely needs to start today from one that has weeks of slack. **Auth:** full-private.
 
-**Business rules:** see [business_logic/plan.md](business_logic/plan.md) (capacity reads
+**Business rules:** see [business_logic/plan.md](../business_logic/plan.md) (capacity reads
 `plan_blocks`, owned by the `plan` domain — there is no `capacity`-owned table).
 
 ## What "capacity" means here
@@ -14,7 +14,7 @@ genuinely needs to start today from one that has weeks of slack. **Auth:** full-
   (default `14`), read once at startup. Changing it means changing the deployment's env, not
   calling an endpoint — there is deliberately no `PUT` for it.
 - "Busy" hours per day come from `plan_blocks` with a `task_id` and/or an `event_ref` set (see
-  [business_logic/plan.md](business_logic/plan.md)) — calendar events themselves are never
+  [business_logic/plan.md](../business_logic/plan.md)) — calendar events themselves are never
   read directly; only a block someone actually committed to counts.
 - `free_hours = max(capacity_hours - busy_hours, 0)`, computed independently per day.
 

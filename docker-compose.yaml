@@ -18,9 +18,7 @@ services:
       - gv
     restart: unless-stopped
 
-  # A bind mount, not a named volume, on purpose: `docker compose down -v` only removes
-  # volumes declared under the top-level `volumes:` key, so backups on disk survive that
-  # even though postgres_data doesn't.
+  # Bind mount so backups survive `docker compose down -v`.
   db-backup:
     image: prodrigestivill/postgres-backup-local:15
     container_name: gv_db_backup
@@ -37,9 +35,7 @@ services:
       - BACKUP_KEEP_MONTHS=0
     volumes:
       - ./backups:/backups
-    # Same check the image's own HEALTHCHECK runs, just polled far more often: its default
-    # 300s interval means `up --wait` (the deploy workflow and `make reset`/`up`) blocks a
-    # full 5 minutes on every fresh create waiting for the first check to land.
+    # The image's own healthcheck runs every 300s, which stalls `up --wait`.
     healthcheck:
       test: ["CMD-SHELL", "curl -f http://localhost:8080/ || exit 1"]
       interval: 10s
@@ -53,8 +49,7 @@ services:
   gv-api:
     build: .
     container_name: gv_api
-    # Uid 1000 (ocp) exists on the deploy host, so the reference dbus-daemon can resolve the
-    # connecting uid and won't reset the D-Bus connection. See the volumes comment below.
+    # dbus-daemon drops connections from uids unknown on the host; 1000 exists there.
     user: "1000:1000"
     depends_on:
       db:
@@ -63,20 +58,11 @@ services:
       - .env
     ports:
       - "8080:8080"
-    # The uptime domain reads central-pipeline's database, which is a separate compose stack:
-    # reachable only through the port it publishes on the host, not on the `gv` network.
+    # central-pipeline's database is only reachable through its published host port.
     extra_hosts:
       - "host.docker.internal:host-gateway"
     volumes:
-      # Domotics lights talk to the bulbs over BlueZ, which lives on the host and is reached
-      # through its D-Bus socket. No host networking and no extra capabilities are needed —
-      # BlueZ's own policy lets any local uid send to org.bluez. Without the mount the API
-      # still runs; every bulb simply reads offline.
-      #
-      # One catch, measured rather than guessed: the reference dbus-daemon resolves the
-      # connecting uid to a host user, and drops the connection ("connection reset by peer")
-      # when it cannot. The image normally runs as uid 100, which usually exists nowhere on
-      # the host, so the `user:` override above pins it to a uid the host actually knows.
+      # Host BlueZ for the lights; without it every bulb reads offline.
       - /run/dbus/system_bus_socket:/run/dbus/system_bus_socket
     healthcheck:
       test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://localhost:8080/health"]

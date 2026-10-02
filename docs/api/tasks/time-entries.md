@@ -42,7 +42,7 @@
 
 - **Method:** `GET`
 - **Endpoint:** `/tasks/time-entries/active`
-- **Description:** Returns the currently running (unfinished) time entry, including the task name and project name. At most one active entry can exist at a time (enforced by a partial unique index).
+- **Description:** The running time entry with task and project names. At most one can exist.
 - **Success Response:**
   - **Code:** `200 OK`
   - **Content:**
@@ -123,7 +123,7 @@
 
 - **Method:** `GET`
 - **Endpoint:** `/tasks/time-entries`
-- **Description:** Returns time entries that overlap with the given date range. An entry overlaps if it started on or before the end date AND has not finished before the start date (or is still running). Includes task and project metadata. Results are ordered by `started_at` descending.
+- **Description:** Time entries overlapping the range (running ones included), with task and project metadata, newest first.
 - **Query Parameters:**
   - `start_time` (required): Start date in `YYYY-MM-DD` format.
   - `end_time` (optional): End date in `YYYY-MM-DD` format. Defaults to today.
@@ -173,7 +173,7 @@
 
 - **Method:** `GET`
 - **Endpoint:** `/tasks/time-entries/summary`
-- **Description:** Returns total seconds worked today and over the current week, plus the rolling daily/weekly target derived from the 80h/week goal. Only completed (finished) time entries contribute to `today` / `week`. Time spent before the period start is excluded — for an entry that started yesterday and finished today, only the portion after midnight counts toward `today`. The week starts on Monday in the server's configured timezone.
+- **Description:** Seconds worked today and this week (Monday-based, server timezone) from finished entries, clamped to the period, plus the daily/weekly targets from the 80h/week goal.
 - **Success Response:**
   - **Code:** `200 OK`
   - **Content:**
@@ -198,7 +198,7 @@
     - `today`: Total seconds worked since today's midnight (server timezone).
     - `week`: Total seconds worked since the current week's Monday (server timezone).
     - `weekly_target_seconds`: Constant `288000` (80h). Source of truth for the weekly goal.
-    - `daily_target_seconds`: Today's share of the **remaining** weekly seconds (`weekly_target_seconds - week`), weighted by the waking hours still left today vs. the waking hours of the rest of the week. Weekdays are 17 waking hours, weekends are 12. Same value as `pace.weighted_today_share_seconds`. Returns `0` once the weekly goal is reached.
+    - `daily_target_seconds`: today's share of the remaining weekly seconds, weighted by waking hours left (17 on weekdays, 12 on weekends). Equals `pace.weighted_today_share_seconds`; `0` once the goal is reached.
     - `pace`: Detailed pacing numbers used by the UI tooltip.
       - `uniform_per_day_seconds`: Remaining seconds divided evenly across the remaining days, treating every day as 17 waking hours.
       - `uniform_today_share_seconds`: `uniform_per_day_seconds` × today's remaining waking-hour fraction.
@@ -215,7 +215,7 @@
 
 - **Method:** `GET`
 - **Endpoint:** `/tasks/time-entries/history`
-- **Description:** Returns aggregated time entry durations over a date range, bucketed by a chosen frequency. Values represent total hours worked (as decimal). Missing periods within the range are filled with zero values. Timezone-aware: uses the server's configured timezone to determine which calendar day each time entry belongs to.
+- **Description:** Hours worked per period over a range, zero-filled, in the server timezone.
 - **Query Parameters:**
   - `frequency` (required): `daily`, `weekly`, or `monthly`.
   - `start_at` (optional): Start date in `YYYY-MM-DD` format. Default depends on frequency: daily = 1 month ago, weekly = 12 weeks ago, monthly = 12 months ago.

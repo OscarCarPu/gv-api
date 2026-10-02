@@ -60,9 +60,7 @@ type CollapseBudgetsParams struct {
 	Period     string `db:"period" json:"period"`
 }
 
-// Drops rows that change nothing: a row equal to the one before it, and a leading NULL row
-// (ending a budget that never started). Keeps each (category, period) series a minimal list of
-// changes.
+// Drops rows that change nothing: one equal to its predecessor, or a leading NULL row.
 func (q *Queries) CollapseBudgets(ctx context.Context, arg CollapseBudgetsParams) error {
 	_, err := q.db.Exec(ctx, collapseBudgets, arg.CategoryID, arg.Period)
 	return err
@@ -319,9 +317,8 @@ type GetCategoryStatsRow struct {
 	Share      float64         `db:"share" json:"share"`
 }
 
-// Sums and counts transactions of a given type per category in a date range,
-// optionally filtered by account_id (matches account_id OR to_account_id for
-// transfers).
+// Sums and counts transactions of a type per category in a date range. account_id
+// matches source or destination.
 func (q *Queries) GetCategoryStats(ctx context.Context, arg GetCategoryStatsParams) ([]GetCategoryStatsRow, error) {
 	rows, err := q.db.Query(ctx, getCategoryStats,
 		arg.Type,
@@ -453,9 +450,7 @@ type GetMonthlyStatsRow struct {
 	Expense decimal.Decimal `db:"expense" json:"expense"`
 }
 
-// Returns one row per calendar month with summed income, expense in the date
-// range. Optional account_id (matches source or destination) and category_id
-// filters.
+// Income and expense per calendar month. account_id matches source or destination.
 func (q *Queries) GetMonthlyStats(ctx context.Context, arg GetMonthlyStatsParams) ([]GetMonthlyStatsRow, error) {
 	rows, err := q.db.Query(ctx, getMonthlyStats,
 		arg.FromAt,
@@ -546,9 +541,8 @@ type GetNetWorthSeriesRow struct {
 	Total    decimal.Decimal    `db:"total" json:"total"`
 }
 
-// Reconstructs net worth at the end of each period (day/week/month) by walking
-// back from the current accounts.total snapshot.
-// Granularity must be one of 'day' | 'week' | 'month'.
+// Net worth at the end of each period ('day' | 'week' | 'month'), walking back from
+// the current accounts.total.
 func (q *Queries) GetNetWorthSeries(ctx context.Context, arg GetNetWorthSeriesParams) ([]GetNetWorthSeriesRow, error) {
 	rows, err := q.db.Query(ctx, getNetWorthSeries, arg.Granularity, arg.ToAt, arg.FromAt)
 	if err != nil {
@@ -694,8 +688,7 @@ type ListCategoryTransactionsRow struct {
 	OccurredAt    pgtype.Timestamptz `db:"occurred_at" json:"occurred_at"`
 }
 
-// Transactions of one type in a set of categories within [from_at, to_at), joined with account
-// and category names for display. Used to list what a budget counted.
+// Transactions of one type in a set of categories within [from_at, to_at), with names.
 func (q *Queries) ListCategoryTransactions(ctx context.Context, arg ListCategoryTransactionsParams) ([]ListCategoryTransactionsRow, error) {
 	rows, err := q.db.Query(ctx, listCategoryTransactions,
 		arg.CategoryIds,
@@ -748,8 +741,8 @@ type ListEffectiveBudgetsRow struct {
 	Amount     decimal.Decimal `db:"amount" json:"amount"`
 }
 
-// The budget in effect for every category and period at a month, skipping ended ones (NULL
-// amount). Yearly rows sit on January 1st, so "month <= M" also picks the right year.
+// The budget in effect for every category and period at a month, skipping ended ones.
+// Yearly rows sit on January 1st.
 func (q *Queries) ListEffectiveBudgets(ctx context.Context, month time.Time) ([]ListEffectiveBudgetsRow, error) {
 	rows, err := q.db.Query(ctx, listEffectiveBudgets, month)
 	if err != nil {
