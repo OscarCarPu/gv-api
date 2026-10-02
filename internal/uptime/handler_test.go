@@ -17,10 +17,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// Handler tests cover HTTP concerns only: query parsing, error to status mapping, and the
-// one status that is a deployment state rather than a fault (503 when no pipeline database
-// is wired up).
-
 func errMessage(t *testing.T, rec *httptest.ResponseRecorder) string {
 	t.Helper()
 	var body map[string]string
@@ -69,7 +65,8 @@ func TestHandler_Windows_ParsesQuery(t *testing.T) {
 		func(_ context.Context, q uptime.WindowsQuery) (uptime.WindowsReport, error) {
 			got = q
 			return uptime.WindowsReport{}, nil
-		})
+		},
+	)
 
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodGet,
@@ -80,7 +77,7 @@ func TestHandler_Windows_ParsesQuery(t *testing.T) {
 	require.NotNil(t, got.Device)
 	assert.Equal(t, uptime.DeviceWatchdog, *got.Device)
 	assert.Equal(t, time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC), got.From)
-	// A bare date is accepted as UTC midnight, which is what the pipeline's timestamps are in.
+	// A bare date is accepted as UTC midnight.
 	assert.Equal(t, time.Date(2026, 2, 1, 0, 0, 0, 0, time.UTC), got.To)
 	assert.Equal(t, 50, got.Limit)
 }

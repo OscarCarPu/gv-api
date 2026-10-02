@@ -21,14 +21,11 @@ The characteristic you want is almost always the single write handle on a vendor
 a 128-bit UUID that is not of the standard 0000xxxx-0000-1000-8000-00805f9b34fb form.
 */
 
-// errUnsupported marks a capability the hardware does not have, as opposed to a failure.
-// The driver reports it on the bulb's card while leaving the bulb online: nothing is wrong
-// with it, it simply cannot do that.
+// errUnsupported marks a capability the hardware lacks; the bulb stays online.
 var errUnsupported = errors.New("unsupported by this bulb")
 
-// readback is what a bulb managed to say about itself. Every field is optional: these lamps
-// answer nothing at all to a query for a value they already hold, so an absent field means
-// "unchanged", never "off" or "zero".
+// readback is what a bulb said about itself. These lamps stay silent when queried for a value
+// they already hold, so an absent field means "unchanged", never zero.
 type readback struct {
 	Power      *bool
 	Brightness *float64
@@ -36,28 +33,19 @@ type readback struct {
 	Mode       string
 }
 
-// empty reports whether the bulb told us nothing, in which case the driver keeps what it
-// last knew rather than publishing a half-empty state.
 func (r readback) empty() bool {
 	return r.Power == nil && r.Brightness == nil && r.ColorTemp == nil
 }
 
-// protocol is how one bulb family speaks.
-//
-// Implementations get the bulb's row, so a per-bulb quirk (a different characteristic UUID,
-// a key) is a value in its options rather than a code change. The driver holds a per-address
-// lock around every call, so implementations need no locking of their own.
+// protocol is how one bulb family speaks. Per-bulb quirks live in the row's options. The driver
+// holds a per-address lock around every call.
 type protocol interface {
 	Name() string
-	// Info describes the model for the add-a-bulb form, so nobody has to know a lamp's kelvin
-	// range to register it.
+	// Info describes the model for the add-a-bulb form.
 	Info() ProtocolInfo
-	// Readable is false for bulbs that cannot be asked their current settings; the driver
-	// then answers reads from what it last wrote, which is all anyone can do.
+	// Readable is false for bulbs that cannot report their settings; reads then use the last write.
 	Readable() bool
-	// Advertises is the GATT service UUID every bulb of this family puts in its advertisement.
-	// A scan keeps only devices that advertise one of these, so the add list is bulbs rather
-	// than everything with a radio in range.
+	// Advertises is the GATT service UUID this family advertises; scans filter on it.
 	Advertises() string
 	Read(ctx context.Context, g gatt, light Light) (readback, error)
 	SetPower(ctx context.Context, g gatt, light Light, on bool) error
@@ -70,7 +58,6 @@ var protocols = map[string]protocol{
 	"lexman": lexman{},
 }
 
-// isBulb reports whether a scan result advertises the service of any supported family.
 func isBulb(device Discovered) bool {
 	for _, p := range protocols {
 		want := p.Advertises()
@@ -88,8 +75,6 @@ func protocolFor(name string) (protocol, bool) {
 	return p, ok
 }
 
-// protocolInfos lists the supported models, in a stable order so the form's select does not
-// shuffle between requests.
 func protocolInfos() []ProtocolInfo {
 	infos := make([]ProtocolInfo, 0, len(protocols))
 	for _, p := range protocols {
@@ -99,8 +84,7 @@ func protocolInfos() []ProtocolInfo {
 	return infos
 }
 
-// applyCommand routes a validated command to the protocol. The command has already been
-// checked by Command.Validate, so the pointers are safe to dereference.
+// applyCommand routes a command already checked by Command.Validate.
 func applyCommand(ctx context.Context, p protocol, g gatt, light Light, cmd Command) error {
 	switch cmd.Type {
 	case CommandPower:
@@ -115,8 +99,6 @@ func applyCommand(ctx context.Context, p protocol, g gatt, light Light, cmd Comm
 		return fmt.Errorf("%w: %s", ErrInvalidCommand, cmd.Type)
 	}
 }
-
-// --- Lexman / Adeo ZBEK-13 ------------------------------------------------------------
 
 /*
 lexman speaks to the Adeo/LEXMAN ZBEK-13 tunable-white bulb (Leroy Merlin's Enki range).
@@ -149,27 +131,21 @@ const (
 	lexmanWriteUUID  = "0000a101-1115-1000-0001-617573746f6d"
 	lexmanNotifyUUID = "0000a102-1115-1000-0001-617573746f6d"
 
-	// The bulb's own brightness scale. The API speaks 0-100 and converts at this boundary.
+	// The API speaks 0-100 and converts at this boundary.
 	lexmanBrightnessMax = 254
 
-	// Vendor range: 153 mireds = coolest, 454 = warmest. The kelvin labels come from the
-	// vendor's stated 2700K-6500K span, so the mapping is linear in kelvin rather than a true
-	// reciprocal (1e6/454 would be ~2200K). It round-trips exactly, which is what matters for
-	// the slider; if the rendered colour ever disagrees with the number, this is the one place
-	// to change.
+	// 153 mireds = coolest, 454 = warmest, mapped linearly onto the vendor's 2700K-6500K label so it
+	// round-trips exactly (a true reciprocal would give ~2200K).
 	lexmanMiredCool, lexmanMiredWarm   = 153, 454
 	lexmanKelvinCool, lexmanKelvinWarm = 6500, 2700
 
-	// How long to wait for a query's notification before falling back to the last known value.
 	lexmanQueryTimeout = 1200 * time.Millisecond
 )
 
 func (lexman) Name() string   { return "lexman" }
 func (lexman) Readable() bool { return true }
 
-// Advertises 0xA100 in its advertisement, in the standard Bluetooth base form. This is not the
-// vendor service the frames are written to (lexmanWriteUUID): that one only exists once
-// connected, and the scan has to decide before connecting.
+// The advertised service, not the vendor one frames go to, which only exists once connected.
 func (lexman) Advertises() string { return "0000a100-0000-1000-8000-00805f9b34fb" }
 
 func (lexman) Info() ProtocolInfo {
@@ -183,8 +159,6 @@ func (lexman) Info() ProtocolInfo {
 	}
 }
 
-// writeUUID and notifyUUID let a single odd bulb override the characteristics from its own
-// options without a new protocol.
 func (lexman) writeUUID(light Light) string {
 	return optionString(light, "writeChar", lexmanWriteUUID)
 }
@@ -210,7 +184,7 @@ func (p lexman) SetPower(ctx context.Context, g gatt, light Light, on bool) erro
 }
 
 func (p lexman) SetBrightness(ctx context.Context, g gatt, light Light, value int) error {
-	// 0 reads back as "off" rather than "dimmest", and off belongs to the switch command.
+	// 0 reads back as off; off belongs to the switch command.
 	raw := max((clampInt(value, 0, 100)*lexmanBrightnessMax+50)/100, 1)
 	return p.send(ctx, g, light, 0x00, 0x00, 0x11, 0x01, 0x03, byte(raw), 0x00, 0x00)
 }
@@ -270,14 +244,11 @@ func kelvinToMired(kelvin int) int {
 func miredToKelvin(mired int) int {
 	span := float64(lexmanKelvinWarm-lexmanKelvinCool) / float64(lexmanMiredWarm-lexmanMiredCool)
 	kelvin := float64(mired-lexmanMiredCool)*span + lexmanKelvinCool
-	// Snap to 10K. One mired step is ~13K, so the extra digits are quantisation noise, and
-	// without this a 2800K write reads back as 2801K and the slider twitches.
+	// Snap to 10K so a 2800K write does not read back as 2801K.
 	snapped := int(math.Round(kelvin/10)) * 10
 	return clampInt(snapped, lexmanKelvinWarm, lexmanKelvinCool)
 }
 
-// optionString reads a per-bulb option from its row, falling back to the protocol's
-// own default.
 func optionString(light Light, key, fallback string) string {
 	if raw, ok := light.Options[key]; ok {
 		if value, ok := raw.(string); ok && value != "" {

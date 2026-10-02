@@ -15,8 +15,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// The fake covers behaviour; these tests cover the wire. What Google is sent and how its
-// answers are read is the part a fake cannot check.
+// These tests cover the wire format; the fake covers behaviour.
 
 func newTestClient(t *testing.T, handler http.Handler) (google.Client, *httptest.Server) {
 	t.Helper()
@@ -260,8 +259,7 @@ func TestClient_RefreshToken_Succeeds(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "fresh", tok.AccessToken)
 	require.WithinDuration(t, time.Now().Add(time.Hour), tok.Expiry, time.Minute)
-	// Google's refresh response carries no refresh token; x/oauth2 copies the one it was given
-	// forward. Either way the stored grant is never overwritten from a refresh.
+	// Google's refresh response carries no refresh token; the stored grant is never overwritten.
 	require.Equal(t, "the-refresh-token", tok.RefreshToken)
 }
 

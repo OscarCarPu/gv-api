@@ -20,10 +20,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// Handler tests assert HTTP-layer concerns only: status codes, decode errors,
-// id parsing, error→status mapping. Business rules (priority defaults,
-// dependency resolution, validation specifics) are covered by service tests.
-
 func withIDParam(req *http.Request, id string) *http.Request {
 	rctx := chi.NewRouteContext()
 	rctx.URLParams.Add("id", id)
@@ -36,8 +32,6 @@ func newReq(method, target, body string) *http.Request {
 	}
 	return httptest.NewRequest(method, target, strings.NewReader(body))
 }
-
-// --- Create ---
 
 func TestHandler_CreateProject(t *testing.T) {
 	t.Run("201 on success", func(t *testing.T) {
@@ -57,9 +51,6 @@ func TestHandler_CreateProject(t *testing.T) {
 		assert.Equal(t, http.StatusBadRequest, rec.Code)
 	})
 
-	// One representative validation test — the "name length" rule is enforced by
-	// the same validator across many endpoints; one assertion is enough to prove
-	// the handler wires it up. See validation_test.go (if added) for matrix coverage.
 	t.Run("400 when name exceeds limit", func(t *testing.T) {
 		rec := httptest.NewRecorder()
 		tasks.NewHandler(mocks.NewMockServiceInterface(t)).CreateProject(rec, newReq(http.MethodPost, "/", `{"name": "aaaaaaaaaabbbbbbbbbbccccccccccddddddddddx"}`))
@@ -91,8 +82,6 @@ func TestHandler_CreateTask(t *testing.T) {
 		assert.Equal(t, http.StatusBadRequest, rec.Code)
 	})
 
-	// task_type/recurrence rule is a handler-layer cross-field check unique to
-	// this endpoint, so it's worth one test here.
 	t.Run("400 when recurring without recurrence", func(t *testing.T) {
 		rec := httptest.NewRecorder()
 		tasks.NewHandler(mocks.NewMockServiceInterface(t)).CreateTask(rec, newReq(http.MethodPost, "/", `{"name": "T", "task_type": "recurring"}`))
@@ -150,7 +139,6 @@ func TestHandler_CreateTimeEntry(t *testing.T) {
 		assert.Equal(t, http.StatusBadRequest, rec.Code)
 	})
 
-	// Unique HTTP-level mapping — sentinel error → 409.
 	t.Run("409 when active entry exists", func(t *testing.T) {
 		svc := mocks.NewMockServiceInterface(t)
 		svc.EXPECT().CreateTimeEntry(mock.Anything, mock.Anything).Return(tasks.TimeEntryResponse{}, tasks.ErrActiveTimeEntryExists)
@@ -167,8 +155,6 @@ func TestHandler_CreateTimeEntry(t *testing.T) {
 		assert.Equal(t, http.StatusInternalServerError, rec.Code)
 	})
 }
-
-// --- Update ---
 
 func TestHandler_UpdateProject(t *testing.T) {
 	t.Run("200 on success", func(t *testing.T) {
@@ -294,9 +280,7 @@ func TestHandler_UpdateTask(t *testing.T) {
 		assert.Equal(t, http.StatusOK, rec.Code)
 	})
 
-	// Tri-state nullable fields are a real handler-layer concern: the JSON
-	// distinction between "field omitted", "field: null", and "field: value"
-	// must round-trip through to the service.
+	// Omitted, null and a value must round-trip distinctly.
 	t.Run("explicit null due_at marks field set with nil value", func(t *testing.T) {
 		svc := mocks.NewMockServiceInterface(t)
 		svc.EXPECT().UpdateTask(mock.Anything, mock.MatchedBy(func(req tasks.UpdateTaskRequest) bool {
@@ -416,8 +400,6 @@ func TestHandler_UpdateTimeEntry(t *testing.T) {
 		assert.Equal(t, http.StatusInternalServerError, rec.Code)
 	})
 }
-
-// --- Get ---
 
 func TestHandler_GetRootProjects(t *testing.T) {
 	t.Run("200 on success", func(t *testing.T) {
@@ -594,8 +576,6 @@ func TestHandler_GetTasksByDueDate(t *testing.T) {
 	})
 }
 
-// --- Delete (uniform shape — one happy + one bad-id + one error per endpoint) ---
-
 func TestHandler_DeleteProject(t *testing.T) {
 	t.Run("204 on success", func(t *testing.T) {
 		svc := mocks.NewMockServiceInterface(t)
@@ -664,8 +644,6 @@ func TestHandler_DeleteTimeEntry(t *testing.T) {
 	})
 }
 
-// One representative bad-id and service-error case for the delete shape — the
-// underlying handler logic is identical across the four delete endpoints.
 func TestHandler_Delete_BadIDAndServiceError(t *testing.T) {
 	t.Run("400 on invalid id", func(t *testing.T) {
 		rec := httptest.NewRecorder()
@@ -681,8 +659,6 @@ func TestHandler_Delete_BadIDAndServiceError(t *testing.T) {
 		assert.Equal(t, http.StatusInternalServerError, rec.Code)
 	})
 }
-
-// --- Active time entry / history / by-date-range ---
 
 func TestHandler_GetActiveTimeEntry(t *testing.T) {
 	t.Run("200 on success", func(t *testing.T) {

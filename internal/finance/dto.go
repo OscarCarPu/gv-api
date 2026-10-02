@@ -102,8 +102,6 @@ type OverviewTransaction struct {
 	OccurredAt    time.Time       `json:"occurred_at"`
 }
 
-// --- Stats ---
-
 type StatsGranularity string
 
 const (
@@ -203,10 +201,7 @@ type EstimationResult struct {
 	Saving decimal.Decimal `json:"saving"`
 }
 
-// --- Budgets ---
-
-// BudgetPeriod is what a budget is measured against: one calendar month, or one calendar year
-// (for expenses that come once a year or irregularly).
+// BudgetPeriod is what a budget is measured against: a calendar month or a calendar year.
 type BudgetPeriod string
 
 const (
@@ -242,15 +237,13 @@ func (p BudgetPeriod) Label(start time.Time) string {
 	return start.Format("2006-01")
 }
 
-// BudgetScope says how far a budget change reaches: from its period on (every later period
-// carries it), or that period only (the previous value comes back in the next one).
+// BudgetScope says how far a budget change reaches: forward from its period, or that period only.
 type BudgetScope string
 
 const (
 	BudgetScopeForward BudgetScope = "forward"
 	BudgetScopeOnce    BudgetScope = "once"
-	// BudgetScopeMonth is the original name of BudgetScopeOnce, still accepted.
-	BudgetScopeMonth BudgetScope = "month"
+	BudgetScopeMonth   BudgetScope = "month"
 )
 
 func (s BudgetScope) Valid() bool {
@@ -279,8 +272,7 @@ type SetBudgetRequest struct {
 	Scope      BudgetScope
 }
 
-// EffectiveBudget is the budget in effect for a category and period at some month, and the
-// start of the period that row began.
+// EffectiveBudget is the budget in effect for a category and period, and the start of its row.
 type EffectiveBudget struct {
 	CategoryID int32
 	Period     BudgetPeriod
@@ -297,14 +289,12 @@ type CategoryTotal struct {
 
 type BudgetMonth struct {
 	Month string `json:"month"`
-	// MonthProgress is the share of the month already elapsed: 1 for past months, 0 for
-	// future ones, and in between for the current one.
+	// MonthProgress is the elapsed share of the month: 1 for past months, 0 for future ones.
 	MonthProgress float64      `json:"month_progress"`
 	Expense       BudgetTotals `json:"expense"`
 	Income        BudgetTotals `json:"income"`
 	Items         []BudgetItem `json:"items"`
-	// PlannedBalance is budgeted income − budgeted expenses for the month, plus a twelfth of
-	// the yearly budgets' net: what the plan expects to save in an average month.
+	// PlannedBalance is budgeted income − budgeted expenses, plus a twelfth of the yearly net.
 	PlannedBalance decimal.Decimal `json:"planned_balance"`
 	Yearly         BudgetYear      `json:"yearly"`
 	// Averages is the last 3 complete months' average per category, to suggest monthly budgets.
@@ -313,28 +303,24 @@ type BudgetMonth struct {
 	PreviousYear []BudgetAmount `json:"previous_year"`
 }
 
-// BudgetYear is the yearly budgets of the year containing the viewed month, against that
-// whole year's actuals.
+// BudgetYear is the yearly budgets of the viewed month's year against that year's actuals.
 type BudgetYear struct {
 	Year         string  `json:"year"`
 	YearProgress float64 `json:"year_progress"`
-	// Totals of the yearly budgets only: Actual is what their categories took this year and
-	// Unbudgeted is always 0 (the monthly view reports unbudgeted spending).
+	// Totals of the yearly budgets only; Unbudgeted is always 0 here.
 	Expense BudgetTotals `json:"expense"`
 	Income  BudgetTotals `json:"income"`
 	Items   []BudgetItem `json:"items"`
 }
 
 type BudgetTotals struct {
-	// Budgeted sums the outermost budgeted categories only, so a parent and its child being
-	// both budgeted does not count twice.
+	// Budgeted sums the outermost budgeted categories only, so nesting does not double count.
 	Budgeted decimal.Decimal `json:"budgeted"`
 	Actual   decimal.Decimal `json:"actual"`
 	// Unbudgeted is the part of Actual in categories no budget covers (incl. uncategorized).
 	Unbudgeted decimal.Decimal `json:"unbudgeted"`
-	// Overspent is what went over the budgets (expenses only; always 0 for income). Nested
-	// budgets don't double count: a budget contributes the larger of its own excess and the
-	// excess of the budgets inside it.
+	// Overspent is what went over the budgets (expenses only). A nested budget's excess is counted
+	// once: each budget contributes the larger of its own excess and its children's.
 	Overspent decimal.Decimal `json:"overspent"`
 }
 

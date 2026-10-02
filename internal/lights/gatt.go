@@ -46,52 +46,31 @@ const (
 	charIface    = "org.bluez.GattCharacteristic1"
 	propsIface   = "org.freedesktop.DBus.Properties"
 
-	// How long to scan when BlueZ has no object for a bulb at all. These bulbs are never
-	// bonded, so BlueZ forgets them some time after they disconnect and a scan is the only
-	// thing that brings the object back.
+	// Unbonded bulbs drop out of BlueZ after disconnecting; only a scan brings them back.
 	discoveryWindow = 8 * time.Second
-	// How long to wait for the GATT table after Connect returns. Nothing can be written
-	// before it resolves.
 	servicesTimeout = 15 * time.Second
-	// Pause between connect attempts. The first try on these bulbs routinely dies partway
-	// through service discovery; the next one almost always works.
+	// The first connect often dies mid service discovery; a retry almost always works.
 	connectRetries = 3
 	retryPause     = 800 * time.Millisecond
 
-	// How long to wait for Powered to come back true after a reset. Measured on the
-	// deploy host's adapter, which is unusually slow to act on its own StartDiscovery too.
+	// The deploy host's adapter is slow to come back after a power cycle.
 	adapterResetSettle = 3 * time.Second
 )
 
-// errQuiet is not used as a failure: a bulb that answers nothing to a query is normal (these
-// lamps stay silent when written a value they already hold), so Query reports it as no bytes
-// rather than as an error.
-
-// gatt is the Bluetooth surface a bulb protocol needs.
-//
-// It is an interface so protocols and the driver can be tested without a radio — the fake in
-// the tests implements these four methods and nothing else.
+// gatt is the Bluetooth surface a bulb protocol needs; faked in tests.
 type gatt interface {
-	// Connect brings the bulb up and waits for its GATT table. Safe to call when already
-	// connected, which is the common case.
+	// Connect is safe to call when already connected.
 	Connect(ctx context.Context, address string) error
-	// Write sends a payload to one characteristic, addressed by UUID.
 	Write(ctx context.Context, address, charUUID string, payload []byte) error
-	// Query writes a frame and waits for the answering notification. It returns nil bytes
-	// and no error when the bulb stays quiet, which is a normal outcome rather than a fault.
+	// Query returns nil bytes and no error when the bulb stays silent.
 	Query(ctx context.Context, address, writeUUID, notifyUUID string, payload []byte, timeout time.Duration) ([]byte, error)
-	// Scan looks for bulbs in range. This is how a bulb gets added: a person cannot type a
-	// BLE address they have no way of knowing.
 	Scan(ctx context.Context, window time.Duration) ([]Discovered, error)
-	// Disconnect drops the link and any state cached for it. Errors are not worth reporting:
-	// the point is that the next call reconnects.
+	// Disconnect errors are ignored: the next call reconnects anyway.
 	Disconnect(address string)
-	// Close releases the bus connection.
 	Close() error
 }
 
-// Errors the driver maps to user-facing messages. They are compared with errors.Is, so the
-// D-Bus detail (which carries the bulb's address in the object path) stays in the logs.
+// Errors the driver maps to user-facing messages; the D-Bus detail stays in the logs.
 var (
 	errNoBluetooth  = errors.New("bluetooth unavailable on this host")
 	errBulbNotFound = errors.New("bulb not found")
@@ -127,11 +106,6 @@ func newBluezGATT(adapter string, connectTimeout time.Duration) *bluezGATT {
 	}
 }
 
-// bus connects on first use and keeps the connection.
-//
-// Deliberately lazy: the API must start on a host with no Bluetooth at all (a laptop, CI, a
-// server before the dongle arrives) and report it per bulb, rather than refusing to boot over
-// a section of the house nobody may be looking at.
 func (g *bluezGATT) bus() (*dbus.Conn, error) {
 	g.mu.Lock()
 	defer g.mu.Unlock()
@@ -145,9 +119,6 @@ func (g *bluezGATT) bus() (*dbus.Conn, error) {
 
 	conn, err := dbus.ConnectSystemBus()
 	if err != nil {
-		// Worth a log rather than only a per-bulb card: this is the difference between "the
-		// lamp is out of range" and "this host cannot do Bluetooth at all", and the causes
-		// (socket not mounted, bluetoothd down) are invisible from the UI.
 		slog.Warn("cannot reach the system bus — is /run/dbus/system_bus_socket mounted?", "error", err)
 		return nil, fmt.Errorf("%w: %w", errNoBluetooth, err)
 	}
@@ -160,8 +131,6 @@ func (g *bluezGATT) bus() (*dbus.Conn, error) {
 	return conn, nil
 }
 
-// pump turns PropertiesChanged signals into notification values. It owns no locks of its own
-// beyond the map lookup, so a slow reader cannot stall D-Bus dispatch.
 func (g *bluezGATT) pump(signals chan *dbus.Signal) {
 	for sig := range signals {
 		if sig.Name != propsIface+".PropertiesChanged" || len(sig.Body) < 2 {
@@ -201,12 +170,8 @@ func (g *bluezGATT) adapterPath() dbus.ObjectPath {
 	return dbus.ObjectPath("/org/bluez/" + g.adapter)
 }
 
-// --- connection ----------------------------------------------------------------------
-
 func (g *bluezGATT) Connect(ctx context.Context, address string) error {
-	// Bound the whole thing rather than each step: three attempts of scan-then-wait can
-	// otherwise outlast the HTTP request that asked for it, and a caller waiting a minute
-	// for a lamp has already given up.
+	// Bound the whole retry loop so it cannot outlast the HTTP request.
 	ctx, cancel := context.WithTimeout(ctx, g.connectTimeout)
 	defer cancel()
 
@@ -224,8 +189,6 @@ func (g *bluezGATT) Connect(ctx context.Context, address string) error {
 		slog.Debug("bulb connect attempt failed", "attempt", attempt+1, "error", err)
 
 		if errors.Is(err, errBulbNotFound) {
-			// BlueZ has no object for this address. Expected rather than exceptional, and a
-			// scan is what brings it back — so discover on every attempt, not just the first.
 			g.discoverBriefly(ctx)
 			continue
 		}
@@ -276,7 +239,6 @@ func (g *bluezGATT) waitForServices(ctx context.Context, device dbus.BusObject) 
 	return false
 }
 
-// discoverBriefly nudges BlueZ into noticing a bulb it has no object for yet.
 func (g *bluezGATT) discoverBriefly(ctx context.Context) {
 	conn, err := g.bus()
 	if err != nil {
@@ -308,18 +270,13 @@ func (g *bluezGATT) ensureNotStuck(ctx context.Context, adapter dbus.BusObject) 
 	g.resetAdapter(ctx, adapter)
 }
 
-// stopDiscovery is StopDiscovery plus the same power-cycle fallback: leaving Discovering true
-// after a failed stop would just hand the next caller the same stuck adapter.
 func (g *bluezGATT) stopDiscovery(ctx context.Context, adapter dbus.BusObject) {
-	// Fresh context: the caller's may already be done, and leaving the adapter scanning
-	// burns power and slows every later connect.
 	stopCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 2*time.Second)
 	defer cancel()
 	_ = adapter.CallWithContext(stopCtx, adapterIface+".StopDiscovery", 0).Err
 	g.ensureNotStuck(stopCtx, adapter)
 }
 
-// resetAdapter power-cycles the radio via its Powered property.
 func (g *bluezGATT) resetAdapter(ctx context.Context, adapter dbus.BusObject) {
 	_ = adapter.SetProperty(adapterIface+".Powered", false)
 	sleepCtx(ctx, 1*time.Second)
@@ -356,8 +313,7 @@ func (g *bluezGATT) Scan(ctx context.Context, window time.Duration) ([]Discovere
 	if call := adapter.CallWithContext(ctx, adapterIface+".StartDiscovery", 0); call.Err != nil {
 		return nil, classifyDBus(call.Err)
 	}
-	// Stopped only after the read: when the adapter still reports Discovering, stopDiscovery
-	// power-cycles the radio, and that wipes BlueZ's device cache, so the list would come back empty.
+	// Stop after reading: a power-cycle in stopDiscovery wipes BlueZ's device cache.
 	defer g.stopDiscovery(ctx, adapter)
 
 	sleepCtx(ctx, window)
@@ -397,7 +353,6 @@ func (g *bluezGATT) Scan(ctx context.Context, window time.Duration) ([]Discovere
 		found = append(found, Discovered{Address: address, Name: name, RSSI: int(rssi), Services: services})
 	}
 
-	// Strongest first: the bulb someone is standing next to is the one they mean.
 	sort.Slice(found, func(i, j int) bool { return found[i].RSSI > found[j].RSSI })
 	return found, nil
 }
@@ -415,8 +370,6 @@ func (g *bluezGATT) Disconnect(address string) {
 		CallWithContext(ctx, deviceIface+".Disconnect", 0).Err
 }
 
-// forget drops everything cached about a link: characteristic paths are only valid while the
-// device object exists, and a stale one is a write into nowhere.
 func (g *bluezGATT) forget(address string) {
 	prefix := string(g.devicePath(address)) + "/"
 
@@ -446,8 +399,6 @@ func (g *bluezGATT) Close() error {
 	}
 	return conn.Close()
 }
-
-// --- characteristics -----------------------------------------------------------------
 
 /*
 characteristic resolves a characteristic's object path by UUID.
@@ -540,8 +491,6 @@ func (g *bluezGATT) Query(
 		return nil, err
 	}
 
-	// Arm before writing so a notification left over from an earlier query cannot satisfy
-	// this one.
 	ready := note.arm()
 	if err := g.Write(ctx, address, writeUUID, payload); err != nil {
 		return nil, err
@@ -551,15 +500,13 @@ func (g *bluezGATT) Query(
 	case <-ready:
 		return note.value(), nil
 	case <-time.After(timeout):
-		// Silence is a real answer here: these bulbs say nothing when written a value they
-		// already hold. The caller falls back to what it last knew.
+		// These bulbs say nothing when written a value they already hold.
 		return nil, nil
 	case <-ctx.Done():
 		return nil, ctx.Err()
 	}
 }
 
-// subscribe turns on notifications for a characteristic, once per link.
 func (g *bluezGATT) subscribe(ctx context.Context, path dbus.ObjectPath) (*notifier, error) {
 	g.mu.Lock()
 	if note, ok := g.notes[path]; ok {
@@ -593,8 +540,6 @@ func (g *bluezGATT) subscribe(ctx context.Context, path dbus.ObjectPath) (*notif
 
 	note := newNotifier()
 	g.mu.Lock()
-	// Another goroutine may have won the race while we were on the bus; one notifier per
-	// path or a delivery could land on an object nobody is waiting on.
 	if existing, ok := g.notes[path]; ok {
 		note = existing
 	} else {
@@ -604,8 +549,7 @@ func (g *bluezGATT) subscribe(ctx context.Context, path dbus.ObjectPath) (*notif
 	return note, nil
 }
 
-// notifier holds the latest value seen on one characteristic and lets a reader wait for the
-// next one. Deliveries arrive on the D-Bus pump goroutine; readers are HTTP handlers.
+// notifier holds the latest value seen on one characteristic and lets a reader wait for the next.
 type notifier struct {
 	mu    sync.Mutex
 	last  []byte
@@ -614,7 +558,6 @@ type notifier struct {
 
 func newNotifier() *notifier { return &notifier{ready: make(chan struct{})} }
 
-// arm clears the previous value and returns the channel closed by the next delivery.
 func (n *notifier) arm() <-chan struct{} {
 	n.mu.Lock()
 	defer n.mu.Unlock()
@@ -640,8 +583,6 @@ func (n *notifier) value() []byte {
 	return n.last
 }
 
-// --- small helpers -------------------------------------------------------------------
-
 func boolProp(object dbus.BusObject, iface, name string) (bool, error) {
 	variant, err := object.GetProperty(iface + "." + name)
 	if err != nil {
@@ -651,8 +592,7 @@ func boolProp(object dbus.BusObject, iface, name string) (bool, error) {
 	return value, nil
 }
 
-// classifyDBus maps BlueZ's error names onto the handful of causes worth telling a user
-// apart. The original is wrapped, so logs keep the detail.
+// classifyDBus maps BlueZ error names onto the causes worth telling a user apart.
 func classifyDBus(err error) error {
 	var dbusErr dbus.Error
 	if !errors.As(err, &dbusErr) {
@@ -664,7 +604,6 @@ func classifyDBus(err error) error {
 	case "org.freedesktop.DBus.Error.UnknownObject", "org.freedesktop.DBus.Error.UnknownMethod":
 		return fmt.Errorf("%w: %w", errBulbNotFound, err)
 	case "org.freedesktop.DBus.Error.ServiceUnknown", "org.bluez.Error.NotReady":
-		// bluetoothd is not running, or the adapter is off.
 		return fmt.Errorf("%w: %w", errNoBluetooth, err)
 	case "org.bluez.Error.DoesNotExist":
 		return fmt.Errorf("%w: %w", errBulbNotFound, err)
@@ -677,14 +616,12 @@ func classifyDBus(err error) error {
 		return fmt.Errorf("%w: %w", errBulbNotFound, err)
 	case strings.Contains(message, "abort-by-local"), strings.Contains(message, "connection refused"),
 		strings.Contains(message, "br-connection-page-timeout"), strings.Contains(message, "not connected"):
-		// One central at a time: the vendor app on a phone will hold the bulb and it then
-		// stops advertising entirely.
+		// The vendor phone app holds the bulb exclusively while connected.
 		return fmt.Errorf("%w: %w", errBulbBusy, err)
 	}
 	return err
 }
 
-// sleepCtx waits unless the context ends first; false means it ended.
 func sleepCtx(ctx context.Context, d time.Duration) bool {
 	timer := time.NewTimer(d)
 	defer timer.Stop()
@@ -696,8 +633,6 @@ func sleepCtx(ctx context.Context, d time.Duration) bool {
 	}
 }
 
-// joinTimeout prefers the specific failure over "deadline exceeded", which says nothing about
-// the bulb.
 func joinTimeout(ctx context.Context, last error) error {
 	if last != nil {
 		return last

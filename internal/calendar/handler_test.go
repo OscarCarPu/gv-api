@@ -18,10 +18,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// Handler tests cover HTTP concerns only: parsing, validation of the request shape, and the
-// mapping from the domain's errors to status codes. The behaviour behind them is tested
-// against the service.
-
 func newReq(method, target, body string) *http.Request {
 	if body == "" {
 		return httptest.NewRequest(method, target, nil)
@@ -60,7 +56,7 @@ func TestHandler_ListEvents_ParsesTheQuery(t *testing.T) {
 	})).Return([]calendar.Event{{InstanceID: "1"}}, nil)
 
 	rec := httptest.NewRecorder()
-	// A plain date is accepted so a client asking for a week does not have to invent a zone.
+	// A plain date is accepted.
 	calendar.NewHandler(svc).ListEvents(rec, newReq(http.MethodGet,
 		"/calendar/events?from=2026-08-20&to=2026-08-27&calendar_ids=3,5&account_ids=1&visible_only=true", ""))
 	assert.Equal(t, http.StatusOK, rec.Code)
@@ -198,8 +194,6 @@ func TestHandler_Sync_AllOrOne(t *testing.T) {
 	})
 }
 
-// --- the two public endpoints --------------------------------------------------------
-
 func TestHandler_OAuthCallback_RedirectsOnSuccessAndOnFailure(t *testing.T) {
 	t.Run("success", func(t *testing.T) {
 		svc := mocks.NewMockServiceInterface(t)
@@ -215,7 +209,7 @@ func TestHandler_OAuthCallback_RedirectsOnSuccessAndOnFailure(t *testing.T) {
 	t.Run("declined at google", func(t *testing.T) {
 		svc := mocks.NewMockServiceInterface(t)
 		rec := httptest.NewRecorder()
-		// The person is looking at a browser tab; a JSON error there is a dead end.
+		// A browser tab is looking at this; a JSON error would be a dead end.
 		calendar.NewHandler(svc).OAuthCallback(rec,
 			newReq(http.MethodGet, "/calendar/google/callback?error=access_denied", ""))
 		assert.Equal(t, http.StatusFound, rec.Code)
@@ -254,8 +248,7 @@ func TestHandler_Webhook(t *testing.T) {
 		svc := mocks.NewMockServiceInterface(t)
 		svc.EXPECT().HandleWebhook(mock.Anything, "old", "exists", "secret").Return(calendar.ErrNotFound)
 		rec := httptest.NewRecorder()
-		// Anything but a 200 makes google retry and eventually drop the channel; a
-		// notification for a channel we replaced is not worth that.
+		// Anything but a 200 makes google retry and eventually drop the channel.
 		calendar.NewHandler(svc).Webhook(rec, newWebhookReq("old", "exists", "secret"))
 		assert.Equal(t, http.StatusOK, rec.Code)
 	})
@@ -269,8 +262,6 @@ func TestHandler_Webhook(t *testing.T) {
 		assert.Equal(t, http.StatusUnauthorized, rec.Code)
 	})
 }
-
-// --- SSE -----------------------------------------------------------------------------
 
 func TestHandler_Stream_SendsEventsAndClosesWithTheClient(t *testing.T) {
 	messages := make(chan calendar.StreamMessage, 4)

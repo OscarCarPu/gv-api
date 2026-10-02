@@ -110,8 +110,7 @@ func TestIntegration_Delete(t *testing.T) {
 	_, err = repo.Get(ctx, created.ID)
 	require.ErrorIs(t, err, rutas.ErrNotFound)
 
-	// Delete of a missing id does not report an error — the DELETE is a plain
-	// exec with no rows-affected check. This documents the current contract.
+	// Deleting a missing id is not an error.
 	require.NoError(t, repo.Delete(ctx, created.ID))
 }
 

@@ -1,4 +1,4 @@
-// Package config provides the config
+// Package config loads the API's configuration from the environment.
 package config
 
 import (
@@ -19,44 +19,32 @@ type Config struct {
 	Timezone            string
 	AllowedOrigins      []string
 
-	// Domotics lights. Which bulbs exist lives in the database — these only say how to reach
-	// them. With LIGHTS_DRIVER unset the in-memory mock is used, so nothing needs a Bluetooth
-	// adapter to run the app.
+	// Domotics lights. LIGHTS_DRIVER unset uses the in-memory mock.
 	LightsDriver  string
 	LightsAdapter string
-	// How long a single connect may take, discovery and GATT resolution included, and how
-	// long an untouched bulb keeps the link before it is handed back to its own remote.
+	// Connect budget per bulb, and how long an idle bulb keeps the link.
 	LightsConnectTimeout time.Duration
 	LightsIdleDisconnect time.Duration
 	LightsCacheTTL       time.Duration
 	LightsPollInterval   time.Duration
-	// These bulbs sometimes land a step off the requested value, so the API re-applies a
-	// write until it holds. 0 attempts disables it.
+	// Re-apply a write until the bulb holds the value. 0 attempts disables it.
 	LightsSettleAttempts int
 	LightsSettleDelay    time.Duration
 
-	// central-pipeline. A second, independent database: the one that owns the marts gv-api
-	// reads — watchdog uptime today, whatever device comes next. Not gv's own DSN and not
-	// gv's schema, since dbt creates and drops those relations. Unset means the domains
-	// reading it mount and answer 503 instead of the app failing to start.
+	// central-pipeline's database (read-only). Unset means those domains answer 503.
 	PipelineDBUrl string
-	// Every mart carries the dbt run time, not now(). Past this age the numbers are
-	// reported as stale rather than presented as live.
+	// Past this age, mart numbers are reported as stale.
 	PipelineStaleAfter time.Duration
 
-	// Calendar. With no client id/secret the domain still mounts and answers; it simply has
-	// nothing connected and never syncs, the same way lights run on a mock driver with no
-	// radio. GoogleTokenKey is required as soon as credentials are present, because the
-	// refresh tokens are stored encrypted and there is no plaintext fallback.
+	// Calendar. Without client id/secret the domain mounts but never syncs. GoogleTokenKey is
+	// required once credentials are set: refresh tokens are stored encrypted.
 	GoogleClientID     string
 	GoogleClientSecret string
 	GoogleRedirectURL  string
 	GoogleTokenKey     string
-	// Where the OAuth callback sends the browser once the account is connected. Defaults to
-	// the first allowed origin, which is gv-web in every real deployment.
+	// Where the OAuth callback sends the browser. Defaults to the first allowed origin.
 	CalendarWebAppURL string
-	// Push notifications. Google needs a public HTTPS address with a valid certificate; with
-	// no URL configured the feature falls back to polling alone.
+	// Push notifications need a public HTTPS URL; without one, polling alone.
 	CalendarWebhookURL       string
 	CalendarWebhookEnabled   bool
 	CalendarWatchTTL         time.Duration
@@ -64,7 +52,7 @@ type Config struct {
 	CalendarSyncInterval     time.Duration
 	CalendarDebounce         time.Duration
 
-	// Theoretical free hours per day, same every day of the year. Not editable from the app.
+	// Theoretical free hours per day.
 	DailyCapacityHours float64
 }
 
@@ -90,11 +78,7 @@ func Load() (*Config, error) {
 
 		LightsDriver:  getEnv("LIGHTS_DRIVER", "mock"),
 		LightsAdapter: getEnv("LIGHTS_ADAPTER", "hci0"),
-		// Connect retries up to connectRetries times (gatt.go), and each retry that finds no
-		// BlueZ object for the bulb re-scans for discoveryWindow (8s) before trying again —
-		// 3 retries is up to ~24s of scanning alone, before any connect/service-resolve time.
-		// 20s was sized for a single cold rediscovery and cuts that retry loop off mid-scan,
-		// turning a bulb that would have connected into "context deadline exceeded".
+		// Each of the 3 connect retries can re-scan for 8s, so this has to cover ~24s of scanning.
 		LightsConnectTimeout: getEnvDuration("LIGHTS_CONNECT_TIMEOUT_MS", 60000),
 		LightsIdleDisconnect: getEnvDuration("LIGHTS_IDLE_DISCONNECT_MS", 90000),
 		LightsCacheTTL:       getEnvDuration("LIGHTS_CACHE_MS", 2000),
@@ -103,8 +87,7 @@ func Load() (*Config, error) {
 		LightsSettleDelay:    getEnvDuration("LIGHTS_SETTLE_DELAY_MS", 400),
 
 		PipelineDBUrl: os.Getenv("PIPELINE_DATABASE_URL"),
-		// dbt is a batch job and is not scheduled yet, so generous: this only decides when
-		// the UI stops calling the numbers current.
+		// Generous: dbt is not scheduled yet.
 		PipelineStaleAfter: getEnvDuration("PIPELINE_STALE_AFTER_MS", 2*60*60*1000),
 
 		GoogleClientID:     os.Getenv("GOOGLE_CLIENT_ID"),
@@ -113,13 +96,10 @@ func Load() (*Config, error) {
 		GoogleTokenKey:     os.Getenv("GOOGLE_TOKEN_KEY"),
 		CalendarWebAppURL:  os.Getenv("CALENDAR_WEB_APP_URL"),
 		CalendarWebhookURL: os.Getenv("CALENDAR_WEBHOOK_URL"),
-		// Push channels last about a week in practice and cannot be renewed in place, so they
-		// are replaced a day before they expire.
+		// Channels last about a week and are replaced a day before they expire.
 		CalendarWatchTTL:         getEnvDuration("CALENDAR_WATCH_TTL_MS", 7*24*60*60*1000),
 		CalendarWatchRenewBefore: getEnvDuration("CALENDAR_WATCH_RENEW_BEFORE_MS", 24*60*60*1000),
-		// The poll is the safety net behind the webhooks, not the main mechanism, hence 15
-		// minutes rather than 1. One change in Google produces a burst of notifications, so
-		// they are coalesced for a couple of seconds before syncing.
+		// Polling is the safety net behind webhooks. Notification bursts are coalesced before syncing.
 		CalendarSyncInterval: getEnvDuration("CALENDAR_SYNC_INTERVAL_MS", 15*60*1000),
 		CalendarDebounce:     getEnvDuration("CALENDAR_DEBOUNCE_MS", 2000),
 

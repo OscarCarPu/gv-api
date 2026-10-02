@@ -11,10 +11,8 @@ const (
 	DefaultMaxKelvin = 6500
 )
 
-// Light is one bulb as the server knows it: a row in the lights table.
-//
-// Address, Protocol and Options describe hardware, so they never leave this process — clients
-// only ever see the fields PublicLight exposes.
+// Light is one row of the lights table. Address, Protocol and Options never leave this process;
+// clients see PublicLight.
 type Light struct {
 	ID       string
 	Name     string
@@ -27,12 +25,11 @@ type Light struct {
 	MinColorTemp      float64
 	MaxColorTemp      float64
 
-	// Options carries model-specific quirks (characteristic UUIDs, keys) so one odd bulb is a
-	// row rather than a new protocol.
+	// Options carries model-specific quirks (characteristic UUIDs, keys).
 	Options map[string]any
 }
 
-// Public is the client-safe view, with no address and nothing about the wire protocol.
+// Public is the client-safe view.
 func (l Light) Public() PublicLight {
 	return PublicLight{
 		ID:                l.ID,
@@ -53,7 +50,6 @@ func publicLights(lights []Light) []PublicLight {
 	return out
 }
 
-// offlineState is the baseline for a bulb that has not answered.
 func offlineState(l Light, errMsg string, now int64) State {
 	mode := "white"
 	if l.SupportsColor {
@@ -78,9 +74,7 @@ func offlineState(l Light, errMsg string, now int64) State {
 	}
 }
 
-// slugify turns a name into an id. Ids are slugs because they show up in URLs, logs and
-// client-side state, and they are assigned once at creation so a rename never moves the
-// ground under a client mid-command. Accents fold rather than drop: "Salón" -> "salon".
+// slugify turns a name into an id, folding accents: "Salón" -> "salon".
 func slugify(name string) string {
 	var b strings.Builder
 	lastDash := true // leading dashes are dropped
@@ -101,8 +95,6 @@ func slugify(name string) string {
 
 	slug := strings.Trim(b.String(), "-")
 	if slug == "" {
-		// Every name was punctuation or a script we cannot fold. The bulb still needs an id,
-		// and the caller makes it unique.
 		return "light"
 	}
 	if len(slug) > 40 {
@@ -111,8 +103,6 @@ func slugify(name string) string {
 	return slug
 }
 
-// foldedLatin covers the accented letters a Spanish or Galician room name actually uses.
-// A general Unicode normaliser would be a dependency for this one table.
 var foldedLatin = map[rune]rune{
 	'á': 'a', 'à': 'a', 'ä': 'a', 'â': 'a', 'ã': 'a', 'å': 'a',
 	'é': 'e', 'è': 'e', 'ë': 'e', 'ê': 'e',
@@ -122,8 +112,7 @@ var foldedLatin = map[rune]rune{
 	'ñ': 'n', 'ç': 'c',
 }
 
-// normalizeAddress makes BLE addresses comparable: BlueZ and every scanner report them
-// uppercase and colon-separated, but people paste them in all sorts of ways.
+// normalizeAddress makes BLE addresses comparable: uppercase, colon-separated.
 func normalizeAddress(address string) string {
 	return strings.ToUpper(strings.TrimSpace(address))
 }

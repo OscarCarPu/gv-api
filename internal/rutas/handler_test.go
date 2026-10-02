@@ -17,10 +17,6 @@ import (
 	"github.com/stretchr/testify/mock"
 )
 
-// Handler tests cover HTTP-layer concerns only: status codes, decode errors,
-// id parsing, error→status mapping. The service is a pass-through to the
-// repository, so business behavior lives in repository tests.
-
 func newReq(method, target, body string) *http.Request {
 	if body == "" {
 		return httptest.NewRequest(method, target, nil)
@@ -172,8 +168,7 @@ func TestHandler_Update(t *testing.T) {
 }
 
 func TestHandler_Delete(t *testing.T) {
-	// Delete does not map ErrNotFound; any service error is a 500. This test
-	// documents the current contract.
+	// Delete does not map ErrNotFound; any service error is a 500.
 	t.Run("500 when service returns ErrNotFound", func(t *testing.T) {
 		svc := mocks.NewMockServiceInterface(t)
 		svc.EXPECT().Delete(mock.Anything, int32(9)).Return(rutas.ErrNotFound)

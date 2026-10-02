@@ -12,12 +12,10 @@ import (
 // budgetWarningShare is the share of an expense budget from which it is flagged as warning.
 const budgetWarningShare = 0.8
 
-// budgetAverageMonths is how many complete months before the viewed one feed the suggested
-// average shown when setting a monthly budget.
+// budgetAverageMonths is how many complete months feed the suggested monthly budget.
 const budgetAverageMonths = 3
 
-// SetBudget sets or removes a category's budget. Only income and expense categories can be
-// budgeted.
+// SetBudget sets or removes a category's budget. Only income and expense categories qualify.
 func (s *Service) SetBudget(ctx context.Context, req SetBudgetRequest) error {
 	t, err := s.repo.GetCategoryType(ctx, req.CategoryID)
 	if err != nil {
@@ -33,12 +31,9 @@ func (s *Service) SetBudget(ctx context.Context, req SetBudgetRequest) error {
 }
 
 // GetBudgetMonth compares every budget in effect at a month with the actuals: monthly budgets
-// against that month, yearly budgets against the whole calendar year containing it.
+// against the month, yearly ones against its calendar year.
 //
-// Actuals roll up the category tree: a budget on a parent covers the transactions of all its
-// descendants of the same type, except those under a descendant budgeted with the other period
-// (a yearly "Car maintenance" under a monthly "Transport" keeps its tyres out of the monthly
-// budget, and the other way round).
+// Actuals roll up the category tree by type, except subtrees budgeted with the other period.
 func (s *Service) GetBudgetMonth(ctx context.Context, month time.Time) (BudgetMonth, error) {
 	now := time.Now().In(s.loc)
 	if month.IsZero() {
@@ -108,8 +103,7 @@ func (s *Service) GetBudgetMonth(ctx context.Context, month time.Time) (BudgetMo
 		PreviousYear: []BudgetAmount{},
 	}
 
-	// The monthly view reports everything the month took: all of it as actual (not only what
-	// the budgets covered), and as unbudgeted whatever no budget of either period covers.
+	// The monthly view reports everything the month took; unbudgeted is what neither period covers.
 	out.Expense.Actual, out.Income.Actual = decimal.Zero, decimal.Zero
 	covered := tree.covered(monthly, yearly)
 	for _, t := range monthTotals {
@@ -145,9 +139,8 @@ func (s *Service) GetBudgetMonth(ctx context.Context, month time.Time) (BudgetMo
 	return out, nil
 }
 
-// GetBudgetTransactions lists the transactions a budget counts in the period containing month:
-// the category's and its same-type descendants', leaving out subtrees budgeted with the other
-// period — exactly what GetBudgetMonth rolls up into the budget's actual.
+// GetBudgetTransactions lists the transactions a budget counts in the period containing month,
+// matching what GetBudgetMonth rolls up.
 func (s *Service) GetBudgetTransactions(ctx context.Context, categoryID int32, period BudgetPeriod, month time.Time) ([]OverviewTransaction, error) {
 	if month.IsZero() {
 		month = time.Now().In(s.loc)
@@ -194,24 +187,19 @@ func totalsFor(out *BudgetMonth, t txtype.Type) *BudgetTotals {
 	return nil
 }
 
-// periodSummary is one period's budget rows and per-type totals. Totals carry Budgeted
-// (outermost budgets only), Actual (what the outermost budgets' categories took) and Overspent.
+// periodSummary is one period's budget rows and per-type totals.
 type periodSummary struct {
 	items  []BudgetItem
 	totals map[txtype.Type]BudgetTotals
 }
 
-// summarize builds the rows and totals of the budgets of one period. other holds the budgets
-// of the other period, whose subtrees are left out of this period's roll-up.
+// summarize builds one period's rows and totals, leaving out subtrees budgeted in other.
 func (t categoryTree) summarize(period BudgetPeriod, own, other map[int32]EffectiveBudget, totals []CategoryTotal) periodSummary {
 	actual := t.rollUp(totals, otherPeriodStop(own, other))
 	out := periodSummary{items: []BudgetItem{}, totals: map[txtype.Type]BudgetTotals{}}
 
-	// Depth-first in category order, counting the budgeted ancestors of the same type so a
-	// budgeted child nests under its budgeted parent and is not counted twice in the totals.
-	// Each call returns the expense overspend of its subtree: a budget's overspend is the larger
-	// of its own excess and the overspend of the budgets nested in it, so a euro spent over a
-	// child budget is counted once however many budgets it is over.
+	// Depth-first in category order, nesting budgeted children under budgeted parents. Each call
+	// returns its subtree's overspend, so a euro over several nested budgets counts once.
 	var walk func(id int32, depth map[txtype.Type]int) decimal.Decimal
 	walk = func(id int32, depth map[txtype.Type]int) decimal.Decimal {
 		c := t.byID[id]
@@ -251,8 +239,7 @@ func (t categoryTree) summarize(period BudgetPeriod, own, other map[int32]Effect
 	return out
 }
 
-// otherPeriodStop is the roll-up boundary of a period's budgets: a subtree whose root has a
-// budget of the other period (and none of this one) is that budget's business, not ours.
+// otherPeriodStop stops the roll-up at subtrees owned by a budget of the other period only.
 func otherPeriodStop(own, other map[int32]EffectiveBudget) func(id int32) bool {
 	return func(id int32) bool {
 		_, mine := own[id]
@@ -336,9 +323,8 @@ func newCategoryTree(cats []Category) categoryTree {
 	return t
 }
 
-// rollUp sums the totals of each category and its descendants of the same type, not
-// descending into children for which stop returns true (nil = descend everywhere).
-// Uncategorized totals are ignored (no category to attribute them to).
+// rollUp sums each category's totals with its same-type descendants, not descending where stop
+// returns true. Uncategorized totals are ignored.
 func (t categoryTree) rollUp(totals []CategoryTotal, stop func(id int32) bool) map[int32]decimal.Decimal {
 	direct := map[int32]decimal.Decimal{}
 	for _, row := range totals {
@@ -371,8 +357,7 @@ func (t categoryTree) rollUp(totals []CategoryTotal, stop func(id int32) bool) m
 	return out
 }
 
-// subtree lists a category and its descendants of the same type, not descending into children
-// for which stop returns true.
+// subtree lists a category and its same-type descendants, not descending where stop returns true.
 func (t categoryTree) subtree(id int32, stop func(id int32) bool) []int32 {
 	typ := t.byID[id].Type
 	out := []int32{}
@@ -396,8 +381,7 @@ func (t categoryTree) subtree(id int32, stop func(id int32) bool) []int32 {
 	return out
 }
 
-// covered reports, per category, whether a budget of any of the given sets applies to it: the
-// category itself or an ancestor of the same type is budgeted.
+// covered reports, per category, whether it or a same-type ancestor is budgeted in any set.
 func (t categoryTree) covered(sets ...map[int32]EffectiveBudget) map[int32]bool {
 	out := make(map[int32]bool, len(t.byID))
 	var walk func(id int32, inherited map[txtype.Type]bool)

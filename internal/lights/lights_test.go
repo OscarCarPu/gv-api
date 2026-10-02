@@ -12,7 +12,7 @@ import (
 	"time"
 )
 
-// bedroom is the bulb most tests drive: the real one, tunable white only.
+// bulb is the real bedroom bulb, tunable white only.
 func bulb(t *testing.T) Light {
 	t.Helper()
 	return Light{
@@ -29,7 +29,7 @@ func bulb(t *testing.T) Light {
 }
 
 func TestPublicHidesAddress(t *testing.T) {
-	// The BLE address identifies hardware in the house; it must not reach a client.
+	// The BLE address must not reach a client.
 	body, err := json.Marshal(bulb(t).Public())
 	if err != nil {
 		t.Fatal(err)
@@ -95,9 +95,7 @@ func TestCommandValidate(t *testing.T) {
 }
 
 func TestMockDriverDoesNotInferPowerFromBrightness(t *testing.T) {
-	// The regression this guards: brightness and power are separate frames on the real bulb,
-	// so dimming one that is off leaves it off. Inferring otherwise made the UI report "on"
-	// over a dark room and turned "All on" into a no-op.
+	// Brightness and power are separate frames: dimming a bulb that is off leaves it off.
 	light := bulb(t)
 	driver := NewMockDriver()
 	ctx := context.Background()
@@ -140,8 +138,7 @@ func TestServiceCachesReadsAndForceBypasses(t *testing.T) {
 }
 
 func TestServiceCollapsesConcurrentReadsOfOneBulb(t *testing.T) {
-	// Two overlapping GATT reads of one peripheral tend to fail both, so callers arriving
-	// while a read is open must wait on it rather than start a second.
+	// Overlapping GATT reads of one bulb fail, so concurrent callers must join the open read.
 	repo := newFakeRepo(bulb(t))
 	driver := &countingDriver{inner: NewMockDriver(), delay: 50 * time.Millisecond}
 	svc := NewService(repo, driver, 0, 0, 0) // no cache, so only the in-flight join can dedupe
@@ -169,12 +166,8 @@ func TestServiceUnknownIDIsNotFound(t *testing.T) {
 	}
 }
 
-// --- BlueZ driver ---------------------------------------------------------------------
-
 func TestBlueZDriverDoesNotLeakTheBulbAddress(t *testing.T) {
-	// BlueZ's errors carry the D-Bus object path, which embeds the bulb's MAC. That string
-	// is handed to every client, including a phone on the open internet — it means nothing to
-	// a person and names hardware in the house. The meaning is kept; the address is not.
+	// D-Bus errors embed the bulb's MAC in the object path; it must not reach clients.
 	light := bulb(t)
 	radio := &fakeGATT{connectErr: fmt.Errorf("%w: %s", errBulbNotFound,
 		`Object /org/bluez/hci0/dev_AA_BB_CC_DD_EE_FF does not exist`)}
@@ -195,8 +188,7 @@ func TestBlueZDriverDoesNotLeakTheBulbAddress(t *testing.T) {
 }
 
 func TestBlueZDriverReportsUnreachableAsOfflineNotError(t *testing.T) {
-	// An unreachable bulb must degrade to one offline card, never to a failed request — it
-	// cannot be allowed to blank a page covering several.
+	// An unreachable bulb degrades to one offline card, never a failed request.
 	light := bulb(t)
 	radio := &fakeGATT{connectErr: errBulbBusy}
 
@@ -208,15 +200,13 @@ func TestBlueZDriverReportsUnreachableAsOfflineNotError(t *testing.T) {
 	if state.Error == "" {
 		t.Error("want an error message explaining why")
 	}
-	// Identity and capabilities still come through, so the card renders.
 	if state.ID != "bedroom" || state.Name != "Bedroom" || state.MaxColorTemp != 6500 {
 		t.Errorf("identity/capabilities lost while offline: %+v", state)
 	}
 }
 
 func TestBlueZDriverKeepsWhatItLastSetWhenTheBulbStaysQuiet(t *testing.T) {
-	// These bulbs answer nothing when written a value they already hold, so a read that comes
-	// back empty must not blank the card — what we last set is the best answer there is.
+	// An empty readback keeps the last set values.
 	light := bulb(t)
 	radio := &fakeGATT{} // every query times out, i.e. returns no bytes
 	driver := newDriver(radio, time.Minute)
@@ -235,7 +225,6 @@ func TestBlueZDriverKeepsWhatItLastSetWhenTheBulbStaysQuiet(t *testing.T) {
 }
 
 func TestBlueZDriverReadbackWins(t *testing.T) {
-	// When the bulb does answer, it is the authority — someone may have used the wall remote.
 	light := bulb(t)
 	radio := &fakeGATT{replies: map[byte][]byte{
 		0x10: {0x00, 0x00, 0x10, 0x03, 0x02, 0x01, 0x01},       // on
@@ -261,8 +250,7 @@ func TestBlueZDriverReadbackWins(t *testing.T) {
 }
 
 func TestBlueZDriverUnsupportedCommandLeavesTheBulbOnline(t *testing.T) {
-	// Asking a tunable-white bulb for red is a limit, not a fault: the card says so and the
-	// bulb keeps working.
+	// An unsupported command is reported on the card; the bulb stays online.
 	light := bulb(t)
 	driver := newDriver(&fakeGATT{}, time.Minute)
 
@@ -280,8 +268,7 @@ func TestBlueZDriverUnsupportedCommandLeavesTheBulbOnline(t *testing.T) {
 }
 
 func TestBlueZDriverSerialisesOneBulb(t *testing.T) {
-	// Two overlapping GATT writes to one peripheral tend to fail both, so the driver must
-	// hold the bulb rather than trust every caller to take turns.
+	// The driver must serialise writes to one bulb.
 	light := bulb(t)
 	radio := &fakeGATT{}
 	driver := newDriver(radio, time.Minute)
@@ -314,8 +301,6 @@ func TestBlueZDriverUnknownProtocolIsAConfigError(t *testing.T) {
 	}
 }
 
-// --- lexman protocol ------------------------------------------------------------------
-
 func TestLexmanFrames(t *testing.T) {
 	light := bulb(t)
 	ctx := context.Background()
@@ -325,20 +310,31 @@ func TestLexmanFrames(t *testing.T) {
 		do   func(g gatt) error
 		want []byte
 	}{
-		{"power on", func(g gatt) error { return lexman{}.SetPower(ctx, g, light, true) },
-			[]byte{0x00, 0x00, 0x10, 0x01, 0x03, 0x01, 0x00, 0x00}},
-		{"power off", func(g gatt) error { return lexman{}.SetPower(ctx, g, light, false) },
-			[]byte{0x00, 0x00, 0x10, 0x01, 0x03, 0x00, 0x00, 0x00}},
-		{"brightness 100", func(g gatt) error { return lexman{}.SetBrightness(ctx, g, light, 100) },
-			[]byte{0x00, 0x00, 0x11, 0x01, 0x03, 0xFE, 0x00, 0x00}},
-		// 0% must still be a legal step: off belongs to the switch command, and a raw 0 would
-		// read back as "off" and confuse the next poll.
-		{"brightness 0", func(g gatt) error { return lexman{}.SetBrightness(ctx, g, light, 0) },
-			[]byte{0x00, 0x00, 0x11, 0x01, 0x03, 0x01, 0x00, 0x00}},
-		{"warmest", func(g gatt) error { return lexman{}.SetColorTemp(ctx, g, light, 2700) },
-			[]byte{0x00, 0x00, 0x12, 0x01, 0x04, 0x01, 0xC6, 0x00, 0x00}}, // 454 mireds
-		{"coolest", func(g gatt) error { return lexman{}.SetColorTemp(ctx, g, light, 6500) },
-			[]byte{0x00, 0x00, 0x12, 0x01, 0x04, 0x00, 0x99, 0x00, 0x00}}, // 153 mireds
+		{
+			"power on", func(g gatt) error { return lexman{}.SetPower(ctx, g, light, true) },
+			[]byte{0x00, 0x00, 0x10, 0x01, 0x03, 0x01, 0x00, 0x00},
+		},
+		{
+			"power off", func(g gatt) error { return lexman{}.SetPower(ctx, g, light, false) },
+			[]byte{0x00, 0x00, 0x10, 0x01, 0x03, 0x00, 0x00, 0x00},
+		},
+		{
+			"brightness 100", func(g gatt) error { return lexman{}.SetBrightness(ctx, g, light, 100) },
+			[]byte{0x00, 0x00, 0x11, 0x01, 0x03, 0xFE, 0x00, 0x00},
+		},
+		// 0% is still a legal step: a raw 0 would read back as off.
+		{
+			"brightness 0", func(g gatt) error { return lexman{}.SetBrightness(ctx, g, light, 0) },
+			[]byte{0x00, 0x00, 0x11, 0x01, 0x03, 0x01, 0x00, 0x00},
+		},
+		{
+			"warmest", func(g gatt) error { return lexman{}.SetColorTemp(ctx, g, light, 2700) },
+			[]byte{0x00, 0x00, 0x12, 0x01, 0x04, 0x01, 0xC6, 0x00, 0x00},
+		}, // 454 mireds
+		{
+			"coolest", func(g gatt) error { return lexman{}.SetColorTemp(ctx, g, light, 6500) },
+			[]byte{0x00, 0x00, 0x12, 0x01, 0x04, 0x00, 0x99, 0x00, 0x00},
+		}, // 153 mireds
 	}
 
 	for _, tc := range cases {
@@ -368,14 +364,12 @@ func TestLexmanKelvinRoundTrips(t *testing.T) {
 			t.Fatalf("%dK round-tripped as %dK, outside the %.0fK settle tolerance", kelvin, got, tolerance)
 		}
 	}
-	// On the bulb's own scale it is exact, which is what keeps the slider from twitching when
-	// a value is read straight back.
+	// Exact on the bulb's own scale.
 	for mired := lexmanMiredCool; mired <= lexmanMiredWarm; mired++ {
 		if got := kelvinToMired(miredToKelvin(mired)); got != mired {
 			t.Fatalf("%d mireds round-tripped as %d", mired, got)
 		}
 	}
-	// Out of range clamps to what the bulb can actually do rather than failing.
 	if got := kelvinToMired(1000); got != lexmanMiredWarm {
 		t.Errorf("below range should clamp warm, got %d mireds", got)
 	}
@@ -385,8 +379,7 @@ func TestLexmanKelvinRoundTrips(t *testing.T) {
 }
 
 func TestLexmanReadIsPartial(t *testing.T) {
-	// A bulb that answers only some queries must yield only those fields: an absent answer
-	// means "unchanged", never zero.
+	// An absent answer means "unchanged", never zero.
 	radio := &fakeGATT{replies: map[byte][]byte{
 		0x11: {0x00, 0x00, 0x11, 0x03, 0x02, 0xFE, 0xFE},
 	}}
@@ -417,7 +410,7 @@ func TestLexmanReadEmptyWhenTheBulbSaysNothing(t *testing.T) {
 }
 
 func TestLexmanUsesPerBulbCharacteristicOverride(t *testing.T) {
-	// A near-identical bulb with different UUIDs should be an env edit, not a new protocol.
+	// A bulb with different UUIDs is configured through options.
 	light := Light{
 		ID: "odd", Address: "AA:BB", Protocol: "lexman",
 		Options: map[string]any{"writeChar": "0000beef-0000-1000-8000-00805f9b34fb"},
@@ -432,10 +425,7 @@ func TestLexmanUsesPerBulbCharacteristicOverride(t *testing.T) {
 	}
 }
 
-// --- managing which bulbs exist --------------------------------------------------------
-
 func TestCreateFillsInWhatTheModelCanDo(t *testing.T) {
-	// Nobody adding a lamp to a bedroom knows its kelvin range. Naming the model is enough.
 	repo := newFakeRepo()
 	svc := NewService(repo, NewMockDriver(), 0, 0, 0)
 
@@ -454,15 +444,12 @@ func TestCreateFillsInWhatTheModelCanDo(t *testing.T) {
 	if light.MinColorTemp != 2700 || light.MaxColorTemp != 6500 {
 		t.Errorf("kelvin range should come from the protocol: %+v", light)
 	}
-	// Addresses are compared against scan results, which BlueZ reports uppercase.
 	if stored := repo.lights[0].Address; stored != "AA:BB:CC:DD:EE:FF" {
 		t.Errorf("address should be normalised, stored %q", stored)
 	}
 }
 
 func TestCreateGivesTwoBulbsOfTheSameNameDifferentIds(t *testing.T) {
-	// Two lamps called "Lamp" is an ordinary house. Two rows with one id is not, and renaming
-	// the lamp is not the user's problem to solve.
 	svc := NewService(newFakeRepo(), NewMockDriver(), 0, 0, 0)
 	ctx := context.Background()
 
@@ -480,7 +467,6 @@ func TestCreateGivesTwoBulbsOfTheSameNameDifferentIds(t *testing.T) {
 }
 
 func TestCreateRejectsTheSameBulbTwice(t *testing.T) {
-	// Two cards for one lamp would fight over a link that takes one conversation at a time.
 	svc := NewService(newFakeRepo(), NewMockDriver(), 0, 0, 0)
 	ctx := context.Background()
 
@@ -530,8 +516,7 @@ func TestUpdateKeepsWhatWasNotSent(t *testing.T) {
 }
 
 func TestRenameDoesNotLeaveTheOldNameInTheCache(t *testing.T) {
-	// The name travels inside State, so a cached read would keep showing the old one for as
-	// long as the TTL lasts.
+	// The name travels inside State, so a stale cache would show the old one.
 	repo := newFakeRepo(bulb(t))
 	svc := NewService(repo, NewMockDriver(), time.Minute, 0, 0)
 	ctx := context.Background()
@@ -573,8 +558,6 @@ func TestDeleteRemovesTheBulb(t *testing.T) {
 }
 
 func TestDiscoverMarksBulbsAlreadyAdded(t *testing.T) {
-	// Without this the add screen offers a bulb that is already on the page, and the only
-	// feedback is a duplicate-address error after the fact.
 	repo := newFakeRepo(Light{ID: "known", Address: "00:11:22:33:44:55", Protocol: "lexman"})
 	svc := NewService(repo, NewMockDriver(), 0, 0, 0)
 
@@ -610,10 +593,7 @@ func TestProtocolsDescribeTheModelsOnOffer(t *testing.T) {
 	}
 }
 
-// --- helpers ---
-
-// fakeRepo is the lights table, in memory, including the two unique constraints that shape
-// the service's behaviour.
+// fakeRepo is the lights table in memory, with both unique constraints.
 type fakeRepo struct {
 	mu     sync.Mutex
 	lights []Light
@@ -706,8 +686,7 @@ func (f *fakeGATT) enter() func() {
 			break
 		}
 	}
-	// Widen the window: without it every call is over before the next one starts and an
-	// overlap could never be observed, passing the test for the wrong reason.
+	// Widen the window so an overlap can actually be observed.
 	time.Sleep(time.Millisecond)
 	return func() { f.active.Add(-1) }
 }
@@ -761,7 +740,6 @@ type countingDriver struct {
 	reads atomic.Int32
 }
 
-// Discover is the mock's, unchanged: none of these doubles is about scanning.
 func (d *countingDriver) Discover(ctx context.Context, window time.Duration) ([]Discovered, error) {
 	return d.inner.Discover(ctx, window)
 }
@@ -782,20 +760,17 @@ func (d *countingDriver) Apply(ctx context.Context, light Light, cmd Command) St
 
 func contains(haystack, needle string) bool {
 	return len(needle) > 0 && len(haystack) >= len(needle) &&
-		(func() bool {
+		func() bool {
 			for i := 0; i+len(needle) <= len(haystack); i++ {
 				if haystack[i:i+len(needle)] == needle {
 					return true
 				}
 			}
 			return false
-		})()
+		}()
 }
 
-// --- settling -------------------------------------------------------------------------
-
-// driftingDriver accepts a value but reports back something a little off, for the first
-// driftUntil applications — the behaviour the real bulbs show.
+// driftingDriver reports a slightly-off value for the first driftUntil applications.
 type driftingDriver struct {
 	inner      *MockDriver
 	drift      float64
@@ -804,7 +779,6 @@ type driftingDriver struct {
 	reads      atomic.Int32
 }
 
-// Discover is the mock's, unchanged: none of these doubles is about scanning.
 func (d *driftingDriver) Discover(ctx context.Context, window time.Duration) ([]Discovered, error) {
 	return d.inner.Discover(ctx, window)
 }
@@ -827,8 +801,6 @@ func (d *driftingDriver) Apply(ctx context.Context, light Light, cmd Command) St
 }
 
 func TestServiceReAppliesWhenTheBulbDrifts(t *testing.T) {
-	// The point of settling: the client asked for 50, the lamp sat on 60, and nobody should
-	// have to nudge it by hand.
 	repo := newFakeRepo(bulb(t))
 	driver := &driftingDriver{inner: NewMockDriver(), drift: 10, driftUntil: 1}
 	svc := NewService(repo, driver, 0, 2, time.Millisecond)
@@ -847,7 +819,7 @@ func TestServiceReAppliesWhenTheBulbDrifts(t *testing.T) {
 }
 
 func TestServiceDoesNotReApplyWhenTheValueHolds(t *testing.T) {
-	// No drift means no extra BLE traffic: settling must be free when nothing is wrong.
+	// No drift means no extra BLE traffic.
 	repo := newFakeRepo(bulb(t))
 	driver := &driftingDriver{inner: NewMockDriver(), drift: 0}
 	svc := NewService(repo, driver, 0, 2, time.Millisecond)
@@ -862,8 +834,7 @@ func TestServiceDoesNotReApplyWhenTheValueHolds(t *testing.T) {
 }
 
 func TestServiceGivesUpOnAStubbornBulb(t *testing.T) {
-	// A lamp that never takes the value must not spin forever — bounded attempts, then report
-	// whatever it is actually doing.
+	// A lamp that never takes the value gets bounded attempts.
 	repo := newFakeRepo(bulb(t))
 	driver := &driftingDriver{inner: NewMockDriver(), drift: 25, driftUntil: 999}
 	svc := NewService(repo, driver, 0, 2, time.Millisecond)
@@ -872,15 +843,13 @@ func TestServiceGivesUpOnAStubbornBulb(t *testing.T) {
 	if _, err := svc.Send(context.Background(), "bedroom", Command{Type: CommandBrightness, Value: &value}); err != nil {
 		t.Fatal(err)
 	}
-	// One initial apply plus at most the configured retries.
 	if got := driver.applies.Load(); got > 3 {
 		t.Errorf("settling should be bounded, got %d applies", got)
 	}
 }
 
 func TestServiceDoesNotSettlePower(t *testing.T) {
-	// Power is a boolean the bulb either took or did not; there is no "near enough" to chase,
-	// so it must cost no extra reads.
+	// Power is not settled, so it costs no extra reads.
 	repo := newFakeRepo(bulb(t))
 	driver := &driftingDriver{inner: NewMockDriver(), drift: 10, driftUntil: 999}
 	svc := NewService(repo, driver, 0, 2, time.Millisecond)
@@ -909,7 +878,6 @@ func TestServiceSettlingDisabled(t *testing.T) {
 }
 
 func TestServiceStopsSettlingIfTheBulbGoesOffline(t *testing.T) {
-	// Losing the bulb mid-correction must surface as offline, not as the value we hoped for.
 	repo := newFakeRepo(bulb(t))
 	svc := NewService(repo, &offlineOnReadDriver{inner: NewMockDriver()}, 0, 2, time.Millisecond)
 
@@ -925,7 +893,6 @@ func TestServiceStopsSettlingIfTheBulbGoesOffline(t *testing.T) {
 
 type offlineOnReadDriver struct{ inner *MockDriver }
 
-// Discover is the mock's, unchanged: none of these doubles is about scanning.
 func (d *offlineOnReadDriver) Discover(ctx context.Context, window time.Duration) ([]Discovered, error) {
 	return d.inner.Discover(ctx, window)
 }
@@ -952,7 +919,7 @@ func (f *scanningGATT) Scan(context.Context, time.Duration) ([]Discovered, error
 }
 
 func TestDiscoverKeepsOnlyDevicesAdvertisingABulbService(t *testing.T) {
-	// The scan hears everything in the room; only the service UUID says which of it is a lamp.
+	// Only the advertised service UUID marks a lamp.
 	radio := &scanningGATT{heard: []Discovered{
 		{Address: "ED:2E:9E:5B:69:5C", Name: "Amazfit T-Rex", Services: nil},
 		{Address: "AA:BB:CC:DD:EE:01", Name: "Speaker", Services: []string{"0000180f-0000-1000-8000-00805f9b34fb"}},
@@ -967,8 +934,6 @@ func TestDiscoverKeepsOnlyDevicesAdvertisingABulbService(t *testing.T) {
 		t.Fatalf("want only the device advertising 0xA100, got %+v", found)
 	}
 }
-
-// --- crazy mode -----------------------------------------------------------------------
 
 func TestCrazySweepStartsAtTheMaximumAndTurnsAtTheMinimum(t *testing.T) {
 	light := bulb(t)
@@ -996,8 +961,7 @@ func TestCrazySweepStartsAtTheMaximumAndTurnsAtTheMinimum(t *testing.T) {
 		}
 	}
 
-	// It never leaves the bulb's range: below 1 reads as "off", and past the kelvin bounds
-	// the driver would clamp and hide a wrong wave.
+	// Never below 1 (reads as off) or outside the kelvin bounds.
 	for elapsed := time.Duration(0); elapsed < 20*time.Second; elapsed += 37 * time.Millisecond {
 		brightness, kelvin := at(elapsed)
 		if brightness < 1 || brightness > 100 {
@@ -1009,7 +973,6 @@ func TestCrazySweepStartsAtTheMaximumAndTurnsAtTheMinimum(t *testing.T) {
 	}
 }
 
-// recordingDriver logs what reaches the radio.
 type recordingDriver struct {
 	inner *MockDriver
 
@@ -1098,7 +1061,7 @@ func TestCrazyModeSweepsAndReportsItself(t *testing.T) {
 		return driver.count(CommandBrightness) > 2 && driver.count(CommandColorTemp) > 2
 	})
 
-	// Reads must not go near the radio: a query would hold the bulb's lock and stall the sweep.
+	// Reads must not touch the radio during the sweep.
 	states, err := svc.States(context.Background(), true)
 	if err != nil {
 		t.Fatal(err)
@@ -1129,7 +1092,7 @@ func TestCrazyModeStopsOnAnyManualCommand(t *testing.T) {
 		t.Errorf("a manual command should end the mode and win: %+v", state)
 	}
 
-	// Nothing may write after the person's command, or the sweep would undo it.
+	// Nothing may write after the person's command.
 	settled := driver.total()
 	time.Sleep(50 * time.Millisecond)
 	if after := driver.total(); after != settled {
@@ -1147,7 +1110,6 @@ func TestCrazyModeTurnsOff(t *testing.T) {
 	if _, err := svc.Send(context.Background(), "bedroom", Command{Type: CommandCrazy, On: &on}); err != nil {
 		t.Fatal(err)
 	}
-	// Starting twice must not stack a second sweep on the same bulb.
 	if _, err := svc.Send(context.Background(), "bedroom", Command{Type: CommandCrazy, On: &on}); err != nil {
 		t.Fatal(err)
 	}
@@ -1208,8 +1170,6 @@ func TestCrazyCommandNeedsOn(t *testing.T) {
 	}
 }
 
-// --- background polling ---------------------------------------------------------------
-
 func TestPollingWarmsTheCacheSoReadsNeverWaitOnTheRadio(t *testing.T) {
 	driver := &recordingDriver{inner: NewMockDriver()}
 	svc := NewService(newFakeRepo(bulb(t)), driver, 0, 0, 0)
@@ -1226,7 +1186,6 @@ func TestPollingWarmsTheCacheSoReadsNeverWaitOnTheRadio(t *testing.T) {
 	waitFor(t, "the first poll", func() bool { return readCount() >= 1 })
 	before := readCount()
 
-	// A client asking now, with no TTL of its own configured, must get the polled answer.
 	for range 5 {
 		states, err := svc.States(context.Background(), false)
 		if err != nil || len(states) != 1 {
@@ -1237,7 +1196,6 @@ func TestPollingWarmsTheCacheSoReadsNeverWaitOnTheRadio(t *testing.T) {
 		t.Errorf("client reads reached the radio: %d -> %d", before, after)
 	}
 
-	// force is the way to get past the cache.
 	if _, err := svc.State(context.Background(), "bedroom", true); err != nil {
 		t.Fatal(err)
 	}
@@ -1283,8 +1241,7 @@ func TestAddingABulbWarmsItWhenPolling(t *testing.T) {
 }
 
 func TestBackgroundChecksDoNotHoldABulbConnected(t *testing.T) {
-	// The whole point of releasing after a poll: a check every minute must not lock the bulb's
-	// own remote out for good.
+	// A poll must not keep the bulb connected.
 	light := bulb(t)
 
 	polled := newDriver(&fakeGATT{}, time.Minute)
@@ -1299,7 +1256,6 @@ func TestBackgroundChecksDoNotHoldABulbConnected(t *testing.T) {
 		t.Errorf("a link a person asked for should count as in use, idle=%v", idle)
 	}
 
-	// A person's link stays theirs when a poll comes through it.
 	shared := newDriver(&fakeGATT{}, time.Minute)
 	shared.GetState(context.Background(), light)
 	shared.GetState(withBackground(context.Background()), light)

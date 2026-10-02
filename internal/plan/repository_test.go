@@ -17,14 +17,8 @@ import (
 
 func decimalFromFloat(f float64) decimal.Decimal { return decimal.NewFromFloat(f) }
 
-// newPlanRepo deliberately does NOT truncate "tasks": that table is shared with
-// internal/tasks_test's own integration tests, and go test runs different packages
-// concurrently by default — two packages truncating the same table races for real (this is
-// exactly how TestIntegration_EnsureRecurringBlocks_GeneratesAndRespectsSkips and
-// TestIntegration_GetByEventRef_UniqueConstraint were first seen failing, intermittently, with
-// a task_id foreign key violation: a still-fresh task got wiped mid-test by the other
-// package's truncate). Not resetting the tasks table's identity sequence is harmless here —
-// every test only ever references the task it just created, by the id CreateTask returns.
+// newPlanRepo does not truncate "tasks": internal/tasks tests share that table and packages run
+// concurrently, so truncating it here wipes their rows mid-test.
 func newPlanRepo(t *testing.T) (*plan.PostgresRepository, *tasks.PostgresRepository) {
 	t.Helper()
 	pool := testutil.NewPool(t)
@@ -191,10 +185,8 @@ func TestIntegration_EnsureRecurringBlocks_GeneratesAndRespectsSkips(t *testing.
 	_ = commitment
 }
 
-// The existing-rows check inside EnsureRecurringBlocks is a plain read before the insert loop,
-// so two calls covering the same range can both pass it before either commits — reproduced here
-// with real concurrent calls rather than trusting the check alone. plan_blocks_commitment_date_uidx
-// plus CreateGenerated's ON CONFLICT DO NOTHING is what actually prevents the duplicate.
+// Concurrent calls can both pass the existing-rows check; the unique index plus ON CONFLICT DO
+// NOTHING must prevent the duplicate.
 func TestIntegration_EnsureRecurringBlocks_ConcurrentCallsNeverDuplicate(t *testing.T) {
 	repo, taskRepo := newPlanRepo(t)
 	ctx := context.Background()

@@ -83,8 +83,7 @@ func (s *Service) BusyHoursByDate(ctx context.Context, from, to time.Time) (map[
 	return s.repo.SumBusyHoursByDate(ctx, from, to, s.location.String())
 }
 
-// PlannedHoursByTask is what tasks.Service needs to keep a task's remaining_hours from
-// double-counting time it has already scheduled for itself.
+// PlannedHoursByTask lets tasks.Service avoid double-counting time a task has already scheduled.
 func (s *Service) PlannedHoursByTask(ctx context.Context, taskIDs []int32, from time.Time) (map[int32]decimal.Decimal, error) {
 	if len(taskIDs) == 0 {
 		return map[int32]decimal.Decimal{}, nil
@@ -184,9 +183,8 @@ func (s *Service) Update(ctx context.Context, req UpdatePlanBlockRequest) (PlanB
 			}
 			current = &c
 		}
-		// Moving a commitment-generated block to a different day: detach it from the
-		// commitment and remember the original date, or the next generation pass recreates a
-		// block there and the moved one lives on alongside it.
+		// Moved to another day: detach it from the commitment and remember the original date, or
+		// the next generation pass recreates it there.
 		if current.CommitmentID != nil && planDate.Format("2006-01-02") != current.PlanDate.Format("2006-01-02") {
 			req.ClearCommitmentID = true
 			if err := s.repo.InsertCommitmentSkip(ctx, *current.CommitmentID, current.PlanDate); err != nil {
@@ -215,9 +213,8 @@ func (s *Service) DeleteFuture(ctx context.Context) error {
 	return s.repo.DeleteEndingAfter(ctx, time.Now())
 }
 
-// SyncEventTime keeps the plan block linked to a calendar event (if any) in step with it.
-// A direct time update, not Service.Update: this is a passive follow, not a user edit, and
-// should not re-run overlap validation or label resolution.
+// SyncEventTime keeps the plan block linked to a calendar event in step with it, without
+// re-running Update's validation.
 func (s *Service) SyncEventTime(ctx context.Context, eventRef string, startedAt, endedAt time.Time) error {
 	block, err := s.repo.GetByEventRef(ctx, eventRef)
 	if errors.Is(err, ErrNotFound) {
@@ -229,9 +226,8 @@ func (s *Service) SyncEventTime(ctx context.Context, eventRef string, startedAt,
 	return s.repo.UpdateTimes(ctx, block.ID, startedAt, endedAt)
 }
 
-// DetachEvent unlinks the plan block from an event that changed identity (restructured
-// recurrence, moved to another Google account) or was deleted. The block itself is kept — it
-// becomes a normal, unlinked block.
+// DetachEvent unlinks the plan block from an event that changed identity or was deleted; the
+// block is kept.
 func (s *Service) DetachEvent(ctx context.Context, eventRef string) error {
 	block, err := s.repo.GetByEventRef(ctx, eventRef)
 	if errors.Is(err, ErrNotFound) {
@@ -280,8 +276,7 @@ func (s *Service) UpdateCommitment(ctx context.Context, req UpdateCommitmentRequ
 	now := time.Now().In(s.location)
 	switch {
 	case req.Active != nil && !updated.Active:
-		// Paused: its not-yet-started blocks go away. Turning it back on regenerates them on the
-		// next range read, and skips are kept so days the user deleted stay deleted.
+		// Paused: unstarted blocks go away. Resuming regenerates them; skips are kept.
 		if err := s.repo.DeleteFutureCommitmentBlocks(ctx, updated.ID, now); err != nil {
 			return RecurringCommitmentResponse{}, err
 		}
@@ -295,17 +290,14 @@ func (s *Service) UpdateCommitment(ctx context.Context, req UpdateCommitmentRequ
 }
 
 func (s *Service) DeleteCommitment(ctx context.Context, id int32) error {
-	// The FK only nulls commitment_id on delete, which would leave every future occurrence
-	// behind as a plain block nothing regenerates or cleans up. Past ones stay as history.
+	// The FK only nulls commitment_id, which would leave future occurrences behind. Past ones stay.
 	if err := s.repo.DeleteFutureCommitmentBlocks(ctx, id, time.Now()); err != nil {
 		return err
 	}
 	return s.repo.DeleteCommitment(ctx, id)
 }
 
-// resolveLabel produces the effective label for a block. If the caller
-// supplied one, trim and validate it. Otherwise, fetch the linked task name.
-// When neither is available, ErrLabelRequired.
+// resolveLabel returns the trimmed caller label, else the linked task's name, else ErrLabelRequired.
 func (s *Service) resolveLabel(ctx context.Context, taskID *int32, label *string) (string, error) {
 	if label != nil {
 		trimmed := strings.TrimSpace(*label)

@@ -1,9 +1,5 @@
-// Package txtype defines the Type enum that maps to the Postgres
-// `transaction_type` enum on both `transactions.type` and `categories.type`.
-//
-// It lives in its own package so the sqlc-generated `gvdb` package can import
-// it (via the sqlc override) without creating a cycle with the higher-level
-// `finance` package that consumes gvdb.
+// Package txtype defines the Type enum mapped to Postgres `transaction_type`. A separate
+// package so sqlc-generated gvdb can import it without a cycle.
 package txtype
 
 type Type string

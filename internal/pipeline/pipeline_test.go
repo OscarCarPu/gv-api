@@ -14,8 +14,7 @@ import (
 )
 
 func TestUnconfigured(t *testing.T) {
-	// An unset DSN is a normal deployment state: Connect succeeds, and it is the read that
-	// says there is nothing behind it.
+	// An unset DSN connects fine; the read reports ErrNotConfigured.
 	db, err := pipeline.Connect(context.Background(), "")
 	require.NoError(t, err)
 	assert.False(t, db.Configured())
@@ -41,8 +40,7 @@ func TestIsStale(t *testing.T) {
 }
 
 func TestIntegration_Collect(t *testing.T) {
-	// The pipeline's own database is another project's stack, so this runs against gv's
-	// test database: what is under test is Collect itself, not any particular mart.
+	// Runs against gv's test database: what is under test is Collect, not a mart.
 	db := pipeline.FromPool(testutil.NewPool(t))
 	ctx := context.Background()
 
@@ -66,8 +64,7 @@ func TestIntegration_Collect(t *testing.T) {
 }
 
 func TestIntegration_Collect_MissingRelationSurfacesAfterRetries(t *testing.T) {
-	// A dropped relation is what a dbt rebuild looks like, so it is retried; a table that
-	// is missing for good still has to fail rather than hang.
+	// A dropped relation is retried; one missing for good still fails.
 	db := pipeline.FromPool(testutil.NewPool(t))
 
 	start := time.Now()
@@ -78,8 +75,7 @@ func TestIntegration_Collect_MissingRelationSurfacesAfterRetries(t *testing.T) {
 }
 
 func TestIntegration_ReadOnlyConnection(t *testing.T) {
-	// The grant on the far side is the pipeline's business; this pins that gv-api's own
-	// connection refuses a write even if the role would allow one.
+	// The connection itself refuses writes, whatever the role allows.
 	url := testutil.DSN(t)
 	db, err := pipeline.Connect(context.Background(), url)
 	require.NoError(t, err)

@@ -12,14 +12,12 @@ import (
 	"gv-api/internal/calendar/google"
 )
 
-// Events created from here are tagged, so "did I make this or did it come from somewhere
-// else" is answerable without guessing from the organizer field.
+// Events created from here are tagged with this.
 const (
 	gvMarkerKey   = "gv"
 	gvMarkerValue = "1"
 )
 
-// Recurring-edit scopes.
 const (
 	ScopeAll       = "all"
 	ScopeInstance  = "instance"
@@ -163,19 +161,16 @@ func (s *Service) UpdateEvent(ctx context.Context, ref string, req UpdateEventRe
 		s.syncPlanAfterUpdate(ctx, ref, scope)
 	}
 
-	// The reference stays valid for an instance edit (the occurrence keeps its original slot)
-	// and for a whole-series edit. After a split the caller is looking at the new series, so
-	// re-resolve from the occurrence instead.
+	// The ref stays valid for instance and whole-series edits; after a split, re-resolve from the
+	// occurrence.
 	if scope == ScopeFollowing {
 		return s.eventAt(ctx, cal.ID, *originalStart)
 	}
 	return s.GetEvent(ctx, ref)
 }
 
-// syncPlanAfterUpdate keeps a plan_block linked to this event (if any) in step with its new
-// time. A scope=following split can leave ref pointing at an occurrence now governed by a new
-// series master, under a different id — trying to resolve it here is what detects that case
-// generically, rather than reasoning through what splitSeries did.
+// syncPlanAfterUpdate keeps a linked plan_block in step with the event's new time. After a
+// scope=following split, ref may point into a new series under a different id.
 func (s *Service) syncPlanAfterUpdate(ctx context.Context, ref, scope string) {
 	ev, err := s.GetEvent(ctx, ref)
 	if err != nil {
@@ -302,8 +297,7 @@ func (s *Service) MoveEvent(ctx context.Context, ref string, req MoveEventReques
 		}
 		s.afterWrite(ctx, source)
 		s.afterWrite(ctx, dest)
-		// The local row was deleted and recreated, so its id — and any event_ref built from
-		// it — changed even though the underlying Google event did not.
+		// The row was recreated, so its id and event_ref changed.
 		if err := s.planSync.DetachEvent(ctx, ref); err != nil {
 			slog.ErrorContext(ctx, "calendar: detaching plan block after move", "ref", ref, "error", err)
 		}
@@ -318,8 +312,7 @@ func (s *Service) MoveEvent(ctx context.Context, ref string, req MoveEventReques
 	}
 	if err := s.gc.DeleteEvent(ctx, sourceToken, source.GoogleCalendarID, rec.GoogleEventID, rec.Etag,
 		sendUpdates(req.SendUpdates)); err != nil {
-		// The copy exists; leaving the original behind is visible and fixable, whereas
-		// deleting the copy to "roll back" could lose the only remaining version.
+		// The copy exists; never delete it to roll back, it may be the only remaining version.
 		slog.ErrorContext(ctx, "calendar: cross-account move left the original in place",
 			"event", rec.ID, "error", err)
 		return MoveResult{}, s.upstreamError(ctx, source, err)
@@ -340,10 +333,7 @@ func (s *Service) MoveEvent(ctx context.Context, ref string, req MoveEventReques
 	return MoveResult{Event: ev, Recreated: true}, err
 }
 
-// --- shared write plumbing -----------------------------------------------------------
-
-// writableCalendar loads a calendar and an access token, refusing early anything Google would
-// refuse later: a read-only role, a disconnected account, a calendar that no longer exists.
+// writableCalendar loads a calendar and access token, refusing early what Google would refuse.
 func (s *Service) writableCalendar(ctx context.Context, calendarID int32) (CalendarRecord, string, error) {
 	cal, err := s.repo.GetCalendar(ctx, calendarID)
 	if err != nil {
@@ -366,8 +356,7 @@ func (s *Service) writableCalendar(ctx context.Context, calendarID int32) (Calen
 	return cal, token, nil
 }
 
-// resolveWriteTarget turns a client reference plus a requested scope into the row to write,
-// the occurrence it names, and the scope that actually applies.
+// resolveWriteTarget resolves a reference and scope into the row, occurrence and effective scope.
 func (s *Service) resolveWriteTarget(ctx context.Context, ref, requested string) (
 	EventRecord, CalendarRecord, string, *time.Time, string, error,
 ) {
@@ -426,7 +415,6 @@ func resolveScope(requested string, hasInstance, isSeries bool) (string, error) 
 	}
 }
 
-// buildPatch turns the request's set fields into a Google patch body.
 func (s *Service) buildPatch(req UpdateEventRequest, rec EventRecord, allDay bool, tz string,
 	originalStart *time.Time, scope string,
 ) (map[string]any, error) {
@@ -462,9 +450,8 @@ func (s *Service) buildPatch(req UpdateEventRequest, rec EventRecord, allDay boo
 		patch["recurrence"] = *req.Recurrence
 	}
 
-	// Times are only sent when asked for, and a request that moves one edge keeps the other:
-	// the base is the occurrence being edited, not the series start, or "make this Tuesday an
-	// hour later" would move every Tuesday.
+	// Times are only sent when asked for, based on the edited occurrence rather than the series
+	// start; moving one edge keeps the other.
 	if req.StartsAt != nil || req.EndsAt != nil || req.AllDay != nil {
 		baseStart, baseEnd := rec.StartsAt, rec.EndsAt
 		if originalStart != nil {
@@ -493,7 +480,7 @@ func resolveWriteTimes(req UpdateEventRequest, baseStart, baseEnd time.Time, all
 		if err != nil {
 			return time.Time{}, time.Time{}, err
 		}
-		// Moving the start alone drags the end with it, keeping the length.
+		// Moving the start alone keeps the length.
 		if req.EndsAt == nil {
 			end = end.Add(parsed.Sub(start))
 		}
@@ -506,8 +493,7 @@ func resolveWriteTimes(req UpdateEventRequest, baseStart, baseEnd time.Time, all
 		}
 		end = parsed
 	}
-	// All-day ends are exclusive too: an end on the start date is a zero-day event, which
-	// Google accepts but no range query ever returns.
+	// All-day ends are exclusive: an end on the start date is a zero-day event no query returns.
 	if !end.After(start) {
 		return time.Time{}, time.Time{}, fmt.Errorf("%w: end must be after start", ErrInvalidRange)
 	}
@@ -576,8 +562,7 @@ func (s *Service) splitSeries(ctx context.Context, token string, cal CalendarRec
 		return err
 	}
 
-	// The tail is built from the master's current state, then the requested change is applied
-	// on top, so a "this and following" edit that only changes the title keeps everything else.
+	// Build the tail from the master, then apply the requested change on top.
 	tail := bodyFromRecord(master)
 	delete(tail, "recurringEventId")
 	delete(tail, "originalStartTime")
@@ -590,9 +575,8 @@ func (s *Service) splitSeries(ctx context.Context, token string, cal CalendarRec
 		tail[k] = v
 	}
 
-	// End the original first. If creating the tail then fails the user sees a series that
-	// stops early rather than two overlapping series, which is the easier of the two to
-	// understand and to fix by hand.
+	// End the original first: if creating the tail fails, a series that stops early is easier to fix
+	// than two overlapping ones.
 	updated, err := s.gc.PatchEvent(ctx, token, cal.GoogleCalendarID, master.GoogleEventID, master.Etag,
 		map[string]any{"recurrence": truncated}, sendUpdates(req.SendUpdates))
 	if err != nil {
@@ -612,9 +596,8 @@ func (s *Service) splitSeries(ctx context.Context, token string, cal CalendarRec
 	return nil
 }
 
-// endSeriesBefore rewrites the RRULE lines so the series stops before the given occurrence.
-// UNTIL is inclusive in iCalendar, so it is set one second earlier, and any COUNT is dropped
-// because the two cannot both bound the same rule.
+// endSeriesBefore stops the series before the given occurrence. UNTIL is inclusive, so it is set
+// one second earlier; COUNT is dropped.
 func endSeriesBefore(lines []string, before time.Time, _ EventRecord, _ *time.Location) ([]string, error) {
 	if len(lines) == 0 {
 		return nil, fmt.Errorf("%w: not a recurring event", ErrInvalidScope)
@@ -636,14 +619,12 @@ func endSeriesBefore(lines []string, before time.Time, _ EventRecord, _ *time.Lo
 	return out, nil
 }
 
-// remainingRecurrence adjusts a counted rule for the part of the series that is left.
 func remainingRecurrence(lines []string, consumed int) ([]string, error) {
 	out := make([]string, 0, len(lines))
 	for _, line := range lines {
 		upper := strings.ToUpper(line)
 		if !strings.HasPrefix(upper, "RRULE") {
-			// EXDATEs and RDATEs of the original series belong to slots that are now in the
-			// old series; carrying them over would exclude dates the new series never had.
+			// The original's EXDATEs/RDATEs belong to the old series.
 			continue
 		}
 		if idx := strings.Index(upper, "COUNT="); idx >= 0 {
@@ -674,8 +655,7 @@ func countValue(s string) string {
 	return s
 }
 
-// rewriteRRule sets and removes parameters of a single RRULE line, leaving the rest as they
-// were written.
+// rewriteRRule sets and removes parameters of a single RRULE line.
 func rewriteRRule(line string, set map[string]string, remove []string) string {
 	prefix := ""
 	body := line
@@ -720,9 +700,7 @@ func contains(list []string, want string) bool {
 	return false
 }
 
-// mirror stores what Google answered. The response is authoritative — it carries the etag and
-// the fields Google normalised — so the local row is written from it rather than from what we
-// asked for.
+// mirror stores Google's response, which is authoritative (etag, normalised fields).
 func (s *Service) mirror(ctx context.Context, cal CalendarRecord, ev google.Event) (EventRecord, error) {
 	if ev.Cancelled() && ev.RecurringEventID == "" {
 		if err := s.repo.DeleteEventByGoogleID(ctx, cal.ID, ev.ID); err != nil {
@@ -750,16 +728,13 @@ func (s *Service) mirror(ctx context.Context, cal CalendarRecord, ev google.Even
 	return rec, nil
 }
 
-// afterWrite tells listeners something moved and asks for an incremental sync of that
-// calendar. The sync is what reconciles the side effects a write has beyond its own response:
-// a materialised override, a bumped sequence on the master, a cancelled sibling.
+// afterWrite notifies listeners and queues a sync to reconcile the write's side effects.
 func (s *Service) afterWrite(ctx context.Context, cal CalendarRecord) {
 	s.stream.Publish(StreamMessage{Type: "calendar.changed", CalendarID: cal.ID})
 	s.notifyChange(cal.ID)
 }
 
-// eventAt finds the event covering an instant on a calendar, used after a split when the
-// caller's old reference points at the series that no longer contains the occurrence.
+// eventAt finds the event covering an instant on a calendar, used after a split.
 func (s *Service) eventAt(ctx context.Context, calendarID int32, at time.Time) (Event, error) {
 	events, err := s.ListEvents(ctx, EventsQuery{
 		From:        at.Add(-time.Second),
@@ -809,9 +784,7 @@ func (s *Service) upstreamError(ctx context.Context, cal CalendarRecord, err err
 	}
 }
 
-// notifyChange queues an incremental sync. It never blocks: this runs on a request path and,
-// for webhooks, on a POST that Google expects an immediate answer to. A dropped notification
-// costs one poll interval of staleness, not correctness.
+// notifyChange queues an incremental sync without blocking; a dropped one costs a poll interval.
 func (s *Service) notifyChange(calendarID int32) {
 	select {
 	case s.changes <- calendarID:
@@ -819,8 +792,6 @@ func (s *Service) notifyChange(calendarID int32) {
 		slog.Warn("calendar: change queue is full, falling back to the poll", "calendar", calendarID)
 	}
 }
-
-// --- body builders -------------------------------------------------------------------
 
 func googleDateTime(t time.Time, allDay bool, tz string) map[string]any {
 	if allDay {
@@ -830,9 +801,8 @@ func googleDateTime(t time.Time, allDay bool, tz string) map[string]any {
 	return map[string]any{"dateTime": t.Format(time.RFC3339), "timeZone": tz}
 }
 
-// parseWriteRange validates a create request's times. An all-day event with no end gets one
-// day, a timed event with no end gets an hour: both are what a calendar UI means by "no end
-// given", and neither is a shape Google accepts on its own.
+// parseWriteRange validates a create request's times. A missing end defaults to one day
+// (all-day) or one hour (timed).
 func parseWriteRange(startRaw, endRaw string, allDay bool, tz string) (time.Time, time.Time, error) {
 	loc := resolveLocation(tz)
 	if strings.TrimSpace(startRaw) == "" {
@@ -859,8 +829,8 @@ func parseWriteRange(startRaw, endRaw string, allDay bool, tz string) (time.Time
 	return start, end, nil
 }
 
-// parseWriteTime accepts a date for an all-day event and an RFC3339 instant otherwise, and
-// tolerates a full instant on an all-day event by keeping its local date.
+// parseWriteTime accepts a date for an all-day event (or keeps an instant's local date) and an
+// RFC3339 instant otherwise.
 func parseWriteTime(raw string, allDay bool, loc *time.Location) (time.Time, error) {
 	raw = strings.TrimSpace(raw)
 	if allDay {
@@ -908,9 +878,8 @@ func remindersBody(in RemindersInput) map[string]any {
 	return body
 }
 
-// bodyFromRecord rebuilds a Google insert body from a stored event. Used for the two paths
-// that have to recreate an event rather than patch it: a cross-account move and the tail of
-// a split series.
+// bodyFromRecord rebuilds a Google insert body from a stored event, for cross-account moves and
+// split tails.
 func bodyFromRecord(rec EventRecord) map[string]any {
 	tz := firstNonEmpty(rec.StartTZ, "UTC")
 	body := map[string]any{
@@ -952,8 +921,7 @@ func bodyFromRecord(rec EventRecord) map[string]any {
 	return body
 }
 
-// sendUpdates defaults to none: editing your own calendar from your own app should not mail
-// people unless that was asked for.
+// sendUpdates defaults to none, so edits do not mail attendees unless asked.
 func sendUpdates(requested string) string {
 	switch requested {
 	case "all", "externalOnly", "none":

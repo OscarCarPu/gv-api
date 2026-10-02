@@ -51,8 +51,7 @@ func NewHandler(s ServiceInterface) *Handler {
 	return &Handler{service: s}
 }
 
-// RegisterRoutes mounts all finance endpoints (accounts, categories,
-// transactions, overview and stats). Requires full auth.
+// RegisterRoutes mounts all finance endpoints under full auth.
 func (h *Handler) RegisterRoutes(r chi.Router) {
 	r.Get("/finance/accounts", h.ListAccounts)
 	r.Get("/finance/accounts/{id}", h.GetAccount)
@@ -98,9 +97,7 @@ func parseDateParam(s string) (time.Time, error) {
 	return time.Time{}, errors.New("invalid date")
 }
 
-// parseDateEndParam is like parseDateParam but treats a bare YYYY-MM-DD value
-// as the end of that day (23:59:59.999999999 UTC) so that the upper-bound
-// filter includes all transactions recorded during that calendar day.
+// parseDateEndParam is like parseDateParam but treats a bare YYYY-MM-DD as the end of that day.
 func parseDateEndParam(s string) (time.Time, error) {
 	if s == "" {
 		return time.Time{}, nil

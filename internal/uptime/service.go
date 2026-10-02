@@ -11,17 +11,14 @@ import (
 const (
 	// defaultLookback is how far back /windows goes when no range is given.
 	defaultLookback = 30 * 24 * time.Hour
-	// DefaultWindowLimit and MaxWindowLimit bound the window list. A year of real data is
-	// ~400 windows per device, so the default covers the whole history in one read while
-	// still refusing to stream an unbounded table if the pipeline ever gets noisy.
+	// DefaultWindowLimit and MaxWindowLimit bound the window list (~400 windows per device a year).
 	DefaultWindowLimit = 1000
 	MaxWindowLimit     = 5000
 )
 
 type Service struct {
 	repo Repository
-	// staleAfter is how old the precomputed numbers may be before they stop being
-	// presented as current.
+	// staleAfter is how old the precomputed numbers may be before they are reported as stale.
 	staleAfter time.Duration
 }
 
@@ -44,9 +41,7 @@ func (s *Service) Overview(ctx context.Context) (Overview, error) {
 		stateByDevice[st.Device] = st
 	}
 	rangesByDevice := make(map[Device]map[Lookback]Aggregation, len(Devices))
-	// computedAt is the newest run time present. The rows are written by one dbt run, so
-	// in practice they all carry the same value; taking the max avoids reporting a stale
-	// half if that ever stops being true.
+	// computedAt is the newest run time present.
 	var computedAt *time.Time
 	for _, a := range aggregations {
 		if rangesByDevice[a.Device] == nil {
@@ -66,8 +61,7 @@ func (s *Service) Overview(ctx context.Context) (Overview, error) {
 	}
 	out.Stale = pipeline.IsStale(computedAt, s.staleAfter)
 
-	// Both devices always appear, in a fixed order, whether or not the pipeline has heard
-	// from them. A missing device is a fact worth rendering, not a row to drop.
+	// Both devices always appear, in a fixed order.
 	for _, device := range Devices {
 		entry := DeviceOverview{Device: device, State: StateUnknown, Ranges: []RangeUptime{}}
 		if st, ok := stateByDevice[device]; ok {
@@ -142,12 +136,9 @@ func (s *Service) Windows(ctx context.Context, q WindowsQuery) (WindowsReport, e
 			entry.Outages = st.Outages
 			from, to := st.CoveredFrom, st.CoveredTo
 			entry.CoveredFrom, entry.CoveredTo = &from, &to
-			// Divide by what the windows cover, not by the whole range: before a device's
-			// first event there is nothing to call up or down, and charging that gap as
-			// downtime would report a young device as mostly dead.
+			// Divide by what the windows cover, so time before the first event is not downtime.
 			if covered := st.UpSeconds + st.DownSeconds; covered > 0 {
-				// Two decimals, the precision the precomputed rows come in, so a tile
-				// showing a custom range next to a lookback shows the same kind of number.
+				// Two decimals, matching the precomputed rows.
 				uptime := math.Round(100*100*st.UpSeconds/covered) / 100
 				entry.Uptime = &uptime
 			}
@@ -157,9 +148,8 @@ func (s *Service) Windows(ctx context.Context, q WindowsQuery) (WindowsReport, e
 	return report, nil
 }
 
-// normalize fills in the defaults and rejects a range that cannot be served. `to` is
-// clamped to now: the open window is counted up to `to`, so asking about the future would
-// invent uptime that has not happened.
+// normalize fills in the defaults and rejects unservable ranges. `to` is clamped to now, since
+// the open window is counted up to it.
 func (s *Service) normalize(q WindowsQuery) (WindowsQuery, error) {
 	now := time.Now()
 	if q.To.IsZero() || q.To.After(now) {
@@ -180,8 +170,7 @@ func (s *Service) normalize(q WindowsQuery) (WindowsQuery, error) {
 	return q, nil
 }
 
-// clippedSeconds is how much of a window falls inside [from, to). An open window is
-// counted up to `to`, matching what the pipeline assumes: the latest known state persists.
+// clippedSeconds is how much of a window falls inside [from, to); an open window runs to `to`.
 func clippedSeconds(row WindowRow, from, to time.Time) float64 {
 	start := row.StartTime
 	if start.Before(from) {

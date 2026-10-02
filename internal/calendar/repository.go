@@ -13,9 +13,6 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-// Repository is the calendar domain's data access. It maps rows to records and back and
-// makes no decisions: what a spent sync token means, when a token is refreshed and which
-// fields a write sends all live in the service.
 type Repository interface {
 	UpsertAccount(ctx context.Context, p UpsertAccountParams) (AccountRecord, error)
 	GetAccount(ctx context.Context, id int32) (AccountRecord, error)
@@ -69,8 +66,6 @@ type PostgresRepository struct {
 func NewRepository(pool *pgxpool.Pool) *PostgresRepository {
 	return &PostgresRepository{q: gvdb.New(pool)}
 }
-
-// --- conversions ---------------------------------------------------------------------
 
 func ts(t time.Time) pgtype.Timestamptz {
 	return pgtype.Timestamptz{Time: t, Valid: !t.IsZero()}
@@ -194,8 +189,6 @@ func syncRunToRecord(r gvdb.CalendarSyncRun) SyncRun {
 	}
 }
 
-// --- accounts ------------------------------------------------------------------------
-
 func (r *PostgresRepository) UpsertAccount(ctx context.Context, p UpsertAccountParams) (AccountRecord, error) {
 	row, err := r.q.UpsertGoogleAccount(ctx, gvdb.UpsertGoogleAccountParams{
 		Email:                p.Email,
@@ -274,8 +267,6 @@ func (r *PostgresRepository) DeleteAccount(ctx context.Context, id int32) error 
 	}
 	return nil
 }
-
-// --- calendars -----------------------------------------------------------------------
 
 func (r *PostgresRepository) UpsertCalendar(ctx context.Context, p UpsertCalendarParams) (CalendarRecord, error) {
 	row, err := r.q.UpsertCalendar(ctx, gvdb.UpsertCalendarParams{
@@ -456,8 +447,6 @@ func (r *PostgresRepository) CountEvents(ctx context.Context, calendarID int32) 
 	return r.q.CountCalendarEvents(ctx, calendarID)
 }
 
-// --- events --------------------------------------------------------------------------
-
 func (r *PostgresRepository) UpsertEvent(ctx context.Context, p UpsertEventParams) (EventRecord, error) {
 	row, err := r.q.UpsertCalendarEvent(ctx, gvdb.UpsertCalendarEventParams{
 		CalendarID:       p.CalendarID,
@@ -590,8 +579,6 @@ func (r *PostgresRepository) ListOrphanOverridesInRange(ctx context.Context, cal
 func (r *PostgresRepository) PurgeCancelledEvents(ctx context.Context, olderThan time.Time) (int64, error) {
 	return r.q.PurgeCancelledEvents(ctx, ts(olderThan))
 }
-
-// --- sync runs -----------------------------------------------------------------------
 
 func (r *PostgresRepository) CreateSyncRun(ctx context.Context, calendarID int32, trigger, kind string) (int32, error) {
 	row, err := r.q.CreateSyncRun(ctx, gvdb.CreateSyncRunParams{

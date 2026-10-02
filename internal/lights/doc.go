@@ -13,19 +13,6 @@
 //	PATCH  /domotics/lights/{id}     - edit a registered bulb
 //	DELETE /domotics/lights/{id}     - unregister a bulb
 //
-// The API talks to the bulbs itself, through BlueZ on the host it runs on:
-// client -> gv-api -> BlueZ -> bulb. The container needs only the host's D-Bus
-// socket bind-mounted (see gatt.go and docker-compose.yaml). Without a working
-// adapter every bulb reads offline with an explanation, so the API runs anywhere.
-//
-// Layout:
-//
-//	dto.go         wire shapes and the command vocabulary
-//	light.go       the bulb record
-//	repository.go  which bulbs exist (a table)
-//	service.go     read cache, in-flight collapsing, settle loop
-//	crazy.go       crazy mode: a per-bulb brightness and temperature sweep
-//	driver.go      per-bulb serialisation, last known values, idle disconnect
-//	protocol.go    per-model frame encoding (currently the LEXMAN ZBEK-13)
-//	gatt.go        BlueZ over D-Bus
+// The API drives the bulbs through BlueZ over the host's D-Bus socket. Without a working
+// adapter every bulb reads offline, so the API still runs anywhere.
 package lights

@@ -49,8 +49,7 @@ func expandSeries(master EventRecord, exceptions []EventRecord, fallbackTZ strin
 		return nil, err
 	}
 
-	// Overrides are keyed by the slot they replace. The map is also the guard against
-	// emitting the same occurrence twice.
+	// Overrides keyed by the slot they replace; also guards against emitting an occurrence twice.
 	overrides := make(map[int64]*EventRecord, len(exceptions))
 	for i := range exceptions {
 		ex := exceptions[i]
@@ -60,8 +59,7 @@ func expandSeries(master EventRecord, exceptions []EventRecord, fallbackTZ strin
 		overrides[ex.OriginalStartsAt.UTC().UnixNano()] = &exceptions[i]
 	}
 
-	// Start the scan one duration early so an occurrence that began before the window but is
-	// still running inside it is not missed.
+	// Start one duration early to catch occurrences still running inside the window.
 	scanFrom := from.Add(-duration - time.Second)
 	var out []Occurrence
 	emitted := make(map[int64]bool, 16)
@@ -94,8 +92,7 @@ func expandSeries(master EventRecord, exceptions []EventRecord, fallbackTZ strin
 		out = append(out, Occurrence{OriginalStart: start, Start: start, End: end})
 	}
 
-	// Overrides that were moved into the window from a slot outside it. Their original slot
-	// was never produced by the scan above, so they would otherwise be invisible.
+	// Overrides moved into the window from a slot outside it, which the scan never produced.
 	for key, ex := range overrides {
 		if emitted[key] || ex.Status == "cancelled" {
 			continue
@@ -116,11 +113,8 @@ func expandSeries(master EventRecord, exceptions []EventRecord, fallbackTZ strin
 	return out, nil
 }
 
-// instanceEnd advances the start by the master's length.
-//
-// An all-day event is advanced in whole local days rather than by an absolute duration: a
-// day containing a DST change is 23 or 25 hours long, and adding 24h to it would put the end
-// an hour off midnight and make the event look like it spills into the next day.
+// instanceEnd advances the start by the master's length. All-day events advance in whole local
+// days, since a DST day is 23 or 25 hours long.
 func instanceEnd(start time.Time, duration time.Duration, allDay bool, loc *time.Location) time.Time {
 	if !allDay {
 		return start.Add(duration)
@@ -194,8 +188,7 @@ func buildRRuleSet(master EventRecord, loc *time.Location) (*rrule.Set, error) {
 	return set, nil
 }
 
-// normalizeRecurrenceLine rewrites the date-only form of EXDATE/RDATE, which Google emits for
-// all-day series and rrule-go does not accept.
+// normalizeRecurrenceLine rewrites date-only EXDATE/RDATE, which rrule-go does not accept.
 func normalizeRecurrenceLine(line string, loc *time.Location) string {
 	name, params, values, ok := splitContentLine(line)
 	if !ok || (name != "EXDATE" && name != "RDATE") {
@@ -216,7 +209,6 @@ func normalizeRecurrenceLine(line string, loc *time.Location) string {
 	return fmt.Sprintf("%s;TZID=%s:%s", name, loc.String(), strings.Join(parts, ","))
 }
 
-// splitContentLine breaks "NAME;PARAMS:VALUES" apart.
 func splitContentLine(line string) (name, params, values string, ok bool) {
 	colon := strings.Index(line, ":")
 	if colon < 0 {

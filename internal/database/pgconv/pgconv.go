@@ -23,8 +23,7 @@ func DatePtr(d pgtype.Date) *time.Time {
 	return nil
 }
 
-// AnyDatePtr handles a date column scanned into any, which sqlc emits for date
-// expressions whose nullability it cannot infer through CTEs.
+// AnyDatePtr handles a date column sqlc typed as any (nullability lost through a CTE).
 func AnyDatePtr(v any) *time.Time {
 	t, ok := v.(time.Time)
 	if !ok {

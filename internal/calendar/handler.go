@@ -17,8 +17,7 @@ import (
 	"github.com/go-chi/chi/v5"
 )
 
-// ServiceInterface is what the HTTP layer needs. Declared here, by the consumer, so the
-// handler can be tested against a mock without a database or a Google.
+// ServiceInterface is what the HTTP layer needs.
 type ServiceInterface interface {
 	Configured() bool
 	AuthURL(ctx context.Context) (AuthURLResponse, error)
@@ -90,8 +89,6 @@ func (h *Handler) RegisterPublicRoutes(r chi.Router) {
 	r.Post("/calendar/google/webhook", h.Webhook)
 }
 
-// --- accounts ------------------------------------------------------------------------
-
 func (h *Handler) ListAccounts(w http.ResponseWriter, r *http.Request) {
 	accounts, err := h.service.ListAccounts(r.Context())
 	if err != nil {
@@ -156,8 +153,6 @@ func (h *Handler) ResyncAccount(w http.ResponseWriter, r *http.Request) {
 	response.JSON(w, http.StatusOK, res)
 }
 
-// --- OAuth ---------------------------------------------------------------------------
-
 /*
 OAuthCallback finishes the consent flow and sends the browser back to the web app.
 
@@ -186,9 +181,8 @@ func urlSafe(s string) string {
 	return replacer.Replace(s)
 }
 
-// Webhook accepts Google's push notification. It always answers 200 unless the request is
-// unrecognisable: Google retries anything else and eventually drops the channel, and a
-// notification we cannot place is not worth losing a channel over.
+// Webhook accepts Google's push notification. It answers 200 unless the request is
+// unrecognisable: Google retries anything else and eventually drops the channel.
 func (h *Handler) Webhook(w http.ResponseWriter, r *http.Request) {
 	channelID := r.Header.Get("X-Goog-Channel-ID")
 	state := r.Header.Get("X-Goog-Resource-State")
@@ -204,8 +198,6 @@ func (h *Handler) Webhook(w http.ResponseWriter, r *http.Request) {
 		response.InternalError(w, r, err, "Failed to handle notification")
 	}
 }
-
-// --- calendars -----------------------------------------------------------------------
 
 func (h *Handler) ListCalendars(w http.ResponseWriter, r *http.Request) {
 	cals, err := h.service.ListCalendars(r.Context())
@@ -234,8 +226,6 @@ func (h *Handler) UpdateCalendar(w http.ResponseWriter, r *http.Request) {
 	}
 	response.JSON(w, http.StatusOK, cal)
 }
-
-// --- events --------------------------------------------------------------------------
 
 func (h *Handler) ListEvents(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
@@ -347,8 +337,6 @@ func (h *Handler) MoveEvent(w http.ResponseWriter, r *http.Request) {
 	response.JSON(w, http.StatusOK, res)
 }
 
-// --- sync ----------------------------------------------------------------------------
-
 func (h *Handler) Sync(w http.ResponseWriter, r *http.Request) {
 	if raw := r.URL.Query().Get("calendar_id"); raw != "" {
 		id, err := strconv.ParseInt(raw, 10, 32)
@@ -437,10 +425,7 @@ func (h *Handler) Stream(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// --- helpers -------------------------------------------------------------------------
-
-// parseQueryTime accepts an instant or a plain date, so a client asking for "2026-08-20" does
-// not have to invent a time zone to ask about a day.
+// parseQueryTime accepts an instant or a plain date.
 func parseQueryTime(raw string) (time.Time, error) {
 	raw = strings.TrimSpace(raw)
 	if raw == "" {

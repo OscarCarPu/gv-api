@@ -29,8 +29,7 @@ func RequestID(next http.Handler) http.Handler {
 	})
 }
 
-// LogHandler adds the request id to records logged with a request context, so a
-// client reporting an error can be matched against the log line for it.
+// LogHandler adds the request id to records logged with a request context.
 type LogHandler struct{ slog.Handler }
 
 func (h LogHandler) Handle(ctx context.Context, record slog.Record) error {

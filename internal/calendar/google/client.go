@@ -18,15 +18,11 @@ import (
 	"golang.org/x/oauth2"
 )
 
-// asAPIError is errors.As specialised, kept private so callers use the Is* helpers.
+// asAPIError is errors.As specialised; callers use the Is* helpers.
 func asAPIError(err error, target **APIError) bool { return errors.As(err, target) }
 
-// Client is everything the calendar domain needs from Google. It exists so the service can
-// be exercised against Fake, which reproduces the behaviour that actually matters here —
-// sync tokens going stale, etags failing, grants being revoked — without a network.
-//
-// Every method takes an access token rather than holding one: tokens are per account, live
-// in the database, and are refreshed by the service that owns them.
+// Client is everything the calendar domain needs from Google; Fake implements it for tests.
+// Methods take an access token because tokens are per account and refreshed by the service.
 type Client interface {
 	// AuthURL builds the consent URL. state is echoed back to the callback.
 	AuthURL(state string) string
@@ -39,13 +35,11 @@ type Client interface {
 
 	ListEvents(ctx context.Context, accessToken, calendarID string, p ListEventsParams) (*EventsPage, error)
 	GetEvent(ctx context.Context, accessToken, calendarID, eventID string) (*Event, error)
-	// ListInstances resolves a series occurrence to the concrete instance id Google wants for
-	// a single-instance edit. Constructing that id by string surgery is possible but Google
-	// documents the format loosely enough that asking is the safer move.
+	// ListInstances resolves a series occurrence to the instance id Google wants for a
+	// single-instance edit.
 	ListInstances(ctx context.Context, accessToken, calendarID, eventID, originalStart string) ([]Event, error)
 	InsertEvent(ctx context.Context, accessToken, calendarID string, body map[string]any, sendUpdates string) (*Event, error)
-	// PatchEvent sends only the given fields. ifMatch is the stored etag: an empty string
-	// means "overwrite whatever is there", which this app never does.
+	// PatchEvent sends only the given fields. ifMatch is the stored etag.
 	PatchEvent(ctx context.Context, accessToken, calendarID, eventID, ifMatch string, body map[string]any, sendUpdates string) (*Event, error)
 	DeleteEvent(ctx context.Context, accessToken, calendarID, eventID, ifMatch, sendUpdates string) error
 	MoveEvent(ctx context.Context, accessToken, calendarID, eventID, destination, sendUpdates string) (*Event, error)
@@ -54,16 +48,13 @@ type Client interface {
 	StopChannel(ctx context.Context, accessToken, channelID, resourceID string) error
 }
 
-// Google's own OAuth endpoints, hardcoded rather than pulled from
-// golang.org/x/oauth2/google: that package's only use here would be these two constants, and
-// it drags in the GCE metadata client with it.
+// Hardcoded to avoid pulling golang.org/x/oauth2/google (and the GCE metadata client).
 const (
 	defaultAuthURL  = "https://accounts.google.com/o/oauth2/auth"
 	defaultTokenURL = "https://oauth2.googleapis.com/token"
 )
 
-// Config wires the HTTP client. The three URL fields exist so tests can point the real
-// client at an httptest server and check the wire format, not just the fake's behaviour.
+// Config wires the HTTP client. The URL fields let tests target an httptest server.
 type Config struct {
 	ClientID     string
 	ClientSecret string
@@ -76,8 +67,8 @@ type Config struct {
 	UserInfoURL     string // default https://www.googleapis.com/oauth2/v3/userinfo
 
 	HTTPClient *http.Client
-	// MaxAttempts counts the first try. RetryBase is the first backoff step, doubled per
-	// attempt with jitter; both are settable so tests do not sleep for real.
+	// MaxAttempts counts the first try. RetryBase is the first backoff step, doubled per attempt
+	// with jitter.
 	MaxAttempts int
 	RetryBase   time.Duration
 }
@@ -126,8 +117,6 @@ func NewClient(cfg Config) Client {
 	}
 }
 
-// --- OAuth ---------------------------------------------------------------------------
-
 /*
 AuthURL forces two options that are not defaults and that this app cannot work without:
 
@@ -138,7 +127,8 @@ AuthURL forces two options that are not defaults and that this app cannot work w
     look like it worked until an hour later.
 */
 func (c *httpClient) AuthURL(state string) string {
-	return c.oauth.AuthCodeURL(state,
+	return c.oauth.AuthCodeURL(
+		state,
 		oauth2.AccessTypeOffline,
 		oauth2.SetAuthURLParam("prompt", "consent"),
 		oauth2.SetAuthURLParam("include_granted_scopes", "true"),
@@ -176,7 +166,7 @@ func (c *httpClient) RevokeToken(ctx context.Context, token string) error {
 	}
 	defer func() { _ = resp.Body.Close() }()
 	body, _ := io.ReadAll(resp.Body)
-	// A token Google has already forgotten answers 400. Nothing left to revoke is success.
+	// Google answers 400 for an already-forgotten token; that counts as revoked.
 	if resp.StatusCode >= 300 && resp.StatusCode != http.StatusBadRequest {
 		return parseAPIError(resp.StatusCode, body)
 	}
@@ -210,9 +200,8 @@ func withHTTPClient(ctx context.Context, hc *http.Client) context.Context {
 	return context.WithValue(ctx, oauth2.HTTPClient, hc)
 }
 
-// IsInvalidGrant reports the one OAuth failure that a human has to fix: the refresh token is
-// no longer accepted (revoked, expired, or the consent screen was never published out of
-// testing). Retrying it forever is pointless, so the account is parked instead.
+// IsInvalidGrant reports a refresh token that is no longer accepted. Only a human can fix it,
+// so the account is parked.
 func IsInvalidGrant(err error) bool {
 	var re *oauth2.RetrieveError
 	if errors.As(err, &re) {
@@ -224,8 +213,6 @@ func IsInvalidGrant(err error) bool {
 	}
 	return false
 }
-
-// --- Calendars -----------------------------------------------------------------------
 
 func (c *httpClient) ListCalendars(ctx context.Context, accessToken string) ([]CalendarListEntry, error) {
 	var out []CalendarListEntry
@@ -252,8 +239,6 @@ func (c *httpClient) ListCalendars(ctx context.Context, accessToken string) ([]C
 		pageToken = page.NextPageToken
 	}
 }
-
-// --- Events --------------------------------------------------------------------------
 
 func (c *httpClient) ListEvents(ctx context.Context, accessToken, calendarID string, p ListEventsParams) (*EventsPage, error) {
 	if p.MaxResults <= 0 {
@@ -348,8 +333,6 @@ func sendUpdatesQuery(sendUpdates string) url.Values {
 	return q
 }
 
-// --- Push ----------------------------------------------------------------------------
-
 func (c *httpClient) Watch(ctx context.Context, accessToken, calendarID string, req WatchRequest) (*WatchChannel, error) {
 	body := map[string]any{
 		"id":      req.ID,
@@ -372,20 +355,17 @@ func (c *httpClient) Watch(ctx context.Context, accessToken, calendarID string, 
 func (c *httpClient) StopChannel(ctx context.Context, accessToken, channelID, resourceID string) error {
 	body := map[string]any{"id": channelID, "resourceId": resourceID}
 	err := c.do(ctx, accessToken, http.MethodPost, c.url("/channels/stop", nil), body, "", nil)
-	// A channel Google has already dropped is not an error worth propagating: the caller is
-	// tidying up after a replacement it already created.
+	// A channel Google already dropped is not an error.
 	if err != nil && (IsNotFound(err) || statusIs(err, 400)) {
 		return nil
 	}
 	return err
 }
 
-// --- Transport -----------------------------------------------------------------------
-
 func (c *httpClient) url(path string, q url.Values) string {
 	u := c.cfg.CalendarBaseURL + path
 	if len(q) > 0 {
-		// Empty values are dropped so an unset page token does not turn into pageToken=.
+		// Drop empty values so an unset page token is not sent as pageToken=.
 		for k, v := range q {
 			if len(v) == 0 || v[0] == "" {
 				q.Del(k)
@@ -441,7 +421,7 @@ func (c *httpClient) do(ctx context.Context, accessToken, method, u string, body
 
 		resp, err := c.http.Do(req)
 		if err != nil {
-			// Transport failures are worth one more go: a tunnel hiccup is not a verdict.
+			// Retry transport failures once.
 			lastErr = err
 			continue
 		}
@@ -488,7 +468,7 @@ func retryable(err *APIError) bool {
 
 func (c *httpClient) backoff(attempt int, _ error) time.Duration {
 	step := c.cfg.RetryBase * time.Duration(1<<(attempt-1))
-	// Jitter keeps four accounts syncing on the same tick from retrying in lockstep.
+	// Jitter keeps accounts syncing on the same tick from retrying in lockstep.
 	jitter := time.Duration(rand.Int64N(int64(c.cfg.RetryBase)))
 	return step + jitter
 }

@@ -14,16 +14,11 @@ type RGB struct {
 }
 
 // State is one bulb as reported to clients.
-//
-// Field names are camelCase rather than the snake_case used elsewhere in this API: this shape
-// is passed through verbatim by the bridge daemon at one end and consumed by TypeScript at the
-// other, and renaming in the middle would only add a translation layer to get wrong.
 type State struct {
 	ID    string `json:"id"`
 	Name  string `json:"name"`
 	Model string `json:"model"`
-	// Online is false when the bridge could not reach the bulb. The remaining fields are then
-	// the last known values, not live ones.
+	// When Online is false the remaining fields are the last known values.
 	Online     bool    `json:"online"`
 	Power      bool    `json:"power"`
 	Brightness float64 `json:"brightness"` // 0-100, normalised from the bulb's own scale
@@ -35,34 +30,25 @@ type State struct {
 	SupportsColorTemp bool    `json:"supportsColorTemp"`
 	MinColorTemp      float64 `json:"minColorTemp"`
 	MaxColorTemp      float64 `json:"maxColorTemp"`
-	// Error is per-bulb, so one unreachable bulb is shown on its own card rather than
-	// failing the whole request.
+	// Error is per bulb so one unreachable bulb does not fail the whole request.
 	Error     string `json:"error,omitempty"`
 	UpdatedAt int64  `json:"updatedAt"`
-	// Crazy is true while the bulb is sweeping brightness and temperature on its own. It is
-	// server state, not a client toggle: every client reads it, and any manual command ends it.
+	// Crazy is server state: any manual command ends it.
 	Crazy bool `json:"crazy"`
 }
 
-// Discovered is a bulb the adapter can see right now, whether or not it has been added.
-//
-// The address is exposed here on purpose: it is the only handle a person has for telling two
-// nameless lamps apart, and choosing one is the whole point of the screen. It stops being
-// public the moment the bulb is added.
+// Discovered is a bulb the adapter can see right now. The address is exposed so a person can
+// tell nameless lamps apart; it stops being public once the bulb is added.
 type Discovered struct {
 	Address string `json:"address"`
 	Name    string `json:"name"`
 	RSSI    int    `json:"rssi"`
-	// Known is true when this address is already registered, so the UI can show it as added
-	// rather than offering to add it twice.
-	Known bool `json:"known"`
-	// Services are the GATT service UUIDs the device advertised. They are how a bulb is told
-	// apart from a watch or a TV, and mean nothing to a client, so they stay off the wire.
+	Known   bool   `json:"known"`
+	// Advertised GATT services, used to filter bulbs; not sent.
 	Services []string `json:"-"`
 }
 
-// ProtocolInfo describes one supported bulb family, so the add form can offer a model and
-// prefill what that model can do instead of asking a person for kelvin ranges.
+// ProtocolInfo describes one supported bulb family, for the add form.
 type ProtocolInfo struct {
 	Name              string  `json:"name"`
 	Label             string  `json:"label"`
@@ -72,8 +58,7 @@ type ProtocolInfo struct {
 	MaxColorTemp      float64 `json:"maxColorTemp"`
 }
 
-// CreateLightRequest adds a bulb. Everything past the first three fields is an override of
-// what the protocol already says the model can do.
+// CreateLightRequest adds a bulb. Fields past the first three override the protocol defaults.
 type CreateLightRequest struct {
 	Name     string `json:"name"`
 	Address  string `json:"address"`
@@ -87,8 +72,7 @@ type CreateLightRequest struct {
 	Options           map[string]any `json:"options,omitempty"`
 }
 
-// UpdateLightRequest edits a bulb. Omitted fields keep their current value; the address is
-// not among them, because a different address is a different lamp.
+// UpdateLightRequest edits a bulb. Omitted fields keep their value; the address cannot change.
 type UpdateLightRequest struct {
 	Name              *string        `json:"name,omitempty"`
 	Model             *string        `json:"model,omitempty"`
@@ -100,12 +84,10 @@ type UpdateLightRequest struct {
 	Options           map[string]any `json:"options,omitempty"`
 }
 
-// DiscoveredResponse wraps the list so the payload stays an object and can grow later.
 type DiscoveredResponse struct {
 	Devices []Discovered `json:"devices"`
 }
 
-// Validate checks a new bulb is worth writing down.
 func (r CreateLightRequest) Validate() error {
 	if strings.TrimSpace(r.Name) == "" {
 		return fmt.Errorf(`%w: "name" is required`, ErrInvalidCommand)
@@ -131,8 +113,7 @@ func (r UpdateLightRequest) Validate() error {
 	return validateKelvinRange(r.MinColorTemp, r.MaxColorTemp)
 }
 
-// validateKelvinRange rejects a range the sliders could not render. Only the pair matters:
-// either bound alone is checked against the stored one at apply time.
+// validateKelvinRange checks the pair; a single bound is clamped at apply time.
 func validateKelvinRange(minKelvin, maxKelvin *float64) error {
 	if minKelvin != nil && maxKelvin != nil && *minKelvin >= *maxKelvin {
 		return fmt.Errorf(`%w: "minColorTemp" must be below "maxColorTemp"`, ErrInvalidCommand)
@@ -156,13 +137,11 @@ type PublicLight struct {
 	MaxColorTemp      float64 `json:"maxColorTemp"`
 }
 
-// StatesResponse wraps the list so the payload stays an object and can grow later.
 type StatesResponse struct {
 	States []State `json:"states"`
 }
 
-// Command is one instruction for a bulb. Exactly one of the value fields applies, chosen by
-// Type; the rest are ignored. Validate before handing it to a driver.
+// Command is one instruction for a bulb. Type picks which value field applies.
 type Command struct {
 	Type   string `json:"type"`
 	On     *bool  `json:"on,omitempty"`
@@ -171,25 +150,19 @@ type Command struct {
 	Kelvin *int   `json:"kelvin,omitempty"`
 }
 
-// Command type values.
 const (
 	CommandPower      = "power"
 	CommandBrightness = "brightness"
 	CommandColor      = "color"
 	CommandColorTemp  = "colorTemp"
-	// CommandCrazy starts or stops crazy mode. The service handles it itself; a driver never
-	// sees it.
+	// CommandCrazy is handled by the service; a driver never sees it.
 	CommandCrazy = "crazy"
 )
 
-// ErrInvalidCommand is returned by Validate; the handler maps it to 400.
 var ErrInvalidCommand = errors.New("invalid command")
 
-// Validate checks a command is well-formed and in range.
-//
-// Done here rather than in a driver so every driver — including the out-of-process bridge —
-// can trust what it receives. Kelvin is only sanity-checked; the per-bulb range is clamped by
-// the driver, which knows the bulb.
+// Validate checks a command is well-formed. Kelvin is only sanity-checked; the driver clamps
+// it to the bulb's range.
 func (c Command) Validate() error {
 	switch c.Type {
 	case CommandPower, CommandCrazy:

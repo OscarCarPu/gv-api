@@ -13,7 +13,6 @@ import (
 	"github.com/go-chi/chi/v5"
 )
 
-// ServiceInterface is the seam the handler depends on, so it can be mocked in tests.
 type ServiceInterface interface {
 	List(ctx context.Context) ([]PublicLight, error)
 	States(ctx context.Context, force bool) ([]State, error)
@@ -35,15 +34,13 @@ func NewHandler(s ServiceInterface) *Handler {
 	return &Handler{service: s}
 }
 
-// Scan window bounds. Long enough to find a bulb across a flat, short enough that nobody
-// wonders whether the button worked.
+// Scan window bounds.
 const (
 	defaultScanWindow = 8 * time.Second
 	maxScanWindow     = 30 * time.Second
 )
 
-// RegisterRoutes mounts the lights endpoints under semiprivate auth: house
-// control, not personal data.
+// RegisterRoutes mounts the lights endpoints under semiprivate auth.
 func (h *Handler) RegisterRoutes(r chi.Router) {
 	r.Get("/domotics/lights", h.List)
 	r.Post("/domotics/lights", h.Create)
@@ -67,9 +64,7 @@ func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 }
 
 // States -> GET /domotics/lights/state
-//
-// `?force=1` skips the read cache. An unreachable bulb comes back inside a 200 with
-// online:false, so one dead bulb never fails the request.
+// `?force=1` skips the read cache. Unreachable bulbs come back as online:false inside a 200.
 func (h *Handler) States(w http.ResponseWriter, r *http.Request) {
 	states, err := h.service.States(r.Context(), r.URL.Query().Get("force") == "1")
 	if err != nil {
@@ -147,15 +142,10 @@ func (h *Handler) Delete(w http.ResponseWriter, r *http.Request) {
 }
 
 // Discover -> GET /domotics/lights/discover?seconds=8
-//
-// Holds the request open for the length of the scan: the answer does not exist until the
-// radio has been listening for a while, and a start-then-poll job is more moving parts than
-// a button pressed once in a while deserves.
+// Holds the request open for the length of the scan.
 func (h *Handler) Discover(w http.ResponseWriter, r *http.Request) {
 	devices, err := h.service.Discover(r.Context(), scanWindow(r))
 	if err != nil {
-		// Unlike a bulb read, this one has nothing useful to degrade to: an empty list would
-		// read as "no bulbs here" when the truth is "this host cannot look".
 		response.Error(w, http.StatusServiceUnavailable, bleErrorMessage(err))
 		return
 	}
@@ -175,8 +165,6 @@ func scanWindow(r *http.Request) time.Duration {
 	return min(time.Duration(seconds*float64(time.Second)), maxScanWindow)
 }
 
-// fail maps the domain's errors onto status codes. Anything unrecognised is a 500 with the
-// detail in the log rather than in the response.
 func (h *Handler) fail(w http.ResponseWriter, r *http.Request, err error, message string) {
 	switch {
 	case errors.Is(err, ErrNotFound):

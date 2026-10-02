@@ -2,8 +2,7 @@ package plan
 
 import "errors"
 
-// Sentinel errors for the plan domain. Repository errors signal data-layer
-// outcomes; the rest are business-rule violations raised by the service.
+// Sentinel errors for the plan domain.
 var (
 	ErrNotFound           = errors.New("not found")
 	ErrTaskNotFound       = errors.New("task not found")

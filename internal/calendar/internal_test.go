@@ -27,8 +27,6 @@ func at(t *testing.T, loc *time.Location, y int, m time.Month, d, hh, mm int) ti
 	return time.Date(y, m, d, hh, mm, 0, 0, loc)
 }
 
-// --- recurrence expansion ------------------------------------------------------------
-
 func TestExpandSeries_KeepsLocalTimeAcrossDST(t *testing.T) {
 	loc := mustLoc(t, "Europe/Madrid")
 	master := EventRecord{
@@ -43,8 +41,7 @@ func TestExpandSeries_KeepsLocalTimeAcrossDST(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, occ, 4)
 
-	// The 29th of March is when Spain moves to summer time. Expanding in UTC would make every
-	// occurrence after it happen an hour earlier in local terms.
+	// Spain moves to summer time on the 29th of March; expanding in UTC would shift later occurrences.
 	for _, o := range occ {
 		require.Equal(t, 9, o.Start.In(loc).Hour(), "a 9am weekly stays at 9am")
 		require.Equal(t, 10, o.End.In(loc).Hour())
@@ -60,8 +57,7 @@ func tzAbbrev(t time.Time) string {
 
 func TestExpandSeries_AllDayCrossesTheDSTDayCorrectly(t *testing.T) {
 	loc := mustLoc(t, "Europe/Madrid")
-	// A daily all-day event over the change to summer time: that local day is 23 hours long,
-	// so advancing by a fixed 24h would leave the end an hour past midnight.
+	// That local day is 23 hours long, so a fixed 24h step would push the end past midnight.
 	master := EventRecord{
 		AllDay:     true,
 		StartsAt:   at(t, loc, 2026, 3, 28, 0, 0),
@@ -83,8 +79,7 @@ func TestExpandSeries_AllDayCrossesTheDSTDayCorrectly(t *testing.T) {
 
 func TestExpandSeries_ExdateWithDateOnlyValue(t *testing.T) {
 	loc := mustLoc(t, "Europe/Madrid")
-	// Google writes EXDATE as a bare date for all-day series, which the rule parser will not
-	// take; it has to be normalised first.
+	// Google writes EXDATE as a bare date for all-day series, which the rule parser rejects.
 	master := EventRecord{
 		AllDay:     true,
 		StartsAt:   at(t, loc, 2026, 8, 17, 0, 0),
@@ -175,8 +170,7 @@ func TestExpandSeries_IncludesAnOccurrenceStillRunningAtTheWindowStart(t *testin
 		StartTZ:    "Europe/Madrid",
 		Recurrence: []string{"RRULE:FREQ=DAILY;COUNT=3"},
 	}
-	// A window starting at midnight on the 18th: the occurrence that began at 23:00 the night
-	// before is still going.
+	// The occurrence that began at 23:00 the night before is still going at midnight.
 	occ, err := expandSeries(master, nil, "Europe/Madrid",
 		at(t, loc, 2026, 8, 18, 0, 0), at(t, loc, 2026, 8, 19, 0, 0))
 	require.NoError(t, err)
@@ -212,13 +206,12 @@ func TestExpandSeries_UnknownZoneFallsBackInsteadOfFailing(t *testing.T) {
 
 func ptrTo[T any](v T) *T { return &v }
 
-// --- rule rewriting ------------------------------------------------------------------
-
 func TestEndSeriesBefore_SetsUntilAndDropsCount(t *testing.T) {
 	loc := mustLoc(t, "Europe/Madrid")
 	lines, err := endSeriesBefore(
 		[]string{"RRULE:FREQ=DAILY;COUNT=5", "EXDATE;TZID=Europe/Madrid:20260818T090000"},
-		at(t, loc, 2026, 8, 19, 9, 0), EventRecord{StartTZ: "Europe/Madrid"}, loc)
+		at(t, loc, 2026, 8, 19, 9, 0), EventRecord{StartTZ: "Europe/Madrid"}, loc,
+	)
 	require.NoError(t, err)
 	require.Len(t, lines, 2)
 	require.Contains(t, lines[0], "UNTIL=20260819T065959Z", "UNTIL is inclusive, so it lands a second early")
@@ -240,8 +233,7 @@ func TestRemainingRecurrence_CarriesOverWhatIsLeftOfTheCount(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, []string{"RRULE:FREQ=DAILY;COUNT=3"}, lines)
 
-	// A rule with no COUNT is carried over as it is, and the original's exclusions are not:
-	// they belong to slots that stayed with the old series.
+	// A rule without COUNT is kept as is; the original's exclusions stay with the old series.
 	lines, err = remainingRecurrence([]string{"RRULE:FREQ=WEEKLY;BYDAY=MO", "EXDATE;VALUE=DATE:20260101"}, 3)
 	require.NoError(t, err)
 	require.Equal(t, []string{"RRULE:FREQ=WEEKLY;BYDAY=MO"}, lines)
@@ -268,8 +260,6 @@ func TestNormalizeRecurrenceLine_OnlyTouchesDateOnlyValues(t *testing.T) {
 	require.Equal(t, "EXDATE;TZID=Europe/Madrid:20260101T090000",
 		normalizeRecurrenceLine("EXDATE;TZID=Europe/Madrid:20260101T090000", loc))
 }
-
-// --- references ----------------------------------------------------------------------
 
 func TestParseEventRef(t *testing.T) {
 	id, start, err := parseEventRef("12")
@@ -327,8 +317,6 @@ func TestResolveScope(t *testing.T) {
 	require.ErrorIs(t, err, ErrInvalidScope)
 }
 
-// --- token encryption ----------------------------------------------------------------
-
 func TestTokenCipher_RoundTrip(t *testing.T) {
 	c, err := newTokenCipher("0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef")
 	require.NoError(t, err)
@@ -378,8 +366,6 @@ func TestTokenCipher_RejectsBadKeysAndTamperedData(t *testing.T) {
 	_, err = c.open([]byte{1, 2, 3})
 	require.ErrorContains(t, err, "truncated")
 }
-
-// --- google event mapping ------------------------------------------------------------
 
 func TestEventParams_CancelledOverrideKeepsTimesFromWhatIsStored(t *testing.T) {
 	loc := mustLoc(t, "Europe/Madrid")

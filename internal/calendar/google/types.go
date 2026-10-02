@@ -1,9 +1,5 @@
-// Package google is the only place in the codebase that knows how to talk to Google.
-//
-// It is deliberately thin: it moves JSON over HTTP, maps Google's error shapes onto typed
-// errors the caller can branch on, and knows nothing about our tables. The sync rules —
-// when a token is spent, what a 410 means, which fields to write — live in the calendar
-// service, because that is where they are testable without a network.
+// Package google is the only place that talks to Google. It moves JSON over HTTP and maps
+// error shapes onto typed errors; the sync rules live in the calendar service.
 package google
 
 import (
@@ -13,16 +9,13 @@ import (
 	"time"
 )
 
-// Scopes requested at consent time. calendar covers reading the calendar list and both
-// reading and writing events; userinfo.email is what tells us which account was connected,
-// so the user does not have to type it in and cannot mistype it.
+// Scopes requested at consent time. userinfo.email identifies the connected account.
 const (
 	ScopeCalendar = "https://www.googleapis.com/auth/calendar"
 	ScopeEmail    = "https://www.googleapis.com/auth/userinfo.email"
 )
 
-// Token is an OAuth grant. RefreshToken is empty on a refresh response: Google only issues
-// one at the first consent, which is why prompt=consent is forced on the auth URL.
+// Token is an OAuth grant. RefreshToken is only issued at first consent, hence prompt=consent.
 type Token struct {
 	AccessToken  string
 	RefreshToken string
@@ -30,7 +23,6 @@ type Token struct {
 	Scope        string
 }
 
-// CalendarListEntry is one row of an account's calendar list.
 type CalendarListEntry struct {
 	ID              string `json:"id"`
 	Summary         string `json:"summary"`
@@ -45,8 +37,7 @@ type CalendarListEntry struct {
 	Deleted         bool   `json:"deleted"`
 }
 
-// Name is what to show: Google puts a renamed subscription in summaryOverride and leaves the
-// owner's name in summary.
+// Name prefers summaryOverride, where Google puts a renamed subscription.
 func (c CalendarListEntry) Name() string {
 	if c.SummaryOverride != "" {
 		return c.SummaryOverride
@@ -54,8 +45,7 @@ func (c CalendarListEntry) Name() string {
 	return c.Summary
 }
 
-// Writable reports whether events can be created or edited here. reader and freeBusyReader
-// cannot, and the API refuses those writes itself instead of forwarding them to be rejected.
+// Writable reports whether events can be created or edited here.
 func (c CalendarListEntry) Writable() bool {
 	return c.AccessRole == "owner" || c.AccessRole == "writer"
 }
@@ -99,8 +89,7 @@ type ExtendedProperties struct {
 	Shared  map[string]string `json:"shared,omitempty"`
 }
 
-// Event is the subset of Google's event resource this app mirrors. Fields Google owns and we
-// never write (etag, sequence, htmlLink, ...) are read-only by convention, not by type.
+// Event is the subset of Google's event resource this app mirrors.
 type Event struct {
 	ID                 string              `json:"id,omitempty"`
 	Etag               string              `json:"etag,omitempty"`
@@ -131,11 +120,9 @@ type Event struct {
 	ExtendedProperties *ExtendedProperties `json:"extendedProperties,omitempty"`
 }
 
-// Cancelled events arrive on every incremental sync; they are the only signal that something
-// was deleted.
+// Cancelled events are the only signal of a deletion on incremental syncs.
 func (e Event) Cancelled() bool { return e.Status == "cancelled" }
 
-// EventsPage is one page of events.list. NextSyncToken is only present on the last page.
 type EventsPage struct {
 	Items         []Event `json:"items"`
 	NextPageToken string  `json:"nextPageToken"`
@@ -143,11 +130,8 @@ type EventsPage struct {
 	TimeZone      string  `json:"timeZone"`
 }
 
-// ListEventsParams drives events.list.
-//
-// Google forbids timeMin/timeMax/updatedMin/q/orderBy/iCalUID next to a syncToken and treats
-// any *other* difference from the initial full sync as undefined behaviour, so this struct
-// carries only what may legally vary between the two.
+// ListEventsParams drives events.list. It carries only what may differ between a full sync and
+// a syncToken request, since Google forbids the rest.
 type ListEventsParams struct {
 	SyncToken    string
 	PageToken    string
@@ -156,9 +140,8 @@ type ListEventsParams struct {
 	SingleEvents bool
 }
 
-// WatchRequest asks Google to POST to Address when a calendar changes. Token is our own
-// secret: it comes back in X-Goog-Channel-Token and is the only thing that authenticates
-// the webhook, which by necessity is a public endpoint.
+// WatchRequest asks Google to POST to Address when a calendar changes. Token comes back in
+// X-Goog-Channel-Token and authenticates the public webhook.
 type WatchRequest struct {
 	ID      string
 	Token   string
@@ -166,16 +149,14 @@ type WatchRequest struct {
 	TTL     time.Duration
 }
 
-// WatchChannel is a live push subscription. It cannot be renewed in place: when it nears
-// expiry a new one is created and the old one stopped.
+// WatchChannel is a live push subscription; it cannot be renewed in place.
 type WatchChannel struct {
 	ID         string
 	ResourceID string
 	Expiration time.Time
 }
 
-// channelResponse decodes Google's channel resource, whose expiration is a millisecond
-// epoch delivered as a string.
+// channelResponse decodes a channel whose expiration is a millisecond epoch string.
 type channelResponse struct {
 	ID         string `json:"id"`
 	ResourceID string `json:"resourceId"`
@@ -205,8 +186,7 @@ func (e *APIError) Error() string {
 	return fmt.Sprintf("google api: %d: %s", e.Status, e.Message)
 }
 
-// parseAPIError pulls the first error reason out of Google's envelope. The body is kept for
-// the log because the reason alone is often too terse to act on.
+// parseAPIError pulls the first error reason out of Google's envelope, keeping the body for logs.
 func parseAPIError(status int, body []byte) *APIError {
 	var env struct {
 		Error struct {
@@ -245,8 +225,7 @@ func statusIs(err error, status int) bool {
 	return apiErr.Status == status
 }
 
-// IsGone reports a spent sync token (or an ACL change): the local copy of that calendar has
-// to be thrown away and rebuilt.
+// IsGone reports a spent sync token (or an ACL change): the calendar must be rebuilt.
 func IsGone(err error) bool { return statusIs(err, 410) }
 
 // IsPreconditionFailed reports that the event changed in Google since the etag we sent.

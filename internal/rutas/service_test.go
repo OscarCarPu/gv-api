@@ -12,9 +12,6 @@ import (
 	"github.com/stretchr/testify/mock"
 )
 
-// The service is a pure pass-through; these tests pin that arguments are
-// forwarded unchanged and errors propagate.
-
 func TestService_List(t *testing.T) {
 	repo := mocks.NewMockRepository(t)
 	want := []rutas.ConcelloMark{{ID: 1, Name: "Arzúa"}}

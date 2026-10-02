@@ -94,9 +94,8 @@ type ProjectFastResponse struct {
 	Priority int32  `json:"priority"`
 }
 
-// ProjectParentCandidate is a project that a given project may be moved under.
-// Path is the full ancestor chain ("Grandparent / Parent / Name") for display and
-// disambiguation of projects that share a name.
+// ProjectParentCandidate is a project a given project may be moved under. Path is the full
+// ancestor chain ("Grandparent / Parent / Name").
 type ProjectParentCandidate struct {
 	ID   int32  `json:"id"`
 	Name string `json:"name"`
@@ -210,8 +209,7 @@ type UpdateProjectRequest struct {
 	Priority    *int32        `json:"priority"`
 }
 
-// NullableTime distinguishes between an absent JSON field and an explicit null.
-// Set is true when the field was present in the JSON payload (even if null).
+// NullableTime distinguishes an absent JSON field from an explicit null.
 type NullableTime struct {
 	Value *time.Time
 	Set   bool
@@ -231,7 +229,7 @@ func (n *NullableTime) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
-// NullableDecimal distinguishes between an absent JSON field and an explicit null.
+// NullableDecimal distinguishes an absent JSON field from an explicit null.
 type NullableDecimal struct {
 	Value *decimal.Decimal
 	Set   bool
@@ -333,19 +331,15 @@ type TaskByDueDateResponse struct {
 	TaskType    string     `json:"task_type"`
 	Recurrence  *int32     `json:"recurrence,omitempty"`
 	Priority    int32      `json:"priority"`
-	// EffectivePriority is Priority raised to the highest priority of anything the task
-	// transitively blocks — the one urgency schedules it by.
+	// EffectivePriority is Priority raised to the highest of anything the task transitively blocks.
 	EffectivePriority int32            `json:"effective_priority"`
 	TimeSpent         int64            `json:"time_spent"`
 	EstimateHours     *decimal.Decimal `json:"estimate_hours"`
 	RemainingHours    *decimal.Decimal `json:"remaining_hours"`
 	StartBy           *string          `json:"start_by"`
-	// FinishBy is the day the task has to be done by: its own due date, or earlier when a task
-	// it blocks has to start before that. Only set when urgency was computed.
+	// FinishBy is the due date, or earlier when a blocked task must start sooner.
 	FinishBy *string `json:"finish_by"`
-	// WorkOrder is the task's position (1 = first) in the order work is done: priority, then
-	// soonest deadline, and always a dependency before the task that depends on it. Only set
-	// when urgency was computed.
+	// WorkOrder is the 1-based position in work order. Only set when urgency was computed.
 	WorkOrder    *int32       `json:"work_order"`
 	Urgent       bool         `json:"urgent"`
 	ProjectID    *int32       `json:"project_id"`

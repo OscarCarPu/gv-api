@@ -2,11 +2,9 @@ package middleware
 
 import "github.com/go-chi/cors"
 
-// BrowserHeaders are the request headers a browser client may send. Every one of
-// them has to be listed: go-chi/cors answers a preflight that asks for an
-// unlisted header without any Access-Control-Allow-* header at all, so the
-// browser reports it as a missing Access-Control-Allow-Origin and blocks the
-// whole request rather than just stripping the header.
+// BrowserHeaders are the request headers a browser client may send. All must be listed: a
+// preflight asking for an unlisted one gets no Access-Control-Allow-* headers and the browser
+// blocks the whole request.
 var BrowserHeaders = []string{
 	"Content-Type",
 	"Authorization",

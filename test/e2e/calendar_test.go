@@ -11,7 +11,6 @@ import (
 	"github.com/jackc/pgx/v5"
 )
 
-// Calendar DTOs as a client sees them.
 type CalendarEvent struct {
 	InstanceID       string     `json:"instance_id"`
 	EventID          int32      `json:"event_id"`
@@ -89,8 +88,7 @@ func seedCalendar(t *testing.T) {
 		t.Fatalf("seed calendar: %v", err)
 	}
 
-	// A one-off, an all-day event, and a daily series with one occurrence moved and one
-	// cancelled: enough to prove the expansion runs for real.
+	// A one-off, an all-day event, and a daily series with one occurrence moved and one cancelled.
 	if _, err := conn.Exec(ctx, `
 		INSERT INTO calendar_events (calendar_id, google_event_id, etag, summary, all_day,
 		                             starts_at, ends_at, start_tz, end_tz)
@@ -139,8 +137,10 @@ func TestE2E_Calendar_RequiresAuth(t *testing.T) {
 	}
 	client := NewAPIClient(t)
 
-	for _, path := range []string{"/calendar/accounts", "/calendar/calendars",
-		"/calendar/events?from=2026-08-20&to=2026-08-21", "/calendar/sync/status", "/calendar/stream"} {
+	for _, path := range []string{
+		"/calendar/accounts", "/calendar/calendars",
+		"/calendar/events?from=2026-08-20&to=2026-08-21", "/calendar/sync/status", "/calendar/stream",
+	} {
 		resp := client.do(t, http.MethodGet, path, nil)
 		func() {
 			defer resp.Body.Close()
@@ -157,8 +157,7 @@ func TestE2E_Calendar_PublicEndpointsNeedNoToken(t *testing.T) {
 	}
 	client := NewAPIClient(t)
 
-	// Google POSTs the webhook with no credentials at all; an unknown channel still gets a
-	// 200, because anything else makes google retry and eventually drop the channel.
+	// An unknown channel still gets a 200, or Google retries and drops the channel.
 	req, err := http.NewRequest(http.MethodPost, getBaseURL(t)+"/calendar/google/webhook", nil)
 	if err != nil {
 		t.Fatal(err)
@@ -221,7 +220,7 @@ func TestE2E_Calendar_WithoutCredentialsItSaysSo(t *testing.T) {
 		}()
 	}
 
-	// Reads still work, and the status endpoint is what tells you why nothing is syncing.
+	// Reads still work; the status endpoint explains why nothing syncs.
 	var status CalendarSyncStatus
 	resp := client.getJSON(t, "/calendar/sync/status", &status)
 	defer resp.Body.Close()
@@ -258,8 +257,7 @@ func TestE2E_Calendar_ListEventsExpandsTheMirror(t *testing.T) {
 		if e.AccountEmail != "e2e@example.com" {
 			t.Errorf("event %q is missing its source account", e.Summary)
 		}
-		// Color is gv's assigned palette colour (first calendar, so palette slot 0), not the
-		// seeded background_color — see internal/calendar/colors.go.
+		// Color is gv's palette slot 0, not the seeded background_color.
 		if e.CalendarName != "Personal" || e.Color != "#3b82f6" {
 			t.Errorf("event %q is missing its calendar's name or colour", e.Summary)
 		}
@@ -463,8 +461,7 @@ func TestE2E_Calendar_StreamAnswersAsAnEventStream(t *testing.T) {
 		t.Errorf("got content type %q, want text/event-stream", got)
 	}
 
-	// The greeting arrives immediately, which is how a client knows the stream is live rather
-	// than buffered somewhere upstream.
+	// The greeting arrives immediately, proving the stream is not buffered upstream.
 	buf := make([]byte, 16)
 	n, err := resp.Body.Read(buf)
 	if err != nil || n == 0 {

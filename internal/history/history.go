@@ -1,5 +1,3 @@
-// Package history provides shared types and utilities for time-series history
-// endpoints (habits, time entries) that aggregate data by frequency period.
 package history
 
 import (

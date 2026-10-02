@@ -13,8 +13,6 @@ import (
 
 func ptr[T any](v T) *T { return &v }
 
-// --- creating ------------------------------------------------------------------------
-
 func TestWrite_Create_GoesToGoogleFirstAndMirrors(t *testing.T) {
 	ctx := context.Background()
 	h := newHarness(t)
@@ -96,8 +94,6 @@ func TestWrite_Create_ValidatesTimes(t *testing.T) {
 	require.ErrorIs(t, err, calendar.ErrInvalidRange)
 }
 
-// --- updating ------------------------------------------------------------------------
-
 func TestWrite_Update_PatchesOnlyWhatWasSent(t *testing.T) {
 	ctx := context.Background()
 	h := newHarness(t)
@@ -147,8 +143,7 @@ func TestWrite_Update_AllDayRefusesAZeroDayRange(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	// Timed instants on the same day collapse to one date on an all-day event; with an
-	// exclusive end that is zero days, which Google stores and every range query drops.
+	// Same-day instants collapse to a zero-day all-day event, which range queries drop.
 	_, err = h.svc.UpdateEvent(ctx, created.InstanceID, calendar.UpdateEventRequest{
 		StartsAt: ptr(madrid(t, 2026, 9, 26, 12, 0).Format(time.RFC3339)),
 		EndsAt:   ptr(madrid(t, 2026, 9, 26, 20, 0).Format(time.RFC3339)),
@@ -167,7 +162,7 @@ func TestWrite_Update_StaleEtagIsAConflict(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	// Someone edits it from a phone: the stored etag is now behind.
+	// Edited elsewhere: the stored etag is now behind.
 	stored, ok := h.gc.Event("me@example.com", primaryCal, created.GoogleEventID)
 	require.True(t, ok)
 	stored.Summary = "Dentist (from the phone)"
@@ -287,8 +282,7 @@ func TestWrite_Update_ScopeValidation(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	// Asking to edit "this occurrence" without saying which one is refused, not guessed:
-	// guessing wrong there rewrites somebody's whole series.
+	// Editing "this occurrence" without naming one is refused, not guessed.
 	_, err = h.svc.UpdateEvent(ctx, series.InstanceID, calendar.UpdateEventRequest{
 		Summary: ptr("x"), Scope: calendar.ScopeInstance,
 	})
@@ -303,7 +297,7 @@ func TestWrite_Update_ScopeValidation(t *testing.T) {
 		calendar.UpdateEventRequest{Scope: calendar.ScopeFollowing, Summary: ptr("x")})
 	require.ErrorIs(t, err, calendar.ErrInvalidScope)
 
-	// The rule itself is a property of the series, so it can only be changed as a whole.
+	// The rule can only be changed for the whole series.
 	_, err = h.svc.UpdateEvent(ctx, ref, calendar.UpdateEventRequest{
 		Recurrence: &[]string{"RRULE:FREQ=WEEKLY"},
 	})
@@ -323,8 +317,6 @@ func TestWrite_Update_EmptyPatchIsRejected(t *testing.T) {
 	require.Error(t, err)
 	require.Zero(t, h.gc.CallCount("PatchEvent"))
 }
-
-// --- deleting ------------------------------------------------------------------------
 
 func TestWrite_Delete_WholeEvent(t *testing.T) {
 	ctx := context.Background()
@@ -360,8 +352,7 @@ func TestWrite_Delete_SingleOccurrenceLeavesAHole(t *testing.T) {
 	ref := series.InstanceID + "@" + madrid(t, 2026, 8, 19, 9, 0).UTC().Format(time.RFC3339)
 	require.NoError(t, h.svc.DeleteEvent(ctx, ref, calendar.ScopeInstance, ""))
 
-	// The cancelled override has to be mirrored, or the occurrence comes back on the next
-	// expansion.
+	// The cancelled override must be mirrored or the occurrence comes back.
 	_, err = h.svc.SyncCalendar(ctx, 1, "manual")
 	require.NoError(t, err)
 
@@ -396,8 +387,6 @@ func TestWrite_Delete_ThisAndFollowingTruncatesTheSeries(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, week, 2, "monday and tuesday survive, wednesday onwards is gone")
 }
-
-// --- moving --------------------------------------------------------------------------
 
 func TestWrite_Move_WithinTheSameAccount(t *testing.T) {
 	ctx := context.Background()

@@ -76,7 +76,8 @@ func TestService_GetBudgetMonth(t *testing.T) {
 		budget(4, month, "20"),
 		budget(7, since, "50"), // transfer: ignored
 	}, nil)
-	expectTotals(repo, month,
+	expectTotals(
+		repo, month,
 		[]finance.CategoryTotal{
 			total(1, txtype.Income, "2100"),
 			total(3, txtype.Expense, "90"),
@@ -171,7 +172,8 @@ func TestService_GetBudgetMonth_Yearly(t *testing.T) {
 		yearlyBudget(4, jan, "450"),
 		yearlyBudget(5, jan, "1200"),
 	}, nil)
-	expectTotals(repo, month,
+	expectTotals(
+		repo, month,
 		[]finance.CategoryTotal{
 			total(2, txtype.Expense, "380"), // tyres this month
 			total(3, txtype.Expense, "60"),

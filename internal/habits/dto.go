@@ -1,7 +1,5 @@
 package habits
 
-// Responses and requests
-
 type HabitWithLog struct {
 	ID                int32    `json:"id"`
 	Name              string   `json:"name"`

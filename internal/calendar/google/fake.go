@@ -42,11 +42,9 @@ type Fake struct {
 	PageSize    int
 	AuthURLBase string
 
-	// FailWith, when set, is returned by the next Calendar API call and then cleared. It is
-	// how a test injects a 403 or a transport error at an exact point in a sync.
+	// FailWith, when set, is returned by the next Calendar API call and then cleared.
 	FailWith error
-	// Calls records every Calendar API method invoked, in order, for tests that care about
-	// how many round-trips a path costs.
+	// Calls records every Calendar API method invoked, in order.
 	Calls []string
 }
 
@@ -79,10 +77,7 @@ func NewFake() *Fake {
 	}
 }
 
-// --- test controls -------------------------------------------------------------------
-
-// AddAccount registers an account with the given calendars and returns the auth code that
-// the OAuth callback would arrive with.
+// AddAccount registers an account with the given calendars and returns its OAuth auth code.
 func (f *Fake) AddAccount(email string, calendars ...CalendarListEntry) string {
 	f.mu.Lock()
 	defer f.mu.Unlock()
@@ -104,7 +99,6 @@ func (f *Fake) AddAccount(email string, calendars ...CalendarListEntry) string {
 	return code
 }
 
-// AccessToken is the token a test hands to the client methods directly.
 func (f *Fake) AccessToken(email string) string { return "access-" + email }
 
 // PutEvent inserts or replaces an event as if it had been created in Google's UI.
@@ -128,8 +122,7 @@ func (f *Fake) PutEvent(email, calendarID string, ev Event) Event {
 	return stored.ev
 }
 
-// DeleteEventDirect cancels an event the way a delete in Google's UI would: the row stays,
-// marked cancelled, so the next incremental sync sees it.
+// DeleteEventDirect cancels an event as Google's UI would: the row stays, marked cancelled.
 func (f *Fake) DeleteEventDirect(email, calendarID, eventID string) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
@@ -169,7 +162,7 @@ func (f *Fake) Revoked(email string) bool {
 	return acc != nil && acc.revoked
 }
 
-// Event returns the stored event, for asserting what a write actually did.
+// Event returns the stored event.
 func (f *Fake) Event(email, calendarID, eventID string) (Event, bool) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
@@ -199,8 +192,7 @@ func (f *Fake) Events(email, calendarID string) []Event {
 	return out
 }
 
-// Channels returns the live push channels, so a test can check they were renewed and the old
-// ones stopped.
+// Channels returns the live push channels.
 func (f *Fake) Channels() map[string]WatchChannel {
 	f.mu.Lock()
 	defer f.mu.Unlock()
@@ -222,8 +214,6 @@ func (f *Fake) CallCount(method string) int {
 	}
 	return n
 }
-
-// --- helpers (mutex already held) ----------------------------------------------------
 
 func (f *Fake) accountByEmail(email string) *fakeAccount {
 	for _, a := range f.accounts {
@@ -271,8 +261,6 @@ func (f *Fake) auth(accessToken string) (*fakeAccount, error) {
 	return acc, nil
 }
 
-// --- Client implementation -----------------------------------------------------------
-
 func (f *Fake) AuthURL(state string) string {
 	return f.AuthURLBase + "?access_type=offline&prompt=consent&state=" + state
 }
@@ -300,7 +288,7 @@ func (f *Fake) RefreshToken(_ context.Context, refreshToken string) (*Token, err
 	if !ok || acc.invalidGrant {
 		return nil, invalidGrantError()
 	}
-	// A refresh never returns a new refresh token, same as the real thing.
+	// A refresh never returns a new refresh token.
 	return &Token{AccessToken: acc.accessToken, Expiry: time.Now().Add(time.Hour)}, nil
 }
 
@@ -370,14 +358,13 @@ func (f *Fake) ListEvents(_ context.Context, accessToken, calendarID string, p L
 		since = ver
 	}
 
-	// Deterministic order: version ascending, which is also "oldest change first".
+	// Version ascending, i.e. oldest change first.
 	var picked []*fakeEvent
 	for _, e := range acc.events[calendarID] {
 		if e.version <= since {
 			continue
 		}
-		// A full sync does not report events that were already cancelled before it ran;
-		// an incremental one must, or the client never learns about the deletion.
+		// A full sync skips already-cancelled events; an incremental one must report them.
 		if since == 0 && e.ev.Cancelled() && !p.ShowDeleted {
 			continue
 		}
@@ -411,8 +398,7 @@ func (f *Fake) ListEvents(_ context.Context, accessToken, calendarID string, p L
 		page.NextPageToken = strconv.Itoa(end)
 		return page, nil
 	}
-	// Last page: the token must cover everything the caller has now seen, including changes
-	// that landed after this listing started.
+	// Last page: the token covers everything seen, including changes during this listing.
 	page.NextSyncToken = fmt.Sprintf("tok:%d:%d", f.tokenGen, max(high, f.seq))
 	return page, nil
 }
@@ -448,9 +434,8 @@ func (f *Fake) GetEvent(_ context.Context, accessToken, calendarID, eventID stri
 	return &ev, nil
 }
 
-// ListInstances answers with the stored override for that occurrence when there is one, and
-// otherwise materialises the instance the way Google does, so the caller gets an id it can
-// patch.
+// ListInstances returns the stored override for the occurrence, or materialises the instance as
+// Google does.
 func (f *Fake) ListInstances(_ context.Context, accessToken, calendarID, eventID, originalStart string) ([]Event, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
@@ -539,8 +524,7 @@ func (f *Fake) PatchEvent(_ context.Context, accessToken, calendarID, eventID, i
 
 	e, ok := acc.events[calendarID][eventID]
 	if !ok {
-		// Patching an occurrence that has no override yet creates one, which is how Google
-		// turns "edit just this instance" into a real event.
+		// Patching an occurrence with no override creates one, as Google does.
 		masterID, originalStart, isInstance := splitInstanceID(eventID)
 		master, hasMaster := acc.events[calendarID][masterID]
 		if !isInstance || !hasMaster {
@@ -562,8 +546,7 @@ func (f *Fake) PatchEvent(_ context.Context, accessToken, calendarID, eventID, i
 		return nil, &APIError{Status: 400, Reason: "invalid", Message: err.Error()}
 	}
 	patched.ID = e.ev.ID
-	// A patch that sets start without end (or the other way round) keeps the other side, and
-	// clearing recurrence is expressed as an explicit empty list.
+	// Setting one of start/end keeps the other; clearing recurrence is an explicit empty list.
 	if raw, ok := body["recurrence"]; ok {
 		if list, isList := raw.([]string); isList && len(list) == 0 {
 			patched.Recurrence = nil
@@ -606,8 +589,7 @@ func (f *Fake) DeleteEvent(_ context.Context, accessToken, calendarID, eventID, 
 		if !isInstance || !hasMaster {
 			return &APIError{Status: 404, Reason: "notFound", Message: "Not Found"}
 		}
-		// Cancelling an occurrence of a series leaves a cancelled exception behind: that row
-		// is the hole in the series and it has to survive.
+		// Cancelling an occurrence leaves a cancelled exception row behind.
 		inst := master.ev
 		inst.ID = eventID
 		inst.Recurrence = nil
@@ -647,8 +629,7 @@ func (f *Fake) MoveEvent(_ context.Context, accessToken, calendarID, eventID, de
 	}
 	moved := e.ev
 	delete(acc.events[calendarID], eventID)
-	// The source row is gone for good here; Google reports the removal on the source
-	// calendar's next incremental sync.
+	// Google reports the removal on the source calendar's next incremental sync.
 	f.seq++
 	stored := f.store(acc, destination, moved)
 	out := stored.ev
@@ -712,9 +693,7 @@ func (f *Fake) writable(acc *fakeAccount, id string) bool {
 	return false
 }
 
-// remarshal applies a patch body to a struct with JSON merge semantics: keys present in the
-// body overwrite, keys absent leave the field alone. That is exactly what events.patch does,
-// so the fake gets Google's behaviour for free instead of reimplementing it field by field.
+// remarshal applies a patch body with JSON merge semantics, as events.patch does.
 func remarshal(body map[string]any, into any) error {
 	raw, err := json.Marshal(body)
 	if err != nil {
@@ -723,8 +702,7 @@ func remarshal(body map[string]any, into any) error {
 	return json.Unmarshal(raw, into)
 }
 
-// invalidGrantError is the error a dead refresh token produces, in the shape
-// golang.org/x/oauth2 would produce it, so IsInvalidGrant recognises it.
+// invalidGrantError mimics golang.org/x/oauth2's error so IsInvalidGrant recognises it.
 func invalidGrantError() error {
 	return &oauth2.RetrieveError{
 		Response:  &http.Response{StatusCode: http.StatusBadRequest},

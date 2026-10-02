@@ -25,8 +25,6 @@ func matchTime(t time.Time) interface{} {
 	return mock.MatchedBy(func(got time.Time) bool { return got.Equal(t) })
 }
 
-// --- CreateTransaction ---
-
 func TestService_CreateTransaction_CategoryMismatch(t *testing.T) {
 	repo := mocks.NewMockRepository(t)
 	repo.EXPECT().GetCategoryType(mock.Anything, int32(5)).Return(txtype.Type("expense"), nil)
@@ -80,8 +78,6 @@ func TestService_UpdateTransaction_CategoryMismatch(t *testing.T) {
 	assert.ErrorIs(t, err, finance.ErrCategoryMismatch)
 }
 
-// --- GetOverview ---
-
 func TestService_GetOverview_AssemblesCorrectly(t *testing.T) {
 	loc := time.UTC
 	now := time.Now().In(loc)
@@ -110,8 +106,6 @@ func TestService_GetOverview_AssemblesCorrectly(t *testing.T) {
 	assert.Equal(t, "300", got.PreviousMonth.Expense.String())
 	assert.Equal(t, "500", got.PreviousMonth.Balance.String())
 }
-
-// --- GetEstimation ---
 
 func TestService_GetEstimation_SavingMode_WithActuals(t *testing.T) {
 	loc := time.UTC
@@ -168,11 +162,8 @@ func TestService_GetEstimation_RateMode_NoActuals(t *testing.T) {
 	}
 }
 
-// --- normalizeStatsRange (via GetNetWorthSeries) ---
-
 func TestService_GetNetWorthSeries_DefaultsFromEarliestTx(t *testing.T) {
-	// When From is zero and transactions exist, From should be set to
-	// one day before the earliest transaction (day granularity default).
+	// From defaults to one day before the earliest transaction.
 	earliest := time.Date(2025, 6, 15, 0, 0, 0, 0, time.UTC)
 	expected := earliest.AddDate(0, 0, -1)
 
@@ -190,7 +181,6 @@ func TestService_GetNetWorthSeries_DefaultsFromEarliestTx(t *testing.T) {
 
 func TestService_GetNetWorthSeries_DefaultsFrom6MonthsWhenNoTx(t *testing.T) {
 	// When From is zero and there are no transactions, From defaults to ~6 months ago.
-	// We only assert the repo is called (From is non-zero); exact value is time-sensitive.
 	repo := mocks.NewMockRepository(t)
 	repo.EXPECT().GetEarliestTransactionDate(mock.Anything).Return(time.Time{}, false, nil)
 	repo.EXPECT().

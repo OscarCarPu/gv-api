@@ -118,10 +118,8 @@ func (r *PostgresRepository) UpdateProject(ctx context.Context, req UpdateProjec
 	}, nil
 }
 
-// checkProjectMove validates moving project id under newParentID: the project and the parent
-// must exist, and the parent must not be the project itself or any of its descendants (at any
-// depth), otherwise the hierarchy would contain a cycle. The advisory lock serialises concurrent
-// moves so two of them can't each pass the check and together create a cycle.
+// checkProjectMove rejects moves that would create a cycle. The advisory lock serialises
+// concurrent moves so two cannot pass the check together.
 func checkProjectMove(ctx context.Context, q *gvdb.Queries, id, newParentID int32) error {
 	if err := q.LockProjectTree(ctx); err != nil {
 		return err
@@ -296,9 +294,7 @@ func (r *PostgresRepository) GetProjectChildren(ctx context.Context, projectID i
 	}
 	children = append(children, topoSortByDeps(projectTasks[projectID])...)
 
-	// Order children by status group. Stable sort keeps the within-group
-	// ordering intact: natural order for sub-projects, dependency order
-	// (topoSortByDeps) for tasks.
+	// Stable sort keeps natural order for sub-projects and dependency order for tasks.
 	sort.SliceStable(children, func(i, j int) bool {
 		return childStatusRank(children[i]) < childStatusRank(children[j])
 	})
@@ -313,8 +309,7 @@ func (r *PostgresRepository) GetProjectChildren(ctx context.Context, projectID i
 	}, nil
 }
 
-// childStatusRank returns the display-ordering rank of a project child by its
-// status group. Lower ranks sort first. The order is:
+// childStatusRank returns a project child's display-ordering rank:
 //
 //	0 projects in progress   1 projects not started
 //	2 task continuous        3 task recurring        4 task in progress
@@ -334,7 +329,6 @@ func childStatusRank(c ProjectChildNode) int {
 		}
 	}
 
-	// task
 	switch {
 	case completed:
 		return 7
@@ -355,10 +349,8 @@ func childStatusRank(c ProjectChildNode) int {
 	}
 }
 
-// topoSortByDeps reorders a project's task list so that any task whose
-// DependsOn references another task in the same list comes after that
-// dependency. The pre-existing relative order is preserved as the tiebreaker
-// (Kahn's algorithm with a min-heap keyed by original index).
+// topoSortByDeps places each task after its in-list dependencies, keeping original order as
+// the tiebreaker.
 func topoSortByDeps(nodes []ProjectChildNode) []ProjectChildNode {
 	n := len(nodes)
 	if n <= 1 {

@@ -34,8 +34,7 @@ func (s *Service) EnsureWatches(ctx context.Context) error {
 		if err := s.renewWatch(ctx, cal); err != nil {
 			slog.ErrorContext(ctx, "calendar: could not establish push channel",
 				"calendar", cal.ID, "summary", cal.Summary, "error", err)
-			// Not fatal, and not retried in a tight loop: the next pass tries again, and the
-			// poll covers the gap in the meantime.
+			// Not fatal: the next pass retries and polling covers the gap.
 			continue
 		}
 	}
@@ -56,9 +55,7 @@ func (s *Service) renewWatch(ctx context.Context, cal CalendarRecord) error {
 	if err != nil {
 		return err
 	}
-	// The channel token is the webhook's only credential: Google echoes it back in
-	// X-Goog-Channel-Token, and the endpoint has to be public because Google cannot
-	// authenticate itself any other way.
+	// The channel token is the public webhook's only credential; Google echoes it back.
 	channelToken, err := randomHex(24)
 	if err != nil {
 		return err
@@ -84,8 +81,7 @@ func (s *Service) renewWatch(ctx context.Context, cal CalendarRecord) error {
 		return err
 	}
 
-	// Only now is the old channel dropped: if storing the new one had failed, the old one
-	// would still be delivering and nothing would have gone quiet.
+	// Drop the old channel only after the new one is stored.
 	if previousID != nil && previousResource != nil && *previousID != ch.ID {
 		if err := s.gc.StopChannel(ctx, token, *previousID, *previousResource); err != nil {
 			slog.WarnContext(ctx, "calendar: stopping the replaced channel",
@@ -97,8 +93,7 @@ func (s *Service) renewWatch(ctx context.Context, cal CalendarRecord) error {
 	return nil
 }
 
-// stopWatch tears a channel down and forgets it. Used when a calendar stops being synced or
-// its account is disconnected.
+// stopWatch tears a channel down and forgets it.
 func (s *Service) stopWatch(ctx context.Context, cal CalendarRecord) {
 	if cal.WatchChannelID == nil || cal.WatchResourceID == nil {
 		return
@@ -132,8 +127,7 @@ func (s *Service) HandleWebhook(ctx context.Context, channelID, resourceState, c
 	}
 	cal, err := s.repo.GetCalendarByChannel(ctx, channelID)
 	if err != nil {
-		// An unknown channel is usually one we replaced and Google has not caught up with, or
-		// one left over from a previous database. Nothing to do, and nothing alarming.
+		// Usually a channel we replaced, or one from a previous database.
 		slog.DebugContext(ctx, "calendar: notification for an unknown channel", "channel", channelID)
 		return ErrNotFound
 	}
@@ -141,8 +135,7 @@ func (s *Service) HandleWebhook(ctx context.Context, channelID, resourceState, c
 		slog.WarnContext(ctx, "calendar: notification with a bad channel token", "channel", channelID)
 		return ErrInvalidState
 	}
-	// "sync" is the handshake Google sends when a channel is created; there is nothing new
-	// behind it.
+	// "sync" is the handshake Google sends when a channel is created.
 	if resourceState == "sync" {
 		return nil
 	}
@@ -161,5 +154,4 @@ func randomHex(n int) (string, error) {
 // Subscribe hands out a stream of change notifications for the SSE endpoint.
 func (s *Service) Subscribe() (<-chan StreamMessage, func()) { return s.stream.Subscribe() }
 
-// WatchTTL and friends are read by the worker.
 func (s *Service) WatchRenewBefore() time.Duration { return s.cfg.WatchRenewBefore }

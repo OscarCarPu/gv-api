@@ -19,8 +19,6 @@ func NewService(repo Repository, loc *time.Location) *Service {
 	return &Service{repo: repo, loc: loc}
 }
 
-// --- Accounts ---
-
 func (s *Service) GetAccount(ctx context.Context, id int32) (Account, error) {
 	return s.repo.GetAccount(ctx, id)
 }
@@ -41,8 +39,6 @@ func (s *Service) DeleteAccount(ctx context.Context, id int32) error {
 	return s.repo.DeleteAccount(ctx, id)
 }
 
-// --- Categories ---
-
 func (s *Service) GetCategory(ctx context.Context, id int32) (Category, error) {
 	return s.repo.GetCategory(ctx, id)
 }
@@ -62,8 +58,6 @@ func (s *Service) UpdateCategory(ctx context.Context, req UpdateCategoryRequest)
 func (s *Service) DeleteCategory(ctx context.Context, id int32) error {
 	return s.repo.DeleteCategory(ctx, id)
 }
-
-// --- Transactions ---
 
 func (s *Service) GetTransaction(ctx context.Context, id int32) (Transaction, error) {
 	return s.repo.GetTransaction(ctx, id)
@@ -91,10 +85,8 @@ func (s *Service) DeleteTransaction(ctx context.Context, id int32) error {
 	return s.repo.DeleteTransaction(ctx, id)
 }
 
-// GetOverview returns the cross-feature summary used by the /finance/overview
-// endpoint: total balance across all accounts, this-month income/expense/balance
-// in the configured timezone, and the last 30 days of transactions joined with
-// account/category names for display.
+// GetOverview returns total balance, this month's income/expense/balance and the last 30 days of
+// transactions.
 func (s *Service) GetOverview(ctx context.Context) (Overview, error) {
 	now := time.Now().In(s.loc)
 	monthStart := time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, s.loc)
@@ -109,8 +101,7 @@ func (s *Service) GetOverview(ctx context.Context) (Overview, error) {
 	if err != nil {
 		return Overview{}, err
 	}
-	// GetMonthlyTotals only takes a lower bound, so summing from prevMonthStart
-	// gives prev-month + current-month combined; subtract current to isolate prev.
+	// Summing from prevMonthStart covers both months; subtract current to isolate prev.
 	prevPlusCurIncome, prevPlusCurExpense, err := s.repo.GetMonthlyTotals(ctx, prevMonthStart)
 	if err != nil {
 		return Overview{}, err
@@ -137,8 +128,6 @@ func (s *Service) GetOverview(ctx context.Context) (Overview, error) {
 	}, nil
 }
 
-// --- Stats ---
-
 func (s *Service) GetNetWorthSeries(ctx context.Context, q NetWorthQuery) ([]NetWorthPoint, error) {
 	from, to, g, err := s.normalizeStatsRange(ctx, q.From, q.To, q.Granularity)
 	if err != nil {
@@ -157,13 +146,8 @@ func (s *Service) GetCategoryStats(ctx context.Context, q CategoryStatsQuery) ([
 	return s.repo.GetCategoryStats(ctx, q)
 }
 
-// GetEstimation returns a monthly series from start_month through end_month.
-// Actual points cover start_month..lastCompletedMonth (end of previous month
-// relative to now). The projection factor is derived from those actuals:
-// - rate: compound monthly rate r such that last = first * (1+r)^n
-// - saving: average monthly delta (last - first) / n
-// Estimated points are then projected forward from the last actual total to
-// end_month using that factor.
+// GetEstimation returns actual monthly points up to the last completed month, then projects to
+// end_month using either a compound monthly rate or the average monthly delta.
 func (s *Service) GetEstimation(ctx context.Context, q EstimationQuery) (EstimationResult, error) {
 	now := time.Now().In(s.loc)
 	currentMonthStart := time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, s.loc)
@@ -172,11 +156,7 @@ func (s *Service) GetEstimation(ctx context.Context, q EstimationQuery) (Estimat
 	startMonth := time.Date(q.StartMonth.Year(), q.StartMonth.Month(), 1, 0, 0, 0, 0, s.loc)
 	endMonth := time.Date(q.EndMonth.Year(), q.EndMonth.Month(), 1, 0, 0, 0, 0, s.loc)
 
-	// Clamp startMonth to the month of the earliest transaction so the actuals
-	// series doesn't include flat pre-data buckets that would otherwise pin
-	// firstTotal to the current accounts.total and yield a near-zero rate.
-	// Mirrors the "missing from → earliest tx date" rule in normalizeStatsRange,
-	// applied as a lower bound rather than a default.
+	// Clamp to the earliest transaction's month so flat pre-data buckets do not flatten the rate.
 	earliest, hasTx, err := s.repo.GetEarliestTransactionDate(ctx)
 	if err != nil {
 		return EstimationResult{}, err
@@ -217,7 +197,6 @@ func (s *Service) GetEstimation(ctx context.Context, q EstimationQuery) (Estimat
 		}
 	}
 
-	// Derive projection factor from the actuals. n = number of monthly steps.
 	n := len(points) - 1
 	var rate, saving decimal.Decimal
 	if n > 0 {
@@ -271,10 +250,8 @@ func (s *Service) GetMonthlyStats(ctx context.Context, q MonthlyStatsQuery) ([]M
 	return s.repo.GetMonthlyStats(ctx, q)
 }
 
-// normalizeStatsRange fills missing to with now and missing from with one
-// granularity period before the earliest transaction date (so the net-worth
-// baseline before the first tx is visible), or now - 6 months if there are no
-// transactions. Validates granularity (defaults to day).
+// normalizeStatsRange defaults to to now, and from to one period before the earliest transaction
+// (or six months ago). Granularity defaults to day.
 func (s *Service) normalizeStatsRange(ctx context.Context, from, to time.Time, g StatsGranularity) (time.Time, time.Time, StatsGranularity, error) {
 	now := time.Now().In(s.loc)
 	if to.IsZero() {
@@ -308,9 +285,7 @@ func shiftBackOnePeriod(t time.Time, g StatsGranularity) time.Time {
 	}
 }
 
-// assertCategoryMatchesType returns ErrCategoryMismatch if the category's
-// type doesn't match the transaction type, ErrInvalidInput if the category
-// doesn't exist, or nil if categoryID is nil (categories are optional).
+// assertCategoryMatchesType checks an optional category exists and matches the transaction type.
 func (s *Service) assertCategoryMatchesType(ctx context.Context, categoryID *int32, t txtype.Type) error {
 	if categoryID == nil {
 		return nil

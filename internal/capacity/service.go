@@ -20,9 +20,8 @@ func NewService(dailyCapacity decimal.Decimal, plan planBusyProvider) *Service {
 	return &Service{dailyCapacity: dailyCapacity, plan: plan}
 }
 
-// FreeBusyRange returns one entry per day in [from, to). An empty or reversed range has no days
-// and yields an empty result rather than an error: callers derive `to` from data (a task's due
-// date), and a due date in the past is an ordinary input, not a malformed request.
+// FreeBusyRange returns one entry per day in [from, to). An empty or reversed range yields an
+// empty result, not an error: a past due date is an ordinary input.
 func (s *Service) FreeBusyRange(ctx context.Context, from, to time.Time) ([]DayFreeBusy, error) {
 	if !to.After(from) {
 		return []DayFreeBusy{}, nil

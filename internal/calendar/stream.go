@@ -29,9 +29,8 @@ func NewStream() *Stream {
 	return &Stream{subs: map[int]chan StreamMessage{}}
 }
 
-// Subscribe returns a channel of messages and the function that releases it. The buffer is
-// small on purpose: a client that cannot keep up misses messages rather than holding up a
-// sync, and the next message it does receive tells it to refetch anyway.
+// Subscribe returns a channel of messages and its release function. A slow client drops
+// messages rather than holding up a sync.
 func (s *Stream) Subscribe() (<-chan StreamMessage, func()) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -64,7 +63,6 @@ func (s *Stream) Publish(msg StreamMessage) {
 	}
 }
 
-// Subscribers is the count of live listeners, reported by the sync status endpoint.
 func (s *Stream) Subscribers() int {
 	s.mu.Lock()
 	defer s.mu.Unlock()

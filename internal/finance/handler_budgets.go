@@ -37,8 +37,7 @@ func parseBudgetMonth(s string, required bool) (time.Time, error) {
 	return t, nil
 }
 
-// parseBudgetPeriodMonth reads the month a budget change applies to. A yearly change also
-// takes a bare YYYY; either way the service uses only the year.
+// parseBudgetPeriodMonth reads YYYY-MM, or a bare YYYY for yearly changes.
 func parseBudgetPeriodMonth(s string, period BudgetPeriod) (time.Time, error) {
 	if period == BudgetPeriodYearly {
 		if t, err := time.Parse("2006", s); err == nil {

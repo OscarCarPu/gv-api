@@ -14,11 +14,8 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// These tables belong to central-pipeline, whose dbt models create them — there is no gv
-// migration to lean on, so the fixture builds the two relations the queries read, with the
-// column types the contract in central-pipeline's docs/sources/watchdog.md specifies. That
-// keeps the SQL under test (the clipping, the quoted `time` column, the overlap filter)
-// honest without needing the other project's stack running.
+// central-pipeline's dbt owns these tables, so the fixture creates them with the column types
+// from its docs/sources/watchdog.md contract.
 const martsFixture = `
 CREATE SCHEMA IF NOT EXISTS marts;
 DROP TABLE IF EXISTS marts.uptime_windows;
@@ -37,8 +34,7 @@ CREATE TABLE marts.uptime_aggregations (
     uptime      double precision
 );`
 
-// base is a fixed instant every fixture timestamp is offset from, so the assertions can be
-// exact instead of approximate.
+// base is the fixed instant every fixture timestamp is offset from.
 var base = time.Date(2026, 8, 1, 0, 0, 0, 0, time.UTC)
 
 func newRepo(t *testing.T) (*uptime.PipelineRepository, *pgxpool.Pool) {
@@ -82,9 +78,7 @@ func seedWindows(t *testing.T, pool *pgxpool.Pool) {
 
 func ptr[T any](v T) *T { return &v }
 
-// sameInstant compares timestamps by the moment they name. pgx hands timestamptz back in
-// the session's own zone, so the fixture's UTC values come out as +02:00 — the same instant
-// carrying a different Location, which struct equality would call a difference.
+// sameInstant compares timestamps by instant; pgx returns them in the session's zone.
 func sameInstant(t *testing.T, want, got time.Time) {
 	t.Helper()
 	assert.WithinDuration(t, want, got, 0)
@@ -141,8 +135,7 @@ func TestIntegration_RangeStats_ClipsToRange(t *testing.T) {
 	seedWindows(t, pool)
 	ctx := context.Background()
 
-	// A range that starts inside lab's first up window and ends inside its open one: 1h of
-	// the first up, the whole 2h outage, then 4h of the open window counted up to `to`.
+	// 1h of the first up window, the whole 2h outage, then 4h of the open window up to `to`.
 	from, to := base.Add(9*time.Hour), base.Add(16*time.Hour)
 	got, err := repo.RangeStats(ctx, from, to, nil)
 	require.NoError(t, err)
@@ -153,8 +146,7 @@ func TestIntegration_RangeStats_ClipsToRange(t *testing.T) {
 	assert.InDelta(t, 5*3600.0, lab.UpSeconds, 0.5)
 	assert.InDelta(t, 2*3600.0, lab.DownSeconds, 0.5)
 	assert.Equal(t, 1, lab.Outages)
-	// A window starting before the range is clipped to it, and the open one is counted up
-	// to the end of the range.
+	// Clipped at the start; the open window counts up to the end of the range.
 	sameInstant(t, from, lab.CoveredFrom)
 	sameInstant(t, to, lab.CoveredTo)
 
@@ -197,7 +189,7 @@ func TestIntegration_Windows_NewestFirstAndOverLimit(t *testing.T) {
 	assert.Nil(t, got[0].EndTime, "the open window keeps its null end")
 	sameInstant(t, base, got[len(got)-1].StartTime)
 
-	// One row over the limit comes back so the caller can tell "full" from "there is more".
+	// One row over the limit tells the caller there is more.
 	got, err = repo.Windows(ctx, base, base.Add(24*time.Hour), nil, 2)
 	require.NoError(t, err)
 	assert.Len(t, got, 3)

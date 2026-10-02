@@ -48,22 +48,19 @@ func TestDisplayColor_Precedence(t *testing.T) {
 	view.ColorOverride = "#ff00ff"
 	require.Equal(t, "#ff00ff", view.DisplayColor())
 
-	// With nothing assigned yet (a path that reads a record directly), google's value is better
-	// than nothing.
+	// With nothing assigned yet, google's value is the fallback.
 	bare := CalendarView{CalendarRecord: CalendarRecord{BackgroundColor: "#9fe1e7"}}
 	require.Equal(t, "#9fe1e7", bare.DisplayColor())
 }
 
 func TestPalette_IsDarkEnoughForLightText(t *testing.T) {
-	// Every colour has to carry white text on a chip; a pastel like google's #9fe1e7 does not,
-	// which is what made the old ones unreadable.
+	// Every colour must carry white text on a chip.
 	for _, hex := range calendarPalette {
 		require.Less(t, relativeLuminance(t, hex), 0.62, "%s is too light to paint white text on", hex)
 		require.Greater(t, relativeLuminance(t, hex), 0.05, "%s is too dark to read on a dark page", hex)
 	}
 }
 
-// relativeLuminance is the WCAG formula, used only to keep the palette honest.
 func relativeLuminance(t *testing.T, hex string) float64 {
 	t.Helper()
 	require.Len(t, hex, 7)

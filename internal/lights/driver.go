@@ -9,23 +9,15 @@ import (
 	"time"
 )
 
-// Driver applies commands to a bulb.
-//
-// Implementations must not return an error for an unreachable bulb: they return a State with
-// Online false and Error set, so one dead bulb cannot fail a request covering several. An
-// error is reserved for the driver itself being unusable.
+// Driver applies commands to a bulb. An unreachable bulb is a State with Online false and
+// Error set, not an error, so one dead bulb cannot fail a request covering several.
 type Driver interface {
 	Kind() string
 	GetState(ctx context.Context, light Light) State
 	Apply(ctx context.Context, light Light, cmd Command) State
-	// Discover lists bulbs in range, so adding one is picking it off a list rather than
-	// typing a BLE address. Unlike the two above, this one does return an error: it is a
-	// deliberate action with a person waiting on the answer, and "no adapter" is the whole
-	// story rather than one card's worth of it.
+	// Discover does return an error: "no adapter" is the whole answer for a scan.
 	Discover(ctx context.Context, window time.Duration) ([]Discovered, error)
 }
-
-// --- BlueZ driver --------------------------------------------------------------------
 
 /*
 BlueZDriver talks to the bulbs over Bluetooth, through BlueZ on this host. It owns three
@@ -55,16 +47,12 @@ type BlueZDriver struct {
 	stopOnce sync.Once
 }
 
-// NewBlueZDriver builds a driver over the given adapter (empty means hci0). A zero timeout or
-// idle window uses the defaults.
-//
-// It opens nothing: the D-Bus connection is made on first use, so the API still starts on a
-// host with no Bluetooth and reports the trouble per bulb instead of refusing to boot.
+// NewBlueZDriver builds a driver over the given adapter (empty means hci0). It opens nothing
+// until first use, so the API starts on hosts without Bluetooth.
 func NewBlueZDriver(adapter string, connectTimeout, idleDisconnect time.Duration) *BlueZDriver {
 	return newDriver(newBluezGATT(adapter, connectTimeout), idleDisconnect)
 }
 
-// newDriver is the seam the tests use, with a fake gatt in place of the radio.
 func newDriver(g gatt, idleDisconnect time.Duration) *BlueZDriver {
 	if idleDisconnect <= 0 {
 		idleDisconnect = 90 * time.Second
@@ -83,8 +71,6 @@ func newDriver(g gatt, idleDisconnect time.Duration) *BlueZDriver {
 
 func (d *BlueZDriver) Kind() string { return "bluez" }
 
-// Close stops the idle sweep and releases the bus. Bulbs are left connected: the host is
-// shutting down anyway, and BlueZ drops the links with it.
 func (d *BlueZDriver) Close() error {
 	d.stopOnce.Do(func() { close(d.stop) })
 	return d.gatt.Close()
@@ -103,8 +89,6 @@ func (d *BlueZDriver) GetState(ctx context.Context, light Light) State {
 		return d.offline(light, err)
 	}
 	if !proto.Readable() {
-		// Nothing to ask: the bulb only takes orders. What we last set is the best answer
-		// there is, and it is a true one as long as nobody used the physical remote.
 		return d.online(light)
 	}
 
@@ -114,8 +98,7 @@ func (d *BlueZDriver) GetState(ctx context.Context, light Light) State {
 		return d.offline(light, err)
 	}
 	if values.empty() {
-		// The bulb stayed quiet on every query. It is there — the connection worked — so
-		// report it online with what we last knew rather than a blank card.
+		// Connected but silent on every query: online with the last known values.
 		slog.Debug("bulb answered no queries", "light", light.ID)
 		return d.online(light)
 	}
@@ -138,13 +121,11 @@ func (d *BlueZDriver) Apply(ctx context.Context, light Light, cmd Command) State
 
 	if err := applyCommand(ctx, proto, d.gatt, light, cmd); err != nil {
 		if errors.Is(err, errUnsupported) {
-			// A capability this model does not have. The bulb is fine, so it stays online and
-			// keeps its state; only the card says why nothing happened.
+			// The model lacks this capability; the bulb itself is fine.
 			state := d.online(light)
 			state.Error = capabilityMessage(cmd)
 			return state
 		}
-		// Drop the link so the next call reconnects: a half-dead one never recovers.
 		d.drop(light.Address)
 		return d.offline(light, err)
 	}
@@ -164,8 +145,6 @@ in front of the app adding a lamp, which is not the moment to be optimising a po
 func (d *BlueZDriver) Discover(ctx context.Context, window time.Duration) ([]Discovered, error) {
 	found, err := d.gatt.Scan(ctx, window)
 	if err != nil {
-		// The client only gets the summarised reason, and a scan that finds nothing is the
-		// hardest thing here to diagnose from the outside.
 		slog.Warn("bulb scan failed", "error", err)
 		return nil, err
 	}
@@ -181,9 +160,8 @@ func (d *BlueZDriver) Discover(ctx context.Context, window time.Duration) ([]Dis
 
 type backgroundKey struct{}
 
-// withBackground marks work nobody is waiting on, such as the status poller. A bulb that is
-// only being checked must not count as in use, or a check every minute would hold every bulb
-// connected for good and lock out its own remote.
+// withBackground marks work nobody is waiting on, such as the poller, so it does not keep
+// bulbs connected and lock out their physical remote.
 func withBackground(ctx context.Context) context.Context {
 	return context.WithValue(ctx, backgroundKey{}, true)
 }
@@ -193,10 +171,8 @@ func isBackground(ctx context.Context) bool {
 	return background
 }
 
-// connect brings the bulb up and records that it was used, which is what keeps the idle sweep
-// from disconnecting a bulb mid-conversation. A background check connects without counting:
-// a link it opened is left already expired for the sweep to release, and one a person is
-// using keeps the stamp that person gave it.
+// connect brings the bulb up and stamps it as used so the idle sweep leaves it alone.
+// Background connects are not stamped.
 func (d *BlueZDriver) connect(ctx context.Context, light Light) error {
 	if light.Address == "" {
 		return errors.New("bulb has no address")
@@ -214,7 +190,6 @@ func (d *BlueZDriver) connect(ctx context.Context, light Light) error {
 	return nil
 }
 
-// drop forgets a link after a failure so the next call starts clean.
 func (d *BlueZDriver) drop(address string) {
 	d.mu.Lock()
 	delete(d.used, address)
@@ -269,8 +244,6 @@ func (d *BlueZDriver) idleAddresses() []string {
 	return idle
 }
 
-// --- per-bulb serialisation ----------------------------------------------------------
-
 func (d *BlueZDriver) bulbLock(address string) *sync.Mutex {
 	d.mu.Lock()
 	defer d.mu.Unlock()
@@ -288,10 +261,7 @@ func (d *BlueZDriver) lockBulb(address string) func() {
 	return lock.Unlock
 }
 
-// --- last known values ---------------------------------------------------------------
-
-// baseline returns what we last knew about a bulb, seeded from config the first time.
-// Callers hold the bulb's lock.
+// baseline returns what we last knew about a bulb. Callers hold the bulb's lock.
 func (d *BlueZDriver) baseline(light Light) State {
 	d.mu.Lock()
 	defer d.mu.Unlock()
@@ -302,8 +272,6 @@ func (d *BlueZDriver) baseline(light Light) State {
 		state.Brightness = 60
 		state.ColorTemp = light.MinColorTemp
 	}
-	// Identity and capabilities follow config, so an env edit shows up without a restart of
-	// anything but the API itself.
 	state.ID = light.ID
 	state.Name = light.Name
 	state.Model = light.Model
@@ -322,7 +290,6 @@ func (d *BlueZDriver) store(state State) {
 	d.known[state.ID] = state
 }
 
-// remember folds a readback into what we know.
 func (d *BlueZDriver) remember(light Light, values readback) {
 	state := d.baseline(light)
 	if values.Power != nil {
@@ -369,8 +336,6 @@ func (d *BlueZDriver) applied(light Light, cmd Command) {
 	d.store(state)
 }
 
-// --- replies -------------------------------------------------------------------------
-
 func (d *BlueZDriver) online(light Light) State {
 	state := d.baseline(light)
 	state.Online = true
@@ -389,15 +354,13 @@ stays in the log.
 func (d *BlueZDriver) offline(light Light, err error) State {
 	slog.Warn("bulb unreachable", "light", light.ID, "error", err)
 
-	// baseline carries the last known settings and clears Online/Error, so this reports the
-	// attempt without recording it: the bulb's settings are still whatever we last set.
+	// Report the attempt without recording it.
 	state := d.baseline(light)
 	state.Online = false
 	state.Error = bleErrorMessage(err)
 	return state
 }
 
-// failed reports a configuration mistake rather than a hardware one.
 func (d *BlueZDriver) failed(light Light, format string, args ...any) State {
 	return offlineState(light, fmt.Sprintf(format, args...), time.Now().UnixMilli())
 }
@@ -433,10 +396,7 @@ func capabilityMessage(cmd Command) string {
 	}
 }
 
-// --- mock driver ---------------------------------------------------------------------
-
-// MockDriver keeps bulb state in memory and touches no hardware. It is the default, so the
-// Domotics UI is workable in development and on any host without a Bluetooth adapter.
+// MockDriver keeps bulb state in memory and touches no hardware.
 type MockDriver struct {
 	mu     sync.Mutex
 	states map[string]State
@@ -456,8 +416,6 @@ hardware, so the mock answers it too: the flow — scan, pick, name, save — is
 laptop, and only the last hop to a real lamp is not.
 */
 func (d *MockDriver) Discover(ctx context.Context, window time.Duration) ([]Discovered, error) {
-	// Take the time a real scan would, so the UI's waiting state is exercised rather than
-	// skipped past.
 	select {
 	case <-time.After(min(window, 2*time.Second)):
 	case <-ctx.Done():
@@ -496,15 +454,12 @@ func (d *MockDriver) Apply(_ context.Context, light Light, cmd Command) State {
 		state.ColorTemp = float64(clampInt(*cmd.Kelvin, int(light.MinColorTemp), int(light.MaxColorTemp)))
 		state.Mode = "white"
 	}
-	// Deliberately does not infer Power from a brightness or colour command: on the real
-	// hardware those are separate frames, and a dimmed bulb that is off stays off. Guessing
-	// otherwise made the UI claim "on" over a dark room.
+	// Power is never inferred from brightness or colour: on the hardware they are separate frames.
 	state.UpdatedAt = time.Now().UnixMilli()
 	d.states[light.ID] = state
 	return state
 }
 
-// current must be called with the lock held.
 func (d *MockDriver) current(light Light) State {
 	state, ok := d.states[light.ID]
 	if !ok {
@@ -513,7 +468,6 @@ func (d *MockDriver) current(light Light) State {
 		state.ColorTemp = (light.MinColorTemp + light.MaxColorTemp) / 2
 		d.states[light.ID] = state
 	}
-	// Identity and capabilities follow config, so an env edit shows up without clearing state.
 	state.Online = true
 	state.Name = light.Name
 	state.Model = light.Model

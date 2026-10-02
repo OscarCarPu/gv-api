@@ -14,10 +14,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// The service's job is everything the pipeline deliberately does not do: decide what
-// "stale" means, keep both devices in the answer even when one is missing, and turn
-// clipped seconds into a percentage over the part of the range that is actually covered.
-
 const staleAfter = 2 * time.Hour
 
 func newService(repo uptime.Repository) *uptime.Service {
@@ -47,8 +43,7 @@ func TestService_Overview_FreshRun(t *testing.T) {
 	assert.False(t, got.Stale)
 	assert.Equal(t, int(staleAfter.Seconds()), got.StaleAfterSeconds)
 
-	// Devices come back in a fixed order regardless of how the rows arrived, and each
-	// device's ranges are ordered shortest lookback first.
+	// Fixed device order; ranges shortest lookback first.
 	require.Len(t, got.Devices, 2)
 	assert.Equal(t, uptime.DeviceLab, got.Devices[0].Device)
 	assert.Equal(t, uptime.StateUp, got.Devices[0].State)
@@ -80,8 +75,7 @@ func TestService_Overview_StaleRun(t *testing.T) {
 }
 
 func TestService_Overview_UnknownDevice(t *testing.T) {
-	// A device the pipeline has never heard from still appears: dropping it would read as
-	// "there is no watchdog" rather than "nothing is known about it".
+	// A device the pipeline has never heard from still appears.
 	repo := mocks.NewMockRepository(t)
 	repo.EXPECT().CurrentStates(mock.Anything).Return([]uptime.CurrentState{
 		{Device: uptime.DeviceLab, State: uptime.StateUp, Since: time.Now()},
@@ -99,8 +93,7 @@ func TestService_Overview_UnknownDevice(t *testing.T) {
 }
 
 func TestService_Overview_NotConfigured(t *testing.T) {
-	// With no pipeline database the repository reports it and the service passes it
-	// through, so the handler can answer 503 rather than 500.
+	// ErrNotConfigured passes through so the handler can answer 503.
 	repo := mocks.NewMockRepository(t)
 	repo.EXPECT().CurrentStates(mock.Anything).Return(nil, uptime.ErrNotConfigured)
 
@@ -141,8 +134,7 @@ func TestService_Windows_DefaultsToLastThirtyDays(t *testing.T) {
 }
 
 func TestService_Windows_ClampsFutureTo(t *testing.T) {
-	// The open window is counted up to `to`, so honouring a future `to` would invent
-	// uptime that has not happened yet.
+	// A future `to` is clamped, or the open window would invent uptime.
 	var gotTo time.Time
 	repo := mocks.NewMockRepository(t)
 	repo.EXPECT().RangeStats(mock.Anything, mock.Anything, mock.Anything, mock.Anything).
@@ -171,9 +163,7 @@ func TestService_Windows_RejectsBackwardsRange(t *testing.T) {
 }
 
 func TestService_Windows_PercentageOverCoveredTime(t *testing.T) {
-	// 9.5 hours up, 1 down, inside a 30-day range the device only partly covers: 90.48%,
-	// not the 1.3% that dividing by the whole range would give. The odd split also pins the
-	// rounding to two decimals that the precomputed rows use.
+	// 9.5h up, 1h down inside a partly covered 30-day range: 90.48%, not 1.3%.
 	to := time.Now()
 	from := to.Add(-30 * 24 * time.Hour)
 	coveredFrom, coveredTo := to.Add(-10*time.Hour), to
@@ -216,8 +206,7 @@ func TestService_Windows_ClipsAndFlagsTruncation(t *testing.T) {
 	repo := mocks.NewMockRepository(t)
 	repo.EXPECT().RangeStats(mock.Anything, mock.Anything, mock.Anything, mock.Anything).
 		Return([]uptime.RangeStat{}, nil)
-	// One row over the limit is what tells the service there is more; it must not be
-	// reported as data.
+	// The extra row only signals truncation; it is not data.
 	repo.EXPECT().Windows(mock.Anything, mock.Anything, mock.Anything, mock.Anything, 1).
 		Return([]uptime.WindowRow{
 			{Device: uptime.DeviceLab, State: uptime.StateUp, StartTime: earlier, EndTime: &closed},

@@ -31,8 +31,6 @@ func withFinIDParam(req *http.Request, key, val string) *http.Request {
 	return req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
 }
 
-// --- CreateTransaction ---
-
 func TestHandler_CreateTransaction_MissingOccurredAt(t *testing.T) {
 	catID := ptr[int32](1)
 	body := `{"type":"income","amount":"10.00","account_id":1,"category_id":1}`
@@ -44,9 +42,6 @@ func TestHandler_CreateTransaction_MissingOccurredAt(t *testing.T) {
 	rec := httptest.NewRecorder()
 	finance.NewHandler(svc).CreateTransaction(rec, newFinReq(http.MethodPost, "/", body))
 
-	// occurred_at is nil — handler should accept (validation is not on OccurredAt for Create)
-	// If the service is called it returns success; if not called the handler returns an error.
-	// The key assertion is that we don't panic and get a defined status.
 	_ = catID
 	assert.NotEqual(t, http.StatusInternalServerError, rec.Code)
 }
@@ -117,7 +112,6 @@ func TestHandler_CreateCategory_SelfParent(t *testing.T) {
 	rec := httptest.NewRecorder()
 	req := withFinIDParam(newFinReq(http.MethodPost, "/", body), "category", "5")
 	finance.NewHandler(svc).CreateCategory(rec, req)
-	// CreateCategory doesn't receive an id param so self-parent guard only fires on Update
 	assert.NotEqual(t, http.StatusInternalServerError, rec.Code)
 }
 

@@ -1,4 +1,4 @@
-// Package database provides the database
+// Package database opens PostgreSQL pools and runs migrations.
 package database
 
 import (
@@ -9,17 +9,13 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-// Options tune a pool. New uses the values the app's own database needs; a satellite
-// database owned by another project wants different ones (see NewWithOptions).
+// Options tune a pool; see NewWithOptions.
 type Options struct {
 	MaxConns int32
 	MinConns int32
-	// ReadOnly refuses writes on the connection itself
-	// (default_transaction_read_only), so a query that should never write cannot,
-	// whatever the grants on the far side say.
+	// ReadOnly refuses writes on the connection itself (default_transaction_read_only).
 	ReadOnly bool
-	// Ping verifies connectivity before returning. Off for a database that is allowed
-	// to be down while gv-api runs: the pool connects lazily and recovers on its own.
+	// Ping verifies connectivity before returning. Off for databases allowed to be down.
 	Ping bool
 }
 

@@ -16,11 +16,8 @@ type Repository interface {
 	Windows(ctx context.Context, from, to time.Time, device *Device, limit int) ([]WindowRow, error)
 }
 
-// PipelineRepository reads the two watchdog marts over the shared pipeline connection.
-// Hand-written SQL rather than sqlc: sqlc generates from db/migrations, and this schema is
-// not in it — dbt owns these relations. The device, state and "time" columns are TEXT with a
-// closed value set that dbt enforces with accepted_values tests rather than a database enum;
-// the ::text casts cost nothing and keep the scans working if that ever changes.
+// PipelineRepository reads the two watchdog marts. Hand-written SQL because dbt, not our
+// migrations, owns this schema; the ::text casts guard against its TEXT columns changing type.
 type PipelineRepository struct {
 	db *pipeline.DB
 }
@@ -30,9 +27,7 @@ func NewRepository(db *pipeline.DB) *PipelineRepository {
 }
 
 func (r *PipelineRepository) CurrentStates(ctx context.Context) ([]CurrentState, error) {
-	// One open window per device, and that window is the device's state right now. Its
-	// start_time is also the newest event the pipeline has for the device, since windows
-	// alternate and same-state events collapse into the running one.
+	// The open window per device is its current state.
 	const query = `
 		SELECT device::text, state::text, start_time
 		FROM marts.uptime_windows
@@ -47,8 +42,7 @@ func (r *PipelineRepository) CurrentStates(ctx context.Context) ([]CurrentState,
 }
 
 func (r *PipelineRepository) Aggregations(ctx context.Context) ([]Aggregation, error) {
-	// Eight rows, two devices by four lookbacks. `time` is a type keyword, hence the
-	// quoting.
+	// Two devices by four lookbacks. `time` is a type keyword, hence the quoting.
 	const query = `
 		SELECT device::text, "time"::text, range_start, range_end, uptime
 		FROM marts.uptime_aggregations`
@@ -61,10 +55,8 @@ func (r *PipelineRepository) Aggregations(ctx context.Context) ([]Aggregation, e
 }
 
 func (r *PipelineRepository) RangeStats(ctx context.Context, from, to time.Time, device *Device) ([]RangeStat, error) {
-	// Windows are clipped to the range instead of being counted whole, and the open one is
-	// counted up to `to` — the same assumption the precomputed rows make, that the latest
-	// known state persists. Aggregated here rather than in Go so the numbers hold whatever
-	// limit the window list is fetched with.
+	// Windows are clipped to the range and the open one counted up to `to`. Aggregated in SQL so
+	// the numbers ignore the list limit.
 	const query = `
 		SELECT device,
 		       coalesce(sum(seconds) FILTER (WHERE state = 'up'), 0)   AS up_seconds,
@@ -95,9 +87,7 @@ func (r *PipelineRepository) RangeStats(ctx context.Context, from, to time.Time,
 }
 
 func (r *PipelineRepository) Windows(ctx context.Context, from, to time.Time, device *Device, limit int) ([]WindowRow, error) {
-	// Newest first: when the limit cuts the list it is the distant past that goes, not the
-	// outage from this morning. One row over the limit is fetched so the caller can tell
-	// "exactly full" from "there is more".
+	// Newest first; one row over the limit tells the caller there is more.
 	const query = `
 		SELECT device::text, state::text, start_time, end_time
 		FROM marts.uptime_windows
@@ -114,7 +104,6 @@ func (r *PipelineRepository) Windows(ctx context.Context, from, to time.Time, de
 	}, query, from, to, deviceFilter(device), limit+1)
 }
 
-// deviceFilter turns an optional device into the nullable text parameter the queries take.
 func deviceFilter(device *Device) *string {
 	if device == nil {
 		return nil

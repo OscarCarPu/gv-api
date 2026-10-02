@@ -12,9 +12,6 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-// Benchmarks for the SQL streak function and history zero-fill. The streak
-// function is the heaviest read-side path for this domain (recursive CTE +
-// gap-and-island over potentially years of daily logs).
 // Run with: go test -bench=. -run=NONE -benchtime=10x ./internal/habits/...
 
 func benchRepo(b *testing.B) (*habits.PostgresRepository, *pgxpool.Pool) {
@@ -96,8 +93,7 @@ func BenchmarkRecalculateStreak_Weekly(b *testing.B) {
 	}
 }
 
-// CarryForward is the worst case: per-day correlated subquery that scans
-// backwards looking for the last logged value. With 1 year of sparse logs.
+// CarryForward is the worst case: a correlated subquery per day over a year of sparse logs.
 func BenchmarkRecalculateStreak_CarryForward(b *testing.B) {
 	cases := []struct {
 		name           string

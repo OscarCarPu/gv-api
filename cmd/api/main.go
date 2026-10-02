@@ -64,29 +64,22 @@ func main() {
 		os.Exit(1)
 	}
 
-	// Habit Setup
 	habitRepo := habits.NewRepository(db)
 	habitService := habits.NewService(habitRepo, loc)
 	habitHandler := habits.NewHandler(habitService)
 
-	// Tasks Setup
 	taskRepo := tasks.NewRepository(db)
 	taskService := tasks.NewService(taskRepo, loc)
 	taskHandler := tasks.NewHandler(taskService)
 
-	// Plan Setup
 	planRepo := plan.NewRepository(db)
 	planService := plan.NewService(planRepo, taskService, loc)
 	planHandler := plan.NewHandler(planService)
 
-	// Finance Setup
 	financeRepo := finance.NewRepository(db)
 	financeService := finance.NewService(financeRepo, loc)
 	financeHandler := finance.NewHandler(financeService)
 
-	// Lights Setup
-	// Which bulbs exist is a table; what they are doing comes from the bulbs themselves, over
-	// this host's Bluetooth adapter.
 	lightsRepo := lights.NewRepository(db)
 	var lightsDriver lights.Driver
 	if cfg.LightsDriver == "bluez" {
@@ -99,9 +92,6 @@ func main() {
 	lightsService := lights.NewService(lightsRepo, lightsDriver, cfg.LightsCacheTTL, cfg.LightsSettleAttempts, cfg.LightsSettleDelay)
 	lightsHandler := lights.NewHandler(lightsService)
 
-	// Calendar Setup
-	// The whole domain runs off one Google client; with no credentials configured it mounts
-	// and answers, but nothing is connected and the background worker does not start.
 	calendarRepo := calendar.NewRepository(db)
 	calendarClient := calendargoogle.NewClient(calendargoogle.Config{
 		ClientID:     cfg.GoogleClientID,
@@ -128,19 +118,11 @@ func main() {
 	}
 	calendarHandler := calendar.NewHandler(calendarService)
 
-	// Capacity Setup
-	// Depends on plan (for busy hours) and feeds back into tasks (for Due Soon urgency) — that
-	// second edge is wired with a setter, not a constructor arg, because tasks.Service and
-	// plan.Service already depend on each other the other way (plan needs tasks for the time
-	// budget summary).
+	// tasks <-> plan depend on each other, so urgency providers are wired with a setter.
 	capacityService := capacity.NewService(decimal.NewFromFloat(cfg.DailyCapacityHours), planService)
 	capacityHandler := capacity.NewHandler(capacityService)
 	taskService.SetUrgencyProviders(capacityService, planService)
 
-	// Pipeline Setup
-	// central-pipeline's database: another project's PostgreSQL, on its own DSN, read-only
-	// and never migrated from here. One connection shared by every domain that reads a mart
-	// out of it. An unset DSN is normal — those endpoints answer 503, nothing else changes.
 	pipelineDB, err := pipeline.Connect(context.Background(), cfg.PipelineDBUrl)
 	if err != nil {
 		slog.Error("failed to configure pipeline database", "error", err)
@@ -148,18 +130,13 @@ func main() {
 	}
 	defer pipelineDB.Close()
 
-	// Uptime Setup
-	// How much of the time the lab and its ESP32 watchdog have been reachable, straight off
-	// the marts dbt builds from what they publish over MQTT.
 	uptimeRepo := uptime.NewRepository(pipelineDB)
 	uptimeHandler := uptime.NewHandler(uptime.NewService(uptimeRepo, cfg.PipelineStaleAfter))
 
-	// Rutas Setup
 	rutasRepo := rutas.NewRepository(db)
 	rutasService := rutas.NewService(rutasRepo)
 	rutasHandler := rutas.NewHandler(rutasService)
 
-	// Auth Setup
 	authService := auth.NewService(cfg, nil)
 	authHandler := auth.NewHandler(authService)
 	fullMiddleware := auth.NewMiddleware(authService, "full")
@@ -177,9 +154,6 @@ func main() {
 	// Public
 	r.Post("/login", authHandler.Login)
 	r.Post("/login/2fa", authHandler.Login2FA)
-	// Google redirects a browser here after consent, and posts push notifications here. Neither
-	// can carry a bearer token: the first is guarded by a signed state parameter, the second by
-	// the per-channel token Google echoes back.
 	calendarHandler.RegisterPublicRoutes(r)
 
 	// Semiprivate (semi or full token)
@@ -210,14 +184,10 @@ func main() {
 		IdleTimeout:       120 * time.Second,
 	}
 
-	// The calendar's background loop: it drains push notifications, polls as a safety net and
-	// keeps the push channels from expiring. Tied to a context so shutdown stops it.
 	workerCtx, stopWorker := context.WithCancel(context.Background())
 	defer stopWorker()
 	go calendar.NewWorker(calendarService).Run(workerCtx)
 
-	// Bulb status is checked in the background so reads answer from memory: a cold BLE read
-	// takes seconds, and nobody should wait that long for a card to draw.
 	lightsService.StartPolling(workerCtx, cfg.LightsPollInterval)
 
 	quit := make(chan os.Signal, 1)

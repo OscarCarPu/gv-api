@@ -14,9 +14,7 @@ import (
 // dateLayout is the wire format for an all-day event's dates, matching Google's.
 const dateLayout = "2006-01-02"
 
-// maxRangeSpan caps a single query. A calendar UI asks for a day, a week or a month; anything
-// past a couple of years is a client bug or a scrape, and expanding infinite series over it
-// is unbounded work.
+// maxRangeSpan caps a single query, bounding the expansion of infinite series.
 const maxRangeSpan = 2 * 366 * 24 * time.Hour
 
 /*
@@ -39,8 +37,7 @@ func (s *Service) ListEvents(ctx context.Context, q EventsQuery) ([]Event, error
 	if err != nil {
 		return nil, err
 	}
-	// Events carry their calendar's colour, so the same assignment the calendar list uses has to
-	// run here too, or the two would disagree.
+	// Events carry their calendar's colour, so assign colours the same way the calendar list does.
 	assignColors(views)
 	byID := make(map[int32]CalendarView, len(views))
 	ids := make([]int32, 0, len(views))
@@ -94,8 +91,7 @@ func (s *Service) ListEvents(ctx context.Context, q EventsQuery) ([]Event, error
 		cal := byID[master.CalendarID]
 		occurrences, err := expandSeries(master, byMaster[master.ID], cal.TimeZone, q.From, q.To)
 		if err != nil {
-			// One unparseable rule must not take the whole month's view down with it. The
-			// series is skipped, loudly.
+			// One unparseable rule must not take the whole view down; skip the series, loudly.
 			slog.ErrorContext(ctx, "calendar: expanding series",
 				"event", master.ID, "recurrence", master.Recurrence, "error", err)
 			continue
@@ -191,9 +187,7 @@ func (s *Service) toEventDTO(owner EventRecord, cal CalendarView, occ *Occurrenc
 		e.OriginalStartsAt = source.OriginalStartsAt
 	}
 	if e.AllDay {
-		// Computed after any occurrence override, so a moved all-day instance reports the day it
-		// actually lands on. The zone is the event's own, which is what the instants were built
-		// from, so this round-trips to the dates Google sent.
+		// After any override, so a moved all-day instance reports the day it lands on.
 		loc := resolveLocation(source.StartTZ, cal.TimeZone)
 		e.StartDate = e.StartsAt.In(loc).Format(dateLayout)
 		e.EndDate = e.EndsAt.In(loc).Format(dateLayout)
@@ -203,9 +197,8 @@ func (s *Service) toEventDTO(owner EventRecord, cal CalendarView, occ *Occurrenc
 	return e
 }
 
-// isEditableType keeps the derived event kinds read-only. Google generates them from other
-// data (contacts, Gmail, working location) and rejects edits; refusing here means the client
-// gets a clear answer instead of a 403 from three layers away.
+// isEditableType keeps the derived event kinds (contacts, Gmail, working location) read-only;
+// Google rejects edits to them.
 func isEditableType(eventType string) bool {
 	switch eventType {
 	case "", "default", "outOfOffice", "focusTime":
@@ -240,14 +233,11 @@ func decodeReminders(raw []byte) *Reminders {
 	return &out
 }
 
-// instanceRef names one occurrence of a series: the event row plus the slot the rule
-// produced. The original start is used rather than the current one because an override can
-// move an occurrence, and the client must still be able to say which one it means.
+// instanceRef names one occurrence of a series by its original start, which survives overrides.
 func instanceRef(eventID int32, originalStart time.Time) string {
 	return fmt.Sprintf("%d@%s", eventID, originalStart.UTC().Format(time.RFC3339))
 }
 
-// parseEventRef reads what instanceRef wrote, and a plain id on its own.
 func parseEventRef(ref string) (int32, *time.Time, error) {
 	idPart, startPart, hasStart := strings.Cut(ref, "@")
 	id, err := strconv.ParseInt(idPart, 10, 32)
@@ -265,7 +255,6 @@ func parseEventRef(ref string) (int32, *time.Time, error) {
 	return int32(id), &utc, nil
 }
 
-// GetEvent resolves a single event or occurrence.
 func (s *Service) GetEvent(ctx context.Context, ref string) (Event, error) {
 	id, originalStart, err := parseEventRef(ref)
 	if err != nil {
@@ -287,9 +276,7 @@ func (s *Service) GetEvent(ctx context.Context, ref string) (Event, error) {
 	if err != nil {
 		return Event{}, err
 	}
-	// An override is looked up by its slot rather than expanded into a window: an occurrence
-	// that was moved is no longer anywhere near the slot it belongs to, and asking "give me
-	// that occurrence" must still answer with it.
+	// Look an override up by its slot: a moved occurrence may be far from it.
 	for i := range overrides {
 		ex := overrides[i]
 		if ex.OriginalStartsAt == nil || !ex.OriginalStartsAt.Equal(*originalStart) {
@@ -302,8 +289,7 @@ func (s *Service) GetEvent(ctx context.Context, ref string) (Event, error) {
 		return s.toEventDTO(rec, cal, &occ, ex), nil
 	}
 
-	// No override: check the rule really produces that slot. A window of a second either side
-	// is enough to pick out exactly one occurrence.
+	// No override: check the rule really produces that slot.
 	occurrences, err := expandSeries(rec, nil, cal.TimeZone,
 		originalStart.Add(-time.Second), originalStart.Add(time.Second))
 	if err != nil {

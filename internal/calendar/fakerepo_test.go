@@ -30,8 +30,7 @@ type fakeRepo struct {
 	nextEvent    int32
 	nextRun      int32
 
-	// FailUpsertEvent, when set, makes the next event upsert fail. Used to check that a
-	// half-applied sync does not leave a sync token behind.
+	// FailUpsertEvent, when set, makes the next event upsert fail.
 	FailUpsertEvent error
 }
 

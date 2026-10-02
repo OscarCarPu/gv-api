@@ -16,7 +16,6 @@ import (
 func newFinRepo(t *testing.T) *finance.PostgresRepository {
 	t.Helper()
 	pool := testutil.NewPool(t)
-	// CASCADE handles FK order, but truncate transactions first for clarity.
 	testutil.Truncate(t, pool, "transactions", "categories", "accounts")
 	return finance.NewRepository(pool)
 }
@@ -122,9 +121,7 @@ func TestIntegration_CreateTransaction_InvalidRefs(t *testing.T) {
 	ctx := context.Background()
 	repo := newFinRepo(t)
 
-	// FK violation on account_id → ErrInvalidInput (mapTxError path).
-	// Note: category/type mismatch is enforced in the service
-	// (assertCategoryMatchesType), not here — see service tests.
+	// FK violation on account_id → ErrInvalidInput. Category/type mismatch is a service rule.
 	at := utc(2026, 5, 10, 12, 0, 0)
 	_, err := repo.CreateTransaction(ctx, finance.CreateTransactionRequest{
 		Type: txtype.Income, Amount: decimal.NewFromInt(10), AccountID: 99999, OccurredAt: &at,
@@ -161,8 +158,7 @@ func TestIntegration_ListTransactions_DateFiltering(t *testing.T) {
 	t.Run("from/to covering a day include 00:00 and 23:59", func(t *testing.T) {
 		got, err := repo.ListTransactions(ctx, finance.ListTransactionsQuery{
 			From: utc(2026, 5, 10, 0, 0, 0),
-			// The handler expands a bare `to` date to the end of that day
-			// (parseDateEndParam); the repository contract is inclusive <=.
+			// The repository contract is inclusive <=.
 			To: utc(2026, 5, 10, 23, 59, 59),
 		})
 		require.NoError(t, err)

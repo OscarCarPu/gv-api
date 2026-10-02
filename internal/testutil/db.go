@@ -8,8 +8,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-// DSN is the test database's connection string, skipping the test when there is none. For
-// tests that need to open a pool of their own rather than take NewPool's.
+// DSN is the test database's connection string, skipping the test when there is none.
 func DSN(tb testing.TB) string {
 	tb.Helper()
 	url := os.Getenv("TEST_DB_URL")

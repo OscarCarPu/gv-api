@@ -34,8 +34,7 @@ func NewWorker(svc *Service) *Worker {
 	}
 }
 
-// Run blocks until the context is cancelled. It returns rather than starting anything when
-// Google is not configured, so the API runs fine with no credentials.
+// Run blocks until the context is cancelled. It returns at once when Google is not configured.
 func (w *Worker) Run(ctx context.Context) {
 	if !w.svc.Configured() {
 		slog.Info("calendar: google is not configured, background sync disabled")
@@ -44,14 +43,12 @@ func (w *Worker) Run(ctx context.Context) {
 	slog.Info("calendar: background sync starting",
 		"poll", w.interval, "debounce", w.debounce, "webhooks", w.svc.cfg.WebhookEnabled)
 
-	// A first pass on boot: channels may have expired while the process was down, and the
-	// local copy is however stale the downtime was.
+	// A first pass on boot: channels may have expired while the process was down.
 	w.reconcile(ctx)
 
 	poll := time.NewTicker(w.interval)
 	defer poll.Stop()
-	// The flush tick is what turns "a notification arrived" into "sync it shortly", so it
-	// runs at a fraction of the debounce window.
+	// Flush at a fraction of the debounce window.
 	flush := time.NewTicker(max(w.debounce/2, 250*time.Millisecond))
 	defer flush.Stop()
 

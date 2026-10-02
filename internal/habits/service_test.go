@@ -3,9 +3,10 @@ package habits_test
 import (
 	"context"
 	"errors"
-	"gv-api/internal/history"
 	"testing"
 	"time"
+
+	"gv-api/internal/history"
 
 	"gv-api/internal/database/gvdb"
 	"gv-api/internal/habits"
@@ -41,8 +42,6 @@ func ceilToFirstOfMonth(d time.Time) time.Time {
 	}
 	return time.Date(d.Year(), d.Month()+1, 1, 0, 0, 0, 0, d.Location())
 }
-
-// --- LogHabit ---
 
 func TestService_LogHabit_HasTargets_CallsRecalculateStreak(t *testing.T) {
 	repo := mocks.NewMockRepository(t)
@@ -91,8 +90,6 @@ func TestService_LogHabit_InvalidDate_ReturnsError(t *testing.T) {
 	assert.Error(t, err)
 }
 
-// --- CreateHabit ---
-
 func TestService_CreateHabit_DefaultsFrequencyToDaily(t *testing.T) {
 	repo := mocks.NewMockRepository(t)
 	svc := habits.NewService(repo, time.UTC)
@@ -134,8 +131,6 @@ func TestService_CreateHabit_InvalidFrequency_ReturnsError(t *testing.T) {
 	assert.Contains(t, err.Error(), "invalid frequency")
 }
 
-// --- UpdateHabit ---
-
 func TestService_UpdateHabit_PassesThroughToRepo(t *testing.T) {
 	repo := mocks.NewMockRepository(t)
 	svc := habits.NewService(repo, time.UTC)
@@ -175,8 +170,6 @@ func TestService_UpdateHabit_NotFound_PropagatesError(t *testing.T) {
 	})
 	assert.ErrorIs(t, err, habits.ErrNotFound)
 }
-
-// --- GetDailyView ---
 
 func TestService_GetDailyView_DefaultsToToday(t *testing.T) {
 	repo := mocks.NewMockRepository(t)
@@ -225,8 +218,6 @@ func TestService_GetDailyView_FutureDate_CapsStreakTodayToNow(t *testing.T) {
 	_, err := svc.GetDailyView(ctx, "2099-01-01")
 	require.NoError(t, err)
 }
-
-// --- GetHistory ---
 
 func TestService_GetHistory_DefaultFrequencyFromHabit(t *testing.T) {
 	repo := mocks.NewMockRepository(t)
@@ -278,7 +269,8 @@ func TestService_GetHistory_DefaultDates_Daily(t *testing.T) {
 	repo.EXPECT().GetHabitByID(mock.Anything, int32(1)).Return(gvdb.GetHabitByIDRow{
 		ID: 1, Frequency: "daily", RecordingRequired: false,
 	}, nil)
-	repo.EXPECT().GetHabitHistory(mock.Anything, int32(1), "day",
+	repo.EXPECT().GetHabitHistory(
+		mock.Anything, int32(1), "day",
 		mock.MatchedBy(func(t time.Time) bool { return t.Equal(oneMonthAgo) }),
 		mock.MatchedBy(func(t time.Time) bool { return t.Equal(today) }),
 		mock.Anything,
@@ -306,7 +298,8 @@ func TestService_GetHistory_DefaultDates_Weekly(t *testing.T) {
 	repo.EXPECT().GetHabitByID(mock.Anything, int32(1)).Return(gvdb.GetHabitByIDRow{
 		ID: 1, Frequency: "weekly", RecordingRequired: false,
 	}, nil)
-	repo.EXPECT().GetHabitHistory(mock.Anything, int32(1), "week",
+	repo.EXPECT().GetHabitHistory(
+		mock.Anything, int32(1), "week",
 		mock.MatchedBy(func(t time.Time) bool { return t.Equal(mondayOfStart) }),
 		mock.MatchedBy(func(t time.Time) bool { return t.Equal(mondayOfEnd) }),
 		mock.Anything,
@@ -334,7 +327,8 @@ func TestService_GetHistory_DefaultDates_Monthly(t *testing.T) {
 	repo.EXPECT().GetHabitByID(mock.Anything, int32(1)).Return(gvdb.GetHabitByIDRow{
 		ID: 1, Frequency: "monthly", RecordingRequired: false,
 	}, nil)
-	repo.EXPECT().GetHabitHistory(mock.Anything, int32(1), "month",
+	repo.EXPECT().GetHabitHistory(
+		mock.Anything, int32(1), "month",
 		mock.MatchedBy(func(t time.Time) bool { return t.Equal(firstOfStartMonth) }),
 		mock.MatchedBy(func(t time.Time) bool { return t.Equal(firstOfEndMonth) }),
 		mock.Anything,

@@ -1,4 +1,4 @@
-// Package response provides a set of functions to handle responses
+// Package response writes JSON responses.
 package response
 
 import (
@@ -19,7 +19,7 @@ func Error(w http.ResponseWriter, status int, message string) {
 	JSON(w, status, map[string]string{"error": message})
 }
 
-// InternalError logs err and responds with 500. Use instead of Error for unexpected server-side failures.
+// InternalError logs err and responds with 500.
 func InternalError(w http.ResponseWriter, r *http.Request, err error, message string) {
 	slog.ErrorContext(r.Context(), message, "error", err)
 	Error(w, http.StatusInternalServerError, message)

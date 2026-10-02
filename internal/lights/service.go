@@ -14,20 +14,16 @@ import (
 // ErrNotFound is returned for an unknown bulb id; the handler maps it to 404.
 var ErrNotFound = errors.New("light not found")
 
-// How many slugs to try before giving up on naming a new bulb: "kitchen", "kitchen-2", ...
 const slugAttempts = 25
 
-// Service reads and writes bulbs through a Driver, with a short read cache: BLE reads take
-// hundreds of milliseconds and two overlapping reads of one bulb tend to fail both, so reads
-// inside the TTL come from memory and concurrent reads share one in-flight call. Writes
-// bypass the cache and replace it with their result.
+// Service reads and writes bulbs through a Driver. Overlapping BLE reads of one bulb tend to
+// fail, so reads share one in-flight call and are cached briefly; writes replace the cache.
 type Service struct {
 	repo   Repository
 	driver Driver
 	ttl    time.Duration
 
-	// How many times a write is re-applied when the bulb drifts off the requested value,
-	// and how long to let it transition before checking. Zero attempts disables settling.
+	// Re-applies of a drifting write, and the transition wait before checking. Zero disables settling.
 	settleAttempts int
 	settleDelay    time.Duration
 
@@ -35,7 +31,6 @@ type Service struct {
 	cache  map[string]cacheEntry
 	flight map[string]*inflight
 
-	// polling is true once StartPolling has a poller keeping the cache warm.
 	polling bool
 
 	// Bulbs currently in crazy mode; see crazy.go.
@@ -47,7 +42,6 @@ type cacheEntry struct {
 	at    time.Time
 }
 
-// inflight lets late callers wait on an in-progress read instead of starting their own.
 type inflight struct {
 	done  chan struct{}
 	state State
@@ -83,8 +77,7 @@ func (s *Service) List(ctx context.Context) ([]PublicLight, error) {
 	return publicLights(lights), nil
 }
 
-// States reads every bulb in parallel — each is an independent connection, and serialising
-// them would multiply the worst case by the number of bulbs.
+// States reads every bulb in parallel.
 func (s *Service) States(ctx context.Context, force bool) ([]State, error) {
 	lights, err := s.repo.List(ctx)
 	if err != nil {
@@ -125,7 +118,6 @@ func (s *Service) Send(ctx context.Context, id string, cmd Command) (State, erro
 		return s.setCrazy(ctx, light, *cmd.On), nil
 	}
 
-	// Any other command is a person taking the wheel back, and the sweep would only fight it.
 	s.stopCrazy(id)
 
 	state := s.driver.Apply(ctx, light, cmd)
@@ -134,10 +126,8 @@ func (s *Service) Send(ctx context.Context, id string, cmd Command) (State, erro
 	return state, nil
 }
 
-// settle re-applies a command until the bulb holds the requested value: these bulbs
-// sometimes land on a neighbouring step and stay there, and fixing that in each client
-// would mean three copies of the same retry. Only continuous values are settled — power
-// either took or did not, and a bulb that cannot be read back has nothing to compare.
+// settle re-applies a command until the bulb holds the requested value: these bulbs sometimes
+// land on a neighbouring step and stay there.
 func (s *Service) settle(ctx context.Context, light Light, cmd Command, state State) State {
 	target, tolerance, ok := settleTarget(cmd)
 	if !ok || !state.Online || s.settleAttempts <= 0 {
@@ -153,7 +143,6 @@ func (s *Service) settle(ctx context.Context, light Light, cmd Command, state St
 
 		fresh := s.driver.GetState(ctx, light)
 		if !fresh.Online {
-			// Lost the bulb mid-correction; report that rather than the value we hoped for.
 			return fresh
 		}
 
@@ -172,13 +161,10 @@ func (s *Service) settle(ctx context.Context, light Light, cmd Command, state St
 	return state
 }
 
-// settleTarget returns the value a command asked for and how far off is close enough.
-// ok is false for commands that cannot meaningfully be verified.
 func settleTarget(cmd Command) (target, tolerance float64, ok bool) {
 	switch cmd.Type {
 	case CommandBrightness:
-		// The bulbs' own scale is 0-254 against our 0-100, so a clean round-trip can still
-		// differ by one after rounding in both directions. Anything more is real drift.
+		// The bulb's 0-254 scale against our 0-100 can round-trip off by one.
 		return float64(*cmd.Value), 1, true
 	case CommandColorTemp:
 		// One mired step is ~13K and readback snaps to 10K, so ~2 steps of slack.
@@ -188,7 +174,6 @@ func settleTarget(cmd Command) (target, tolerance float64, ok bool) {
 	}
 }
 
-// settleActual pulls the comparable field out of a freshly read state.
 func settleActual(cmd Command, state State) (float64, bool) {
 	switch cmd.Type {
 	case CommandBrightness:
@@ -200,12 +185,8 @@ func settleActual(cmd Command, state State) (float64, bool) {
 	}
 }
 
-// StartPolling checks every bulb's state on a timer, so a read finds it already in the cache
-// instead of waiting on the radio. A zero interval leaves polling off and reads stay live.
-//
-// The cache is then trusted for two intervals rather than the short TTL: with a poller behind
-// it, a stale answer is at most one missed check old, and a live read on the request path is
-// exactly the wait this exists to remove. `?force=1` still goes to the bulb.
+// StartPolling refreshes every bulb on a timer so reads come from the cache. While polling, the
+// cache is trusted for two intervals; `?force=1` still goes to the bulb.
 func (s *Service) StartPolling(ctx context.Context, interval time.Duration) {
 	if interval <= 0 {
 		return
@@ -231,8 +212,6 @@ func (s *Service) StartPolling(ctx context.Context, interval time.Duration) {
 	slog.Info("light status polling on", "every", interval)
 }
 
-// pollOnce refreshes every bulb in parallel, bounded by the interval so one that hangs cannot
-// push the next round back.
 func (s *Service) pollOnce(ctx context.Context, interval time.Duration) {
 	lights, err := s.repo.List(ctx)
 	if err != nil {
@@ -253,8 +232,7 @@ func (s *Service) pollOnce(ctx context.Context, interval time.Duration) {
 	wg.Wait()
 }
 
-// warmIfPolling reads a bulb in the background so its first appearance on a page is not a
-// cold read. Without a poller nothing keeps the answer warm, so there is no point.
+// warmIfPolling reads a bulb in the background so its first page load is not a cold read.
 func (s *Service) warmIfPolling(light Light) {
 	s.mu.Lock()
 	polling := s.polling
@@ -271,11 +249,9 @@ func (s *Service) warm(light Light) {
 	s.read(ctx, light, true)
 }
 
-// setCrazy turns crazy mode on or off and returns the bulb's state afterwards.
 func (s *Service) setCrazy(ctx context.Context, light Light, on bool) State {
 	if on {
-		// Not cached: the sweep answers reads itself for as long as it runs, and a cached copy
-		// would keep claiming crazy after it gave up.
+		// Not cached: the sweep answers reads itself while it runs.
 		return s.startCrazy(ctx, light)
 	}
 	state, ok := s.stopCrazy(light.ID)
@@ -296,7 +272,6 @@ func (s *Service) read(ctx context.Context, light Light, force bool) State {
 		}
 	}
 
-	// Join an in-progress read for this bulb rather than starting a competing one.
 	s.mu.Lock()
 	if existing, ok := s.flight[light.ID]; ok {
 		s.mu.Unlock()
@@ -329,11 +304,7 @@ func (s *Service) cached(id string) (State, bool) {
 	return entry.state, true
 }
 
-// --- managing which bulbs exist -------------------------------------------------------
-
-// Create registers a bulb picked off a scan. The caller gives a name, an address and a
-// model; the rest defaults to what that model can do, because nobody adding a lamp to a
-// bedroom knows its kelvin range.
+// Create registers a bulb picked off a scan; unset fields default to the model's capabilities.
 func (s *Service) Create(ctx context.Context, req CreateLightRequest) (PublicLight, error) {
 	if err := req.Validate(); err != nil {
 		return PublicLight{}, err
@@ -353,8 +324,7 @@ func (s *Service) Create(ctx context.Context, req CreateLightRequest) (PublicLig
 		Options:           req.Options,
 	}
 
-	// Two bulbs called "Bedroom lamp" are perfectly reasonable; two rows with the same id are
-	// not. Suffix until one sticks rather than making the person rename their lamp.
+	// Suffix the slug until it is unique.
 	base := slugify(light.Name)
 	for attempt := 1; attempt <= slugAttempts; attempt++ {
 		light.ID = base
@@ -376,7 +346,6 @@ func (s *Service) Create(ctx context.Context, req CreateLightRequest) (PublicLig
 	return PublicLight{}, fmt.Errorf("could not find a free id for %q", light.Name)
 }
 
-// Update edits a registered bulb. Omitted fields keep what they had.
 func (s *Service) Update(ctx context.Context, id string, req UpdateLightRequest) (PublicLight, error) {
 	if err := req.Validate(); err != nil {
 		return PublicLight{}, err
@@ -404,10 +373,8 @@ func (s *Service) Update(ctx context.Context, id string, req UpdateLightRequest)
 	if err != nil {
 		return PublicLight{}, err
 	}
-	// The sweep was built from the old row: its temperature range, its protocol.
 	s.stopCrazy(id)
-	// A renamed or reconfigured bulb must not keep answering from a cache built under the old
-	// one — the name travels inside State.
+	// The name travels inside the cached State.
 	s.forget(id)
 	return updated.Public(), nil
 }
@@ -422,8 +389,7 @@ func (s *Service) Delete(ctx context.Context, id string) error {
 	return nil
 }
 
-// Discover lists bulbs in range and marks the ones already registered, so the add screen
-// does not offer a lamp that is already on the page.
+// Discover lists bulbs in range, marking the registered ones.
 func (s *Service) Discover(ctx context.Context, window time.Duration) ([]Discovered, error) {
 	found, err := s.driver.Discover(ctx, window)
 	if err != nil {
@@ -446,14 +412,12 @@ func (s *Service) Discover(ctx context.Context, window time.Duration) ([]Discove
 
 func (s *Service) Protocols() []ProtocolInfo { return protocolInfos() }
 
-// forget drops a bulb's cached state, for when the bulb it described has changed or gone.
 func (s *Service) forget(id string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	delete(s.cache, id)
 }
 
-// valueOr resolves an optional field against a fallback.
 func valueOr[T any](value *T, fallback T) T {
 	if value == nil {
 		return fallback

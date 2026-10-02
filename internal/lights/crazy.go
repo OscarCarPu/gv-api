@@ -25,22 +25,18 @@ const (
 	crazyBrightnessPeriod = 5 * time.Second
 	crazyTempPeriod       = 4 * time.Second
 
-	// Time between frames. Each frame is up to two BLE writes, so this is about 3 writes a
-	// second: a rate the bulb keeps up with rather than the smoothest one on offer. At 300ms
-	// (about 7 a second) a bulb answered with ATT errors within a minute and then stopped
-	// advertising until it was power-cycled, so this leaves it well clear of that.
+	// About 3 BLE writes a second. At 300ms a bulb started failing within a minute and stopped
+	// advertising until power-cycled.
 	crazyStep = 600 * time.Millisecond
 
-	// 0 reads as "off" rather than "dimmest" on these bulbs, and off belongs to the switch.
+	// 0 reads as off on these bulbs.
 	crazyMinBrightness = 1
 	crazyMaxBrightness = 100
 
-	// Consecutive frames the bulb may fail to take before the mode gives up and lets the card
-	// show the real state, instead of hammering a lamp that has gone away.
+	// Consecutive failed frames before the sweep gives up.
 	crazyMaxFailures = 5
 )
 
-// crazyRun is one bulb's running sweep.
 type crazyRun struct {
 	cancel context.CancelFunc
 	done   chan struct{}
@@ -55,9 +51,7 @@ func (r *crazyRun) set(state State) {
 	r.mu.Unlock()
 }
 
-// snapshot is what the bulb was last told, flagged as crazy. Reads are answered with this
-// instead of asking the radio: a query takes the bulb's lock for over a second and would make
-// the sweep stutter every time a client polls.
+// snapshot answers reads during the sweep; a radio query would hold the bulb's lock and stutter it.
 func (r *crazyRun) snapshot() State {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -66,7 +60,6 @@ func (r *crazyRun) snapshot() State {
 	return state
 }
 
-// crazyModes is the set of bulbs currently sweeping, by light id.
 type crazyModes struct {
 	step time.Duration
 
@@ -85,8 +78,7 @@ func (m *crazyModes) get(id string) (*crazyRun, bool) {
 	return run, ok
 }
 
-// remove forgets run, but only if it is still the one registered: a run that ended on its own
-// must not evict the fresh one that replaced it.
+// remove forgets run only if it is still the registered one, so it cannot evict its replacement.
 func (m *crazyModes) remove(id string, run *crazyRun) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -95,7 +87,6 @@ func (m *crazyModes) remove(id string, run *crazyRun) {
 	}
 }
 
-// crazyState is the answer for a bulb that is sweeping. ok is false for one that is not.
 func (s *Service) crazyState(id string) (State, bool) {
 	run, ok := s.crazy.get(id)
 	if !ok {
@@ -104,15 +95,13 @@ func (s *Service) crazyState(id string) (State, bool) {
 	return run.snapshot(), true
 }
 
-// startCrazy switches the bulb on and starts the sweep. Starting one that is already
-// sweeping changes nothing.
+// startCrazy switches the bulb on and starts the sweep; a no-op if already sweeping.
 func (s *Service) startCrazy(ctx context.Context, light Light) State {
 	if state, ok := s.crazyState(light.ID); ok {
 		return state
 	}
 
-	// Power first, and synchronously: a bulb that cannot be reached should say so in this
-	// response rather than start a loop that fails in the background.
+	// Power on synchronously so an unreachable bulb fails this request.
 	on := true
 	state := s.driver.Apply(ctx, light, Command{Type: CommandPower, On: &on})
 	if !state.Online {
@@ -136,8 +125,8 @@ func (s *Service) startCrazy(ctx context.Context, light Light) State {
 	return run.snapshot()
 }
 
-// stopCrazy ends the sweep and waits for its last write to land, so nothing it sends can
-// arrive after the command that follows. It returns what the bulb was last told.
+// stopCrazy ends the sweep and waits for its last write, so nothing lands after the next
+// command. It returns what the bulb was last told.
 func (s *Service) stopCrazy(id string) (State, bool) {
 	run, ok := s.crazy.get(id)
 	if !ok {
@@ -190,7 +179,6 @@ func (s *Service) sweep(ctx context.Context, light Light, run *crazyRun) {
 	}
 }
 
-// crazyFrame writes one frame of the sweep and reports whether the bulb took it.
 func (s *Service) crazyFrame(ctx context.Context, light Light, elapsed time.Duration) (State, bool) {
 	brightness := crazyBrightness(elapsed)
 	state := s.driver.Apply(ctx, light, Command{Type: CommandBrightness, Value: &brightness})
@@ -205,8 +193,7 @@ func (s *Service) crazyFrame(ctx context.Context, light Light, elapsed time.Dura
 	return state, state.Online
 }
 
-// crazyWave turns elapsed time into 1 -> 0 -> 1 over one period: it starts at the maximum
-// and heads for the minimum, then climbs back.
+// crazyWave maps elapsed time to 1 -> 0 -> 1 over one period.
 func crazyWave(elapsed, period time.Duration) float64 {
 	phase := float64(elapsed%period) / float64(period)
 	return math.Abs(2*phase - 1)

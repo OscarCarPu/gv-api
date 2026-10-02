@@ -10,8 +10,7 @@ import (
 	"gv-api/internal/calendar/google"
 )
 
-// syncPageSize is Google's maximum. Fewer pages means fewer round-trips and, on a full sync
-// of a busy calendar, a materially shorter run.
+// syncPageSize is Google's maximum.
 const syncPageSize = 2500
 
 /*
@@ -32,9 +31,7 @@ func (s *Service) SyncAll(ctx context.Context, trigger string) (SyncResult, erro
 
 	result := SyncResult{}
 	for _, acc := range accounts {
-		// A parked account is reported rather than skipped in silence: this is what a manual
-		// "sync now" answers with, and "0 calendars, no errors" would hide the one thing the
-		// user has to act on.
+		// Report a parked account rather than skipping it silently.
 		if acc.Status != "connected" {
 			result.Errors = append(result.Errors, fmt.Sprintf("%s: %v", acc.Email, ErrNeedsReauth))
 			continue
@@ -65,16 +62,14 @@ func (s *Service) SyncAll(ctx context.Context, trigger string) (SyncResult, erro
 		}
 	}
 
-	// Cancelled one-offs are dropped as they arrive, so this only ever sweeps leftovers from
-	// a write path that stored one. It is cheap and it keeps the table honest.
+	// Sweeps leftover cancelled one-offs from write paths.
 	if _, err := s.repo.PurgeCancelledEvents(ctx, s.now().Add(-s.cfg.CancelledRetention)); err != nil {
 		slog.ErrorContext(ctx, "calendar: purging cancelled events", "error", err)
 	}
 	return result, nil
 }
 
-// SyncCalendar syncs one calendar, taking the per-calendar lock so a push notification and
-// the poll tick cannot spend the same sync token twice.
+// SyncCalendar syncs one calendar under the per-calendar lock.
 func (s *Service) SyncCalendar(ctx context.Context, calendarID int32, trigger string) (SyncResult, error) {
 	if err := s.requireConfigured(); err != nil {
 		return SyncResult{}, err
@@ -88,8 +83,7 @@ func (s *Service) SyncCalendar(ctx context.Context, calendarID int32, trigger st
 	}
 
 	if !s.lockCalendar(calendarID) {
-		// Someone is already on it. Skipping is right: the run in flight will pick up
-		// whatever this trigger was about.
+		// Already running; that run will pick this up.
 		slog.DebugContext(ctx, "calendar: sync already running", "calendar", calendarID)
 		return SyncResult{}, nil
 	}
@@ -106,9 +100,7 @@ func (s *Service) SyncCalendar(ctx context.Context, calendarID int32, trigger st
 
 	res, err := s.syncOnce(ctx, cal, token, trigger)
 	if err != nil && google.IsGone(err) {
-		// The token is spent: the local copy of this calendar is not trustworthy any more, so
-		// it is thrown away and rebuilt. This is the documented recovery, and holiday
-		// calendars in particular go through it regularly.
+		// Spent token (410): throw the local copy away and rebuild it.
 		slog.InfoContext(ctx, "calendar: sync token expired, doing a full resync",
 			"calendar", cal.ID, "summary", cal.Summary)
 		if _, delErr := s.repo.DeleteEventsForCalendar(ctx, cal.ID); delErr != nil {
@@ -215,8 +207,7 @@ func (s *Service) syncOnce(ctx context.Context, cal CalendarRecord, accessToken,
 		break
 	}
 
-	// Overrides can arrive before the master they belong to, so the link is resolved once the
-	// whole pass has landed rather than per row.
+	// Overrides can arrive before their master, so link after the whole pass.
 	if err := s.repo.LinkEventMasters(ctx, cal.ID); err != nil {
 		finish(err)
 		return SyncResult{Calendars: 1}, err
@@ -228,8 +219,7 @@ func (s *Service) syncOnce(ctx context.Context, cal CalendarRecord, accessToken,
 			return SyncResult{Calendars: 1}, err
 		}
 	} else {
-		// No token means the next pass has to be a full sync; better a wasted listing than a
-		// silently frozen calendar.
+		// No token means the next pass is a full sync.
 		slog.WarnContext(ctx, "calendar: google returned no sync token", "calendar", cal.ID)
 		if err := s.repo.ClearCalendarSyncToken(ctx, cal.ID); err != nil {
 			slog.ErrorContext(ctx, "calendar: clearing sync token", "calendar", cal.ID, "error", err)
@@ -405,9 +395,7 @@ func personEmail(p *google.Person) string {
 	return p.Email
 }
 
-// parseEventTime reads Google's start/end shape. An all-day value has no zone of its own, so
-// it is pinned to the calendar's: the same date means a different instant in Madrid and in
-// Mexico City, and range queries need one answer.
+// parseEventTime reads Google's start/end. All-day values are pinned to the calendar's zone.
 func parseEventTime(dt *google.EventDateTime, fallbackTZ string) (t time.Time, tz string, allDay bool, ok bool) {
 	if dt == nil {
 		return time.Time{}, "", false, false
@@ -431,8 +419,7 @@ func parseEventTime(dt *google.EventDateTime, fallbackTZ string) (t time.Time, t
 	return parsed, firstNonEmpty(dt.TimeZone, fallbackTZ), false, true
 }
 
-// ResyncAccount throws away the account's sync cursors and its local events, then rebuilds
-// from scratch. The escape hatch for when the mirror is visibly wrong.
+// ResyncAccount drops the account's sync cursors and local events, then rebuilds from scratch.
 func (s *Service) ResyncAccount(ctx context.Context, id int32) (SyncResult, error) {
 	if err := s.requireConfigured(); err != nil {
 		return SyncResult{}, err
@@ -470,8 +457,7 @@ func (s *Service) ResyncAccount(ctx context.Context, id int32) (SyncResult, erro
 	return result, nil
 }
 
-// SyncStatus is the operational view: it exists so a dead push channel or a stalled sync
-// token is visible before someone notices their calendar stopped changing.
+// SyncStatus is the operational view: channels, cursors, recent runs.
 func (s *Service) SyncStatus(ctx context.Context) (SyncStatus, error) {
 	accounts, err := s.ListAccounts(ctx)
 	if err != nil {

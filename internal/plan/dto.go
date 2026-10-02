@@ -60,9 +60,8 @@ type UpdatePlanBlockRequest struct {
 	Note      *string    `json:"note"`
 	ClearNote bool       `json:"clear_note"`
 
-	// ClearCommitmentID is never set from a request body — the service sets it when it
-	// detects that editing started_at/ended_at moved the block to a different plan_date, so a
-	// commitment-linked block does not silently duplicate on the next generation pass.
+	// ClearCommitmentID is set by the service, never a request, when an edit moves a commitment-linked
+	// block to another date, so the next generation pass does not duplicate it.
 	ClearCommitmentID bool `json:"-"`
 }
 

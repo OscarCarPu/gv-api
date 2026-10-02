@@ -1,9 +1,8 @@
 /*
 Package calendar mirrors the user's Google calendars and lets them be edited from here.
 
-Google stays the source of truth. Reads are served from the local copy, which is kept current
-by incremental sync; writes go to Google first and are stored only once it accepts them, so a
-row here always corresponds to an event over there.
+Google stays the source of truth. Reads come from the local copy, kept current by incremental
+sync; writes go to Google first and are stored only once it accepts them.
 
 Shape:
 
@@ -11,14 +10,11 @@ Shape:
 	calendar  one entry of that account's calendar list, one sync cursor, one push channel
 	event     one mirrored event: a one-off, a series master, or an override of one occurrence
 
-Recurring series are stored the way Google stores them — a master carrying the RRULE plus a row
-per modified or cancelled occurrence — and expanded on read, in the event's own zone. Storing
-the expansion would mean either unbounded rows for an endless series or a horizon that quietly
-truncates the calendar.
+Recurring series are stored as Google stores them (a master with the RRULE plus a row per
+modified or cancelled occurrence) and expanded on read, in the event's own zone.
 
-Freshness comes from two mechanisms, and both are needed: push notifications make a change in
-Google show up here in seconds, and the poll is the safety net for the notifications Google
-admits it drops and for channels that expire without being renewed.
+Push notifications deliver changes within seconds; polling covers dropped notifications and
+expired channels.
 
 Endpoints (full auth):
 

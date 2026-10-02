@@ -1,6 +1,5 @@
 package tasks
 
-// Request-shape validation shared by the create/update handlers.
 // Each helper returns "" when valid, or the client-facing error message.
 
 func validateName(name string) string {

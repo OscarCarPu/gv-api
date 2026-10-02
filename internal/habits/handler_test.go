@@ -3,11 +3,12 @@ package habits_test
 import (
 	"context"
 	"errors"
-	"gv-api/internal/history"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
+
+	"gv-api/internal/history"
 
 	"gv-api/internal/habits"
 	"gv-api/internal/habits/mocks"
@@ -16,9 +17,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 )
-
-// Handler tests cover HTTP-layer concerns only: status codes, decode errors,
-// id parsing, error→status mapping. Business rules are covered by service tests.
 
 func newReq(method, target, body string) *http.Request {
 	if body == "" {
@@ -93,7 +91,6 @@ func TestHandler_CreateHabit(t *testing.T) {
 		assert.Equal(t, http.StatusBadRequest, rec.Code)
 	})
 
-	// Cross-field rule unique to this endpoint, worth one explicit test.
 	t.Run("400 when target_min > target_max", func(t *testing.T) {
 		rec := httptest.NewRecorder()
 		habits.NewHandler(mocks.NewMockServiceInterface(t)).CreateHabit(rec, newReq(http.MethodPost, "/", `{"name": "E", "target_min": 10, "target_max": 5}`))

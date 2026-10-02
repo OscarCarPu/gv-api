@@ -29,10 +29,7 @@ func preflight(t *testing.T, requestHeaders string) *http.Response {
 	return rec.Result()
 }
 
-// A header the browser sends but the allowlist omits makes the preflight answer
-// with no Access-Control-Allow-Origin at all, which blocks every cross-origin
-// call rather than only dropping that header. gv-web sends X-Device-ID on every
-// request, and leaving it out took the whole deployed frontend down.
+// An unlisted header blocks every cross-origin call; leaving out X-Device-ID took gv-web down.
 func TestCORSAllowsEveryHeaderTheWebClientSends(t *testing.T) {
 	sent := []string{"content-type", "authorization", "x-device-id", "x-request-id"}
 

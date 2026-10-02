@@ -13,11 +13,9 @@ import (
 )
 
 // ErrDuplicateAddress is returned when a bulb with that BLE address is already registered.
-// Two cards for one lamp would fight over a radio link that only takes one conversation.
 var ErrDuplicateAddress = errors.New("that bulb is already added")
 
-// errDuplicateID is internal: the service retries a taken slug with a suffix rather than
-// bothering the caller about it.
+// errDuplicateID makes the service retry with a suffixed slug.
 var errDuplicateID = errors.New("id already taken")
 
 type Repository interface {
@@ -119,8 +117,6 @@ func (r *PostgresRepository) Update(ctx context.Context, light Light) (Light, er
 		}
 		return Light{}, err
 	}
-	// The address is not updatable: it identifies the hardware, so a different one is a
-	// different bulb. Take it from the row so the caller sees the truth either way.
 	light.Address = row.Address
 	return light, nil
 }
@@ -136,9 +132,7 @@ func (r *PostgresRepository) Delete(ctx context.Context, id string) error {
 	return nil
 }
 
-// classifyConflict tells the two unique constraints apart. Both arrive as SQLSTATE 23505, and
-// they mean very different things to a user: one is "you already added this bulb", the other
-// is "two bulbs want the same slug", which the service fixes by itself.
+// classifyConflict tells the two unique constraints apart; both arrive as SQLSTATE 23505.
 func classifyConflict(err error) error {
 	var pgErr *pgconn.PgError
 	if !errors.As(err, &pgErr) || pgErr.Code != "23505" {

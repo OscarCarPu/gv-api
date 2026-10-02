@@ -64,8 +64,7 @@ func (c *tokenCipher) open(sealed []byte) (string, error) {
 	nonce, ct := sealed[:c.aead.NonceSize()], sealed[c.aead.NonceSize():]
 	plain, err := c.aead.Open(nil, nonce, ct, nil)
 	if err != nil {
-		// Almost always a changed GOOGLE_TOKEN_KEY. Say so, because the alternative is
-		// hunting a "sync stopped working" with no clue.
+		// Almost always a changed GOOGLE_TOKEN_KEY.
 		return "", fmt.Errorf("cannot decrypt stored token (has GOOGLE_TOKEN_KEY changed?): %w", err)
 	}
 	return string(plain), nil

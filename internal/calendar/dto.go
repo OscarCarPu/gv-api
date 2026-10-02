@@ -2,10 +2,7 @@ package calendar
 
 import "time"
 
-// --- Stored records ------------------------------------------------------------------
-//
-// These mirror the rows. They carry the sync bookkeeping the service needs (tokens, etags,
-// channels) and never leave the package; what the HTTP layer returns is further down.
+// Stored records mirror the rows, including sync bookkeeping, and never leave the package.
 
 type AccountRecord struct {
 	ID                   int32
@@ -48,8 +45,7 @@ type CalendarRecord struct {
 	DeletedAt          *time.Time
 }
 
-// Writable mirrors Google's access roles: reader and freeBusyReader cannot be written to, and
-// the service refuses those writes rather than letting Google answer 403 after the fact.
+// Writable mirrors Google's access roles: reader and freeBusyReader cannot be written to.
 func (c CalendarRecord) Writable() bool {
 	return c.AccessRole == "owner" || c.AccessRole == "writer"
 }
@@ -88,10 +84,8 @@ type EventRecord struct {
 	GoogleUpdatedAt  *time.Time
 }
 
-// IsMaster reports a recurring series' defining row.
 func (e EventRecord) IsMaster() bool { return len(e.Recurrence) > 0 }
 
-// IsException reports a row that overrides or cancels one occurrence of a series.
 func (e EventRecord) IsException() bool {
 	return e.RecurringEventID != nil && *e.RecurringEventID != ""
 }
@@ -102,8 +96,7 @@ type CalendarView struct {
 	AccountLabel  string
 	AccountColor  string
 	AccountStatus string
-	// AssignedColor is gv's own colour for this calendar, filled in when the list is read.
-	// Google's colours are unusable as identity: every primary calendar shares one.
+	// AssignedColor is gv's own colour for this calendar; Google gives every primary calendar the same one.
 	AssignedColor string
 }
 
@@ -119,8 +112,6 @@ type SyncRun struct {
 	Deleted    int32
 	Error      *string
 }
-
-// --- Repository parameters -----------------------------------------------------------
 
 type UpsertAccountParams struct {
 	Email                string
@@ -189,8 +180,6 @@ type UpsertEventParams struct {
 	GoogleUpdatedAt  *time.Time
 }
 
-// --- HTTP responses ------------------------------------------------------------------
-
 type Account struct {
 	ID            int32      `json:"id"`
 	Email         string     `json:"email"`
@@ -208,8 +197,6 @@ type CalendarSyncState struct {
 	LastSyncAt     *time.Time `json:"last_sync_at"`
 	LastFullSyncAt *time.Time `json:"last_full_sync_at"`
 	LastSyncError  *string    `json:"last_sync_error"`
-	// WatchActive is the difference between "changes arrive in seconds" and "changes arrive
-	// on the next poll", so it is part of the contract rather than a debug detail.
 	WatchActive    bool       `json:"watch_active"`
 	WatchExpiresAt *time.Time `json:"watch_expires_at"`
 }
@@ -223,8 +210,7 @@ type Calendar struct {
 	Summary          string `json:"summary"`
 	Description      string `json:"description"`
 	TimeZone         string `json:"time_zone"`
-	// Color is what clients paint with: the user's override if set, otherwise gv's assigned
-	// palette colour. BackgroundColor is Google's own, kept for reference.
+	// Color is the user's override if set, otherwise gv's assigned colour. BackgroundColor is Google's.
 	Color           string            `json:"color"`
 	BackgroundColor string            `json:"background_color"`
 	ForegroundColor string            `json:"foreground_color"`
@@ -358,8 +344,6 @@ type SyncResult struct {
 	Errors    []string `json:"errors"`
 }
 
-// --- HTTP requests -------------------------------------------------------------------
-
 type AttendeeInput struct {
 	Email    string `json:"email"`
 	Optional bool   `json:"optional,omitempty"`
@@ -392,8 +376,7 @@ type CreateEventRequest struct {
 	Transparency string          `json:"transparency"`
 	Visibility   string          `json:"visibility"`
 	ColorID      string          `json:"color_id"`
-	// SendUpdates is passed through to Google: all, externalOnly or none (default none, so
-	// editing your own calendar does not mail people by accident).
+	// SendUpdates is passed to Google: all, externalOnly or none (default).
 	SendUpdates string `json:"send_updates"`
 }
 
@@ -430,9 +413,7 @@ type MoveEventRequest struct {
 	SendUpdates string `json:"send_updates"`
 }
 
-// MoveResult reports what a move actually did. Google can only move an event between
-// calendars of the same account; across accounts the event is recreated, so its id changes
-// and the client must not keep using the old one.
+// MoveResult reports what a move did. Moves across accounts recreate the event, changing its id.
 type MoveResult struct {
 	Event     Event `json:"event"`
 	Recreated bool  `json:"recreated"`
@@ -454,7 +435,6 @@ type EventsQuery struct {
 	To          time.Time
 	CalendarIDs []int32
 	AccountIDs  []int32
-	// VisibleOnly restricts to calendars the user has not hidden; a client that manages its
-	// own filtering asks for everything.
+	// VisibleOnly restricts to calendars the user has not hidden.
 	VisibleOnly bool
 }

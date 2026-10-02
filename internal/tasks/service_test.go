@@ -547,7 +547,8 @@ func TestService_GetTimeEntryHistory_DefaultDatesDaily(t *testing.T) {
 	expectedStart := expectedEnd.AddDate(0, -1, 0)
 
 	repo.EXPECT().
-		GetTimeEntryHistory(mock.Anything, "day", "UTC",
+		GetTimeEntryHistory(
+			mock.Anything, "day", "UTC",
 			mock.MatchedBy(func(t time.Time) bool { return t.Equal(expectedStart) }),
 			mock.MatchedBy(func(t time.Time) bool { return t.Equal(expectedEnd) }),
 		).
@@ -571,7 +572,8 @@ func TestService_GetTimeEntriesByDateRange(t *testing.T) {
 		expectedEnd := time.Date(2026, 4, 1, 0, 0, 0, 0, loc) // end_time+1 day for inclusive
 
 		repo.EXPECT().
-			GetTimeEntriesByDateRange(mock.Anything,
+			GetTimeEntriesByDateRange(
+				mock.Anything,
 				mock.MatchedBy(func(t time.Time) bool { return t.Equal(expectedStart) }),
 				mock.MatchedBy(func(t time.Time) bool { return t.Equal(expectedEnd) }),
 			).
@@ -596,7 +598,8 @@ func TestService_GetTimeEntriesByDateRange(t *testing.T) {
 		expectedEnd := time.Date(now.Year(), now.Month(), now.Day()+1, 0, 0, 0, 0, loc)
 
 		repo.EXPECT().
-			GetTimeEntriesByDateRange(mock.Anything, mock.AnythingOfType("time.Time"),
+			GetTimeEntriesByDateRange(
+				mock.Anything, mock.AnythingOfType("time.Time"),
 				mock.MatchedBy(func(t time.Time) bool { return t.Equal(expectedEnd) }),
 			).
 			Return([]tasks.TimeEntryWithTaskResponse{}, nil)
@@ -693,10 +696,8 @@ func (stubPlannedHoursProvider) PlannedHoursByTask(_ context.Context, _ []int32,
 	return map[int32]decimal.Decimal{}, nil
 }
 
-// due_at is stored as midnight UTC for its calendar date, while "today" is midnight in the
-// server's own location (never UTC in the real deployment). A due date of "tomorrow" makes
-// start_by fall on today's date for any task, regardless of its estimate — this asserts that
-// both a task whose estimate fits inside today's free hours and one that doesn't still agree.
+// due_at is midnight UTC while "today" is midnight in the server's location. A task due tomorrow
+// starts today whether or not its estimate fits today's free hours.
 func TestService_GetTasksByDueDate_UrgencyAgreesAcrossOffset(t *testing.T) {
 	loc, err := time.LoadLocation("Europe/Madrid")
 	require.NoError(t, err)
@@ -732,11 +733,8 @@ func TestService_GetTasksByDueDate_UrgencyAgreesAcrossOffset(t *testing.T) {
 	}
 }
 
-// Every estimated task already past its due date: there is no future day left to spend, so the
-// range handed to capacity ends before it starts. Uses the real capacity service — the stub
-// above returns whatever it is told and cannot reproduce a reversed range, which is how this
-// went unnoticed: the whole Due Soon endpoint answered 500 the moment the last estimated task
-// slipped past its deadline.
+// Every estimated task overdue: the capacity range would be reversed. Uses the real capacity
+// service, since the stub cannot reproduce that.
 func TestService_GetTasksByDueDate_AllEstimatedTasksOverdue(t *testing.T) {
 	loc, err := time.LoadLocation("Europe/Madrid")
 	require.NoError(t, err)
@@ -782,9 +780,8 @@ func (stubBusyProvider) BusyHoursByDate(_ context.Context, _, _ time.Time) (map[
 	return map[string]decimal.Decimal{}, nil
 }
 
-// Two tasks sharing the same 5-day, 20-hour window draw from the same freeByDate pool. The p1 task
-// is worked on first, so the p3 one takes the last hours and the p1 task — 19 hours into 20 — is
-// the one that has to start today. Checked on its own, it would have fit and not been urgent.
+// Two tasks share a 5-day, 20-hour window. The p1 task is worked first, so the p3 one takes the
+// last hours and the p1 task has to start today.
 func TestService_GetTasksByDueDate_UrgencyAccountsForCompetingTasks(t *testing.T) {
 	loc, err := time.LoadLocation("Europe/Madrid")
 	require.NoError(t, err)
@@ -826,10 +823,8 @@ func TestService_GetTasksByDueDate_UrgencyAccountsForCompetingTasks(t *testing.T
 	assert.Falsef(t, byID[2].Urgent, "lower-priority task takes the last hours: start_by=%v", byID[2].StartBy)
 }
 
-// Work is done p1 first, then p2 and so on, each by what falls due soonest. A p2 8h job due day 5,
-// a p3 4h task due day 4 and a p2 8h task due day 3, over five 4h days: the p3 task goes last and
-// keeps day 3, the later p2 job takes days 4 and 2, and the sooner p2 task — first in line — has
-// to start today. The p3 task, though due before the p2 job, is not what turns urgent.
+// A p2 8h job due day 5, a p3 4h task due day 4 and a p2 8h task due day 3, over five 4h days:
+// the p3 task keeps day 3, the p2 job takes days 4 and 2, and the sooner p2 task starts today.
 func TestService_GetTasksByDueDate_UrgencyFollowsPriorityThenDeadline(t *testing.T) {
 	loc, err := time.LoadLocation("Europe/Madrid")
 	require.NoError(t, err)
@@ -871,9 +866,7 @@ func TestService_GetTasksByDueDate_UrgencyFollowsPriorityThenDeadline(t *testing
 	assert.False(t, byID[2].Urgent)
 }
 
-// A → B → C → D → E, 4h each, E due in 5 days with 4 free hours a day: the chain needs all 20
-// hours, so A has to start today. Checked task by task against E's due date, A and B would only
-// have claimed the two days before it.
+// A → B → C → D → E, 4h each, E due in 5 days with 4 free hours a day: A has to start today.
 func TestService_GetTasksByDueDate_ChainAccumulatesEstimates(t *testing.T) {
 	loc, err := time.LoadLocation("Europe/Madrid")
 	require.NoError(t, err)
@@ -913,8 +906,7 @@ func TestService_GetTasksByDueDate_ChainAccumulatesEstimates(t *testing.T) {
 	}
 
 	t.Run("work order puts each step before the one depending on it", func(t *testing.T) {
-		// With 8h a day, C and B share day 3: same start, same finish_by. Only the work order
-		// still tells that B comes first.
+		// With 8h a day, C and B share day 3; only the work order puts B first.
 		byID := run(t, "8")
 		require.NotNil(t, byID[1].WorkOrder)
 		require.NotNil(t, byID[2].WorkOrder)
@@ -945,10 +937,8 @@ func TestService_GetTasksByDueDate_ChainAccumulatesEstimates(t *testing.T) {
 	})
 }
 
-// Nothing is planned weeks ahead, so a far-off day must not count as the whole daily capacity
-// free: the cap is capacity − 0.5h per day from today, never below 6h. With 14h capacity and
-// nothing busy, days 16+ give 6h, so 20h due in 20 days needs days 19, 18, 17 (6h each) and 2h
-// of day 16.
+// Future days cap at capacity − 0.5h per day from today, never below 6h. With 14h capacity,
+// days 16+ give 6h, so 20h due in 20 days needs days 19, 18, 17 and 2h of day 16.
 func TestService_GetTasksByDueDate_FutureDaysCapped(t *testing.T) {
 	loc, err := time.LoadLocation("Europe/Madrid")
 	require.NoError(t, err)
@@ -988,9 +978,7 @@ func TestService_GetTasksByDueDate_FutureDaysCapped(t *testing.T) {
 	assert.Equal(t, today.AddDate(0, 0, 10).Format("2006-01-02"), *got[2].StartBy)
 }
 
-// The study tasks behind a p2 exam are left at the default p3. They are scheduled as p2 work —
-// ahead of an unrelated p3 chore due sooner — and must survive a min_priority=2 filter while the
-// exam stays visible.
+// Study tasks left at p3 behind a p2 exam are scheduled as p2 work and survive min_priority=2.
 func TestService_GetTasksByDueDate_ChainInheritsPriority(t *testing.T) {
 	loc, err := time.LoadLocation("Europe/Madrid")
 	require.NoError(t, err)
@@ -1047,9 +1035,7 @@ func decPtr(s string) *decimal.Decimal {
 	return &d
 }
 
-// A recurring task is done on the day it falls due, not started days ahead: it gets no
-// start_by and never turns urgent by back-filling, however little room is left — otherwise every
-// renewal would drag it straight back to "start today". It also leaves the hours to others.
+// Recurring tasks get no start_by and never turn urgent by back-filling.
 func TestService_GetTasksByDueDate_RecurringTasksTakeNoPartInUrgency(t *testing.T) {
 	loc, err := time.LoadLocation("Europe/Madrid")
 	require.NoError(t, err)
@@ -1097,7 +1083,8 @@ func TestService_GetTimeEntrySummary(t *testing.T) {
 
 	repo := mocks.NewMockRepository(t)
 	repo.EXPECT().
-		GetTimeEntrySummary(mock.Anything,
+		GetTimeEntrySummary(
+			mock.Anything,
 			mock.MatchedBy(func(t time.Time) bool { return t.Equal(expectedToday) }),
 			mock.MatchedBy(func(t time.Time) bool { return t.Equal(expectedWeek) }),
 		).

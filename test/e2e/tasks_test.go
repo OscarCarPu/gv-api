@@ -7,10 +7,6 @@ import (
 	"time"
 )
 
-// E2E tests prove the wiring (DB, router, middleware, handler) works end-to-end
-// for representative user flows. Business rules and error branches are covered
-// at lower test levels; this file deliberately stays narrow.
-
 func TestE2E_ProjectAndTaskLifecycle(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping e2e test in short mode")
@@ -123,8 +119,7 @@ func TestE2E_ClearDueAtViaPatch(t *testing.T) {
 		t.Fatal("setup: expected due_at to be set on creation")
 	}
 
-	// The typed UpdateTaskRequest uses omitempty and cannot express explicit null,
-	// so this case (regression for commit 9eaa587) needs a raw PATCH body.
+	// Raw body: the typed request cannot express an explicit null.
 	resp := client.do(t, http.MethodPatch, "/tasks/tasks/"+strconv.Itoa(int(task.ID)), []byte(`{"due_at": null}`))
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {

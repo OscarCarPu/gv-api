@@ -2,8 +2,7 @@ package uptime
 
 import "time"
 
-// Device is one of exactly two publishers: the home lab and the ESP32 that watches it.
-// Typed here rather than constrained in a database gv-api does not own.
+// Device is one of the two publishers: the home lab and the ESP32 that watches it.
 type Device string
 
 const (
@@ -11,7 +10,6 @@ const (
 	DeviceWatchdog Device = "watchdog"
 )
 
-// Devices is the order every response lists them in.
 var Devices = []Device{DeviceLab, DeviceWatchdog}
 
 func ParseDevice(s string) (Device, error) {
@@ -23,9 +21,8 @@ func ParseDevice(s string) (Device, error) {
 	return "", ErrUnknownDevice
 }
 
-// State is what a device was doing during a window. StateUnknown is not published by
-// anything: it is what a device with no windows at all reads as, so a device the pipeline
-// has never heard from still appears instead of silently vanishing.
+// State is what a device was doing during a window. StateUnknown is what a device with no
+// windows reads as.
 type State string
 
 const (
@@ -34,8 +31,7 @@ const (
 	StateUnknown State = "unknown"
 )
 
-// Lookback is one of the four precomputed ranges. The values are the pipeline's own
-// strings, kept verbatim so both sides name the same thing.
+// Lookback is one of the four precomputed ranges, using the pipeline's own strings.
 type Lookback string
 
 const (
@@ -45,17 +41,13 @@ const (
 	LookbackAll         Lookback = "all"
 )
 
-// Lookbacks is the order the ranges are reported in, shortest first.
 var Lookbacks = []Lookback{LookbackMonth, LookbackThreeMonths, LookbackYear, LookbackAll}
 
-// Overview is the dashboard read: where both devices stand now, and the four percentages
-// the pipeline precomputed for each.
+// Overview is where both devices stand now, with the four precomputed percentages for each.
 type Overview struct {
-	// ComputedAt is when dbt last ran, not now. Null when the pipeline has produced
-	// nothing yet.
+	// ComputedAt is when dbt last ran. Null when the pipeline has produced nothing yet.
 	ComputedAt *time.Time `json:"computed_at"`
-	// Stale says the percentages are older than StaleAfterSeconds, so they describe a
-	// past run rather than the present. dbt is a batch job: treat them as a snapshot.
+	// Stale says the percentages are older than StaleAfterSeconds.
 	Stale             bool             `json:"stale"`
 	StaleAfterSeconds int              `json:"stale_after_seconds"`
 	Devices           []DeviceOverview `json:"devices"`
@@ -64,25 +56,21 @@ type Overview struct {
 type DeviceOverview struct {
 	Device Device `json:"device"`
 	State  State  `json:"state"`
-	// Since is the start of the open window: when the device entered this state, which is
-	// also the last thing the pipeline heard about it. Events are edge-triggered, so an
-	// old value means "nothing has changed", not "nothing is alive".
+	// Since is when the device entered this state. Events are edge-triggered, so an old value means
+	// nothing has changed.
 	Since *time.Time `json:"since"`
-	// Ranges holds one entry per lookback, in Lookbacks order. Empty for a device the
-	// pipeline has no aggregation rows for.
+	// Ranges holds one entry per lookback, in Lookbacks order.
 	Ranges []RangeUptime `json:"ranges"`
 }
 
 type RangeUptime struct {
 	Range  Lookback `json:"range"`
 	Uptime float64  `json:"uptime"` // percentage, 0-100
-	// RangeStart is floored at the device's first event, so a young device reports its
-	// real history instead of ~0%. Read it rather than assuming now - lookback.
+	// RangeStart is floored at the device's first event, so a young device is not reported at ~0%.
 	RangeStart time.Time `json:"range_start"`
 	RangeEnd   time.Time `json:"range_end"`
 }
 
-// WindowsQuery is a request for state changes over an arbitrary range.
 type WindowsQuery struct {
 	Device *Device
 	From   time.Time
@@ -90,10 +78,9 @@ type WindowsQuery struct {
 	Limit  int
 }
 
-// WindowsReport answers WindowsQuery: the percentage for exactly that range, computed
-// from the windows rather than read off a precomputed row, plus the windows themselves.
+// WindowsReport is the uptime for exactly the queried range, plus the windows themselves.
 type WindowsReport struct {
-	// From and To are the range actually used, after defaults and the clamp to now.
+	// From and To are the range actually used, after defaults and clamping to now.
 	From    time.Time       `json:"from"`
 	To      time.Time       `json:"to"`
 	Devices []DeviceWindows `json:"devices"`
@@ -101,21 +88,16 @@ type WindowsReport struct {
 
 type DeviceWindows struct {
 	Device Device `json:"device"`
-	// Uptime is up / (up + down) over the covered part of the range, not over the whole
-	// range: before a device's first event there is nothing to call up or down, and
-	// dividing by the full range would report the gap as downtime. Null when no window
-	// overlaps at all.
+	// Uptime is up / (up + down) over the covered part of the range, so time before the first event
+	// is not counted as downtime. Null when no window overlaps.
 	Uptime      *float64 `json:"uptime"`
 	UpSeconds   float64  `json:"up_seconds"`
 	DownSeconds float64  `json:"down_seconds"`
-	// Outages counts the down windows overlapping the range.
-	Outages int `json:"outages"`
+	Outages     int      `json:"outages"`
 	// CoveredFrom/CoveredTo bound the part of the range the windows actually span.
 	CoveredFrom *time.Time `json:"covered_from"`
 	CoveredTo   *time.Time `json:"covered_to"`
-	// Windows are newest first, so a truncated list keeps the recent history. The
-	// percentages above are computed in the database over every overlapping window and
-	// are unaffected by the limit.
+	// Windows are newest first. The percentages above cover every window, regardless of the limit.
 	Windows   []Window `json:"windows"`
 	Truncated bool     `json:"truncated"`
 }
@@ -125,22 +107,16 @@ type Window struct {
 	StartTime time.Time `json:"start_time"`
 	// EndTime is null for the open window: the state the device is in now.
 	EndTime *time.Time `json:"end_time"`
-	// Seconds is the part of the window inside the queried range, with an open window
-	// counted up to To — the pipeline's own assumption that the latest known state
-	// persists.
+	// Seconds is the part of the window inside the range, with an open window counted up to To.
 	Seconds float64 `json:"seconds"`
 }
 
-// --- rows as the pipeline stores them ---
-
-// CurrentState is the open window of one device.
 type CurrentState struct {
 	Device Device
 	State  State
 	Since  time.Time
 }
 
-// Aggregation is one row of marts.uptime_aggregations.
 type Aggregation struct {
 	Device     Device
 	Range      Lookback
@@ -149,7 +125,6 @@ type Aggregation struct {
 	Uptime     float64
 }
 
-// RangeStat is the clipped up/down split of one device over a queried range.
 type RangeStat struct {
 	Device      Device
 	UpSeconds   float64
@@ -159,7 +134,6 @@ type RangeStat struct {
 	CoveredTo   time.Time
 }
 
-// WindowRow is one row of marts.uptime_windows.
 type WindowRow struct {
 	Device    Device
 	State     State

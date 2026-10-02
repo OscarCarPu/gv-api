@@ -9,7 +9,6 @@ import (
 	"time"
 )
 
-// DTOs representing the API contract from the client's perspective.
 type CreateHabitRequest struct {
 	Name              string   `json:"name"`
 	Description       *string  `json:"description"`
@@ -50,8 +49,6 @@ type LogRequest struct {
 	Date    string  `json:"date"`
 	Value   float32 `json:"value"`
 }
-
-// Tasks DTOs
 
 type TaskDepRef struct {
 	ID    int32   `json:"id"`
@@ -284,8 +281,6 @@ func (c *APIClient) GetDailyView(t *testing.T, date string) []HabitWithLog {
 	}
 	return habits
 }
-
-// Tasks client methods
 
 func (c *APIClient) CreateProject(t *testing.T, req CreateProjectRequest) ProjectResponse {
 	t.Helper()

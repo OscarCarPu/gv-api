@@ -12,8 +12,6 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-// Benchmarks exercise the SQL paths that absorbed Go-side logic (recursive
-// CTE for blocks-closure, json_agg for todos, bottom-up time accumulation).
 // Run with: go test -bench=. -run=NONE -benchtime=10x ./internal/tasks/...
 // Requires TEST_DB_URL.
 
@@ -24,8 +22,7 @@ func benchRepo(b *testing.B) (*tasks.PostgresRepository, *pgxpool.Pool) {
 	return tasks.NewRepository(pool), pool
 }
 
-// seedTasks creates `n` standalone unfinished tasks. Returns their IDs in
-// creation order. With dependencies, downstream IDs depend on earlier ones.
+// seedTasks creates n standalone unfinished tasks and returns their IDs in creation order.
 func seedTasks(b *testing.B, repo *tasks.PostgresRepository, n int) []int32 {
 	b.Helper()
 	ctx := context.Background()
@@ -105,9 +102,8 @@ func BenchmarkGetTasksByDueDate(b *testing.B) {
 	}
 }
 
-// BenchmarkGetProjectChildren exercises the recursive descendants CTE plus
-// the bottom-up time accumulation. Builds a chain of `depth` nested projects,
-// each with `tasksPerProject` tasks, each task with one finished time entry.
+// BenchmarkGetProjectChildren builds `depth` nested projects, each with `tasksPerProject` tasks
+// carrying one finished time entry.
 func BenchmarkGetProjectChildren(b *testing.B) {
 	cases := []struct {
 		name            string

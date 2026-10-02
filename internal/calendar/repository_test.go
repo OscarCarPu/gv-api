@@ -12,10 +12,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// Integration tests cover the SQL: the upserts, the range predicates and the cascades. The
-// in-memory repository the service tests use reproduces this behaviour, and these are what
-// keep the two honest.
-
 func newCalendarRepo(t *testing.T) (*calendar.PostgresRepository, *pgxpool.Pool) {
 	t.Helper()
 	pool := testutil.NewPool(t)
@@ -78,7 +74,7 @@ func TestIntegration_Calendar_AccountRoundTripAndReconnect(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "connected", acc.Status)
 
-	// Parking the account and then reconnecting it must clear the error, not stack on top of it.
+	// Reconnecting a parked account clears the error.
 	msg := "invalid_grant"
 	require.NoError(t, repo.UpdateAccountStatus(ctx, acc.ID, "needs_reauth", &msg))
 	parked, err := repo.GetAccount(ctx, acc.ID)
@@ -109,8 +105,7 @@ func TestIntegration_Calendar_UpsertKeepsLocalPreferences(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	// A later calendarList pass refreshes Google's metadata and must not undo the user's
-	// choices.
+	// A later calendarList pass must not undo the user's choices.
 	updated, err := repo.UpsertCalendar(ctx, calendar.UpsertCalendarParams{
 		AccountID:        acc.ID,
 		GoogleCalendarID: "me@example.com",
@@ -154,7 +149,7 @@ func TestIntegration_Calendar_MarkDeletedAndRevive(t *testing.T) {
 	require.NoError(t, err)
 	require.Nil(t, revived.DeletedAt)
 
-	// An empty "seen" list marks everything deleted rather than failing on an empty array.
+	// An empty "seen" list marks everything deleted.
 	require.NoError(t, repo.MarkCalendarsDeleted(ctx, acc.ID, nil))
 	all, err := repo.ListCalendarsByAccount(ctx, acc.ID)
 	require.NoError(t, err)
@@ -330,7 +325,7 @@ func TestIntegration_Calendar_MastersAndOverrides(t *testing.T) {
 	require.NoError(t, err)
 	require.Empty(t, orphans, "once linked it is no longer an orphan")
 
-	// Deleting the master takes its overrides with it: they only mean anything as holes in it.
+	// Deleting the master cascades to its overrides.
 	require.NoError(t, repo.DeleteEvent(ctx, master.ID))
 	count, err := repo.CountEvents(ctx, cal.ID)
 	require.NoError(t, err)
@@ -410,8 +405,7 @@ func TestIntegration_Calendar_PurgeOnlyTouchesStandaloneCancellations(t *testing
 		RecurringEventID: &seriesID, OriginalStartsAt: &slot,
 		StartsAt: slot, EndsAt: slot.Add(time.Hour),
 	})
-	// Age both rows past the retention window. The touch trigger has to be stood down for
-	// this: it exists precisely to stop updated_at being written by hand.
+	// Age both rows past retention; the touch trigger must be disabled to write updated_at.
 	_, err := pool.Exec(ctx, `
 		ALTER TABLE calendar_events DISABLE TRIGGER calendar_events_touch_updated_at;
 		UPDATE calendar_events SET updated_at = now() - interval '200 days';
@@ -446,8 +440,7 @@ func TestIntegration_Calendar_DeleteEventsForCalendarAndByGoogleID(t *testing.T)
 	require.NoError(t, err)
 	require.EqualValues(t, 2, count)
 
-	// Deleting one that is already gone is not an error: the sync learns of deletions it may
-	// have already applied.
+	// Deleting an already-deleted row is not an error.
 	require.NoError(t, repo.DeleteEventByGoogleID(ctx, cal.ID, "b"))
 
 	wiped, err := repo.DeleteEventsForCalendar(ctx, cal.ID)

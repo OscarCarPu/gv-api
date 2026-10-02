@@ -14,9 +14,6 @@ import (
 	"github.com/shopspring/decimal"
 )
 
-// CreatePlanBlockParams is a struct rather than positional args: it already grew past the
-// point where a wrong-order call is easy to make (event_ref/commitment_id are both *int32
-// -ish and sit right next to task_id).
 type CreatePlanBlockParams struct {
 	PlanDate     time.Time
 	StartedAt    time.Time
@@ -36,9 +33,8 @@ type Repository interface {
 	GetTaskName(ctx context.Context, taskID int32) (string, error)
 	HasOverlap(ctx context.Context, startedAt, endedAt time.Time, excludeID *int32) (bool, error)
 	Create(ctx context.Context, params CreatePlanBlockParams) (PlanBlockResponse, error)
-	// CreateGenerated inserts a commitment-generated block. created is false, with no error,
-	// when a concurrent request already generated the same (commitment_id, plan_date) occurrence
-	// — see plan_blocks_commitment_date_uidx.
+	// CreateGenerated inserts a commitment-generated block. created is false, with no error, when a
+	// concurrent request already generated it.
 	CreateGenerated(ctx context.Context, params CreatePlanBlockParams) (created bool, err error)
 	Update(ctx context.Context, req UpdatePlanBlockRequest) (PlanBlockResponse, error)
 	UpdateTimes(ctx context.Context, id int32, startedAt, endedAt time.Time) error
@@ -57,12 +53,10 @@ type Repository interface {
 	ListPlanBlockDatesByCommitment(ctx context.Context, commitmentID int32, from, to time.Time) (map[string]bool, error)
 	ListCommitmentSkips(ctx context.Context, commitmentID int32, from, to time.Time) (map[string]bool, error)
 	InsertCommitmentSkip(ctx context.Context, commitmentID int32, skipDate time.Time) error
-	// ApplyCommitmentSchedule brings the commitment's already-generated blocks from fromDate on
-	// in line with its current days and times: blocks on a weekday it no longer runs are
-	// deleted, the rest are moved to its start/end (wall-clock in timezone).
+	// ApplyCommitmentSchedule aligns the commitment's generated blocks from fromDate on with its current
+	// days and times: off-day blocks are deleted, the rest moved.
 	ApplyCommitmentSchedule(ctx context.Context, c RecurringCommitmentResponse, fromDate time.Time, timezone string) error
-	// DeleteFutureCommitmentBlocks removes the commitment's generated blocks that start at or
-	// after from.
+	// DeleteFutureCommitmentBlocks removes the commitment's generated blocks starting at or after from.
 	DeleteFutureCommitmentBlocks(ctx context.Context, commitmentID int32, from time.Time) error
 }
 
@@ -207,8 +201,7 @@ func (r *PostgresRepository) Create(ctx context.Context, params CreatePlanBlockP
 		return PlanBlockResponse{}, err
 	}
 
-	// Refetch via Get so the response carries the joined task_* fields, matching
-	// the shape of ListByDate.
+	// Refetch so the response carries the joined task_* fields.
 	return r.Get(ctx, row.ID)
 }
 
@@ -274,8 +267,7 @@ func (r *PostgresRepository) Update(ctx context.Context, req UpdatePlanBlockRequ
 		return PlanBlockResponse{}, err
 	}
 
-	// Refetch via Get so the response carries the joined task_* fields, matching
-	// the shape of ListByDate.
+	// Refetch so the response carries the joined task_* fields.
 	return r.Get(ctx, row.ID)
 }
 
@@ -301,8 +293,7 @@ func (r *PostgresRepository) DeleteEndingAfter(ctx context.Context, t time.Time)
 }
 
 func (r *PostgresRepository) SumBusyHoursByDate(ctx context.Context, from, to time.Time, timezone string) (map[string]decimal.Decimal, error) {
-	// SumBusyHoursByDate treats @to_date as the last day INCLUDED, not exclusive — see the
-	// query comment for why (an inline `- interval '1 day'` there breaks sqlc's rewriter).
+	// @to_date is inclusive; see the query comment.
 	rows, err := r.q.SumBusyHoursByDate(ctx, gvdb.SumBusyHoursByDateParams{
 		Timezone: timezone,
 		FromDate: from,

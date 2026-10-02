@@ -104,8 +104,6 @@ func transactionToDTO(t gvdb.Transaction) Transaction {
 	}
 }
 
-// --- Accounts ---
-
 func (r *PostgresRepository) GetAccount(ctx context.Context, id int32) (Account, error) {
 	row, err := r.q.GetAccount(ctx, id)
 	if err != nil {
@@ -161,8 +159,6 @@ func (r *PostgresRepository) DeleteAccount(ctx context.Context, id int32) error 
 	}
 	return nil
 }
-
-// --- Categories ---
 
 func (r *PostgresRepository) GetCategory(ctx context.Context, id int32) (Category, error) {
 	row, err := r.q.GetCategory(ctx, id)
@@ -237,8 +233,7 @@ func (r *PostgresRepository) DeleteCategory(ctx context.Context, id int32) error
 	return nil
 }
 
-// mapCategoryError handles the parent_id self-FK violation (parent doesn't exist)
-// and the parent_id != id CHECK violation.
+// mapCategoryError maps the parent_id FK and parent_id != id CHECK violations.
 func mapCategoryError(err error) error {
 	var pgErr *pgconn.PgError
 	if errors.As(err, &pgErr) {
@@ -251,8 +246,6 @@ func mapCategoryError(err error) error {
 	}
 	return err
 }
-
-// --- Transactions ---
 
 func (r *PostgresRepository) GetTransaction(ctx context.Context, id int32) (Transaction, error) {
 	row, err := r.q.GetTransaction(ctx, id)
@@ -341,8 +334,6 @@ func (r *PostgresRepository) DeleteTransaction(ctx context.Context, id int32) er
 	return nil
 }
 
-// --- Overview ---
-
 func (r *PostgresRepository) GetAccountsTotal(ctx context.Context) (decimal.Decimal, error) {
 	return r.q.GetAccountsTotal(ctx)
 }
@@ -376,9 +367,7 @@ func (r *PostgresRepository) ListRecentTransactions(ctx context.Context, since t
 	return out, nil
 }
 
-// mapTxError converts FK violations on transactions.account_id /
-// to_account_id / category_id (referenced row doesn't exist) into
-// ErrInvalidInput so the handler returns 400 instead of 500.
+// mapTxError maps FK violations on account/to_account/category into ErrInvalidInput (400).
 func mapTxError(err error) error {
 	var pgErr *pgconn.PgError
 	if errors.As(err, &pgErr) && pgErr.Code == "23503" {
@@ -386,8 +375,6 @@ func mapTxError(err error) error {
 	}
 	return err
 }
-
-// --- Stats ---
 
 func (r *PostgresRepository) GetNetWorthSeries(ctx context.Context, q NetWorthQuery) ([]NetWorthPoint, error) {
 	rows, err := r.q.GetNetWorthSeries(ctx, gvdb.GetNetWorthSeriesParams{
@@ -464,19 +451,14 @@ func (r *PostgresRepository) GetMonthlyStats(ctx context.Context, q MonthlyStats
 	return out, nil
 }
 
-// --- Budgets ---
-
-// dbMonth normalizes a month to midnight UTC on its first day, which is how a DATE column
-// round-trips through pgx.
+// dbMonth normalizes a month to midnight UTC on its first day, as a DATE column round-trips.
 func dbMonth(t time.Time) time.Time {
 	return time.Date(t.Year(), t.Month(), 1, 0, 0, 0, 0, time.UTC)
 }
 
-// SetBudget writes a budget change in one transaction. Rows are "effective from this period"
-// and each (category, period) is its own series:
-//   - scope=once restores the value that was in effect on the next period (unless that one
-//     already has its own row), so the change stays confined to this period;
-//   - scope=forward drops every later row, so this value carries on indefinitely.
+// SetBudget writes a budget change in one transaction. Rows are "effective from this period":
+//   - scope=once restores the next period's previous value, confining the change to this period;
+//   - scope=forward drops every later row.
 //
 // A nil Amount ends the budget. Redundant rows are collapsed afterwards.
 func (r *PostgresRepository) SetBudget(ctx context.Context, req SetBudgetRequest) error {

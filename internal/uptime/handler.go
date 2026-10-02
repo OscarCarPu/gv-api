@@ -26,8 +26,7 @@ func NewHandler(s ServiceInterface) *Handler {
 	return &Handler{service: s}
 }
 
-// RegisterRoutes mounts the uptime endpoints. Semiprivate: reading how long the lab has
-// been up gives nothing away, and it sits next to lights in the same section.
+// RegisterRoutes mounts the uptime endpoints under semiprivate auth.
 func (h *Handler) RegisterRoutes(r chi.Router) {
 	r.Get("/domotics/uptime", h.Overview)
 	r.Get("/domotics/uptime/windows", h.Windows)
@@ -89,8 +88,7 @@ func (h *Handler) Windows(w http.ResponseWriter, r *http.Request) {
 	response.JSON(w, http.StatusOK, report)
 }
 
-// writeError maps the one failure that is a deployment state rather than a bug: with no
-// pipeline database wired up there is nothing to read, and that is not a 500.
+// writeError answers 503 when no pipeline database is wired up.
 func (h *Handler) writeError(w http.ResponseWriter, r *http.Request, err error, message string) {
 	if errors.Is(err, ErrNotConfigured) {
 		response.Error(w, http.StatusServiceUnavailable, ErrNotConfigured.Error())
@@ -99,9 +97,7 @@ func (h *Handler) writeError(w http.ResponseWriter, r *http.Request, err error, 
 	response.InternalError(w, r, err, message)
 }
 
-// parseTimeParam accepts RFC 3339 or a plain date; an empty value leaves the default to
-// the service. A bare date is read as UTC midnight, which is what the pipeline's own
-// timestamps are in.
+// parseTimeParam accepts RFC 3339 or a plain date (UTC midnight); empty leaves the default.
 func parseTimeParam(raw, name string) (time.Time, error) {
 	if raw == "" {
 		return time.Time{}, nil

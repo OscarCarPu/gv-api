@@ -53,8 +53,7 @@ func NewHandler(s ServiceInterface) *Handler {
 	return &Handler{service: s}
 }
 
-// RegisterRoutes mounts all task endpoints (projects, tasks, todos and
-// time entries). Requires full auth.
+// RegisterRoutes mounts all task endpoints under full auth.
 func (h *Handler) RegisterRoutes(r chi.Router) {
 	r.Get("/tasks/tree", h.GetActiveTree)
 

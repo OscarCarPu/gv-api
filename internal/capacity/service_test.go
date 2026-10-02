@@ -51,8 +51,7 @@ func TestService_FreeBusyRange(t *testing.T) {
 		assert.True(t, got[0].FreeHours.IsZero())
 	})
 
-	// A task's due date is a legitimate source of `to`, and a due date in the past puts it before
-	// `from`. That used to size a slice with a negative capacity and panic the request.
+	// A past due date puts `to` before `from`; this used to panic.
 	t.Run("a reversed or empty range has no days and does not panic", func(t *testing.T) {
 		busy := &stubBusy{}
 		svc := capacity.NewService(daily, busy)

@@ -33,10 +33,8 @@ func NewService(repo Repository, loc *time.Location) *Service {
 	return &Service{repo: repo, location: loc}
 }
 
-// SetUrgencyProviders wires the dependencies GetTasksByDueDate needs to compute urgency.
-// A setter rather than a constructor argument because plan.Service itself depends on
-// tasks.Service (for the time-entry budget summary) — constructing both the normal way would
-// require each to exist before the other does.
+// SetUrgencyProviders wires urgency's dependencies. A setter because plan.Service depends on
+// tasks.Service.
 func (s *Service) SetUrgencyProviders(capacity capacityProvider, plan plannedHoursProvider) {
 	s.capacity = capacity
 	s.plan = plan
@@ -167,7 +165,6 @@ func (s *Service) GetActiveTree(ctx context.Context, minPriority *int32) ([]Acti
 		return nil, err
 	}
 
-	// Build project nodes indexed by ID
 	projectNodes := make(map[int32]*ActiveTreeNode, len(projects))
 	for _, p := range projects {
 		projectNodes[p.ID] = &ActiveTreeNode{
@@ -179,7 +176,6 @@ func (s *Service) GetActiveTree(ctx context.Context, minPriority *int32) ([]Acti
 		}
 	}
 
-	// Group tasks by project ID
 	projectTasks := make(map[int32][]ActiveTreeNode)
 	var orphanTasks []ActiveTreeNode
 
@@ -205,20 +201,17 @@ func (s *Service) GetActiveTree(ctx context.Context, minPriority *int32) ([]Acti
 			if _, ok := projectNodes[*t.ProjectID]; ok {
 				projectTasks[*t.ProjectID] = append(projectTasks[*t.ProjectID], node)
 			}
-			// project not active — skip task
 			continue
 		}
 		orphanTasks = append(orphanTasks, node)
 	}
 
-	// Attach tasks to each project node (SQL already orders: en progreso → continua → recurrente → pendiente)
+	// SQL already orders: en progreso → continua → recurrente → pendiente.
 	for id, node := range projectNodes {
 		node.Children = append(node.Children, projectTasks[id]...)
 	}
 
-	// Compute depth for each project so we attach deepest children first.
-	// This ensures that when a project is copied into its parent, all its
-	// own children are already attached.
+	// Attach deepest projects first so each is complete before it is copied into its parent.
 	depthOf := make(map[int32]int, len(projects))
 	parentOf := make(map[int32]*int32, len(projects))
 	for _, p := range projects {
@@ -246,14 +239,12 @@ func (s *Service) GetActiveTree(ctx context.Context, minPriority *int32) ([]Acti
 		getDepth(p.ID)
 	}
 
-	// Sort projects by depth descending so deepest nest first
 	sorted := make([]ActiveProject, len(projects))
 	copy(sorted, projects)
 	sort.Slice(sorted, func(i, j int) bool {
 		return depthOf[sorted[i].ID] > depthOf[sorted[j].ID]
 	})
 
-	// Attach child projects to parent projects (sub-projects first, before tasks)
 	childProjectIDs := make(map[int32]bool)
 	for _, p := range sorted {
 		if p.ParentID != nil {
@@ -264,7 +255,6 @@ func (s *Service) GetActiveTree(ctx context.Context, minPriority *int32) ([]Acti
 		}
 	}
 
-	// Build root: projects that aren't children, then orphan tasks
 	var root []ActiveTreeNode
 	for _, p := range projects {
 		if !childProjectIDs[p.ID] {
@@ -301,8 +291,7 @@ func (s *Service) GetTasksByDueDate(ctx context.Context, minPriority *int32) ([]
 	if err != nil {
 		return nil, err
 	}
-	// Urgency runs over the unfiltered set: a task below the priority threshold can still sit at
-	// the end of a dependency chain whose visible head has to start early.
+	// Run urgency over the unfiltered set: a hidden low-priority task can still head a chain.
 	priority := chainPriorities(rows)
 	if err := s.applyUrgency(ctx, rows, priority); err != nil {
 		return nil, err
@@ -324,10 +313,8 @@ func (s *Service) today() time.Time {
 	return time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, s.location)
 }
 
-// localDay re-anchors a stored date's calendar day to s.location's midnight. due_at is stored
-// as a conceptual date (midnight UTC), not a real moment; comparing it as-is against "today"
-// (already midnight in s.location) mixes two different offsets for the same calendar day and
-// puts the day boundary in the wrong place by exactly that offset.
+// localDay re-anchors a stored date (midnight UTC) to midnight in s.location so it compares
+// correctly against "today".
 func (s *Service) localDay(d time.Time) time.Time {
 	return time.Date(d.Year(), d.Month(), d.Day(), 0, 0, 0, 0, s.location)
 }
@@ -348,10 +335,8 @@ func (s *Service) normalizedDue(t TaskByDueDateResponse) *time.Time {
 	return &norm
 }
 
-// chainPriorities returns each row's priority as seen by urgency: its own, raised to the highest
-// priority (lowest number) of anything it transitively blocks. Preparing for a p2 exam is p2
-// work even if each study task was left at the default — otherwise it loses the shared hours to
-// unrelated p3 tasks and disappears under a min_priority filter while the exam stays visible.
+// chainPriorities returns each row's own priority raised to the highest (lowest number) of
+// anything it transitively blocks.
 func chainPriorities(rows []TaskByDueDateResponse) []int32 {
 	idxByID := make(map[int32]int, len(rows))
 	for i, t := range rows {
@@ -362,7 +347,7 @@ func chainPriorities(rows []TaskByDueDateResponse) []int32 {
 	var visit func(i int) int32
 	visit = func(i int) int32 {
 		if state[i] != 0 {
-			// state 1 is a cycle (rejected on write); the partial value is as good as any.
+			// A cycle (rejected on write); the partial value will do.
 			return prio[i]
 		}
 		state[i] = 1
@@ -383,10 +368,8 @@ func chainPriorities(rows []TaskByDueDateResponse) []int32 {
 	return prio
 }
 
-// Nothing is planned far ahead, so a future day would otherwise read as the whole daily
-// capacity free for deadline work. Everything not predicted — the next cycles of recurring
-// tasks, errands, days that go worse than planned — is absorbed by capping each day's free
-// hours at capacity minus half an hour per day from today, never below urgencyFloorHours.
+// Future days are capped at capacity minus half an hour per day from today, never below
+// urgencyFloorHours, to absorb everything not planned yet.
 var (
 	urgencyDecayPerDay = decimal.RequireFromString("0.5")
 	urgencyFloorHours  = decimal.NewFromInt(6)
@@ -396,16 +379,11 @@ func urgencyDayCap(capacityHours decimal.Decimal, daysFromToday int) decimal.Dec
 	return decimal.Max(capacityHours.Sub(urgencyDecayPerDay.Mul(decimal.NewFromInt(int64(daysFromToday)))), urgencyFloorHours)
 }
 
-// applyUrgency fills RemainingHours/StartBy/Urgent on standard tasks that carry an estimate: the
-// latest day each can start so that everything still finishes by its deadline. Other tasks get
-// nothing themselves but still pass their deadline through a dependency chain. Recurring tasks
-// are left out on purpose: a weekly chore is done on the day it falls due, not started days
-// ahead, and its future cycles are already absorbed by urgencyDayCap — back-filling it would
-// only drag it to "start today" again right after every renewal.
+// applyUrgency fills RemainingHours/StartBy/Urgent on standard tasks with an estimate: the latest
+// day each can start and still finish by its deadline. Recurring tasks are left out.
 //
-// Tasks are back-filled from the end of each dependency chain: a task's last usable day is the
-// day before its own due date, or the start_by of any task it blocks, whichever is earlier — so
-// in A → B → C, A has to fit A+B+C's hours before C's deadline, not just its own.
+// Tasks are back-filled from the end of each dependency chain: in A → B → C, A has to fit
+// A+B+C's hours before C's deadline.
 func (s *Service) applyUrgency(ctx context.Context, rows []TaskByDueDateResponse, priority []int32) error {
 	if s.capacity == nil || s.plan == nil {
 		return nil
@@ -431,9 +409,7 @@ func (s *Service) applyUrgency(ctx context.Context, rows []TaskByDueDateResponse
 		return nil
 	}
 
-	// The backward fill below only spends days in [today, due), so when every task is already
-	// due (or overdue) there is no free capacity to look up — those tasks are urgent by
-	// definition and start_by is today. Asking anyway would hand FreeBusyRange a reversed range.
+	// Every task already due: urgent, start today, and FreeBusyRange would get a reversed range.
 	var series []capacity.DayFreeBusy
 	if maxDue.After(today) {
 		var err error
@@ -452,8 +428,7 @@ func (s *Service) applyUrgency(ctx context.Context, rows []TaskByDueDateResponse
 		return err
 	}
 
-	// Dependency graph over the tasks in this set. A dependent that is finished or not in the
-	// set places no constraint.
+	// Finished or out-of-set dependents place no constraint.
 	idxByID := make(map[int32]int, len(rows))
 	for i, t := range rows {
 		if s.normalizedDue(t) != nil {
@@ -469,12 +444,9 @@ func (s *Service) applyUrgency(ctx context.Context, rows []TaskByDueDateResponse
 		}
 	}
 
-	// chainStart[i] is the day task i's own work begins; it caps the last usable day of every
-	// task i depends on.
+	// chainStart[i] is the day task i's work begins; it caps its dependencies' last day.
 	chainStart := make(map[int]time.Time, len(idxByID))
-	// finishBy is the task's deadline in due-date terms. lastDay is the last day it may still be
-	// worked on: the day before its own due date, but the very day a dependent starts — both can
-	// share that day's hours, this one first.
+	// lastDay is the day before the due date, or the day a dependent starts (sharing its hours).
 	finishBy := func(i int) time.Time {
 		finish := *s.normalizedDue(rows[i])
 		for _, b := range rows[i].Blocks {
@@ -499,13 +471,9 @@ func (s *Service) applyUrgency(ctx context.Context, rows []TaskByDueDateResponse
 		remaining[i] = true
 	}
 	for len(remaining) > 0 {
-		// Every hour comes out of the same freeByDate pool, so the claim order matters. Work is
-		// done p1 first, then p2 and so on, each by what falls due soonest; filling backwards,
-		// that order is reversed: among the tasks whose dependents are all placed, the lowest
-		// priority and latest deadline claim first, as late as they can, and the most important,
-		// soonest-due work lands closest to today. With more hours due than free, what turns
-		// urgent is therefore the high-priority work. Cycles are rejected on write; if one slipped
-		// through, its members are placed ignoring the edges.
+		// Filling backwards reverses the work order (priority, then soonest deadline): the lowest
+		// priority, latest deadline claims first so the most important work lands closest to today.
+		// Members of a cycle that slipped through are placed ignoring the edges.
 		pick, pickLast := -1, time.Time{}
 		for _, readyOnly := range []bool{true, false} {
 			for i := range remaining {
@@ -521,7 +489,7 @@ func (s *Service) applyUrgency(ctx context.Context, rows []TaskByDueDateResponse
 				break
 			}
 		}
-		// Claims run in reverse of the work order, so the last task placed is the first to do.
+		// Claims run in reverse, so the last task placed is the first to do.
 		workOrder := int32(len(remaining))
 		rows[pick].WorkOrder = &workOrder
 		delete(remaining, pick)
@@ -580,9 +548,7 @@ func isEstimated(t TaskByDueDateResponse) bool {
 	return t.TaskType == "standard" && t.EstimateHours != nil
 }
 
-// betterClaim orders the tasks competing for the shared hours, in reverse of the order they are
-// worked on (priority, then soonest deadline): lower (chain) priority claims first, then the
-// later last usable day. ID keeps the result independent of map iteration order.
+// betterClaim orders claims: lower (chain) priority first, then later last day, then ID.
 func betterClaim(aPrio int32, aLast time.Time, aID int32, bPrio int32, bLast time.Time, bID int32) bool {
 	if aPrio != bPrio {
 		return aPrio > bPrio
@@ -601,7 +567,6 @@ func (s *Service) GetTimeEntrySummary(ctx context.Context) (TimeEntrySummaryResp
 	now := time.Now().In(s.location)
 	todayStart := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, s.location)
 
-	// Find last Monday at 00:00
 	weekday := now.Weekday()
 	daysSinceMonday := (int(weekday) + 6) % 7 // Monday=0, Sunday=6
 	weekStart := time.Date(now.Year(), now.Month(), now.Day()-daysSinceMonday, 0, 0, 0, 0, s.location)

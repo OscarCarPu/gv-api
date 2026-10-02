@@ -33,8 +33,6 @@ func iso(s string) time.Time {
 	return t
 }
 
-// --- streak SQL function: behavior parity with the former Go logic ---
-
 func TestIntegration_RecalculateStreak(t *testing.T) {
 	t.Run("daily chain", func(t *testing.T) {
 		ctx := context.Background()
@@ -175,7 +173,6 @@ func TestIntegration_RecalculateStreak(t *testing.T) {
 		h, err := repo.CreateHabit(ctx, "h", nil, "daily", ptr(float32(1)), nil, true)
 		require.NoError(t, err)
 
-		// Seed a longest_streak directly that the recompute should overwrite.
 		_, err = pool.Exec(ctx, "UPDATE habits SET longest_streak = 99 WHERE id = $1", h.ID)
 		require.NoError(t, err)
 
@@ -207,8 +204,6 @@ func TestIntegration_RecalculateStreak(t *testing.T) {
 		require.Equal(t, int32(1), ls)
 	})
 }
-
-// --- GetHabitsWithLogs: live streak for target_max = 0 habits ---
 
 func TestIntegration_GetHabitsWithLogs_ZeroMaxStreak(t *testing.T) {
 	// habitRow finds a habit's row in a GetHabitsWithLogs result by ID.
@@ -269,8 +264,7 @@ func TestIntegration_GetHabitsWithLogs_ZeroMaxStreak(t *testing.T) {
 		today = time.Date(today.Year(), today.Month(), today.Day(), 0, 0, 0, 0, time.UTC)
 		tomorrow := today.AddDate(0, 0, 1)
 
-		// Simulates service.GetDailyView capping streakToday to the real
-		// today even when the caller is browsing a future view date.
+		// As service.GetDailyView does: streakToday capped to the real today.
 		rows, err := repo.GetHabitsWithLogs(ctx, tomorrow, today)
 		require.NoError(t, err)
 		row := habitRow(t, rows, h.ID)
@@ -284,9 +278,7 @@ func TestIntegration_GetHabitsWithLogs_ZeroMaxStreak(t *testing.T) {
 		h, err := repo.CreateHabit(ctx, "workout", nil, "daily", ptr(float32(1)), nil, true)
 		require.NoError(t, err)
 
-		// No logs at all: the persisted columns stay at their CreateHabit
-		// defaults (0, 0) — GetHabitsWithLogs must not touch them via the
-		// live join, since target_max != 0.
+		// No logs: the persisted columns keep their defaults (0, 0), since target_max != 0.
 		_, err = pool.Exec(ctx, "UPDATE habits SET current_streak = 7, longest_streak = 9 WHERE id = $1", h.ID)
 		require.NoError(t, err)
 
@@ -381,7 +373,6 @@ func TestIntegration_UpdateHabit_RoundTrip(t *testing.T) {
 	require.Equal(t, &tmax, updated.TargetMax)
 	require.False(t, updated.RecordingRequired)
 
-	// Verify persisted
 	var name, freq string
 	err = pool.QueryRow(ctx, "SELECT name, frequency FROM habits WHERE id = $1", h.ID).Scan(&name, &freq)
 	require.NoError(t, err)

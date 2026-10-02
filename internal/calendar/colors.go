@@ -52,8 +52,7 @@ func assignColors(views []CalendarView) {
 	}
 }
 
-// paletteAt is the colour a calendar in the given position gets. Exported for the tests, which
-// assert the assignment rather than restating the palette.
+// paletteAt is the colour a calendar in the given position gets.
 func paletteAt(position int) string {
 	return calendarPalette[position%len(calendarPalette)]
 }

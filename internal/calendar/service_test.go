@@ -14,8 +14,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// A fixed key: these tests care that tokens survive a round trip through the cipher, not
-// which key was used.
+// A fixed key for the token cipher.
 const testTokenKey = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
 
 const (
@@ -75,8 +74,7 @@ func newHarness(t *testing.T) *harness {
 	return &harness{svc: svc, repo: repo, gc: gc, loc: loc, planSync: planSync}
 }
 
-// connect runs the real consent flow against the fake, so every test starts from the state a
-// user would actually be in.
+// connect runs the real consent flow against the fake.
 func (h *harness) connect(t *testing.T, email string, calendars ...google.CalendarListEntry) {
 	t.Helper()
 	code := h.gc.AddAccount(email, calendars...)
@@ -119,11 +117,10 @@ func timedEvent(id, summary string, start, end time.Time) google.Event {
 	}
 }
 
-// --- connecting ----------------------------------------------------------------------
-
 func TestService_Connect_StoresGrantAndImportsCalendars(t *testing.T) {
 	h := newHarness(t)
-	h.connect(t, "me@example.com",
+	h.connect(
+		t, "me@example.com",
 		writableEntry(primaryCal, "Personal"),
 		readerEntry(readOnlyCal, "Shared"),
 		readerEntry(holidayCal, "Holidays in Spain"),
@@ -153,8 +150,7 @@ func TestService_Connect_StoresGrantAndImportsCalendars(t *testing.T) {
 
 func TestService_Connect_RefusesWhenGoogleReturnsNoRefreshToken(t *testing.T) {
 	h := newHarness(t)
-	// A consent that hands back no refresh token is useless in an hour; it must not be stored
-	// as if it had worked.
+	// A consent without a refresh token must not be stored.
 	h.gc.AddAccount("me@example.com", writableEntry(primaryCal, "Personal"))
 	out, err := h.svc.AuthURL(context.Background())
 	require.NoError(t, err)
@@ -173,13 +169,13 @@ func TestService_AuthURL_StateOutlivesAMultiAccountSitting(t *testing.T) {
 	require.NoError(t, err)
 	state := mustState(t, out.URL)
 
-	// The same URL has to still work a while later: it is used once per account, by hand.
+	// The URL still works a while later.
 	code := h.gc.AddAccount("me@example.com", writableEntry(primaryCal, "Personal"))
 	h.svc.SetNow(func() time.Time { return time.Now().Add(25 * time.Minute) })
 	_, err = h.svc.HandleCallback(context.Background(), code, state)
 	require.NoError(t, err)
 
-	// Past the window it is refused, so a link left lying around does not stay usable.
+	// Past the window it is refused.
 	h.svc.SetNow(func() time.Time { return time.Now().Add(31 * time.Minute) })
 	_, err = h.svc.HandleCallback(context.Background(), code, state)
 	require.ErrorIs(t, err, calendar.ErrInvalidState)
@@ -199,7 +195,7 @@ func TestService_NotConfigured_StillAnswers(t *testing.T) {
 	require.NoError(t, err)
 	require.False(t, svc.Configured())
 
-	// Reads work and are empty; anything needing Google says so instead of failing obscurely.
+	// Reads work and are empty; anything needing Google says so.
 	events, err := svc.ListEvents(context.Background(), calendar.EventsQuery{
 		From: time.Now(), To: time.Now().Add(time.Hour),
 	})
@@ -225,8 +221,6 @@ func mustState(t *testing.T, authURL string) string {
 	require.NoError(t, err)
 	return parsed.Query().Get("state")
 }
-
-// --- syncing -------------------------------------------------------------------------
 
 func TestService_Sync_FullThenIncremental(t *testing.T) {
 	ctx := context.Background()
@@ -320,8 +314,7 @@ func TestService_Sync_InvalidGrantParksTheAccount(t *testing.T) {
 	_, err := h.svc.SyncAll(ctx, "manual")
 	require.NoError(t, err)
 
-	// Expire the cached access token so the next pass has to refresh, and make the refresh
-	// fail the way a revoked grant does.
+	// Expire the access token and make the refresh fail like a revoked grant.
 	require.NoError(t, h.repo.UpdateAccountAccessToken(ctx, 1, nil, time.Now().Add(-time.Hour)))
 	h.gc.SetInvalidGrant("me@example.com", true)
 
@@ -333,7 +326,7 @@ func TestService_Sync_InvalidGrantParksTheAccount(t *testing.T) {
 	require.Equal(t, "needs_reauth", accounts[0].Status)
 	require.NotNil(t, accounts[0].LastSyncError)
 
-	// A parked account is skipped rather than retried into the ground.
+	// A parked account is skipped.
 	res, err := h.svc.SyncAll(ctx, "poll")
 	require.NoError(t, err)
 	require.Len(t, res.Errors, 1)
@@ -389,8 +382,6 @@ func TestService_DisablingACalendarDropsItsEventsAndChannel(t *testing.T) {
 	require.False(t, cal.Sync.WatchActive)
 	require.Empty(t, h.gc.Channels(), "the push channel is stopped, not left running")
 }
-
-// --- recurring series ----------------------------------------------------------------
 
 func TestService_Sync_CancelledOccurrenceSurvivesAsAHole(t *testing.T) {
 	ctx := context.Background()
@@ -499,7 +490,7 @@ func TestService_ListEvents_AllDayAndRangeEdges(t *testing.T) {
 	require.True(t, events[0].AllDay)
 	require.Equal(t, madrid(t, 2026, 8, 20, 0, 0).UTC(), events[0].StartsAt.UTC())
 
-	// The day after it ends is outside: Google's end date is exclusive and so is ours.
+	// Google's end date is exclusive and so is ours.
 	events, err = h.svc.ListEvents(ctx, calendar.EventsQuery{
 		From: madrid(t, 2026, 8, 23, 0, 0), To: madrid(t, 2026, 8, 24, 0, 0),
 	})
@@ -553,8 +544,6 @@ func TestService_ListEvents_FiltersByCalendarAndVisibility(t *testing.T) {
 	require.Len(t, shown, 1, "a hidden calendar drops out of a visible-only query")
 }
 
-// --- push notifications --------------------------------------------------------------
-
 func TestService_EnsureWatches_CreatesAndRenews(t *testing.T) {
 	ctx := context.Background()
 	h := newHarness(t)
@@ -573,8 +562,7 @@ func TestService_EnsureWatches_CreatesAndRenews(t *testing.T) {
 	require.Len(t, h.gc.Channels(), 1)
 	require.Equal(t, 1, h.gc.CallCount("Watch"))
 
-	// Push the expiry inside the renewal window: a replacement is created and the old one is
-	// stopped, because a channel cannot be renewed in place.
+	// Inside the renewal window the channel is replaced, since it cannot be renewed in place.
 	soon := time.Now().Add(time.Hour)
 	require.NoError(t, h.repo.SetCalendarWatch(ctx, 1, calendar.WatchInfo{
 		ChannelID: firstID, ResourceID: "res-x", Token: "tok", ExpiresAt: soon,
@@ -620,8 +608,6 @@ func TestService_Webhook_QueuesOnlyValidNotifications(t *testing.T) {
 	require.ErrorIs(t, err, calendar.ErrNotFound)
 	require.Empty(t, h.svc.Changes())
 }
-
-// --- disconnecting -------------------------------------------------------------------
 
 func TestService_DeleteAccount_RevokesStopsAndCleansUp(t *testing.T) {
 	ctx := context.Background()
@@ -714,8 +700,7 @@ func TestService_Sync_ConcurrentPassesDoNotOverlap(t *testing.T) {
 	for i := 0; i < 4; i++ {
 		require.NoError(t, <-done)
 	}
-	// Whatever the interleaving, the calendar ends up with exactly one usable cursor and no
-	// error: a second caller finding the lock taken is a no-op, not a failure.
+	// Whatever the interleaving: one usable cursor and no error.
 	cal, err := h.repo.GetCalendar(ctx, 1)
 	require.NoError(t, err)
 	require.NotNil(t, cal.SyncToken)
@@ -779,7 +764,7 @@ func TestService_StreamDoesNotBlockOnASlowClient(t *testing.T) {
 	h := newHarness(t)
 	_, unsubscribe := h.svc.Subscribe()
 	defer unsubscribe()
-	// Far more messages than the subscriber buffer holds: publishing must not block.
+	// More messages than the subscriber buffer holds: publishing must not block.
 	done := make(chan struct{})
 	go func() {
 		for i := 0; i < 1000; i++ {
@@ -804,13 +789,10 @@ func TestService_ConnectedAccountEmailIsTrimmedIntoTheRedirect(t *testing.T) {
 	require.True(t, strings.Contains(out.URL, "access_type=offline"))
 }
 
-// --- colours -------------------------------------------------------------------------
-
 func TestService_Colors_AreAssignedNotTakenFromGoogle(t *testing.T) {
 	ctx := context.Background()
 	h := newHarness(t)
-	// Google hands back the same pale cyan for every primary calendar and the same green for
-	// every holiday one, which is the whole reason gv assigns its own.
+	// Google gives every primary calendar the same cyan and every holiday one the same green.
 	googleCyan := google.CalendarListEntry{
 		ID: primaryCal, Summary: "Personal", TimeZone: "Europe/Madrid",
 		AccessRole: "owner", Primary: true, BackgroundColor: "#9fe1e7",
@@ -899,14 +881,13 @@ func TestService_Colors_EventsMatchTheirCalendar(t *testing.T) {
 	require.NotEqual(t, events[0].Color, events[1].Color)
 }
 
-// --- all-day events are dates ---------------------------------------------------------
-
 func TestService_AllDayEventsCarryTheirDates(t *testing.T) {
 	ctx := context.Background()
 	h := newHarness(t)
-	// Calendars do not agree on a zone: Google reports some as UTC and some as the local one.
-	// Both have to place their all-day events on the same days a person sees in Google.
-	h.connect(t, "me@example.com",
+	// Google reports some calendars as UTC and some as local; both must place all-day events on
+	// the same days.
+	h.connect(
+		t, "me@example.com",
 		google.CalendarListEntry{ID: primaryCal, Summary: "Madrid", TimeZone: "Europe/Madrid", AccessRole: "owner", Primary: true},
 		google.CalendarListEntry{ID: "utc@x", Summary: "UTC", TimeZone: "UTC", AccessRole: "owner"},
 	)

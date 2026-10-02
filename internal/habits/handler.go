@@ -4,8 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"gv-api/internal/history"
 	"net/http"
+
+	"gv-api/internal/history"
 
 	"gv-api/internal/httputil"
 	"gv-api/internal/response"
@@ -40,8 +41,7 @@ func (h *Handler) RegisterRoutes(r chi.Router) {
 	r.Get("/habits/{id}/history", h.GetHistory)
 }
 
-// validateHabitFields covers the checks shared by CreateHabit and UpdateHabit.
-// frequency may be nil (create allows omitting it); returns "" when valid.
+// validateHabitFields covers the checks shared by CreateHabit and UpdateHabit; frequency may be nil.
 func validateHabitFields(name string, frequency *string, targetMin, targetMax *float32) string {
 	if name == "" {
 		return "name is required"

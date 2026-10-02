@@ -5,13 +5,9 @@ import (
 	"time"
 )
 
-// EnsureRecurringBlocks materializes, for each active commitment, a real plan_block in
-// [from, to) for every date whose weekday is in days_of_week — unless a row already exists for
-// that (commitment, date) or the date is in recurring_commitment_skips. Idempotent: safe (and
-// meant) to call on every range read, no background worker needed. The existing-rows check
-// above is a plain read, so two range reads covering the same date can both pass it before
-// either commits — CreateGenerated relies on a unique index for the actual guarantee, silently
-// skipping when a concurrent call already generated that occurrence.
+// EnsureRecurringBlocks materializes a plan_block in [from, to) for each active commitment on every
+// matching weekday, unless one exists or the date is skipped. Idempotent and called on every range
+// read; a unique index makes concurrent calls safe.
 func (s *Service) EnsureRecurringBlocks(ctx context.Context, from, to time.Time) error {
 	commitments, err := s.repo.ListActiveCommitments(ctx)
 	if err != nil {

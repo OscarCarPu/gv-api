@@ -1,21 +1,8 @@
-// Package pipeline is gv-api's read-only side of central-pipeline.
+// Package pipeline is gv-api's read-only connection to central-pipeline's dbt marts, shared by
+// every domain that reads one.
 //
-// central-pipeline collects what the devices around the house publish over MQTT and models
-// it with dbt into marts in its own PostgreSQL instance. Any gv-api domain reading one of
-// those marts — uptime today, whatever the next device turns out to be — goes through the
-// single connection here rather than opening its own.
-//
-// It is deliberately not gv's database and deliberately not gv's schema:
-//
-//   - Separate DSN and separate pool. The two servers are different servers, on different
-//     ports, and the pipeline stack is allowed to be down while gv-api runs.
-//   - Read-only on the connection itself, not only by grant. dbt owns these relations;
-//     nothing on this side may write to them.
-//   - No migrations, no views, no long-lived prepared statements built on top. Every dbt
-//     run drops and recreates the marts, which is also why reads retry instead of
-//     surfacing the moment a relation was missing.
-//   - Unset DSN is a normal state, not a failure: reads report ErrNotConfigured and the
-//     domain answers 503 while the rest of the app is unaffected.
+// It has its own DSN and pool, is read-only on the connection itself, and runs no migrations.
+// An unset DSN is normal: reads report ErrNotConfigured and the domain answers 503.
 package pipeline
 
 import (
@@ -31,28 +18,22 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-// ErrNotConfigured means no pipeline database is wired up. Domains reading a mart should
-// let it through so their handler can answer 503: it is a deployment state, not a fault.
+// ErrNotConfigured means no pipeline database is wired up; handlers answer 503.
 var ErrNotConfigured = errors.New("pipeline database not configured")
 
-// DB is the shared connection to central-pipeline. A zero DB is the not-configured one and
-// is safe to use: every read reports ErrNotConfigured.
+// DB is the shared connection to central-pipeline. The zero DB is unconfigured and safe to use.
 type DB struct {
 	pool *pgxpool.Pool
 }
 
-// Connect opens the pool. An empty DSN returns a usable, unconfigured DB rather than an
-// error, so wiring does not have to branch. Connectivity is not verified: the pipeline is a
-// separate stack that may well be down when this one starts, and the pool reconnects on its
-// own once it is back.
+// Connect opens the pool. An empty DSN returns an unconfigured DB. Connectivity is not verified;
+// the pool reconnects once the pipeline is up.
 func Connect(ctx context.Context, dsn string) (*DB, error) {
 	if dsn == "" {
 		slog.Warn("PIPELINE_DATABASE_URL not set: pipeline-backed endpoints will answer 503")
 		return &DB{}, nil
 	}
 	pool, err := database.NewWithOptions(ctx, dsn, database.Options{
-		// A handful of connections is plenty for dashboard reads, and none are kept warm
-		// against a database that is allowed to be absent.
 		MaxConns: 5,
 		MinConns: 0,
 		ReadOnly: true,
@@ -63,12 +44,10 @@ func Connect(ctx context.Context, dsn string) (*DB, error) {
 	return &DB{pool: pool}, nil
 }
 
-// FromPool wraps an existing pool. For tests, and for anything that already holds one.
 func FromPool(pool *pgxpool.Pool) *DB {
 	return &DB{pool: pool}
 }
 
-// Configured says whether there is a database behind this DB at all.
 func (db *DB) Configured() bool {
 	return db != nil && db.pool != nil
 }
@@ -79,9 +58,7 @@ func (db *DB) Close() {
 	}
 }
 
-// Collect runs a query and scans every row with scan. It is the only way domains read from
-// here, so the retry below covers all of them at once. Returns an empty slice, never nil,
-// so a JSON response carries `[]` rather than `null`.
+// Collect runs a query and scans every row. Returns an empty slice, never nil.
 func Collect[T any](ctx context.Context, db *DB, scan func(pgx.Rows) (T, error), sql string, args ...any) ([]T, error) {
 	if !db.Configured() {
 		return nil, ErrNotConfigured
@@ -105,15 +82,13 @@ func Collect[T any](ctx context.Context, db *DB, scan func(pgx.Rows) (T, error),
 	})
 }
 
-// A dbt run drops and recreates the marts, so a read can land in the gap where a relation
-// does not exist. That window is milliseconds; retrying beats surfacing a 500 for it.
+// A dbt run drops and recreates the marts, so a read can briefly hit a missing relation.
 const (
 	rebuildRetries = 2
 	rebuildBackoff = 200 * time.Millisecond
 )
 
-// retryRebuild runs fn again while the error looks like a relation being swapped under it.
-// Anything else is returned as it is.
+// retryRebuild retries fn while the error looks like a relation being swapped under it.
 func retryRebuild[T any](ctx context.Context, fn func(context.Context) (T, error)) (T, error) {
 	var (
 		out T
@@ -148,10 +123,8 @@ func isRebuildError(err error) bool {
 	return false
 }
 
-// IsStale reports whether a mart's computed-at marker is too old to present as current.
-// Every mart carries the dbt run time rather than now(), and dbt is a batch job, so this is
-// the question each pipeline-backed domain has to answer. Nothing computed yet counts as
-// stale: there is no run to call fresh.
+// IsStale reports whether a mart's computed-at marker is too old to present as current. Nothing
+// computed yet counts as stale.
 func IsStale(computedAt *time.Time, after time.Duration) bool {
 	return computedAt == nil || time.Since(*computedAt) > after
 }

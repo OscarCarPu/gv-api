@@ -34,10 +34,8 @@ func CalcDailyTargetSeconds(now time.Time, weekSeconds, todaySeconds int64) int6
 	return pace.WeightedTodayShareSeconds
 }
 
-// CalcPace computes the day's goal as a full-day allocation. The daily target
-// depends only on prior days' logged time and today's full waking hours — not
-// on the current clock or on seconds already logged today — so it represents
-// "the day's goal", not "what's left to do today".
+// CalcPace computes the day's goal from prior days' logged time and today's waking hours,
+// independent of the current clock.
 func CalcPace(now time.Time, weekSeconds, todaySeconds int64) PaceBreakdown {
 	if weekSeconds >= WeeklyTaskTargetSeconds {
 		return PaceBreakdown{GoalReached: true}

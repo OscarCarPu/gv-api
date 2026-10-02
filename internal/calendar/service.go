@@ -19,16 +19,12 @@ import (
 	"gv-api/internal/calendar/google"
 )
 
-// Config is everything the calendar service needs from the environment.
 type Config struct {
-	// ClientID/ClientSecret empty means the domain runs read-only-and-empty: it mounts, it
-	// answers, and every connect or sync attempt says it is not configured. The API must
-	// still boot without Google credentials, the same way it boots without a Bluetooth radio.
+	// Empty ClientID/ClientSecret leaves the domain mounted but unable to connect or sync.
 	ClientID     string
 	ClientSecret string
 	RedirectURL  string
-	// WebAppURL is where the OAuth callback sends the browser back to. The callback lands on
-	// the API host (that is what Google was given), but the user is looking at gv-web.
+	// WebAppURL is where the OAuth callback sends the browser back to (gv-web).
 	WebAppURL string
 
 	WebhookEnabled   bool
@@ -37,22 +33,19 @@ type Config struct {
 	WatchRenewBefore time.Duration
 	SyncInterval     time.Duration
 	Debounce         time.Duration
-	// StateSecret signs the OAuth state parameter. Reusing JWT_SECRET is deliberate: it is
-	// already the app's "this came from us" key.
-	StateSecret []byte
-	TokenKey    string
-	// CancelledRetention is how long a cancelled one-off event is kept before being purged.
+	// StateSecret signs the OAuth state parameter (JWT_SECRET).
+	StateSecret        []byte
+	TokenKey           string
 	CancelledRetention time.Duration
 }
 
-// planBlockSyncer keeps a plan_block that hangs off a calendar event in step with it. Both
-// methods are no-ops if no plan_block links to that event_ref.
+// planBlockSyncer keeps a plan_block linked to a calendar event in step with it. Both methods
+// are no-ops if nothing links to that event_ref.
 type planBlockSyncer interface {
 	SyncEventTime(ctx context.Context, eventRef string, startsAt, endsAt time.Time) error
 	DetachEvent(ctx context.Context, eventRef string) error
 }
 
-// Service holds the calendar domain's rules.
 type Service struct {
 	repo     Repository
 	gc       google.Client
@@ -62,13 +55,10 @@ type Service struct {
 	loc      *time.Location
 	planSync planBlockSyncer
 
-	// changes carries calendar ids that a webhook says have moved. The worker debounces and
-	// drains it; nothing here blocks on a sync, because Google drops a channel that does not
-	// answer its POST quickly.
+	// changes carries calendar ids a webhook reported; the worker debounces and drains it.
 	changes chan int32
 
-	// One sync at a time per calendar. A push notification and the poll tick landing together
-	// would otherwise spend the same sync token twice and turn a good token into a 410.
+	// One sync at a time per calendar, so the same sync token is never spent twice.
 	syncMu  sync.Mutex
 	syncing map[int32]bool
 
@@ -107,8 +97,7 @@ func NewService(repo Repository, gc google.Client, cfg Config, loc *time.Locatio
 		now:      time.Now,
 	}
 
-	// Without a key the tokens would have to be stored in the clear, which is not a trade
-	// this feature gets to make silently: it refuses to configure instead.
+	// Refuse to configure rather than store tokens in the clear.
 	if cfg.ClientID != "" && cfg.ClientSecret != "" {
 		if cfg.TokenKey == "" {
 			return nil, fmt.Errorf("GOOGLE_TOKEN_KEY is required when google oauth is configured")
@@ -122,17 +111,13 @@ func NewService(repo Repository, gc google.Client, cfg Config, loc *time.Locatio
 	return s, nil
 }
 
-// Configured reports whether Google credentials are present.
 func (s *Service) Configured() bool { return s.cipher != nil }
 
-// Stream exposes the SSE hub so the handler can subscribe clients to it.
 func (s *Service) Stream() *Stream { return s.stream }
 
-// Changes is the queue of calendars a webhook reported as changed. The worker owns it; tests
-// read it to assert that a notification was accepted.
+// Changes is the queue of calendars a webhook reported as changed.
 func (s *Service) Changes() <-chan int32 { return s.changes }
 
-// Interval is the poll period, which the worker needs and the status endpoint reports.
 func (s *Service) Interval() time.Duration { return s.cfg.SyncInterval }
 
 func (s *Service) requireConfigured() error {
@@ -141,8 +126,6 @@ func (s *Service) requireConfigured() error {
 	}
 	return nil
 }
-
-// --- OAuth ---------------------------------------------------------------------------
 
 /*
 oauthStateTTL is how long a consent URL stays usable.
@@ -219,8 +202,7 @@ func (s *Service) HandleCallback(ctx context.Context, code, state string) (strin
 		return "", fmt.Errorf("%w: %v", ErrUpstream, err)
 	}
 	if tok.RefreshToken == "" {
-		// Without a refresh token the grant is useless in an hour. This is what happens when
-		// the consent screen is re-approved without prompt=consent, so say so plainly.
+		// Happens when consent is re-approved without prompt=consent.
 		return "", fmt.Errorf("%w: google returned no refresh token; revoke the app's access at myaccount.google.com and connect again", ErrUpstream)
 	}
 
@@ -250,8 +232,7 @@ func (s *Service) HandleCallback(ctx context.Context, code, state string) (strin
 	}
 
 	if err := s.importCalendars(ctx, acc, tok.AccessToken); err != nil {
-		// The account is connected; a failed calendar list is a transient upstream problem
-		// that the next sync pass fixes. Do not lose the grant over it.
+		// A failed calendar list is transient; the next sync fixes it. Keep the grant.
 		slog.ErrorContext(ctx, "calendar: importing calendar list after connect", "account", email, "error", err)
 	}
 	s.stream.Publish(StreamMessage{Type: "account.connected", AccountEmail: email})
@@ -268,9 +249,8 @@ func (s *Service) redirectTo(status, email string) string {
 	return base + "/calendar?" + q.Encode()
 }
 
-// importCalendars refreshes an account's calendar list. Calendars that vanished from Google
-// are marked deleted rather than removed: their events stay visible, and a shared calendar
-// that comes back keeps its local preferences.
+// importCalendars refreshes an account's calendar list. Vanished calendars are marked deleted,
+// not removed, so a re-shared one keeps its local preferences.
 func (s *Service) importCalendars(ctx context.Context, acc AccountRecord, accessToken string) error {
 	entries, err := s.gc.ListCalendars(ctx, accessToken)
 	if err != nil {
@@ -292,8 +272,7 @@ func (s *Service) importCalendars(ctx context.Context, acc AccountRecord, access
 			ForegroundColor:  e.ForegroundColor,
 			AccessRole:       e.AccessRole,
 			IsPrimary:        e.Primary,
-			// Holiday and birthday calendars are enormous and never interesting here, and the
-			// initial import cannot be bounded by date, so they start switched off.
+			// Holiday and birthday calendars are huge and unbounded by date, so they start switched off.
 			SyncEnabled: defaultSyncEnabled(e),
 		}); err != nil {
 			return err
@@ -302,8 +281,7 @@ func (s *Service) importCalendars(ctx context.Context, acc AccountRecord, access
 	return s.repo.MarkCalendarsDeleted(ctx, acc.ID, seen)
 }
 
-// defaultSyncEnabled decides whether a newly discovered calendar is synced without being
-// asked. Only applies the first time a calendar is seen; after that the user's choice wins.
+// defaultSyncEnabled decides whether a newly discovered calendar is synced.
 func defaultSyncEnabled(e google.CalendarListEntry) bool {
 	id := strings.ToLower(e.ID)
 	switch {
@@ -314,8 +292,6 @@ func defaultSyncEnabled(e google.CalendarListEntry) bool {
 	}
 	return true
 }
-
-// --- accounts ------------------------------------------------------------------------
 
 func (s *Service) ListAccounts(ctx context.Context) ([]Account, error) {
 	accounts, err := s.repo.ListAccounts(ctx)
@@ -397,8 +373,6 @@ func (s *Service) DeleteAccount(ctx context.Context, id int32) error {
 	if err := s.repo.DeleteAccount(ctx, id); err != nil {
 		return err
 	}
-	// Deliberately at info: this drops every mirrored event of the account, and the only other
-	// trace it leaves is an absence.
 	slog.InfoContext(ctx, "calendar: account disconnected, its calendars and events are gone",
 		"account", acc.ID, "email", acc.Email)
 	s.stream.Publish(StreamMessage{Type: "account.disconnected", AccountEmail: acc.Email})
@@ -457,8 +431,6 @@ func (s *Service) accessTokenFor(ctx context.Context, acc AccountRecord) (string
 	return tok.AccessToken, nil
 }
 
-// --- calendars -----------------------------------------------------------------------
-
 func (s *Service) ListCalendars(ctx context.Context) ([]Calendar, error) {
 	views, err := s.repo.ListCalendars(ctx)
 	if err != nil {
@@ -502,9 +474,7 @@ func toCalendarDTO(v CalendarView) Calendar {
 	}
 }
 
-// DisplayColor is the colour clients paint with. An override is the user's explicit choice, the
-// assignment is gv's, and Google's own value is only a last resort — it is the same pale cyan for
-// every primary calendar, so it identifies nothing.
+// DisplayColor is the user's override, else gv's assignment, else Google's own.
 func (v CalendarView) DisplayColor() string {
 	if v.ColorOverride != "" {
 		return v.ColorOverride
@@ -529,8 +499,7 @@ func (s *Service) UpdateCalendar(ctx context.Context, id int32, req UpdateCalend
 		return Calendar{}, err
 	}
 
-	// Turning a calendar off should not leave its events sitting in the local copy pretending
-	// to be current, and it should not leave a push channel alive either.
+	// Turning a calendar off drops its local events and push channel.
 	if before.SyncEnabled && !rec.SyncEnabled {
 		if _, err := s.repo.DeleteEventsForCalendar(ctx, id); err != nil {
 			slog.ErrorContext(ctx, "calendar: clearing events of disabled calendar", "calendar", id, "error", err)
@@ -570,6 +539,5 @@ func jsonOrEmpty(v any, fallback string) []byte {
 	return raw
 }
 
-// SetNow overrides the clock. Exported for tests that need to look at what happens either side
-// of the consent window; nothing in the app calls it.
+// SetNow overrides the clock, for tests.
 func (s *Service) SetNow(now func() time.Time) { s.now = now }
