@@ -8,7 +8,7 @@ import (
 	"strconv"
 	"time"
 
-	"gv-api/internal/response"
+	"gv-api/internal/core"
 
 	"github.com/go-chi/chi/v5"
 )
@@ -57,10 +57,10 @@ func (h *Handler) RegisterRoutes(r chi.Router) {
 func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 	lights, err := h.service.List(r.Context())
 	if err != nil {
-		response.InternalError(w, r, err, "Failed to list lights")
+		core.InternalError(w, r, err, "Failed to list lights")
 		return
 	}
-	response.JSON(w, http.StatusOK, lights)
+	core.JSON(w, http.StatusOK, lights)
 }
 
 // States -> GET /domotics/lights/state
@@ -68,10 +68,10 @@ func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) States(w http.ResponseWriter, r *http.Request) {
 	states, err := h.service.States(r.Context(), r.URL.Query().Get("force") == "1")
 	if err != nil {
-		response.InternalError(w, r, err, "Failed to read lights")
+		core.InternalError(w, r, err, "Failed to read lights")
 		return
 	}
-	response.JSON(w, http.StatusOK, StatesResponse{States: states})
+	core.JSON(w, http.StatusOK, StatesResponse{States: states})
 }
 
 // State -> GET /domotics/lights/{id}
@@ -81,14 +81,14 @@ func (h *Handler) State(w http.ResponseWriter, r *http.Request) {
 		h.fail(w, r, err, "Failed to read light")
 		return
 	}
-	response.JSON(w, http.StatusOK, state)
+	core.JSON(w, http.StatusOK, state)
 }
 
 // Send -> POST /domotics/lights/{id}
 func (h *Handler) Send(w http.ResponseWriter, r *http.Request) {
 	var cmd Command
 	if err := json.NewDecoder(r.Body).Decode(&cmd); err != nil {
-		response.Error(w, http.StatusBadRequest, "invalid body")
+		core.Error(w, http.StatusBadRequest, "invalid body")
 		return
 	}
 
@@ -97,14 +97,14 @@ func (h *Handler) Send(w http.ResponseWriter, r *http.Request) {
 		h.fail(w, r, err, "Failed to send command")
 		return
 	}
-	response.JSON(w, http.StatusOK, state)
+	core.JSON(w, http.StatusOK, state)
 }
 
 // Create -> POST /domotics/lights
 func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 	var req CreateLightRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		response.Error(w, http.StatusBadRequest, "invalid body")
+		core.Error(w, http.StatusBadRequest, "invalid body")
 		return
 	}
 
@@ -113,14 +113,14 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 		h.fail(w, r, err, "Failed to add light")
 		return
 	}
-	response.JSON(w, http.StatusCreated, light)
+	core.JSON(w, http.StatusCreated, light)
 }
 
 // Update -> PATCH /domotics/lights/{id}
 func (h *Handler) Update(w http.ResponseWriter, r *http.Request) {
 	var req UpdateLightRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		response.Error(w, http.StatusBadRequest, "invalid body")
+		core.Error(w, http.StatusBadRequest, "invalid body")
 		return
 	}
 
@@ -129,7 +129,7 @@ func (h *Handler) Update(w http.ResponseWriter, r *http.Request) {
 		h.fail(w, r, err, "Failed to update light")
 		return
 	}
-	response.JSON(w, http.StatusOK, light)
+	core.JSON(w, http.StatusOK, light)
 }
 
 // Delete -> DELETE /domotics/lights/{id}
@@ -146,15 +146,15 @@ func (h *Handler) Delete(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) Discover(w http.ResponseWriter, r *http.Request) {
 	devices, err := h.service.Discover(r.Context(), scanWindow(r))
 	if err != nil {
-		response.Error(w, http.StatusServiceUnavailable, bleErrorMessage(err))
+		core.Error(w, http.StatusServiceUnavailable, bleErrorMessage(err))
 		return
 	}
-	response.JSON(w, http.StatusOK, DiscoveredResponse{Devices: devices})
+	core.JSON(w, http.StatusOK, DiscoveredResponse{Devices: devices})
 }
 
 // Protocols -> GET /domotics/lights/protocols
 func (h *Handler) Protocols(w http.ResponseWriter, _ *http.Request) {
-	response.JSON(w, http.StatusOK, h.service.Protocols())
+	core.JSON(w, http.StatusOK, h.service.Protocols())
 }
 
 func scanWindow(r *http.Request) time.Duration {
@@ -168,12 +168,12 @@ func scanWindow(r *http.Request) time.Duration {
 func (h *Handler) fail(w http.ResponseWriter, r *http.Request, err error, message string) {
 	switch {
 	case errors.Is(err, ErrNotFound):
-		response.Error(w, http.StatusNotFound, "light not found")
+		core.Error(w, http.StatusNotFound, "light not found")
 	case errors.Is(err, ErrInvalidCommand):
-		response.Error(w, http.StatusBadRequest, err.Error())
+		core.Error(w, http.StatusBadRequest, err.Error())
 	case errors.Is(err, ErrDuplicateAddress):
-		response.Error(w, http.StatusConflict, ErrDuplicateAddress.Error())
+		core.Error(w, http.StatusConflict, ErrDuplicateAddress.Error())
 	default:
-		response.InternalError(w, r, err, message)
+		core.InternalError(w, r, err, message)
 	}
 }

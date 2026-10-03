@@ -11,8 +11,7 @@ import (
 	"strings"
 	"time"
 
-	"gv-api/internal/httputil"
-	"gv-api/internal/response"
+	"gv-api/internal/core"
 
 	"github.com/go-chi/chi/v5"
 )
@@ -95,7 +94,7 @@ func (h *Handler) ListAccounts(w http.ResponseWriter, r *http.Request) {
 		h.fail(w, r, err, "Failed to list accounts")
 		return
 	}
-	response.JSON(w, http.StatusOK, accounts)
+	core.JSON(w, http.StatusOK, accounts)
 }
 
 func (h *Handler) AuthURL(w http.ResponseWriter, r *http.Request) {
@@ -104,18 +103,18 @@ func (h *Handler) AuthURL(w http.ResponseWriter, r *http.Request) {
 		h.fail(w, r, err, "Failed to build the consent url")
 		return
 	}
-	response.JSON(w, http.StatusOK, out)
+	core.JSON(w, http.StatusOK, out)
 }
 
 func (h *Handler) UpdateAccount(w http.ResponseWriter, r *http.Request) {
-	id, err := httputil.ParseIDParam(r, "account")
+	id, err := core.ParseIDParam(r, "account")
 	if err != nil {
-		response.Error(w, http.StatusBadRequest, err.Error())
+		core.Error(w, http.StatusBadRequest, err.Error())
 		return
 	}
 	var req UpdateAccountRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		response.Error(w, http.StatusBadRequest, "invalid body")
+		core.Error(w, http.StatusBadRequest, "invalid body")
 		return
 	}
 	acc, err := h.service.UpdateAccount(r.Context(), id, req)
@@ -123,13 +122,13 @@ func (h *Handler) UpdateAccount(w http.ResponseWriter, r *http.Request) {
 		h.fail(w, r, err, "Failed to update account")
 		return
 	}
-	response.JSON(w, http.StatusOK, acc)
+	core.JSON(w, http.StatusOK, acc)
 }
 
 func (h *Handler) DeleteAccount(w http.ResponseWriter, r *http.Request) {
-	id, err := httputil.ParseIDParam(r, "account")
+	id, err := core.ParseIDParam(r, "account")
 	if err != nil {
-		response.Error(w, http.StatusBadRequest, err.Error())
+		core.Error(w, http.StatusBadRequest, err.Error())
 		return
 	}
 	if err := h.service.DeleteAccount(r.Context(), id); err != nil {
@@ -140,9 +139,9 @@ func (h *Handler) DeleteAccount(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) ResyncAccount(w http.ResponseWriter, r *http.Request) {
-	id, err := httputil.ParseIDParam(r, "account")
+	id, err := core.ParseIDParam(r, "account")
 	if err != nil {
-		response.Error(w, http.StatusBadRequest, err.Error())
+		core.Error(w, http.StatusBadRequest, err.Error())
 		return
 	}
 	res, err := h.service.ResyncAccount(r.Context(), id)
@@ -150,7 +149,7 @@ func (h *Handler) ResyncAccount(w http.ResponseWriter, r *http.Request) {
 		h.fail(w, r, err, "Failed to resync account")
 		return
 	}
-	response.JSON(w, http.StatusOK, res)
+	core.JSON(w, http.StatusOK, res)
 }
 
 /*
@@ -193,9 +192,9 @@ func (h *Handler) Webhook(w http.ResponseWriter, r *http.Request) {
 	case err == nil, errors.Is(err, ErrNotFound):
 		w.WriteHeader(http.StatusOK)
 	case errors.Is(err, ErrInvalidState):
-		response.Error(w, http.StatusUnauthorized, "invalid channel token")
+		core.Error(w, http.StatusUnauthorized, "invalid channel token")
 	default:
-		response.InternalError(w, r, err, "Failed to handle notification")
+		core.InternalError(w, r, err, "Failed to handle notification")
 	}
 }
 
@@ -205,18 +204,18 @@ func (h *Handler) ListCalendars(w http.ResponseWriter, r *http.Request) {
 		h.fail(w, r, err, "Failed to list calendars")
 		return
 	}
-	response.JSON(w, http.StatusOK, cals)
+	core.JSON(w, http.StatusOK, cals)
 }
 
 func (h *Handler) UpdateCalendar(w http.ResponseWriter, r *http.Request) {
-	id, err := httputil.ParseIDParam(r, "calendar")
+	id, err := core.ParseIDParam(r, "calendar")
 	if err != nil {
-		response.Error(w, http.StatusBadRequest, err.Error())
+		core.Error(w, http.StatusBadRequest, err.Error())
 		return
 	}
 	var req UpdateCalendarRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		response.Error(w, http.StatusBadRequest, "invalid body")
+		core.Error(w, http.StatusBadRequest, "invalid body")
 		return
 	}
 	cal, err := h.service.UpdateCalendar(r.Context(), id, req)
@@ -224,29 +223,29 @@ func (h *Handler) UpdateCalendar(w http.ResponseWriter, r *http.Request) {
 		h.fail(w, r, err, "Failed to update calendar")
 		return
 	}
-	response.JSON(w, http.StatusOK, cal)
+	core.JSON(w, http.StatusOK, cal)
 }
 
 func (h *Handler) ListEvents(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 	from, err := parseQueryTime(q.Get("from"))
 	if err != nil {
-		response.Error(w, http.StatusBadRequest, "from is required (RFC3339 or YYYY-MM-DD)")
+		core.Error(w, http.StatusBadRequest, "from is required (RFC3339 or YYYY-MM-DD)")
 		return
 	}
 	to, err := parseQueryTime(q.Get("to"))
 	if err != nil {
-		response.Error(w, http.StatusBadRequest, "to is required (RFC3339 or YYYY-MM-DD)")
+		core.Error(w, http.StatusBadRequest, "to is required (RFC3339 or YYYY-MM-DD)")
 		return
 	}
 	calendarIDs, err := parseIDList(q.Get("calendar_ids"))
 	if err != nil {
-		response.Error(w, http.StatusBadRequest, "invalid calendar_ids")
+		core.Error(w, http.StatusBadRequest, "invalid calendar_ids")
 		return
 	}
 	accountIDs, err := parseIDList(q.Get("account_ids"))
 	if err != nil {
-		response.Error(w, http.StatusBadRequest, "invalid account_ids")
+		core.Error(w, http.StatusBadRequest, "invalid account_ids")
 		return
 	}
 
@@ -261,7 +260,7 @@ func (h *Handler) ListEvents(w http.ResponseWriter, r *http.Request) {
 		h.fail(w, r, err, "Failed to list events")
 		return
 	}
-	response.JSON(w, http.StatusOK, events)
+	core.JSON(w, http.StatusOK, events)
 }
 
 func (h *Handler) GetEvent(w http.ResponseWriter, r *http.Request) {
@@ -270,21 +269,21 @@ func (h *Handler) GetEvent(w http.ResponseWriter, r *http.Request) {
 		h.fail(w, r, err, "Failed to get event")
 		return
 	}
-	response.JSON(w, http.StatusOK, ev)
+	core.JSON(w, http.StatusOK, ev)
 }
 
 func (h *Handler) CreateEvent(w http.ResponseWriter, r *http.Request) {
 	var req CreateEventRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		response.Error(w, http.StatusBadRequest, "invalid body")
+		core.Error(w, http.StatusBadRequest, "invalid body")
 		return
 	}
 	if req.CalendarID <= 0 {
-		response.Error(w, http.StatusBadRequest, "calendar_id is required")
+		core.Error(w, http.StatusBadRequest, "calendar_id is required")
 		return
 	}
 	if strings.TrimSpace(req.Summary) == "" {
-		response.Error(w, http.StatusBadRequest, "summary is required")
+		core.Error(w, http.StatusBadRequest, "summary is required")
 		return
 	}
 	ev, err := h.service.CreateEvent(r.Context(), req)
@@ -292,13 +291,13 @@ func (h *Handler) CreateEvent(w http.ResponseWriter, r *http.Request) {
 		h.fail(w, r, err, "Failed to create event")
 		return
 	}
-	response.JSON(w, http.StatusCreated, ev)
+	core.JSON(w, http.StatusCreated, ev)
 }
 
 func (h *Handler) UpdateEvent(w http.ResponseWriter, r *http.Request) {
 	var req UpdateEventRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		response.Error(w, http.StatusBadRequest, "invalid body")
+		core.Error(w, http.StatusBadRequest, "invalid body")
 		return
 	}
 	ev, err := h.service.UpdateEvent(r.Context(), chi.URLParam(r, "ref"), req)
@@ -306,7 +305,7 @@ func (h *Handler) UpdateEvent(w http.ResponseWriter, r *http.Request) {
 		h.fail(w, r, err, "Failed to update event")
 		return
 	}
-	response.JSON(w, http.StatusOK, ev)
+	core.JSON(w, http.StatusOK, ev)
 }
 
 func (h *Handler) DeleteEvent(w http.ResponseWriter, r *http.Request) {
@@ -322,11 +321,11 @@ func (h *Handler) DeleteEvent(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) MoveEvent(w http.ResponseWriter, r *http.Request) {
 	var req MoveEventRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		response.Error(w, http.StatusBadRequest, "invalid body")
+		core.Error(w, http.StatusBadRequest, "invalid body")
 		return
 	}
 	if req.CalendarID <= 0 {
-		response.Error(w, http.StatusBadRequest, "calendar_id is required")
+		core.Error(w, http.StatusBadRequest, "calendar_id is required")
 		return
 	}
 	res, err := h.service.MoveEvent(r.Context(), chi.URLParam(r, "ref"), req)
@@ -334,14 +333,14 @@ func (h *Handler) MoveEvent(w http.ResponseWriter, r *http.Request) {
 		h.fail(w, r, err, "Failed to move event")
 		return
 	}
-	response.JSON(w, http.StatusOK, res)
+	core.JSON(w, http.StatusOK, res)
 }
 
 func (h *Handler) Sync(w http.ResponseWriter, r *http.Request) {
 	if raw := r.URL.Query().Get("calendar_id"); raw != "" {
 		id, err := strconv.ParseInt(raw, 10, 32)
 		if err != nil || id <= 0 {
-			response.Error(w, http.StatusBadRequest, "invalid calendar_id")
+			core.Error(w, http.StatusBadRequest, "invalid calendar_id")
 			return
 		}
 		res, err := h.service.SyncCalendar(r.Context(), int32(id), "manual")
@@ -349,7 +348,7 @@ func (h *Handler) Sync(w http.ResponseWriter, r *http.Request) {
 			h.fail(w, r, err, "Failed to sync calendar")
 			return
 		}
-		response.JSON(w, http.StatusOK, res)
+		core.JSON(w, http.StatusOK, res)
 		return
 	}
 	res, err := h.service.SyncAll(r.Context(), "manual")
@@ -357,7 +356,7 @@ func (h *Handler) Sync(w http.ResponseWriter, r *http.Request) {
 		h.fail(w, r, err, "Failed to sync")
 		return
 	}
-	response.JSON(w, http.StatusOK, res)
+	core.JSON(w, http.StatusOK, res)
 }
 
 func (h *Handler) SyncStatus(w http.ResponseWriter, r *http.Request) {
@@ -366,7 +365,7 @@ func (h *Handler) SyncStatus(w http.ResponseWriter, r *http.Request) {
 		h.fail(w, r, err, "Failed to read sync status")
 		return
 	}
-	response.JSON(w, http.StatusOK, status)
+	core.JSON(w, http.StatusOK, status)
 }
 
 /*
@@ -381,7 +380,7 @@ connection.
 func (h *Handler) Stream(w http.ResponseWriter, r *http.Request) {
 	flusher, ok := w.(http.Flusher)
 	if !ok {
-		response.Error(w, http.StatusInternalServerError, "streaming unsupported")
+		core.Error(w, http.StatusInternalServerError, "streaming unsupported")
 		return
 	}
 	rc := http.NewResponseController(w)
@@ -469,21 +468,21 @@ Both are the client's problem to act on, neither is a server fault, and collapsi
 func (h *Handler) fail(w http.ResponseWriter, r *http.Request, err error, message string) {
 	switch {
 	case errors.Is(err, ErrNotFound):
-		response.Error(w, http.StatusNotFound, "not found")
+		core.Error(w, http.StatusNotFound, "not found")
 	case errors.Is(err, ErrNotConfigured):
-		response.Error(w, http.StatusServiceUnavailable, "google calendar is not configured on this server")
+		core.Error(w, http.StatusServiceUnavailable, "google calendar is not configured on this server")
 	case errors.Is(err, ErrNeedsReauth):
-		response.Error(w, http.StatusConflict, "account needs to be reconnected")
+		core.Error(w, http.StatusConflict, "account needs to be reconnected")
 	case errors.Is(err, ErrConflict):
-		response.Error(w, http.StatusConflict, "event changed in google, refetch and retry")
+		core.Error(w, http.StatusConflict, "event changed in google, refetch and retry")
 	case errors.Is(err, ErrReadOnly):
-		response.Error(w, http.StatusForbidden, err.Error())
+		core.Error(w, http.StatusForbidden, err.Error())
 	case errors.Is(err, ErrInvalidRange), errors.Is(err, ErrInvalidScope), errors.Is(err, ErrInvalidState):
-		response.Error(w, http.StatusBadRequest, err.Error())
+		core.Error(w, http.StatusBadRequest, err.Error())
 	case errors.Is(err, ErrUpstream):
 		slog.ErrorContext(r.Context(), message, "error", err)
-		response.Error(w, http.StatusBadGateway, "google rejected the request")
+		core.Error(w, http.StatusBadGateway, "google rejected the request")
 	default:
-		response.InternalError(w, r, err, message)
+		core.InternalError(w, r, err, message)
 	}
 }

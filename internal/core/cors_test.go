@@ -1,11 +1,11 @@
-package middleware_test
+package core_test
 
 import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
 
-	"gv-api/internal/middleware"
+	"gv-api/internal/core"
 
 	"github.com/go-chi/cors"
 )
@@ -15,7 +15,7 @@ const origin = "https://gv.example.com"
 func preflight(t *testing.T, requestHeaders string) *http.Response {
 	t.Helper()
 
-	h := cors.Handler(middleware.CORSOptions([]string{origin}))(
+	h := cors.Handler(core.CORSOptions([]string{origin}))(
 		http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusOK) }),
 	)
 
@@ -53,7 +53,7 @@ func TestCORSAllowsEveryHeaderTheWebClientSends(t *testing.T) {
 }
 
 func TestCORSRejectsUnknownOrigin(t *testing.T) {
-	h := cors.Handler(middleware.CORSOptions([]string{origin}))(
+	h := cors.Handler(core.CORSOptions([]string{origin}))(
 		http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusOK) }),
 	)
 

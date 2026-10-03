@@ -16,11 +16,11 @@ import (
 	calendargoogle "gv-api/internal/calendar/google"
 	"gv-api/internal/capacity"
 	"gv-api/internal/config"
+	"gv-api/internal/core"
 	"gv-api/internal/database"
 	"gv-api/internal/finance"
 	"gv-api/internal/habits"
 	"gv-api/internal/lights"
-	"gv-api/internal/middleware"
 	"gv-api/internal/pipeline"
 	"gv-api/internal/plan"
 	"gv-api/internal/rutas"
@@ -34,9 +34,7 @@ import (
 )
 
 func main() {
-	slog.SetDefault(slog.New(middleware.LogHandler{Handler: slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
-		Level: slog.LevelInfo,
-	})}))
+	core.SetupLogging()
 
 	cfg, err := config.Load()
 	if err != nil {
@@ -58,11 +56,7 @@ func main() {
 	//nolint:errcheck // if the db is closed, the program has already exited
 	defer db.Close()
 
-	loc, err := time.LoadLocation(cfg.Timezone)
-	if err != nil {
-		slog.Error("failed to load timezone", "timezone", cfg.Timezone, "error", err)
-		os.Exit(1)
-	}
+	loc := cfg.Location
 
 	habitRepo := habits.NewRepository(db)
 	habitService := habits.NewService(habitRepo, loc)
@@ -144,8 +138,8 @@ func main() {
 
 	r := chi.NewRouter()
 	r.Use(chimiddleware.Recoverer)
-	r.Use(middleware.RequestID)
-	r.Use(cors.Handler(middleware.CORSOptions(cfg.AllowedOrigins)))
+	r.Use(core.RequestID)
+	r.Use(cors.Handler(core.CORSOptions(cfg.AllowedOrigins)))
 
 	r.Get("/health", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)

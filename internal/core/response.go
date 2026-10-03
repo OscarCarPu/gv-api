@@ -1,5 +1,4 @@
-// Package response writes JSON responses.
-package response
+package core
 
 import (
 	"encoding/json"

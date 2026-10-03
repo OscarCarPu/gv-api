@@ -8,8 +8,7 @@ import (
 
 	"gv-api/internal/history"
 
-	"gv-api/internal/httputil"
-	"gv-api/internal/response"
+	"gv-api/internal/core"
 
 	"github.com/go-chi/chi/v5"
 )
@@ -73,39 +72,39 @@ func (h *Handler) GetDaily(w http.ResponseWriter, r *http.Request) {
 
 	habits, err := h.service.GetDailyView(r.Context(), dateParam)
 	if err != nil {
-		response.InternalError(w, r, err, "Failed to get daily habits")
+		core.InternalError(w, r, err, "Failed to get daily habits")
 		return
 	}
 
-	response.JSON(w, http.StatusOK, habits)
+	core.JSON(w, http.StatusOK, habits)
 }
 
 // UpsertLog -> POST /habits/log
 func (h *Handler) UpsertLog(w http.ResponseWriter, r *http.Request) {
 	var req LogUpsertRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		response.Error(w, http.StatusBadRequest, "Invalid Body")
+		core.Error(w, http.StatusBadRequest, "Invalid Body")
 		return
 	}
 
 	if err := h.service.LogHabit(r.Context(), req); err != nil {
-		response.InternalError(w, r, err, "Failed to log habit")
+		core.InternalError(w, r, err, "Failed to log habit")
 		return
 	}
 
-	response.JSON(w, http.StatusOK, map[string]string{"status": "ok"})
+	core.JSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }
 
 // DeleteHabit -> DELETE /habits/{id}
 func (h *Handler) DeleteHabit(w http.ResponseWriter, r *http.Request) {
-	id, err := httputil.ParseIDParam(r, "habit")
+	id, err := core.ParseIDParam(r, "habit")
 	if err != nil {
-		response.Error(w, http.StatusBadRequest, err.Error())
+		core.Error(w, http.StatusBadRequest, err.Error())
 		return
 	}
 
 	if err := h.service.DeleteHabit(r.Context(), id); err != nil {
-		response.InternalError(w, r, err, "Failed to delete habit")
+		core.InternalError(w, r, err, "Failed to delete habit")
 		return
 	}
 
@@ -114,9 +113,9 @@ func (h *Handler) DeleteHabit(w http.ResponseWriter, r *http.Request) {
 
 // GetHistory -> GET /habits/{id}/history
 func (h *Handler) GetHistory(w http.ResponseWriter, r *http.Request) {
-	id, err := httputil.ParseIDParam(r, "habit")
+	id, err := core.ParseIDParam(r, "habit")
 	if err != nil {
-		response.Error(w, http.StatusBadRequest, err.Error())
+		core.Error(w, http.StatusBadRequest, err.Error())
 		return
 	}
 
@@ -124,7 +123,7 @@ func (h *Handler) GetHistory(w http.ResponseWriter, r *http.Request) {
 	if frequency != "" {
 		valid := map[string]bool{"daily": true, "weekly": true, "monthly": true}
 		if !valid[frequency] {
-			response.Error(w, http.StatusBadRequest, "frequency must be daily, weekly, or monthly")
+			core.Error(w, http.StatusBadRequest, "frequency must be daily, weekly, or monthly")
 			return
 		}
 	}
@@ -134,64 +133,64 @@ func (h *Handler) GetHistory(w http.ResponseWriter, r *http.Request) {
 
 	history, err := h.service.GetHistory(r.Context(), id, frequency, startAt, endAt)
 	if err != nil {
-		response.InternalError(w, r, err, "Failed to get habit history")
+		core.InternalError(w, r, err, "Failed to get habit history")
 		return
 	}
 
-	response.JSON(w, http.StatusOK, history)
+	core.JSON(w, http.StatusOK, history)
 }
 
 // CreateHabit -> POST /habits
 func (h *Handler) CreateHabit(w http.ResponseWriter, r *http.Request) {
 	var req CreateHabitRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		response.Error(w, http.StatusBadRequest, "Invalid Body")
+		core.Error(w, http.StatusBadRequest, "Invalid Body")
 		return
 	}
 
 	if msg := validateHabitFields(req.Name, req.Frequency, req.TargetMin, req.TargetMax); msg != "" {
-		response.Error(w, http.StatusBadRequest, msg)
+		core.Error(w, http.StatusBadRequest, msg)
 		return
 	}
 
 	habit, err := h.service.CreateHabit(r.Context(), req)
 	if err != nil {
-		response.InternalError(w, r, err, "Failed to create habit")
+		core.InternalError(w, r, err, "Failed to create habit")
 		return
 	}
 
-	response.JSON(w, http.StatusCreated, habit)
+	core.JSON(w, http.StatusCreated, habit)
 }
 
 // UpdateHabit -> PUT /habits/{id}
 func (h *Handler) UpdateHabit(w http.ResponseWriter, r *http.Request) {
-	id, err := httputil.ParseIDParam(r, "habit")
+	id, err := core.ParseIDParam(r, "habit")
 	if err != nil {
-		response.Error(w, http.StatusBadRequest, err.Error())
+		core.Error(w, http.StatusBadRequest, err.Error())
 		return
 	}
 
 	var req UpdateHabitRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		response.Error(w, http.StatusBadRequest, "Invalid Body")
+		core.Error(w, http.StatusBadRequest, "Invalid Body")
 		return
 	}
 	req.ID = id
 
 	if msg := validateHabitFields(req.Name, &req.Frequency, req.TargetMin, req.TargetMax); msg != "" {
-		response.Error(w, http.StatusBadRequest, msg)
+		core.Error(w, http.StatusBadRequest, msg)
 		return
 	}
 
 	habit, err := h.service.UpdateHabit(r.Context(), req)
 	if err != nil {
 		if errors.Is(err, ErrNotFound) {
-			response.Error(w, http.StatusNotFound, "habit not found")
+			core.Error(w, http.StatusNotFound, "habit not found")
 			return
 		}
-		response.InternalError(w, r, err, "Failed to update habit")
+		core.InternalError(w, r, err, "Failed to update habit")
 		return
 	}
 
-	response.JSON(w, http.StatusOK, habit)
+	core.JSON(w, http.StatusOK, habit)
 }

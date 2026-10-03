@@ -4,7 +4,7 @@ import (
 	"net/http"
 	"strings"
 
-	"gv-api/internal/response"
+	"gv-api/internal/core"
 )
 
 type TokenValidator interface {
@@ -24,13 +24,13 @@ func (m *Middleware) Handle(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		authHeader := r.Header.Get("Authorization")
 		if authHeader == "" {
-			response.Error(w, http.StatusUnauthorized, "Unauthorized")
+			core.Error(w, http.StatusUnauthorized, "Unauthorized")
 			return
 		}
 
 		token := strings.TrimPrefix(authHeader, "Bearer ")
 		if token == authHeader {
-			response.Error(w, http.StatusUnauthorized, "Unauthorized")
+			core.Error(w, http.StatusUnauthorized, "Unauthorized")
 			return
 		}
 
@@ -41,6 +41,6 @@ func (m *Middleware) Handle(next http.Handler) http.Handler {
 			}
 		}
 
-		response.Error(w, http.StatusUnauthorized, "Unauthorized")
+		core.Error(w, http.StatusUnauthorized, "Unauthorized")
 	})
 }

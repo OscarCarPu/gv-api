@@ -6,9 +6,8 @@ import (
 	"net/http"
 	"strings"
 
+	"gv-api/internal/core"
 	"gv-api/internal/finance/txtype"
-	"gv-api/internal/httputil"
-	"gv-api/internal/response"
 )
 
 func validateCategory(name string, t txtype.Type, parentID *int32, selfID int32) (string, string) {
@@ -31,39 +30,39 @@ func validateCategory(name string, t txtype.Type, parentID *int32, selfID int32)
 func (h *Handler) ListCategories(w http.ResponseWriter, r *http.Request) {
 	out, err := h.service.ListCategories(r.Context())
 	if err != nil {
-		response.InternalError(w, r, err, "Failed to list categories")
+		core.InternalError(w, r, err, "Failed to list categories")
 		return
 	}
-	response.JSON(w, http.StatusOK, out)
+	core.JSON(w, http.StatusOK, out)
 }
 
 func (h *Handler) GetCategory(w http.ResponseWriter, r *http.Request) {
-	id, err := httputil.ParseIDParam(r, "category")
+	id, err := core.ParseIDParam(r, "category")
 	if err != nil {
-		response.Error(w, http.StatusBadRequest, err.Error())
+		core.Error(w, http.StatusBadRequest, err.Error())
 		return
 	}
 	c, err := h.service.GetCategory(r.Context(), id)
 	if err != nil {
 		if errors.Is(err, ErrNotFound) {
-			response.Error(w, http.StatusNotFound, "category not found")
+			core.Error(w, http.StatusNotFound, "category not found")
 			return
 		}
-		response.InternalError(w, r, err, "Failed to get category")
+		core.InternalError(w, r, err, "Failed to get category")
 		return
 	}
-	response.JSON(w, http.StatusOK, c)
+	core.JSON(w, http.StatusOK, c)
 }
 
 func (h *Handler) CreateCategory(w http.ResponseWriter, r *http.Request) {
 	var req CreateCategoryRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		response.Error(w, http.StatusBadRequest, "Invalid Body")
+		core.Error(w, http.StatusBadRequest, "Invalid Body")
 		return
 	}
 	name, msg := validateCategory(req.Name, req.Type, req.ParentID, 0)
 	if msg != "" {
-		response.Error(w, http.StatusBadRequest, msg)
+		core.Error(w, http.StatusBadRequest, msg)
 		return
 	}
 	req.Name = name
@@ -71,30 +70,30 @@ func (h *Handler) CreateCategory(w http.ResponseWriter, r *http.Request) {
 	c, err := h.service.CreateCategory(r.Context(), req)
 	if err != nil {
 		if errors.Is(err, ErrInvalidInput) {
-			response.Error(w, http.StatusBadRequest, "parent_id is invalid")
+			core.Error(w, http.StatusBadRequest, "parent_id is invalid")
 			return
 		}
-		response.InternalError(w, r, err, "Failed to create category")
+		core.InternalError(w, r, err, "Failed to create category")
 		return
 	}
-	response.JSON(w, http.StatusCreated, c)
+	core.JSON(w, http.StatusCreated, c)
 }
 
 func (h *Handler) UpdateCategory(w http.ResponseWriter, r *http.Request) {
-	id, err := httputil.ParseIDParam(r, "category")
+	id, err := core.ParseIDParam(r, "category")
 	if err != nil {
-		response.Error(w, http.StatusBadRequest, err.Error())
+		core.Error(w, http.StatusBadRequest, err.Error())
 		return
 	}
 	var req UpdateCategoryRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		response.Error(w, http.StatusBadRequest, "Invalid Body")
+		core.Error(w, http.StatusBadRequest, "Invalid Body")
 		return
 	}
 	req.ID = id
 	name, msg := validateCategory(req.Name, req.Type, req.ParentID, id)
 	if msg != "" {
-		response.Error(w, http.StatusBadRequest, msg)
+		core.Error(w, http.StatusBadRequest, msg)
 		return
 	}
 	req.Name = name
@@ -102,31 +101,31 @@ func (h *Handler) UpdateCategory(w http.ResponseWriter, r *http.Request) {
 	c, err := h.service.UpdateCategory(r.Context(), req)
 	if err != nil {
 		if errors.Is(err, ErrNotFound) {
-			response.Error(w, http.StatusNotFound, "category not found")
+			core.Error(w, http.StatusNotFound, "category not found")
 			return
 		}
 		if errors.Is(err, ErrInvalidInput) {
-			response.Error(w, http.StatusBadRequest, "parent_id is invalid")
+			core.Error(w, http.StatusBadRequest, "parent_id is invalid")
 			return
 		}
-		response.InternalError(w, r, err, "Failed to update category")
+		core.InternalError(w, r, err, "Failed to update category")
 		return
 	}
-	response.JSON(w, http.StatusOK, c)
+	core.JSON(w, http.StatusOK, c)
 }
 
 func (h *Handler) DeleteCategory(w http.ResponseWriter, r *http.Request) {
-	id, err := httputil.ParseIDParam(r, "category")
+	id, err := core.ParseIDParam(r, "category")
 	if err != nil {
-		response.Error(w, http.StatusBadRequest, err.Error())
+		core.Error(w, http.StatusBadRequest, err.Error())
 		return
 	}
 	if err := h.service.DeleteCategory(r.Context(), id); err != nil {
 		if errors.Is(err, ErrCategoryInUse) {
-			response.Error(w, http.StatusConflict, "category is referenced by transactions or other categories")
+			core.Error(w, http.StatusConflict, "category is referenced by transactions or other categories")
 			return
 		}
-		response.InternalError(w, r, err, "Failed to delete category")
+		core.InternalError(w, r, err, "Failed to delete category")
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)

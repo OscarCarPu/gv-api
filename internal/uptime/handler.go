@@ -8,7 +8,7 @@ import (
 	"strconv"
 	"time"
 
-	"gv-api/internal/response"
+	"gv-api/internal/core"
 
 	"github.com/go-chi/chi/v5"
 )
@@ -39,7 +39,7 @@ func (h *Handler) Overview(w http.ResponseWriter, r *http.Request) {
 		h.writeError(w, r, err, "Failed to read uptime")
 		return
 	}
-	response.JSON(w, http.StatusOK, overview)
+	core.JSON(w, http.StatusOK, overview)
 }
 
 // Windows -> GET /domotics/uptime/windows?device=&from=&to=&limit=
@@ -50,19 +50,19 @@ func (h *Handler) Windows(w http.ResponseWriter, r *http.Request) {
 	if raw := q.Get("device"); raw != "" {
 		device, err := ParseDevice(raw)
 		if err != nil {
-			response.Error(w, http.StatusBadRequest, fmt.Sprintf("device must be one of %s", deviceList()))
+			core.Error(w, http.StatusBadRequest, fmt.Sprintf("device must be one of %s", deviceList()))
 			return
 		}
 		query.Device = &device
 	}
 	from, err := parseTimeParam(q.Get("from"), "from")
 	if err != nil {
-		response.Error(w, http.StatusBadRequest, err.Error())
+		core.Error(w, http.StatusBadRequest, err.Error())
 		return
 	}
 	to, err := parseTimeParam(q.Get("to"), "to")
 	if err != nil {
-		response.Error(w, http.StatusBadRequest, err.Error())
+		core.Error(w, http.StatusBadRequest, err.Error())
 		return
 	}
 	query.From, query.To = from, to
@@ -70,7 +70,7 @@ func (h *Handler) Windows(w http.ResponseWriter, r *http.Request) {
 	if raw := q.Get("limit"); raw != "" {
 		limit, err := strconv.Atoi(raw)
 		if err != nil || limit <= 0 {
-			response.Error(w, http.StatusBadRequest, "limit must be a positive integer")
+			core.Error(w, http.StatusBadRequest, "limit must be a positive integer")
 			return
 		}
 		query.Limit = limit
@@ -79,22 +79,22 @@ func (h *Handler) Windows(w http.ResponseWriter, r *http.Request) {
 	report, err := h.service.Windows(r.Context(), query)
 	if err != nil {
 		if errors.Is(err, ErrInvalidRange) {
-			response.Error(w, http.StatusBadRequest, "from must be before to")
+			core.Error(w, http.StatusBadRequest, "from must be before to")
 			return
 		}
 		h.writeError(w, r, err, "Failed to read uptime windows")
 		return
 	}
-	response.JSON(w, http.StatusOK, report)
+	core.JSON(w, http.StatusOK, report)
 }
 
 // writeError answers 503 when no pipeline database is wired up.
 func (h *Handler) writeError(w http.ResponseWriter, r *http.Request, err error, message string) {
 	if errors.Is(err, ErrNotConfigured) {
-		response.Error(w, http.StatusServiceUnavailable, ErrNotConfigured.Error())
+		core.Error(w, http.StatusServiceUnavailable, ErrNotConfigured.Error())
 		return
 	}
-	response.InternalError(w, r, err, message)
+	core.InternalError(w, r, err, message)
 }
 
 // parseTimeParam accepts RFC 3339 or a plain date (UTC midnight); empty leaves the default.

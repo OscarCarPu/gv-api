@@ -35,8 +35,8 @@ gv-api/
       db.go, migrate.go      # pgxpool factory, startup migrations
       pgconv/                # nullable pgx columns -> Go pointers
       gvdb/                  # sqlc-generated code, one file per query file
-    response/, httputil/     # JSON responses, URL param parsing
-    middleware/              # request id + slog correlation
+    core/                    # shared HTTP plumbing: request id + slog correlation,
+                             # CORS, JSON responses, URL params
     history/                 # shared history types and period maths
     testutil/                # test DB pool and truncation
     pipeline/                # read-only connection to central-pipeline's database

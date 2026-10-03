@@ -7,7 +7,7 @@ import (
 	"strconv"
 	"time"
 
-	"gv-api/internal/response"
+	"gv-api/internal/core"
 
 	"github.com/go-chi/chi/v5"
 )
@@ -139,12 +139,12 @@ func parseMonthParam(s string) (time.Time, error) {
 func writeTxErr(w http.ResponseWriter, r *http.Request, err error, op string) {
 	switch {
 	case errors.Is(err, ErrNotFound):
-		response.Error(w, http.StatusNotFound, "transaction not found")
+		core.Error(w, http.StatusNotFound, "transaction not found")
 	case errors.Is(err, ErrCategoryMismatch):
-		response.Error(w, http.StatusBadRequest, "category type does not match transaction type")
+		core.Error(w, http.StatusBadRequest, "category type does not match transaction type")
 	case errors.Is(err, ErrInvalidInput):
-		response.Error(w, http.StatusBadRequest, "referenced account or category does not exist")
+		core.Error(w, http.StatusBadRequest, "referenced account or category does not exist")
 	default:
-		response.InternalError(w, r, err, "Failed to "+op+" transaction")
+		core.InternalError(w, r, err, "Failed to "+op+" transaction")
 	}
 }

@@ -4,7 +4,6 @@ package config
 import (
 	"fmt"
 	"os"
-	"strconv"
 	"strings"
 	"time"
 )
@@ -17,6 +16,7 @@ type Config struct {
 	JwtSecret           string
 	TotpSecret          string
 	Timezone            string
+	Location            *time.Location
 	AllowedOrigins      []string
 
 	// Domotics lights. LIGHTS_DRIVER unset uses the in-memory mock.
@@ -132,52 +132,11 @@ func Load() (*Config, error) {
 	if len(missing) > 0 {
 		return nil, fmt.Errorf("required env vars not set: %s", strings.Join(missing, ", "))
 	}
+
+	loc, err := time.LoadLocation(cfg.Timezone)
+	if err != nil {
+		return nil, fmt.Errorf("invalid TIMEZONE %q: %w", cfg.Timezone, err)
+	}
+	cfg.Location = loc
 	return cfg, nil
-}
-
-func getEnv(key, fallback string) string {
-	if value, exists := os.LookupEnv(key); exists {
-		return value
-	}
-	return fallback
-}
-
-// getEnvDuration reads a millisecond count from the environment, falling back to defaultMs.
-func getEnvDuration(key string, defaultMs int) time.Duration {
-	if raw := os.Getenv(key); raw != "" {
-		if ms, err := strconv.Atoi(raw); err == nil && ms >= 0 {
-			return time.Duration(ms) * time.Millisecond
-		}
-	}
-	return time.Duration(defaultMs) * time.Millisecond
-}
-
-// getEnvBool reads a boolean from the environment, falling back to defaultValue.
-func getEnvBool(key string, defaultValue bool) bool {
-	if raw := os.Getenv(key); raw != "" {
-		if v, err := strconv.ParseBool(raw); err == nil {
-			return v
-		}
-	}
-	return defaultValue
-}
-
-// getEnvInt reads an integer from the environment, falling back to defaultValue.
-func getEnvInt(key string, defaultValue int) int {
-	if raw := os.Getenv(key); raw != "" {
-		if v, err := strconv.Atoi(raw); err == nil {
-			return v
-		}
-	}
-	return defaultValue
-}
-
-// getEnvFloat reads a float from the environment, falling back to defaultValue.
-func getEnvFloat(key string, defaultValue float64) float64 {
-	if raw := os.Getenv(key); raw != "" {
-		if v, err := strconv.ParseFloat(raw, 64); err == nil {
-			return v
-		}
-	}
-	return defaultValue
 }

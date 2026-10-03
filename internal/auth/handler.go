@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 
-	"gv-api/internal/response"
+	"gv-api/internal/core"
 )
 
 type ServiceInterface interface {
@@ -25,17 +25,17 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 		Password string `json:"password"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		response.Error(w, http.StatusBadRequest, "Invalid Request")
+		core.Error(w, http.StatusBadRequest, "Invalid Request")
 		return
 	}
 
 	token, kind, err := h.svc.Login(req.Password)
 	if err != nil {
-		response.Error(w, http.StatusUnauthorized, err.Error())
+		core.Error(w, http.StatusUnauthorized, err.Error())
 		return
 	}
 
-	response.JSON(w, http.StatusOK, map[string]string{"token": token, "kind": kind})
+	core.JSON(w, http.StatusOK, map[string]string{"token": token, "kind": kind})
 }
 
 func (h *Handler) Login2FA(w http.ResponseWriter, r *http.Request) {
@@ -44,15 +44,15 @@ func (h *Handler) Login2FA(w http.ResponseWriter, r *http.Request) {
 		Code  string `json:"code"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		response.Error(w, http.StatusBadRequest, "Invalid Request")
+		core.Error(w, http.StatusBadRequest, "Invalid Request")
 		return
 	}
 
 	token, err := h.svc.Login2FA(req.Token, req.Code)
 	if err != nil {
-		response.Error(w, http.StatusUnauthorized, err.Error())
+		core.Error(w, http.StatusUnauthorized, err.Error())
 		return
 	}
 
-	response.JSON(w, http.StatusOK, map[string]string{"token": token})
+	core.JSON(w, http.StatusOK, map[string]string{"token": token})
 }

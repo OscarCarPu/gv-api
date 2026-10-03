@@ -1,5 +1,4 @@
-// Package middleware provides the HTTP middleware not specific to any domain.
-package middleware
+package core
 
 import (
 	"context"

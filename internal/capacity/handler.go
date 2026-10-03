@@ -5,7 +5,7 @@ import (
 	"net/http"
 	"time"
 
-	"gv-api/internal/response"
+	"gv-api/internal/core"
 
 	"github.com/go-chi/chi/v5"
 )
@@ -32,29 +32,29 @@ func (h *Handler) RegisterRoutes(r chi.Router) {
 func (h *Handler) GetFreeBusy(w http.ResponseWriter, r *http.Request) {
 	from, err := time.Parse("2006-01-02", r.URL.Query().Get("from"))
 	if err != nil {
-		response.Error(w, http.StatusBadRequest, "invalid or missing from")
+		core.Error(w, http.StatusBadRequest, "invalid or missing from")
 		return
 	}
 	to, err := time.Parse("2006-01-02", r.URL.Query().Get("to"))
 	if err != nil {
-		response.Error(w, http.StatusBadRequest, "invalid or missing to")
+		core.Error(w, http.StatusBadRequest, "invalid or missing to")
 		return
 	}
 	if !to.After(from) {
-		response.Error(w, http.StatusBadRequest, "to must be after from")
+		core.Error(w, http.StatusBadRequest, "to must be after from")
 		return
 	}
 	if to.Sub(from) > maxRangeSpan {
-		response.Error(w, http.StatusBadRequest, "range is longer than 90 days")
+		core.Error(w, http.StatusBadRequest, "range is longer than 90 days")
 		return
 	}
 
 	days, err := h.service.FreeBusyRange(r.Context(), from, to)
 	if err != nil {
-		response.InternalError(w, r, err, "Failed to get free/busy range")
+		core.InternalError(w, r, err, "Failed to get free/busy range")
 		return
 	}
-	response.JSON(w, http.StatusOK, FreeBusyRangeResponse{
+	core.JSON(w, http.StatusOK, FreeBusyRangeResponse{
 		From: from.Format("2006-01-02"),
 		To:   to.Format("2006-01-02"),
 		Days: days,
