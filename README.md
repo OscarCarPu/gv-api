@@ -59,7 +59,7 @@ degrade gracefully when unset.
 
 | Method | Path | Auth | Description |
 |---|---|---|---|
-| `GET` | `/health` | None | Liveness probe. |
+| `GET` | `/health` | None | 200 when the database answers, 503 otherwise. |
 | `GET` | `/calendar/google/callback` | Signed state | Google's OAuth redirect. |
 | `POST` | `/calendar/google/webhook` | Channel token | Google's push notifications. |
 

@@ -54,6 +54,9 @@ type Config struct {
 
 	// Theoretical free hours per day.
 	DailyCapacityHours float64
+
+	// Health ping timeout to db
+	HealthTimeout time.Duration
 }
 
 func Load() (*Config, error) {
@@ -104,6 +107,8 @@ func Load() (*Config, error) {
 		CalendarDebounce:     getEnvDuration("CALENDAR_DEBOUNCE_MS", 2000),
 
 		DailyCapacityHours: getEnvFloat("DAILY_CAPACITY_HOURS", 14),
+
+		HealthTimeout: getEnvDuration("HEALTH_TIMEOUT_MS", 2000),
 	}
 	cfg.CalendarWebhookEnabled = getEnvBool("CALENDAR_WEBHOOK_ENABLED", cfg.CalendarWebhookURL != "")
 	if cfg.CalendarWebAppURL == "" && len(allowedOrigins) > 0 {

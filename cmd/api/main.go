@@ -141,9 +141,7 @@ func main() {
 	r.Use(core.RequestID)
 	r.Use(cors.Handler(core.CORSOptions(cfg.AllowedOrigins)))
 
-	r.Get("/health", func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusOK)
-	})
+	r.Get("/health", core.Health(db, cfg.HealthTimeout))
 
 	// Public
 	r.Post("/login", authHandler.Login)
