@@ -134,10 +134,13 @@ test-bench: test-api-setup
 		| awk '{ for (i=1;i<=NF;i++) if ($$i=="ns/op") { $$(i-1)=sprintf("%.3f",$$(i-1)/1e6); $$i="ms/op" } print }'
 	@$(MAKE) test-db-cleanup --no-print-directory
 
-test:
-	@$(MAKE) test-unit --no-print-directory
-	@$(MAKE) test-integration --no-print-directory
-	@$(MAKE) test-e2e --no-print-directory
+# All three levels with one test database setup and one cleanup
+test: test-unit test-api-setup
+	@printf "$(CYAN)>>> Running integration tests...$(NC)\n"
+	@TEST_DB_URL=$(OUTSIDE_TEST_DB_URL) go test -p 1 -v -run Integration ./internal/... || { $(MAKE) test-db-cleanup --no-print-directory; exit 1; }
+	@printf "$(CYAN)>>> Running e2e tests...$(NC)\n"
+	@TEST_DB_URL=$(OUTSIDE_TEST_DB_URL) PORT=$(PORT) PASSWORD=$(PASSWORD) TOTP_SECRET=$(TOTP_SECRET) go test ./test/e2e/... -v || { $(MAKE) test-db-cleanup --no-print-directory; exit 1; }
+	@$(MAKE) test-db-cleanup --no-print-directory
 	@printf "$(GREEN)>>> All tests passed$(NC)\n"
 
 # Authenticate and print a JWT token for manual testing

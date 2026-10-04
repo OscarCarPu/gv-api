@@ -1,0 +1,10 @@
+.git
+.gitea
+.env*
+backups
+bin
+docs
+test
+**/mocks
+**/*_test.go
+*.md
