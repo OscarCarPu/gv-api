@@ -57,6 +57,12 @@ type Config struct {
 
 	// Health ping timeout to db
 	HealthTimeout time.Duration
+
+	// Backups
+	BackupDir        string
+	BackupKeepHourly time.Duration
+	BackupKeepDaily  time.Duration
+	BackupInterval   time.Duration
 }
 
 func Load() (*Config, error) {
@@ -109,6 +115,11 @@ func Load() (*Config, error) {
 		DailyCapacityHours: getEnvFloat("DAILY_CAPACITY_HOURS", 14),
 
 		HealthTimeout: getEnvDuration("HEALTH_TIMEOUT_MS", 2000),
+
+		BackupDir:        getEnv("BACKUP_DIR", "/backups"),
+		BackupKeepHourly: time.Duration(getEnvInt("BACKUP_KEEP_HOURLY_DAYS", 2)) * 24 * time.Hour,
+		BackupKeepDaily:  time.Duration(getEnvInt("BACKUP_KEEP_DAILY_DAYS", 30)) * 24 * time.Hour,
+		BackupInterval:   getEnvDuration("BACKUP_INTERVAL_MS", 60*60*1000),
 	}
 	cfg.CalendarWebhookEnabled = getEnvBool("CALENDAR_WEBHOOK_ENABLED", cfg.CalendarWebhookURL != "")
 	if cfg.CalendarWebAppURL == "" && len(allowedOrigins) > 0 {
@@ -136,6 +147,9 @@ func Load() (*Config, error) {
 	}
 	if len(missing) > 0 {
 		return nil, fmt.Errorf("required env vars not set: %s", strings.Join(missing, ", "))
+	}
+	if cfg.BackupKeepHourly <= 0 || cfg.BackupKeepDaily < cfg.BackupKeepHourly {
+		return nil, fmt.Errorf("BACKUP_KEEP_HOURLY_DAYS must be at least 1 and at most BACKUP_KEEP_DAILY_DAYS")
 	}
 
 	loc, err := time.LoadLocation(cfg.Timezone)

@@ -8,11 +8,12 @@ RUN go mod download
 
 COPY . .
 
-RUN GCO_ENABLED=0 GOOS=linux go build -ldflags="-w -s" -o /main cmd/api/main.go 
+RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-w -s" -o /main ./cmd/api
 
-FROM alpine:latest
+FROM alpine:3.22
 
-RUN addgroup -S appgroup && adduser -S appuser -G appgroup
+RUN apk add --no-cache postgresql15-client \
+    && addgroup -S appgroup && adduser -S appuser -G appgroup
 
 WORKDIR /app
 

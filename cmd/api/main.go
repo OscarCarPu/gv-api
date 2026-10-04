@@ -12,6 +12,7 @@ import (
 	_ "time/tzdata"
 
 	"gv-api/internal/auth"
+	"gv-api/internal/backup"
 	"gv-api/internal/calendar"
 	calendargoogle "gv-api/internal/calendar/google"
 	"gv-api/internal/capacity"
@@ -40,6 +41,10 @@ func main() {
 	if err != nil {
 		slog.Error("failed to load config", "error", err)
 		os.Exit(1)
+	}
+
+	if len(os.Args) > 1 && os.Args[1] == "backup" {
+		os.Exit(runBackup(cfg))
 	}
 
 	if err := database.Migrate(cfg.DBUrl, "db/migrations"); err != nil {
@@ -131,6 +136,9 @@ func main() {
 	rutasService := rutas.NewService(rutasRepo)
 	rutasHandler := rutas.NewHandler(rutasService)
 
+	backupService := newBackupService(cfg, db)
+	backupHandler := backup.NewHandler(backupService)
+
 	authService := auth.NewService(cfg, nil)
 	authHandler := auth.NewHandler(authService)
 	fullMiddleware := auth.NewMiddleware(authService, "full")
@@ -165,6 +173,7 @@ func main() {
 		financeHandler.RegisterRoutes(r)
 		calendarHandler.RegisterRoutes(r)
 		capacityHandler.RegisterRoutes(r)
+		backupHandler.RegisterRoutes(r)
 	})
 
 	server := &http.Server{
@@ -179,6 +188,7 @@ func main() {
 	workerCtx, stopWorker := context.WithCancel(context.Background())
 	defer stopWorker()
 	go calendar.NewWorker(calendarService).Run(workerCtx)
+	go backup.NewWorker(backupService, cfg.BackupInterval).Run(workerCtx)
 
 	lightsService.StartPolling(workerCtx, cfg.LightsPollInterval)
 

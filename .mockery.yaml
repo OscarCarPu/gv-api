@@ -56,3 +56,9 @@ packages:
       outpkg: mocks
     interfaces:
       ServiceInterface:
+  gv-api/internal/backup:
+    config:
+      dir: internal/backup/mocks 
+      outpkg: mocks 
+    interfaces:
+      ServiceInterface:

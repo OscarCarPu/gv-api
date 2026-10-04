@@ -1,3 +1,5 @@
+BACKUP_DIR_OWNER=docker run --rm -v "$(CURDIR)/backups:/b" alpine:3.22 sh -c "mkdir -p /b/hourly /b/daily && chown 1000:1000 /b /b/hourly /b/daily"
+
 .PHONY: setup-project sqlc generate-mocks pgcli-db demo run build lint \
 	up reset logs up-logs reset-logs down \
 	test test-unit test-integration test-e2e test-bench test-silent \
@@ -49,9 +51,11 @@ demo:
 # --- DOCKER OPERATIONS ---
 
 up:
+	@$(BACKUP_DIR_OWNER)
 	docker compose --progress plain up --build --wait -d
 
 reset:
+	@$(BACKUP_DIR_OWNER)
 	docker compose down -v --remove-orphans
 	docker compose --progress plain up --build --wait -d
 
@@ -84,6 +88,7 @@ test-db-cleanup:
 	@printf "$(GREEN)>>> Cleanup complete$(NC)\n"
 
 test-api-setup:
+	@$(BACKUP_DIR_OWNER)
 	@printf "$(CYAN)>>> Starting database...$(NC)\n"
 	@docker compose stop gv-api > /dev/null 2>&1 || true
 	@docker compose up -d --wait db > /dev/null

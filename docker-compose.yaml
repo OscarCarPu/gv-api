@@ -18,34 +18,6 @@ services:
       - gv
     restart: unless-stopped
 
-  # Bind mount so backups survive `docker compose down -v`.
-  db-backup:
-    image: prodrigestivill/postgres-backup-local:15
-    container_name: gv_db_backup
-    depends_on:
-      db:
-        condition: service_healthy
-    env_file:
-      - .env
-    environment:
-      - POSTGRES_HOST=db
-      - SCHEDULE=@daily
-      - BACKUP_KEEP_DAYS=7
-      - BACKUP_KEEP_WEEKS=0
-      - BACKUP_KEEP_MONTHS=0
-    volumes:
-      - ./backups:/backups
-    # The image's own healthcheck runs every 300s, which stalls `up --wait`.
-    healthcheck:
-      test: ["CMD-SHELL", "curl -f http://localhost:8080/ || exit 1"]
-      interval: 10s
-      timeout: 5s
-      retries: 3
-      start_period: 10s
-    networks:
-      - gv
-    restart: unless-stopped
-
   gv-api:
     build: .
     container_name: gv_api
@@ -64,6 +36,7 @@ services:
     volumes:
       # Host BlueZ for the lights; without it every bulb reads offline.
       - /run/dbus/system_bus_socket:/run/dbus/system_bus_socket
+      - ./backups:/backups
     healthcheck:
       test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://localhost:8080/health"]
       interval: 5s

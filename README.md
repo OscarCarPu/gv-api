@@ -38,6 +38,13 @@ All variables are in `.env.example` with their defaults. Required: `DATABASE_URL
 once `GOOGLE_CLIENT_ID` is set. Optional integrations (lights, central-pipeline, Google Calendar)
 degrade gracefully when unset.
 
+| Backup variable | Default | Meaning |
+|---|---|---|
+| `BACKUP_DIR` | `/backups` | Where `hourly/` and `daily/` live inside the container. |
+| `BACKUP_INTERVAL_MS` | `3600000` | Milliseconds between scheduled backups, aligned to the clock. `0` turns the schedule off. |
+| `BACKUP_KEEP_HOURLY_DAYS` | `2` | Days a backup stays in `hourly/`. Must be at least 1. |
+| `BACKUP_KEEP_DAILY_DAYS` | `30` | Days a backup stays in `daily/`. Must be at least `BACKUP_KEEP_HOURLY_DAYS`. |
+
 ## API
 
 ### Domains
@@ -54,6 +61,7 @@ degrade gracefully when unset.
 | **Lights** | Bluetooth bulbs driven over BlueZ, with discovery and a registry. Semiprivate auth. | [lights](docs/api/lights.md) |
 | **Calendar** | Google calendars mirrored locally and editable: OAuth, incremental sync, push notifications. | [calendar](docs/api/calendar.md) |
 | **Uptime** | Lab and ESP32 watchdog uptime from central-pipeline's marts. Semiprivate auth. | [uptime](docs/api/uptime.md) |
+| **Backups** | List, take and download the API's own database dumps. | [backups](docs/api/backups.md) |
 
 ### Infrastructure
 
@@ -69,6 +77,22 @@ degrade gracefully when unset.
 |---|---|---|
 | `X-Request-ID` | Request & Response | Optional; generated if absent, echoed back and logged. |
 | `X-Device-ID` | Request | Per-browser UUID from gv-web. Unused, but must stay CORS-allowlisted or preflights fail. |
+
+## Backups
+
+gv-api dumps its own database with `pg_dump` every `BACKUP_INTERVAL_MS` (default 1 h, at the top of the hour; `0` turns the schedule off). The dumps are gzipped plain SQL.
+
+**On demand:** run the same backup outside the schedule from the running container. Only one backup runs at a time, so this is safe while the schedule or another run is active:
+
+```bash
+docker compose exec -T gv-api ./main backup
+```
+
+The deploy workflow runs this before every deploy. The HTTP endpoints, response codes and restore steps are in [docs/api/backups.md](docs/api/backups.md).
+
+**Retention:** every backup goes to `hourly/`, and the first one of each UTC day is also hard-linked into `daily/`. After each successful run, backups older than `BACKUP_KEEP_HOURLY_DAYS` (default 2) are deleted from `hourly/`, and older than `BACKUP_KEEP_DAILY_DAYS` (default 30) from `daily/`. The newest file in each folder is always kept, and files that don't match `gv-db-<YYYYMMDD>T<HHMMSS>Z.sql.gz` are never touched.
+
+**Storage:** compose mounts `./backups` at `/backups` (`BACKUP_DIR`). gv-api runs as uid 1000, so `backups/`, `backups/hourly/` and `backups/daily/` must be owned by uid 1000, or every backup fails with `permission denied`. `make up`, `make reset` and the deploy workflow create the folders and fix their owner with a throwaway container, so no `sudo` is needed.
 
 ## Testing
 

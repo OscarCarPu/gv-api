@@ -21,14 +21,19 @@ jobs:
       - name: Backup database
         run: |
           cd /home/ocp/docker/gv/gv-api
+          docker run --rm -v "$PWD/backups:/b" alpine:3.22 sh -c "mkdir -p /b/hourly /b/daily && chown 1000:1000 /b /b/hourly /b/daily"
           # Best-effort: a failed backup must not block the deploy.
-          docker compose exec -T db-backup /backup.sh || echo "::warning::pre-deploy backup skipped or failed"
+          if docker ps -q -f name='^gv_db_backup$' | grep -q .; then
+            docker exec gv_db_backup /backup.sh
+          else
+            docker compose exec -T gv-api ./main backup
+          fi || echo "::warning::pre-deploy backup skipped or failed"
 
       - name: Deploy
         run: |
           cd /home/ocp/docker/gv/gv-api
           # --wait-timeout makes a crash-looping container fail the job instead of hanging it.
-          if ! docker compose up --build --wait --wait-timeout 90 -d; then
+          if ! docker compose up --build --wait --wait-timeout 90 --remove-orphans -d; then
             echo "::error::gv_api did not become healthy - deploy failed"
             docker compose ps
             docker compose logs --tail 50 gv-api
