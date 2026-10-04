@@ -23,11 +23,7 @@ jobs:
           cd /home/ocp/docker/gv/gv-api
           docker run --rm -v "$PWD/backups:/b" alpine:3.22 sh -c "mkdir -p /b/hourly /b/daily && chown 1000:1000 /b /b/hourly /b/daily"
           # Best-effort: a failed backup must not block the deploy.
-          if docker ps -q -f name='^gv_db_backup$' | grep -q .; then
-            docker exec gv_db_backup /backup.sh
-          else
-            docker compose exec -T gv-api ./main backup
-          fi || echo "::warning::pre-deploy backup skipped or failed"
+          docker compose exec -T gv-api ./main backup || echo "::warning::pre-deploy backup skipped or failed"
 
       - name: Deploy
         run: |
