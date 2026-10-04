@@ -63,6 +63,7 @@ type Config struct {
 	BackupKeepHourly time.Duration
 	BackupKeepDaily  time.Duration
 	BackupInterval   time.Duration
+	BackupS3Bucket   string
 }
 
 func Load() (*Config, error) {
@@ -120,6 +121,7 @@ func Load() (*Config, error) {
 		BackupKeepHourly: time.Duration(getEnvInt("BACKUP_KEEP_HOURLY_DAYS", 2)) * 24 * time.Hour,
 		BackupKeepDaily:  time.Duration(getEnvInt("BACKUP_KEEP_DAILY_DAYS", 30)) * 24 * time.Hour,
 		BackupInterval:   getEnvDuration("BACKUP_INTERVAL_MS", 60*60*1000),
+		BackupS3Bucket:   os.Getenv("BACKUP_S3_BUCKET"),
 	}
 	cfg.CalendarWebhookEnabled = getEnvBool("CALENDAR_WEBHOOK_ENABLED", cfg.CalendarWebhookURL != "")
 	if cfg.CalendarWebAppURL == "" && len(allowedOrigins) > 0 {

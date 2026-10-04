@@ -38,13 +38,6 @@ All variables are in `.env.example` with their defaults. Required: `DATABASE_URL
 once `GOOGLE_CLIENT_ID` is set. Optional integrations (lights, central-pipeline, Google Calendar)
 degrade gracefully when unset.
 
-| Backup variable | Default | Meaning |
-|---|---|---|
-| `BACKUP_DIR` | `/backups` | Where `hourly/` and `daily/` live inside the container. |
-| `BACKUP_INTERVAL_MS` | `3600000` | Milliseconds between scheduled backups, aligned to the clock. `0` turns the schedule off. |
-| `BACKUP_KEEP_HOURLY_DAYS` | `2` | Days a backup stays in `hourly/`. Must be at least 1. |
-| `BACKUP_KEEP_DAILY_DAYS` | `30` | Days a backup stays in `daily/`. Must be at least `BACKUP_KEEP_HOURLY_DAYS`. |
-
 ## API
 
 ### Domains

@@ -40,10 +40,10 @@ func (l fakeLocker) TryLock(context.Context) (func(), error) {
 	return func() {}, nil
 }
 
-func newService(t *testing.T, d backup.Dumper, l backup.Locker) (*backup.Service, string) {
+func newService(t *testing.T, d backup.Dumper, l backup.Locker, u backup.Uploader) (*backup.Service, string) {
 	t.Helper()
 	dir := t.TempDir()
-	return backup.NewService(d, l, backup.Config{Dir: dir, KeepHourly: 2 * day, KeepDaily: 30 * day}), dir
+	return backup.NewService(d, l, u, backup.Config{Dir: dir, KeepHourly: 2 * day, KeepDaily: 30 * day}), dir
 }
 
 func nameAt(at time.Time) string {
@@ -71,7 +71,7 @@ func TestService_Run(t *testing.T) {
 	ctx := context.Background()
 
 	t.Run("writes the dump gzipped into hourly/", func(t *testing.T) {
-		svc, dir := newService(t, fakeDumper{out: "CREATE TABLE x();"}, fakeLocker{})
+		svc, dir := newService(t, fakeDumper{out: "CREATE TABLE x();"}, fakeLocker{}, nil)
 
 		b, err := svc.Run(ctx)
 		require.NoError(t, err)
@@ -87,7 +87,7 @@ func TestService_Run(t *testing.T) {
 	})
 
 	t.Run("only the first backup of the day is copied to daily/", func(t *testing.T) {
-		svc, dir := newService(t, fakeDumper{out: "x"}, fakeLocker{})
+		svc, dir := newService(t, fakeDumper{out: "x"}, fakeLocker{}, nil)
 		earlier := nameAt(time.Now().Add(-time.Second))
 		touch(t, dir, "hourly", earlier)
 
@@ -105,7 +105,7 @@ func TestService_Run(t *testing.T) {
 	})
 
 	t.Run("deletes by age per folder and leaves other files alone", func(t *testing.T) {
-		svc, dir := newService(t, fakeDumper{out: "x"}, fakeLocker{})
+		svc, dir := newService(t, fakeDumper{out: "x"}, fakeLocker{}, nil)
 		now := time.Now()
 
 		recent := nameAt(now.Add(-time.Hour))
@@ -135,7 +135,7 @@ func TestService_Run(t *testing.T) {
 	})
 
 	t.Run("a second run in the same second returns the existing backup", func(t *testing.T) {
-		svc, dir := newService(t, fakeDumper{out: "new"}, fakeLocker{})
+		svc, dir := newService(t, fakeDumper{out: "new"}, fakeLocker{}, nil)
 		now := time.Now()
 		for i := range 3 {
 			touch(t, dir, "hourly", nameAt(now.Add(time.Duration(i)*time.Second)))
@@ -151,7 +151,7 @@ func TestService_Run(t *testing.T) {
 	})
 
 	t.Run("a failed dump leaves no file and deletes nothing", func(t *testing.T) {
-		svc, dir := newService(t, fakeDumper{err: errors.New("boom")}, fakeLocker{})
+		svc, dir := newService(t, fakeDumper{err: errors.New("boom")}, fakeLocker{}, nil)
 		touch(t, dir, "hourly", nameAt(time.Now().Add(-40*day)))
 		touch(t, dir, "hourly", nameAt(time.Now().Add(-41*day)))
 
@@ -164,7 +164,7 @@ func TestService_Run(t *testing.T) {
 	})
 
 	t.Run("ErrRunning when the lock is held elsewhere", func(t *testing.T) {
-		svc, _ := newService(t, fakeDumper{}, fakeLocker{err: backup.ErrRunning})
+		svc, _ := newService(t, fakeDumper{}, fakeLocker{err: backup.ErrRunning}, nil)
 
 		_, err := svc.Run(ctx)
 		assert.ErrorIs(t, err, backup.ErrRunning)
@@ -172,7 +172,7 @@ func TestService_Run(t *testing.T) {
 }
 
 func TestService_Path(t *testing.T) {
-	svc, dir := newService(t, fakeDumper{}, fakeLocker{})
+	svc, dir := newService(t, fakeDumper{}, fakeLocker{}, nil)
 	inHourly := "gv-db-20260102T000000Z.sql.gz"
 	onlyDaily := "gv-db-20260101T000000Z.sql.gz"
 	touch(t, dir, "hourly", inHourly)
@@ -192,4 +192,44 @@ func TestService_Path(t *testing.T) {
 	path, err = svc.Path(onlyDaily)
 	require.NoError(t, err)
 	assert.Equal(t, filepath.Join(dir, "daily", onlyDaily), path)
+}
+
+type fakeUploader struct {
+	keys []string
+	err  error
+}
+
+func (u *fakeUploader) Upload(_ context.Context, key, _ string) error {
+	if u.err != nil {
+		return u.err
+	}
+	u.keys = append(u.keys, key)
+	return nil
+}
+
+func TestService_Upload(t *testing.T) {
+	ctx := context.Background()
+
+	t.Run("the day's first backup also goes to daily/", func(t *testing.T) {
+		up := &fakeUploader{}
+		svc, _ := newService(t, fakeDumper{out: "ex"}, fakeLocker{}, up)
+
+		first, err := svc.Run(ctx)
+		require.NoError(t, err)
+		assert.Equal(t, []string{"hourly/" + first.Name, "daily/" + first.Name}, up.keys)
+
+		up.keys = nil
+		time.Sleep(time.Until(time.Now().Truncate(time.Second).Add(time.Second)))
+		second, err := svc.Run(ctx)
+		require.NoError(t, err)
+		assert.Equal(t, []string{"hourly/" + second.Name}, up.keys)
+	})
+
+	t.Run("a failed upload still keeps the local backup", func(t *testing.T) {
+		svc, dir := newService(t, fakeDumper{out: "x"}, fakeLocker{}, &fakeUploader{err: errors.New("denied")})
+
+		b, err := svc.Run(ctx)
+		require.NoError(t, err)
+		assert.FileExists(t, filepath.Join(dir, "hourly", b.Name))
+	})
 }

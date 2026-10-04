@@ -12,12 +12,21 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-func newBackupService(cfg *config.Config, db *pgxpool.Pool) *backup.Service {
+func newBackupService(ctx context.Context, cfg *config.Config, db *pgxpool.Pool) (*backup.Service, error) {
+	var uploader backup.Uploader
+	if cfg.BackupS3Bucket != "" {
+		u, err := backup.NewS3Uploader(ctx, cfg.BackupS3Bucket)
+		if err != nil {
+			return nil, err
+		}
+		uploader = u
+	}
 	return backup.NewService(
 		backup.PgDump{URL: cfg.DBUrl},
 		backup.NewPgLocker(db),
+		uploader,
 		backup.Config{Dir: cfg.BackupDir, KeepHourly: cfg.BackupKeepHourly, KeepDaily: cfg.BackupKeepDaily},
-	)
+	), nil
 }
 
 func runBackup(cfg *config.Config) int {
@@ -30,8 +39,12 @@ func runBackup(cfg *config.Config) int {
 		return 1
 	}
 	defer db.Close()
-
-	b, err := newBackupService(cfg, db).Run(ctx)
+	svc, err := newBackupService(ctx, cfg, db)
+	if err != nil {
+		slog.Error("failed to set up backups", "error", err)
+		return 1
+	}
+	b, err := svc.Run(ctx)
 	if err != nil {
 		slog.Error("backup failed", "error", err)
 		return 1

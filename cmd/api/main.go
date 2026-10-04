@@ -136,7 +136,11 @@ func main() {
 	rutasService := rutas.NewService(rutasRepo)
 	rutasHandler := rutas.NewHandler(rutasService)
 
-	backupService := newBackupService(cfg, db)
+	backupService, err := newBackupService(context.Background(), cfg, db)
+	if err != nil {
+		slog.Error("failed to set up backups", "error", err)
+		os.Exit(1)
+	}
 	backupHandler := backup.NewHandler(backupService)
 
 	authService := auth.NewService(cfg, nil)

@@ -83,3 +83,7 @@ gunzip -c backups/hourly/<name> | docker compose exec -T db psql -U <user> -d <d
 ```
 
 Try it on a scratch database first. On the server, a restore is a manual decision, not something the API does.
+
+## Off-site copy
+
+With `BACKUP_S3_BUCKET` set, each backup is also uploaded to `gv-db/hourly/`, and the day's first to `gv-db/daily/`. The bucket and its upload-only key live in `aws-failover`. A failed upload is only logged.

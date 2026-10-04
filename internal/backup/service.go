@@ -24,6 +24,10 @@ type Locker interface {
 	TryLock(ctx context.Context) (unlock func(), err error)
 }
 
+type Uploader interface {
+	Upload(ctx context.Context, key, file string) error
+}
+
 type Config struct {
 	Dir        string
 	KeepHourly time.Duration
@@ -40,13 +44,14 @@ const (
 var namePattern = regexp.MustCompile(`^gv-db-\d{8}T\d{6}Z\.sql\.gz$`)
 
 type Service struct {
-	dumper Dumper
-	locker Locker
-	cfg    Config
+	dumper   Dumper
+	locker   Locker
+	uploader Uploader
+	cfg      Config
 }
 
-func NewService(dumper Dumper, locker Locker, cfg Config) *Service {
-	return &Service{dumper: dumper, locker: locker, cfg: cfg}
+func NewService(dumper Dumper, locker Locker, uploader Uploader, cfg Config) *Service {
+	return &Service{dumper: dumper, locker: locker, uploader: uploader, cfg: cfg}
 }
 
 func (s *Service) Run(ctx context.Context) (*Backup, error) {
@@ -77,8 +82,14 @@ func (s *Service) Run(ctx context.Context) (*Backup, error) {
 		return nil, err
 	}
 
-	if err := s.promote(b); err != nil {
+	daily, err := s.promote(b)
+	if err != nil {
 		slog.WarnContext(ctx, "backup: creating daily copy", "error", err)
+	}
+	if s.uploader != nil {
+		if err := s.upload(ctx, b.Name, daily); err != nil {
+			slog.ErrorContext(ctx, "backup: s3 upload failed", "error", err)
+		}
 	}
 
 	if err := s.prune(); err != nil {
@@ -118,18 +129,18 @@ func (s *Service) write(ctx context.Context, name string) (err error) {
 	return nil
 }
 
-func (s *Service) promote(b *Backup) error {
+func (s *Service) promote(b *Backup) (bool, error) {
 	sameDay, err := filepath.Glob(s.path(dailyDir, "gv-db-"+b.CreatedAt.Format(dayLayout)+"T*Z.sql.gz"))
 	if err != nil {
-		return err
+		return false, err
 	}
 	if len(sameDay) > 0 {
-		return nil
+		return false, nil
 	}
 	if err := os.Link(s.path(hourlyDir, b.Name), s.path(dailyDir, b.Name)); err != nil {
-		return fmt.Errorf("link: %w", err)
+		return false, fmt.Errorf("link: %w", err)
 	}
-	return nil
+	return true, nil
 }
 
 func (s *Service) prune() error {
@@ -214,4 +225,14 @@ func (s *Service) Path(name string) (string, error) {
 		}
 	}
 	return "", ErrNotFound
+}
+
+func (s *Service) upload(ctx context.Context, name string, daily bool) error {
+	if err := s.uploader.Upload(ctx, hourlyDir+"/"+name, s.path(hourlyDir, name)); err != nil {
+		return err
+	}
+	if daily {
+		return s.uploader.Upload(ctx, dailyDir+"/"+name, s.path(dailyDir, name))
+	}
+	return nil
 }
