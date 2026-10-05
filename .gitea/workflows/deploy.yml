@@ -35,3 +35,23 @@ jobs:
             docker compose logs --tail 50 gv-api
             exit 1
           fi
+
+      - name: Push to ECR
+        shell: bash
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_REGION: eu-south-2
+          REGISTRY: 715831355178.dkr.ecr.eu-south-2.amazonaws.com
+        run: |
+          aws() { docker run --rm -e AWS_ACCESS_KEY_ID -e AWS_SECRET_ACCESS_KEY -e AWS_REGION amazon/aws-cli "$@"; }
+          aws ecr get-login-password | docker login --username AWS --password-stdin "$REGISTRY"
+          docker tag gv-api:latest "$REGISTRY/gv-api:latest"
+          docker push "$REGISTRY/gv-api:latest"
+          # Keep latest and the manifests its index references; delete everything else.
+          keep=$(aws ecr batch-get-image --repository-name gv-api --image-ids imageTag=latest --query 'images[0].[imageId.imageDigest,imageManifest]' --output text | grep -o 'sha256:[0-9a-f]\{64\}' | sort -u)
+          [ -n "$keep" ]
+          old=$(aws ecr list-images --repository-name gv-api --query 'imageIds[].imageDigest' --output text | tr '\t' '\n' | grep -vxFf <(echo "$keep") || true)
+          if [ -n "$old" ]; then
+            aws ecr batch-delete-image --repository-name gv-api --image-ids $(printf 'imageDigest=%s ' $old)
+          fi

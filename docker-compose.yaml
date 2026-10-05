@@ -19,6 +19,7 @@ services:
     restart: unless-stopped
 
   gv-api:
+    image: gv-api
     build: .
     container_name: gv_api
     # dbus-daemon drops connections from uids unknown on the host; 1000 exists there.
