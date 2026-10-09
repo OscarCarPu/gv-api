@@ -273,13 +273,13 @@ func (r *recorder) start() (Recording, error) {
 
 	go func() {
 		_ = cmd.Wait()
-		close(a.done)
 		a.stopOverlay()
 		r.mu.Lock()
 		if r.active == a {
 			r.active = nil
 		}
 		r.mu.Unlock()
+		close(a.done)
 		makePoster(path)
 		r.prune(r.liveName())
 	}()
@@ -420,7 +420,7 @@ func (r *recorder) videoArgs(textfile string) []string {
 	if codec == "copy" {
 		codec = "libx264"
 	}
-	return []string{"-vf", drawtext, "-c:v", codec, "-preset", "veryfast", "-crf", "26",
+	return []string{"-vf", drawtext, "-c:v", codec, "-preset", "ultrafast", "-crf", "26",
 		"-g", "50", "-pix_fmt", "yuv420p", "-threads", "2"}
 }
 
