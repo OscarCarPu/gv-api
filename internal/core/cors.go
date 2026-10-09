@@ -10,6 +10,10 @@ var BrowserHeaders = []string{
 	"Authorization",
 	"X-Request-ID",
 	"X-Device-ID", // stable per-browser UUID from gv-web; unread so far, but sent on every call
+	"X-File-Name",
+	"X-Upload-Id",
+	"X-Upload-Offset",
+	"X-Upload-Total",
 }
 
 // CORSOptions is the CORS configuration the API serves browser clients with.

@@ -13,8 +13,10 @@ RUN --mount=type=cache,target=/go/pkg/mod --mount=type=cache,target=/root/.cache
 
 FROM alpine:3.22
 
-RUN apk add --no-cache postgresql15-client \
+RUN apk add --no-cache postgresql15-client ffmpeg font-dejavu \
     && addgroup -S appgroup && adduser -S appuser -G appgroup
+
+RUN mkdir -p /data/recordings && chown 1000:1000 /data/recordings
 
 WORKDIR /app
 

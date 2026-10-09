@@ -38,6 +38,7 @@ services:
       # Host BlueZ for the lights; without it every bulb reads offline.
       - /run/dbus/system_bus_socket:/run/dbus/system_bus_socket
       - ./backups:/backups
+      - printer_recordings:/data/recordings
     healthcheck:
       test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://localhost:8080/health"]
       interval: 5s
@@ -50,6 +51,7 @@ services:
 
 volumes:
   postgres_data:
+  printer_recordings:
 
 networks:
   gv:

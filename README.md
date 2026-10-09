@@ -51,6 +51,7 @@ degrade gracefully when unset.
 | **Capacity** | Free and busy hours per day. | [capacity](docs/api/capacity.md) |
 | **Finance** | Accounts, categories, transactions, monthly/yearly budgets and stats. | [finance](docs/api/finance.md) |
 | **Rutas** | Concello marks: which municipalities were visited and when. Semiprivate auth. | [rutas](docs/api/rutas.md) |
+| **Printers** | PrusaLink telemetry, job control, print files, camera and recordings. Semiprivate auth. | [printers](docs/api/printers.md) |
 | **Lights** | Bluetooth bulbs driven over BlueZ, with discovery and a registry. Semiprivate auth. | [lights](docs/api/lights.md) |
 | **Calendar** | Google calendars mirrored locally and editable: OAuth, incremental sync, push notifications. | [calendar](docs/api/calendar.md) |
 | **Uptime** | Lab and ESP32 watchdog uptime from central-pipeline's marts. Semiprivate auth. | [uptime](docs/api/uptime.md) |

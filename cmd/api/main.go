@@ -24,6 +24,7 @@ import (
 	"gv-api/internal/lights"
 	"gv-api/internal/pipeline"
 	"gv-api/internal/plan"
+	"gv-api/internal/printers"
 	"gv-api/internal/rutas"
 	"gv-api/internal/tasks"
 	"gv-api/internal/uptime"
@@ -90,6 +91,29 @@ func main() {
 	}
 	lightsService := lights.NewService(lightsRepo, lightsDriver, cfg.LightsCacheTTL, cfg.LightsSettleAttempts, cfg.LightsSettleDelay)
 	lightsHandler := lights.NewHandler(lightsService)
+
+	printersService := printers.NewService(printers.Config{
+		Printers: []printers.Printer{{
+			ID:       "core-one",
+			Name:     "Prusa CORE One",
+			Model:    "Prusa CORE One + Buddy3D",
+			RTSP:     cfg.PrinterRTSP,
+			Host:     cfg.PrusaLinkHost,
+			User:     cfg.PrusaLinkUser,
+			Password: cfg.PrusaLinkPassword,
+			APIKey:   cfg.PrusaLinkAPIKey,
+			Storage:  cfg.PrusaLinkStorage,
+		}},
+		RecordingsDir: cfg.PrinterRecordingsDir,
+		UploadsDir:    cfg.PrinterUploadsDir,
+		MaxMinutes:    cfg.PrinterRecordingMaxMinutes,
+		MaxBytes:      int64(cfg.PrinterRecordingsMaxGB * (1 << 30)),
+		VideoCodec:    cfg.PrinterRecordingVideoCodec,
+		Overlay:       cfg.PrinterRecordingOverlay,
+		Font:          cfg.PrinterRecordingFont,
+		SignKey:       []byte(cfg.JwtSecret),
+	})
+	printersHandler := printers.NewHandler(printersService)
 
 	calendarRepo := calendar.NewRepository(db)
 	calendarClient := calendargoogle.NewClient(calendargoogle.Config{
@@ -159,11 +183,13 @@ func main() {
 	r.Post("/login", authHandler.Login)
 	r.Post("/login/2fa", authHandler.Login2FA)
 	calendarHandler.RegisterPublicRoutes(r)
+	printersHandler.RegisterPublicRoutes(r)
 
 	// Semiprivate (semi or full token)
 	r.Group(func(r chi.Router) {
 		r.Use(semiMiddleware.Handle)
 		lightsHandler.RegisterRoutes(r)
+		printersHandler.RegisterRoutes(r)
 		uptimeHandler.RegisterRoutes(r)
 		rutasHandler.RegisterRoutes(r)
 	})

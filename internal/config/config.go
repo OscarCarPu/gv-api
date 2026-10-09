@@ -31,6 +31,21 @@ type Config struct {
 	LightsSettleAttempts int
 	LightsSettleDelay    time.Duration
 
+	// Domotics printers. Unset PRUSALINK_HOST leaves telemetry and files unconfigured.
+	PrinterRTSP                string
+	PrusaLinkHost              string
+	PrusaLinkUser              string
+	PrusaLinkPassword          string
+	PrusaLinkAPIKey            string
+	PrusaLinkStorage           string
+	PrinterRecordingsDir       string
+	PrinterUploadsDir          string
+	PrinterRecordingMaxMinutes int
+	PrinterRecordingsMaxGB     float64
+	PrinterRecordingVideoCodec string
+	PrinterRecordingOverlay    bool
+	PrinterRecordingFont       string
+
 	// central-pipeline's database (read-only). Unset means those domains answer 503.
 	PipelineDBUrl string
 	// Past this age, mart numbers are reported as stale.
@@ -95,6 +110,20 @@ func Load() (*Config, error) {
 		LightsPollInterval:   getEnvDuration("LIGHTS_POLL_MS", 60000),
 		LightsSettleAttempts: getEnvInt("LIGHTS_SETTLE_ATTEMPTS", 2),
 		LightsSettleDelay:    getEnvDuration("LIGHTS_SETTLE_DELAY_MS", 400),
+
+		PrinterRTSP:                getEnv("PRINTER_RTSP_URL", "rtsp://192.168.1.211/live"),
+		PrusaLinkHost:              strings.TrimRight(os.Getenv("PRUSALINK_HOST"), "/"),
+		PrusaLinkUser:              os.Getenv("PRUSALINK_USER"),
+		PrusaLinkPassword:          os.Getenv("PRUSALINK_PASSWORD"),
+		PrusaLinkAPIKey:            os.Getenv("PRUSALINK_API_KEY"),
+		PrusaLinkStorage:           os.Getenv("PRUSALINK_STORAGE"),
+		PrinterRecordingsDir:       getEnv("PRINTER_RECORDINGS_DIR", "/data/recordings"),
+		PrinterUploadsDir:          getEnv("PRINTER_UPLOADS_DIR", os.TempDir()+"/gv-print-uploads"),
+		PrinterRecordingMaxMinutes: getEnvInt("PRINTER_RECORDING_MAX_MINUTES", 30*60),
+		PrinterRecordingsMaxGB:     getEnvFloat("PRINTER_RECORDINGS_MAX_GB", 30),
+		PrinterRecordingVideoCodec: getEnv("PRINTER_RECORDING_VIDEO_CODEC", "copy"),
+		PrinterRecordingOverlay:    getEnvBool("PRINTER_RECORDING_OVERLAY", true),
+		PrinterRecordingFont:       os.Getenv("PRINTER_RECORDING_FONT"),
 
 		PipelineDBUrl: os.Getenv("PIPELINE_DATABASE_URL"),
 		// Generous: dbt is not scheduled yet.
