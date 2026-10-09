@@ -467,8 +467,19 @@ func (s *Service) applyUrgency(ctx context.Context, rows []TaskByDueDateResponse
 	}
 
 	remaining := make(map[int]bool, len(idxByID))
+	remHours := make(map[int]decimal.Decimal, len(idxByID))
 	for _, i := range idxByID {
 		remaining[i] = true
+		remHours[i] = remainingHours(rows[i], plannedByTask[rows[i].ID])
+	}
+	claimOf := func(i int, last time.Time) claim {
+		return claim{
+			priority: priority[i],
+			last:     last,
+			due:      *s.normalizedDue(rows[i]),
+			hours:    remHours[i],
+			id:       rows[i].ID,
+		}
 	}
 	for len(remaining) > 0 {
 		// Filling backwards reverses the work order (priority, then soonest deadline): the lowest
@@ -481,7 +492,7 @@ func (s *Service) applyUrgency(ctx context.Context, rows []TaskByDueDateResponse
 					continue
 				}
 				last := lastDay(i)
-				if pick == -1 || betterClaim(priority[i], last, rows[i].ID, priority[pick], pickLast, rows[pick].ID) {
+				if pick == -1 || claimOf(i, last).beats(claimOf(pick, pickLast)) {
 					pick, pickLast = i, last
 				}
 			}
@@ -507,11 +518,7 @@ func (s *Service) applyUrgency(ctx context.Context, rows []TaskByDueDateResponse
 			continue
 		}
 
-		spentHours := decimal.NewFromInt(t.TimeSpent).Div(decimal.NewFromInt(3600))
-		rem := t.EstimateHours.Sub(spentHours).Sub(plannedByTask[t.ID])
-		if rem.IsNegative() {
-			rem = decimal.Zero
-		}
+		rem := remHours[pick]
 		t.RemainingHours = &rem
 		if rem.IsZero() {
 			continue
@@ -548,15 +555,37 @@ func isEstimated(t TaskByDueDateResponse) bool {
 	return t.TaskType == "standard" && t.EstimateHours != nil
 }
 
-// betterClaim orders claims: lower (chain) priority first, then later last day, then ID.
-func betterClaim(aPrio int32, aLast time.Time, aID int32, bPrio int32, bLast time.Time, bID int32) bool {
-	if aPrio != bPrio {
-		return aPrio > bPrio
+func remainingHours(t TaskByDueDateResponse, planned decimal.Decimal) decimal.Decimal {
+	if !isEstimated(t) {
+		return decimal.Zero
 	}
-	if !aLast.Equal(bLast) {
-		return aLast.After(bLast)
+	spent := decimal.NewFromInt(t.TimeSpent).Div(decimal.NewFromInt(3600))
+	return decimal.Max(t.EstimateHours.Sub(spent).Sub(planned), decimal.Zero)
+}
+
+type claim struct {
+	priority int32
+	last     time.Time
+	due      time.Time
+	hours    decimal.Decimal
+	id       int32
+}
+
+// beats orders claims: lower (chain) priority first, then later last day, later due date, fewer remaining hours, then ID.
+func (a claim) beats(b claim) bool {
+	if a.priority != b.priority {
+		return a.priority > b.priority
 	}
-	return aID < bID
+	if !a.last.Equal(b.last) {
+		return a.last.After(b.last)
+	}
+	if !a.due.Equal(b.due) {
+		return a.due.After(b.due)
+	}
+	if !a.hours.Equal(b.hours) {
+		return a.hours.LessThan(b.hours)
+	}
+	return a.id < b.id
 }
 
 func (s *Service) GetActiveTimeEntry(ctx context.Context) (ActiveTimeEntryResponse, error) {

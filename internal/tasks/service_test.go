@@ -1113,3 +1113,59 @@ func TestService_UpdateTask_ReplaceBlocks(t *testing.T) {
 	require.Len(t, got.Blocks, 2)
 	assert.Equal(t, int32(5), got.Blocks[0].ID)
 }
+
+func TestService_GetTasksByDueDate_WorkOrderTieBreaks(t *testing.T) {
+	loc, err := time.LoadLocation("Europe/Madrid")
+	require.NoError(t, err)
+
+	now := time.Now().In(loc)
+	today := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, loc)
+	dueIn := func(d int) *time.Time {
+		v := time.Date(today.Year(), today.Month(), today.Day()+d, 0, 0, 0, 0, time.UTC)
+		return &v
+	}
+	days := func(free string) []capacity.DayFreeBusy {
+		out := make([]capacity.DayFreeBusy, 0, 12)
+		for i := 0; i < 12; i++ {
+			out = append(out, capacity.DayFreeBusy{Date: today.AddDate(0, 0, i).Format("2006-01-02"), CapacityHours: decimal.NewFromInt(14), FreeHours: decimal.RequireFromString(free)})
+		}
+		return out
+	}
+	run := func(t *testing.T, free string, rows []tasks.TaskByDueDateResponse) map[int32]tasks.TaskByDueDateResponse {
+		repo := mocks.NewMockRepository(t)
+		repo.EXPECT().GetTasksByDueDate(mock.Anything).Return(rows, nil)
+		svc := tasks.NewService(repo, loc)
+		svc.SetUrgencyProviders(stubCapacityProvider{days: days(free)}, stubPlannedHoursProvider{})
+		got, err := svc.GetTasksByDueDate(context.Background(), nil)
+		require.NoError(t, err)
+		byID := map[int32]tasks.TaskByDueDateResponse{}
+		for _, r := range got {
+			byID[r.ID] = r
+		}
+		return byID
+	}
+	link := func(id int32) []tasks.TaskDepRef { return []tasks.TaskDepRef{{ID: id}} }
+
+	t.Run("two squeezed chains keep their real deadlines apart", func(t *testing.T) {
+		byID := run(t, "0", []tasks.TaskByDueDateResponse{
+			{ID: 4, Priority: 2, TaskType: "standard", DueAt: dueIn(9), EstimateHours: decPtr("4"), DependsOn: link(3), Blocked: true},
+			{ID: 3, Priority: 2, TaskType: "standard", DueAt: dueIn(9), EstimateHours: decPtr("4"), Blocks: link(4)},
+			{ID: 2, Priority: 2, TaskType: "standard", DueAt: dueIn(3), EstimateHours: decPtr("4"), DependsOn: link(1), Blocked: true},
+			{ID: 1, Priority: 2, TaskType: "standard", DueAt: dueIn(3), EstimateHours: decPtr("4"), Blocks: link(2)},
+		})
+		require.NotNil(t, byID[1].WorkOrder)
+		require.NotNil(t, byID[3].WorkOrder)
+		assert.Less(t, *byID[1].WorkOrder, *byID[3].WorkOrder, "the chain due sooner goes first")
+		assert.Less(t, *byID[1].WorkOrder, *byID[2].WorkOrder, "a dependency still precedes its dependent")
+	})
+
+	t.Run("a full tie goes to the task with more hours left", func(t *testing.T) {
+		byID := run(t, "8", []tasks.TaskByDueDateResponse{
+			{ID: 2, Priority: 2, TaskType: "standard", DueAt: dueIn(5), EstimateHours: decPtr("2")},
+			{ID: 1, Priority: 2, TaskType: "standard", DueAt: dueIn(5), EstimateHours: decPtr("6")},
+		})
+		require.NotNil(t, byID[1].WorkOrder)
+		require.NotNil(t, byID[2].WorkOrder)
+		assert.Less(t, *byID[1].WorkOrder, *byID[2].WorkOrder, "6h before 2h, whatever the IDs")
+	})
+}
