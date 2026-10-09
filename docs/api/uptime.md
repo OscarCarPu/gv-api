@@ -118,7 +118,7 @@ State changes over an arbitrary range, with the percentage computed for exactly 
 |---|---|
 | `400` | Unknown `device`, unparseable `from`/`to`, non-positive `limit`, or `from` not before `to`. |
 | `401` | No token, or a token of the wrong tier. |
-| `503` | `PIPELINE_DATABASE_URL` is not configured. |
+| `503` | `PIPELINE_DATABASE_URL` is not configured, or the API runs on the backup server (`FAILOVER_SIDE=aws`, body carries `code: unavailable_on_failover`, which wins). |
 
 Reads hitting a dbt rebuild are retried twice before becoming a 500.
 

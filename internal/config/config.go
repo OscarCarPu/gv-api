@@ -18,6 +18,7 @@ type Config struct {
 	Timezone            string
 	Location            *time.Location
 	AllowedOrigins      []string
+	FailoverSide        string
 
 	// Domotics lights. LIGHTS_DRIVER unset uses the in-memory mock.
 	LightsDriver  string
@@ -81,6 +82,8 @@ type Config struct {
 	BackupS3Bucket   string
 }
 
+func (c *Config) OnFailover() bool { return c.FailoverSide == "aws" }
+
 func Load() (*Config, error) {
 	var allowedOrigins []string
 	if raw := os.Getenv("ALLOWED_ORIGINS"); raw != "" {
@@ -100,6 +103,7 @@ func Load() (*Config, error) {
 		TotpSecret:          os.Getenv("TOTP_SECRET"),
 		Timezone:            getEnv("TIMEZONE", "Europe/Madrid"),
 		AllowedOrigins:      allowedOrigins,
+		FailoverSide:        strings.ToLower(strings.TrimSpace(getEnv("FAILOVER_SIDE", "home"))),
 
 		LightsDriver:  getEnv("LIGHTS_DRIVER", "mock"),
 		LightsAdapter: getEnv("LIGHTS_ADAPTER", "hci0"),
@@ -181,6 +185,10 @@ func Load() (*Config, error) {
 	}
 	if cfg.BackupKeepHourly <= 0 || cfg.BackupKeepDaily < cfg.BackupKeepHourly {
 		return nil, fmt.Errorf("BACKUP_KEEP_HOURLY_DAYS must be at least 1 and at most BACKUP_KEEP_DAILY_DAYS")
+	}
+
+	if cfg.FailoverSide != "home" && cfg.FailoverSide != "aws" {
+		return nil, fmt.Errorf("invalid FAILOVER_SIDE %q: must be home or aws", cfg.FailoverSide)
 	}
 
 	loc, err := time.LoadLocation(cfg.Timezone)

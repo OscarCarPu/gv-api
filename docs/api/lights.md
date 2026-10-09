@@ -157,6 +157,14 @@ Edits name, model, protocol or capabilities; omitted fields keep their value. Th
 
 `204`, or `404` if it was already gone.
 
+## On the backup server
+
+With `FAILOVER_SIDE=aws` every endpoint here answers `503` before reaching the handler (after auth, except for signed media URLs):
+
+```json
+{"error": "Not available while running on the backup server. Back when home is restored.", "code": "unavailable_on_failover"}
+```
+
 ## Configuration
 
 ```

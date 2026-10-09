@@ -29,6 +29,14 @@ Config is env-only (`PRINTER_RTSP_URL`, `PRUSALINK_*`, `PRINTER_RECORDING*`; see
 | `DELETE …/recordings?name=` | Delete one (409 while it is recording) |
 | `GET …/recordings/{name}?exp&sig` | **No bearer.** Signed with the JWT secret, valid 12–13h. Honours `Range`; `&download=1` adds `Content-Disposition` |
 
+## On the backup server
+
+With `FAILOVER_SIDE=aws` every endpoint here answers `503` before reaching the handler (after auth, except for signed media URLs):
+
+```json
+{"error": "Not available while running on the backup server. Back when home is restored.", "code": "unavailable_on_failover"}
+```
+
 ## Notes
 
 - Large uploads must be chunked: the tunnel in front of the API rejects bodies over 100 MB. Chunks stage on disk (`PRINTER_UPLOADS_DIR`) and the assembled file streams to the printer in the background, so the request returns before the slow USB write.

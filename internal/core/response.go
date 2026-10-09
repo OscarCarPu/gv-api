@@ -18,6 +18,10 @@ func Error(w http.ResponseWriter, status int, message string) {
 	JSON(w, status, map[string]string{"error": message})
 }
 
+func ErrorCode(w http.ResponseWriter, status int, code, message string) {
+	JSON(w, status, map[string]string{"error": message, "code": code})
+}
+
 // InternalError logs err and responds with 500.
 func InternalError(w http.ResponseWriter, r *http.Request, err error, message string) {
 	slog.ErrorContext(r.Context(), message, "error", err)

@@ -35,6 +35,10 @@
 | `FAILING_BACK` | 1. Stop the API on EC2 through SSM Run Command. 2. Dump the EC2 DB to S3 as the failback dump. 3. Mark the dump ready. 4. Wait for the home agent to report db restored  
 | `HOME_READY` | Flip the CNAME to home, check `home-health`, stop cloudflared and shut down EC2, send Telegram , set `NORMAL`. |
 
+## FAILOVER_SIDE
+
+`FAILOVER_SIDE` is `home` (default) or `aws`; anything else stops startup. On `aws`, the Domotics routes (`/domotics/lights`, `/domotics/printers` including the signed camera and recording URLs, `/domotics/uptime`) answer `503` with `code: "unavailable_on_failover"` after auth. The BlueZ driver, lights polling and the pipeline pool are not started. gv-web and Android read `code` to show the unavailable state. `/health` and every non-Domotics route are unaffected.
+
 ## Planned maintenance
 
 - Button on gv-web: take a final backup, set state = PLANNED, then shuts down the home lab server

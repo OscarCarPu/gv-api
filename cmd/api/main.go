@@ -44,6 +44,10 @@ func main() {
 		os.Exit(1)
 	}
 
+	if cfg.OnFailover() {
+		slog.Warn("running on the backup server: lights, printers and uptime answer 503", "failover_side", cfg.FailoverSide)
+	}
+
 	if len(os.Args) > 1 && os.Args[1] == "backup" {
 		os.Exit(runBackup(cfg))
 	}
@@ -82,7 +86,7 @@ func main() {
 
 	lightsRepo := lights.NewRepository(db)
 	var lightsDriver lights.Driver
-	if cfg.LightsDriver == "bluez" {
+	if cfg.LightsDriver == "bluez" && !cfg.OnFailover() {
 		bluez := lights.NewBlueZDriver(cfg.LightsAdapter, cfg.LightsConnectTimeout, cfg.LightsIdleDisconnect)
 		defer func() { _ = bluez.Close() }()
 		lightsDriver = bluez
@@ -146,10 +150,13 @@ func main() {
 	capacityHandler := capacity.NewHandler(capacityService)
 	taskService.SetUrgencyProviders(capacityService, planService)
 
-	pipelineDB, err := pipeline.Connect(context.Background(), cfg.PipelineDBUrl)
-	if err != nil {
-		slog.Error("failed to configure pipeline database", "error", err)
-		os.Exit(1)
+	pipelineDB := &pipeline.DB{}
+	if !cfg.OnFailover() {
+		pipelineDB, err = pipeline.Connect(context.Background(), cfg.PipelineDBUrl)
+		if err != nil {
+			slog.Error("failed to configure pipeline database", "error", err)
+			os.Exit(1)
+		}
 	}
 	defer pipelineDB.Close()
 
@@ -183,15 +190,26 @@ func main() {
 	r.Post("/login", authHandler.Login)
 	r.Post("/login/2fa", authHandler.Login2FA)
 	calendarHandler.RegisterPublicRoutes(r)
-	printersHandler.RegisterPublicRoutes(r)
+	r.Group(func(r chi.Router) {
+		if cfg.OnFailover() {
+			r.Use(core.UnavailableOnFailover)
+		}
+		printersHandler.RegisterPublicRoutes(r)
+	})
 
 	// Semiprivate (semi or full token)
 	r.Group(func(r chi.Router) {
 		r.Use(semiMiddleware.Handle)
-		lightsHandler.RegisterRoutes(r)
-		printersHandler.RegisterRoutes(r)
-		uptimeHandler.RegisterRoutes(r)
 		rutasHandler.RegisterRoutes(r)
+
+		r.Group(func(r chi.Router) {
+			if cfg.OnFailover() {
+				r.Use(core.UnavailableOnFailover)
+			}
+			lightsHandler.RegisterRoutes(r)
+			printersHandler.RegisterRoutes(r)
+			uptimeHandler.RegisterRoutes(r)
+		})
 	})
 
 	// Full private
@@ -220,7 +238,9 @@ func main() {
 	go calendar.NewWorker(calendarService).Run(workerCtx)
 	go backup.NewWorker(backupService, cfg.BackupInterval).Run(workerCtx)
 
-	lightsService.StartPolling(workerCtx, cfg.LightsPollInterval)
+	if !cfg.OnFailover() {
+		lightsService.StartPolling(workerCtx, cfg.LightsPollInterval)
+	}
 
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
