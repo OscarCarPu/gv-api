@@ -27,3 +27,8 @@ func (s *Service) verify(printerID, name, expRaw, sig string) bool {
 	}
 	return hmac.Equal([]byte(sig), []byte(s.sign(printerID, name, exp)))
 }
+
+func (s *Service) cameraURL(printerID string) string {
+	exp := time.Now().Add(mediaURLTTL).Truncate(mediaURLStep).Unix()
+	return fmt.Sprintf("/domotics/printers/%s/camera/stream?exp=%d&sig=%s", printerID, exp, s.sign(printerID, "camera", exp))
+}

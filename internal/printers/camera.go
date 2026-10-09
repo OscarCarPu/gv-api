@@ -26,11 +26,18 @@ type camera struct {
 	url     string
 	mu      sync.Mutex
 	latest  []byte
+	seq     uint64
+	changed chan struct{}
 	last    time.Time
 	running bool
 }
 
-func (c *camera) frame(ctx context.Context) ([]byte, error) {
+func newCamera(url string) *camera {
+	return &camera{url: url, changed: make(chan struct{})}
+}
+
+// next returns the first frame newer than seq, starting the stream if nobody is watching.
+func (c *camera) next(ctx context.Context, seq uint64) ([]byte, uint64, error) {
 	c.mu.Lock()
 	c.last = time.Now()
 	if !c.running {
@@ -39,21 +46,20 @@ func (c *camera) frame(ctx context.Context) ([]byte, error) {
 	}
 	c.mu.Unlock()
 
-	deadline := time.Now().Add(cameraTimeout)
+	timeout := time.After(cameraTimeout)
 	for {
 		c.mu.Lock()
-		f := c.latest
+		frame, cur, changed := c.latest, c.seq, c.changed
 		c.mu.Unlock()
-		if f != nil {
-			return f, nil
-		}
-		if time.Now().After(deadline) {
-			return nil, errors.New("no frame available")
+		if frame != nil && cur != seq {
+			return frame, cur, nil
 		}
 		select {
+		case <-changed:
 		case <-ctx.Done():
-			return nil, ctx.Err()
-		case <-time.After(100 * time.Millisecond):
+			return nil, 0, ctx.Err()
+		case <-timeout:
+			return nil, 0, errors.New("no frame available")
 		}
 	}
 }
@@ -119,6 +125,9 @@ func (c *camera) stream() {
 			frame := append([]byte(nil), pending[start:end]...)
 			c.mu.Lock()
 			c.latest = frame
+			c.seq++
+			close(c.changed)
+			c.changed = make(chan struct{})
 			c.mu.Unlock()
 			pending = pending[end:]
 		}

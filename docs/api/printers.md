@@ -22,6 +22,8 @@ Config is env-only (`PRINTER_RTSP_URL`, `PRUSALINK_*`, `PRINTER_RECORDING*`; see
 | `DELETE …/files?name=` | Delete a file |
 | `GET …/files/progress[?u=id]` | Forwarding progress to the printer for one upload, or every upload still known |
 | `GET …/camera` | One JPEG frame from a warm ffmpeg process that idles out after 30s |
+| `GET …/camera/url` | `{url}`: signed link to the stream below, valid 12–13h |
+| `GET …/camera/stream?exp&sig` | **No bearer.** `multipart/x-mixed-replace` MJPEG, ~5 fps, runs until the client leaves |
 | `GET …/recordings` | Recordings on disk plus the one being written, with signed `url` / `posterUrl` |
 | `POST …/recordings?action=start\|stop` | Recording is a server job and outlives the client |
 | `DELETE …/recordings?name=` | Delete one (409 while it is recording) |

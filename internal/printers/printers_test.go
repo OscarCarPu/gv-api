@@ -246,3 +246,17 @@ func TestRecordingsAreSignedAndServed(t *testing.T) {
 	rec = do(r, http.MethodGet, "/domotics/printers/core-one/recordings/2026-08-06T14-32-05.mp4", "", nil)
 	assert.Equal(t, http.StatusUnauthorized, rec.Code)
 }
+
+func TestCameraStreamNeedsSignature(t *testing.T) {
+	srv, _ := fakePrusa(t)
+	r := testRouter(t, srv.URL)
+
+	rec := do(r, http.MethodGet, "/domotics/printers/core-one/camera/stream", "", nil)
+	assert.Equal(t, http.StatusUnauthorized, rec.Code)
+
+	rec = do(r, http.MethodGet, "/domotics/printers/core-one/camera/url", "", nil)
+	require.Equal(t, http.StatusOK, rec.Code)
+	var body map[string]string
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &body))
+	assert.Contains(t, body["url"], "/camera/stream?exp=")
+}

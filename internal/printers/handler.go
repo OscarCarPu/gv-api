@@ -2,6 +2,7 @@ package printers
 
 import (
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"os"
@@ -36,12 +37,14 @@ func (h *Handler) RegisterRoutes(r chi.Router) {
 	r.Delete("/domotics/printers/{id}/files", h.DeleteFile)
 	r.Get("/domotics/printers/{id}/files/progress", h.Progress)
 	r.Get("/domotics/printers/{id}/camera", h.Camera)
+	r.Get("/domotics/printers/{id}/camera/url", h.CameraURL)
 	r.Get("/domotics/printers/{id}/recordings", h.Recordings)
 	r.Post("/domotics/printers/{id}/recordings", h.RecordingAction)
 	r.Delete("/domotics/printers/{id}/recordings", h.DeleteRecording)
 }
 
 func (h *Handler) RegisterPublicRoutes(r chi.Router) {
+	r.Get("/domotics/printers/{id}/camera/stream", h.CameraStream)
 	r.Get("/domotics/printers/{id}/recordings/{name}", h.Media)
 }
 
@@ -254,7 +257,7 @@ func (h *Handler) Camera(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	frame, err := un.cam.frame(r.Context())
+	frame, _, err := un.cam.next(r.Context(), 0)
 	if err != nil {
 		core.Error(w, http.StatusServiceUnavailable, "No frame available")
 		return
@@ -262,6 +265,48 @@ func (h *Handler) Camera(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "image/jpeg")
 	w.Header().Set("Cache-Control", "no-store")
 	_, _ = w.Write(frame)
+}
+
+func (h *Handler) CameraURL(w http.ResponseWriter, r *http.Request) {
+	if un, ok := h.unit(w, r); ok {
+		core.JSON(w, http.StatusOK, map[string]string{"url": h.service.cameraURL(un.p.ID)})
+	}
+}
+
+func (h *Handler) CameraStream(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "id")
+	q := r.URL.Query()
+	if !h.service.verify(id, "camera", q.Get("exp"), q.Get("sig")) {
+		core.Error(w, http.StatusUnauthorized, "Unauthorized")
+		return
+	}
+	un, ok := h.unit(w, r)
+	if !ok {
+		return
+	}
+
+	rc := http.NewResponseController(w)
+	_ = rc.SetWriteDeadline(time.Time{})
+	w.Header().Set("Content-Type", "multipart/x-mixed-replace; boundary=frame")
+	w.Header().Set("Cache-Control", "no-store")
+
+	var seq uint64
+	for {
+		frame, cur, err := un.cam.next(r.Context(), seq)
+		if err != nil {
+			return
+		}
+		seq = cur
+		if _, err := fmt.Fprintf(w, "--frame\r\nContent-Type: image/jpeg\r\nContent-Length: %d\r\n\r\n", len(frame)); err != nil {
+			return
+		}
+		if _, err := w.Write(append(frame, "\r\n"...)); err != nil {
+			return
+		}
+		if rc.Flush() != nil {
+			return
+		}
+	}
 }
 
 func (h *Handler) Recordings(w http.ResponseWriter, r *http.Request) {
