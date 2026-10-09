@@ -54,8 +54,8 @@ Todos toggle `is_done`. Time entries are open until `finished_at` is set; only f
 - Free hours per day come from capacity (`GET /capacity/free-busy`) in one batched call. Day `n` from today is capped at capacity − 0.5h·n, never below 6h, to absorb unplanned work.
 - Each task's **effective priority** is its own, raised to the highest priority of anything it transitively blocks. It drives scheduling and the `min_priority` filter, which runs after urgency.
 - Tasks are back-filled from the end of each dependency chain: a task's last usable day is the day before its due date, or the day a dependent starts. In A → B → C, A must fit A+B+C's hours before C's deadline.
-- All tasks draw from one shared pool of free hours. Work order is priority, then soonest last usable day, then soonest effective due date, then more remaining hours first, then higher ID; filling backwards reverses it, so lower priority and later deadlines claim first and the most important work lands closest to today.
-- When the pool runs out, a task's start is squeezed to today and so is its dependencies' last usable day, which can tie unrelated chains. The effective due date keeps them apart (a chain due the 12th goes before one due the 18th); only then do remaining hours decide.
+- All tasks draw from one shared pool of free hours. Work order is priority, then soonest effective due date, then soonest last usable day, then more remaining hours first, then higher ID; filling backwards reverses it, so lower priority and later deadlines claim first and the most important work lands closest to today.
+- When the pool runs out, a task's start is squeezed to today and so is its dependencies' last usable day, which would tie unrelated chains. The effective due date is compared first, so a chain due the 12th goes before one due the 18th however squeezed their last days are.
 - Each task gets `start_by` (the day its hours are covered), `urgent = start_by <= today`, `finish_by` and `work_order` (1 = first).
 
 **Task dependencies**

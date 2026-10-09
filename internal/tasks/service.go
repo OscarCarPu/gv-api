@@ -571,16 +571,16 @@ type claim struct {
 	id       int32
 }
 
-// beats orders claims: lower (chain) priority first, then later last day, later due date, fewer remaining hours, then ID.
+// beats orders claims: lower (chain) priority first, then later due date, later last day, fewer remaining hours, then ID.
 func (a claim) beats(b claim) bool {
 	if a.priority != b.priority {
 		return a.priority > b.priority
 	}
-	if !a.last.Equal(b.last) {
-		return a.last.After(b.last)
-	}
 	if !a.due.Equal(b.due) {
 		return a.due.After(b.due)
+	}
+	if !a.last.Equal(b.last) {
+		return a.last.After(b.last)
 	}
 	if !a.hours.Equal(b.hours) {
 		return a.hours.LessThan(b.hours)

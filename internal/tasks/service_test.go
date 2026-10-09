@@ -1159,6 +1159,17 @@ func TestService_GetTasksByDueDate_WorkOrderTieBreaks(t *testing.T) {
 		assert.Less(t, *byID[1].WorkOrder, *byID[2].WorkOrder, "a dependency still precedes its dependent")
 	})
 
+	t.Run("a squeezed chain due later does not pass a task due sooner", func(t *testing.T) {
+		byID := run(t, "0", []tasks.TaskByDueDateResponse{
+			{ID: 3, Priority: 2, TaskType: "standard", DueAt: dueIn(9), EstimateHours: decPtr("4"), DependsOn: link(2), Blocked: true},
+			{ID: 2, Priority: 2, TaskType: "standard", DueAt: dueIn(9), EstimateHours: decPtr("4"), Blocks: link(3)},
+			{ID: 1, Priority: 2, TaskType: "standard", DueAt: dueIn(3), EstimateHours: decPtr("5")},
+		})
+		require.NotNil(t, byID[1].WorkOrder)
+		require.NotNil(t, byID[2].WorkOrder)
+		assert.Less(t, *byID[1].WorkOrder, *byID[2].WorkOrder)
+	})
+
 	t.Run("a full tie goes to the task with more hours left", func(t *testing.T) {
 		byID := run(t, "8", []tasks.TaskByDueDateResponse{
 			{ID: 2, Priority: 2, TaskType: "standard", DueAt: dueIn(5), EstimateHours: decPtr("2")},
