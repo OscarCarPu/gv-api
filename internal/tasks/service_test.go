@@ -823,7 +823,7 @@ func TestService_GetTasksByDueDate_UrgencyAccountsForCompetingTasks(t *testing.T
 	assert.Falsef(t, byID[2].Urgent, "lower-priority task takes the last hours: start_by=%v", byID[2].StartBy)
 }
 
-// A p2 8h job due day 5, a p3 4h task due day 4 and a p2 8h task due day 3, over five 4h days:
+// A p2 8h job due day 4, a p3 4h task due day 3 and a p2 8h task due day 2, over five 4h days:
 // the p3 task keeps day 3, the p2 job takes days 4 and 2, and the sooner p2 task starts today.
 func TestService_GetTasksByDueDate_UrgencyFollowsPriorityThenDeadline(t *testing.T) {
 	loc, err := time.LoadLocation("Europe/Madrid")
@@ -843,9 +843,9 @@ func TestService_GetTasksByDueDate_UrgencyFollowsPriorityThenDeadline(t *testing
 
 	repo := mocks.NewMockRepository(t)
 	repo.EXPECT().GetTasksByDueDate(mock.Anything).Return([]tasks.TaskByDueDateResponse{
-		{ID: 1, Name: "reforma", Priority: 2, TaskType: "standard", DueAt: dayUTC(5), EstimateHours: decPtr("8")},
-		{ID: 2, Name: "introduccion", Priority: 3, TaskType: "standard", DueAt: dayUTC(4), EstimateHours: decPtr("4")},
-		{ID: 3, Name: "pec", Priority: 2, TaskType: "standard", DueAt: dayUTC(3), EstimateHours: decPtr("8")},
+		{ID: 1, Name: "reforma", Priority: 2, TaskType: "standard", DueAt: dayUTC(4), EstimateHours: decPtr("8")},
+		{ID: 2, Name: "introduccion", Priority: 3, TaskType: "standard", DueAt: dayUTC(3), EstimateHours: decPtr("4")},
+		{ID: 3, Name: "pec", Priority: 2, TaskType: "standard", DueAt: dayUTC(2), EstimateHours: decPtr("8")},
 	}, nil)
 
 	svc := tasks.NewService(repo, loc)
@@ -938,14 +938,14 @@ func TestService_GetTasksByDueDate_ChainAccumulatesEstimates(t *testing.T) {
 }
 
 // Future days cap at capacity − 0.5h per day from today, never below 6h. With 14h capacity,
-// days 16+ give 6h, so 20h due in 20 days needs days 19, 18, 17 and 2h of day 16.
+// days 16+ give 6h, so 20h due in 19 days needs days 19, 18, 17 and 2h of day 16.
 func TestService_GetTasksByDueDate_FutureDaysCapped(t *testing.T) {
 	loc, err := time.LoadLocation("Europe/Madrid")
 	require.NoError(t, err)
 
 	now := time.Now().In(loc)
 	today := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, loc)
-	dueIn20Days := time.Date(today.Year(), today.Month(), today.Day()+20, 0, 0, 0, 0, time.UTC)
+	dueIn20Days := time.Date(today.Year(), today.Month(), today.Day()+19, 0, 0, 0, 0, time.UTC)
 
 	days := make([]capacity.DayFreeBusy, 0, 20)
 	for i := 0; i < 20; i++ {
@@ -960,9 +960,9 @@ func TestService_GetTasksByDueDate_FutureDaysCapped(t *testing.T) {
 	repo := mocks.NewMockRepository(t)
 	repo.EXPECT().GetTasksByDueDate(mock.Anything).Return([]tasks.TaskByDueDateResponse{
 		{ID: 1, Priority: 3, TaskType: "standard", DueAt: &dueIn20Days, EstimateHours: decPtr("20")},
-		{ID: 2, Priority: 3, TaskType: "standard", DueAt: dayUTC(4), EstimateHours: decPtr("2")},
+		{ID: 2, Priority: 3, TaskType: "standard", DueAt: dayUTC(3), EstimateHours: decPtr("2")},
 		// Days 11 and 10 cap at 8.5 and 9: 17.5h together, so 17h fits in them.
-		{ID: 3, Priority: 3, TaskType: "standard", DueAt: dayUTC(12), EstimateHours: decPtr("17")},
+		{ID: 3, Priority: 3, TaskType: "standard", DueAt: dayUTC(11), EstimateHours: decPtr("17")},
 	}, nil)
 
 	svc := tasks.NewService(repo, loc)
@@ -997,9 +997,9 @@ func TestService_GetTasksByDueDate_ChainInheritsPriority(t *testing.T) {
 
 	repo := mocks.NewMockRepository(t)
 	repo.EXPECT().GetTasksByDueDate(mock.Anything).Return([]tasks.TaskByDueDateResponse{
-		{ID: 1, Name: "exam", Priority: 2, TaskType: "standard", DueAt: dayUTC(3), EstimateHours: decPtr("4"), DependsOn: []tasks.TaskDepRef{{ID: 2}}, Blocked: true},
-		{ID: 2, Name: "study", Priority: 3, TaskType: "standard", DueAt: dayUTC(3), EstimateHours: decPtr("4"), Blocks: []tasks.TaskDepRef{{ID: 1}}},
-		{ID: 3, Name: "chore", Priority: 3, TaskType: "standard", DueAt: dayUTC(2), EstimateHours: decPtr("4")},
+		{ID: 1, Name: "exam", Priority: 2, TaskType: "standard", DueAt: dayUTC(2), EstimateHours: decPtr("4"), DependsOn: []tasks.TaskDepRef{{ID: 2}}, Blocked: true},
+		{ID: 2, Name: "study", Priority: 3, TaskType: "standard", DueAt: dayUTC(2), EstimateHours: decPtr("4"), Blocks: []tasks.TaskDepRef{{ID: 1}}},
+		{ID: 3, Name: "chore", Priority: 3, TaskType: "standard", DueAt: dayUTC(1), EstimateHours: decPtr("4")},
 	}, nil).Times(2)
 
 	svc := tasks.NewService(repo, loc)
@@ -1223,13 +1223,13 @@ func TestService_GetDueSoonSlack(t *testing.T) {
 	})
 
 	t.Run("work that reaches today eats into today's hours", func(t *testing.T) {
-		rows := []tasks.TaskByDueDateResponse{{ID: 1, TaskType: "standard", DueAt: &dueIn3Days, EstimateHours: est("20")}}
-		assert.Equal(t, 2*60+30, run(t, rows, freeDays("8")), "days 0-2 hold 8+7.5+7h after the per-day decay; 20h leaves 2.5h today")
+		rows := []tasks.TaskByDueDateResponse{{ID: 1, TaskType: "standard", DueAt: &dueIn3Days, EstimateHours: est("28")}}
+		assert.Equal(t, 60, run(t, rows, freeDays("8")), "days 0-3 hold 8, 7.5, 7 and 6.5h after the per-day decay, the due day included; 28h leaves 1h today")
 	})
 
 	t.Run("hours that fit nowhere are negative", func(t *testing.T) {
 		rows := []tasks.TaskByDueDateResponse{{ID: 1, TaskType: "standard", DueAt: &dueIn3Days, EstimateHours: est("30.5")}}
-		assert.Equal(t, -12*60-30, run(t, rows, freeDays("6")), "3 days x 6h hold 18h; 30.5h overflows by 12.5h")
+		assert.Equal(t, -6*60-30, run(t, rows, freeDays("6")), "4 days x 6h hold 24h; 30.5h overflows by 6.5h")
 	})
 
 	t.Run("overdue work counts fully as overflow when nothing is free", func(t *testing.T) {
@@ -1241,4 +1241,30 @@ func TestService_GetDueSoonSlack(t *testing.T) {
 		rows := []tasks.TaskByDueDateResponse{{ID: 1, TaskType: "standard", DueAt: &dueIn3Days}}
 		assert.Equal(t, 0, run(t, rows, freeDays("8")))
 	})
+}
+
+func TestService_GetDueSoonSlack_DueTodayUsesToday(t *testing.T) {
+	loc, err := time.LoadLocation("Europe/Madrid")
+	require.NoError(t, err)
+
+	now := time.Now().In(loc)
+	today := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, loc)
+	dueToday := time.Date(today.Year(), today.Month(), today.Day(), 0, 0, 0, 0, time.UTC)
+	estimate := decimal.RequireFromString("5")
+
+	repo := mocks.NewMockRepository(t)
+	repo.EXPECT().GetTasksByDueDate(mock.Anything).Return([]tasks.TaskByDueDateResponse{
+		{ID: 1, TaskType: "standard", DueAt: &dueToday, EstimateHours: &estimate},
+	}, nil)
+	svc := tasks.NewService(repo, loc)
+	svc.SetUrgencyProviders(
+		stubCapacityProvider{days: []capacity.DayFreeBusy{
+			{Date: today.Format("2006-01-02"), CapacityHours: decimal.NewFromInt(14), FreeHours: decimal.NewFromInt(8)},
+		}},
+		stubPlannedHoursProvider{},
+	)
+
+	got, err := svc.GetDueSoonSlack(context.Background())
+	require.NoError(t, err)
+	assert.Equal(t, 3*60, got.SlackMinutes, "a task due today has all of today to fit in")
 }

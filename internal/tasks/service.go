@@ -424,9 +424,9 @@ func (s *Service) applyUrgency(ctx context.Context, rows []TaskByDueDateResponse
 		return 0, nil
 	}
 
-	// Every task already due: urgent, start today, and FreeBusyRange would get a reversed range.
+	// Every task overdue: urgent, start today, and FreeBusyRange would get a reversed range.
 	var series []capacity.DayFreeBusy
-	if maxDue.After(today) {
+	if !maxDue.Before(today) {
 		var err error
 		series, err = s.capacity.FreeBusyRange(ctx, today, maxDue.AddDate(0, 0, 1))
 		if err != nil {
@@ -461,7 +461,7 @@ func (s *Service) applyUrgency(ctx context.Context, rows []TaskByDueDateResponse
 
 	// chainStart[i] is the day task i's work begins; it caps its dependencies' last day.
 	chainStart := make(map[int]time.Time, len(idxByID))
-	// lastDay is the day before the due date, or the day a dependent starts (sharing its hours).
+	// lastDay is the due date itself (the work may use all of it), or the day a dependent starts (sharing its hours).
 	finishBy := func(i int) time.Time {
 		finish := *s.normalizedDue(rows[i])
 		for _, b := range rows[i].Blocks {
@@ -472,7 +472,7 @@ func (s *Service) applyUrgency(ctx context.Context, rows []TaskByDueDateResponse
 		return finish
 	}
 	lastDay := func(i int) time.Time {
-		last := s.normalizedDue(rows[i]).AddDate(0, 0, -1)
+		last := *s.normalizedDue(rows[i])
 		for _, b := range rows[i].Blocks {
 			if j, ok := idxByID[b.ID]; ok && chainStart[j].Before(last) {
 				last = chainStart[j]
