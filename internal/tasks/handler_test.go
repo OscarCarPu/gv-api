@@ -552,6 +552,25 @@ func TestHandler_GetTaskTimeEntries(t *testing.T) {
 	})
 }
 
+func TestHandler_GetDueSoonSlack(t *testing.T) {
+	t.Run("200 on success", func(t *testing.T) {
+		svc := mocks.NewMockServiceInterface(t)
+		svc.EXPECT().GetDueSoonSlack(mock.Anything).Return(tasks.DueSoonSlackResponse{SlackMinutes: -90}, nil)
+		rec := httptest.NewRecorder()
+		tasks.NewHandler(svc).GetDueSoonSlack(rec, newReq(http.MethodGet, "/", ""))
+		assert.Equal(t, http.StatusOK, rec.Code)
+		assert.JSONEq(t, `{"slack_minutes":-90}`, rec.Body.String())
+	})
+
+	t.Run("500 on service error", func(t *testing.T) {
+		svc := mocks.NewMockServiceInterface(t)
+		svc.EXPECT().GetDueSoonSlack(mock.Anything).Return(tasks.DueSoonSlackResponse{}, errors.New("db error"))
+		rec := httptest.NewRecorder()
+		tasks.NewHandler(svc).GetDueSoonSlack(rec, newReq(http.MethodGet, "/", ""))
+		assert.Equal(t, http.StatusInternalServerError, rec.Code)
+	})
+}
+
 func TestHandler_GetTasksByDueDate(t *testing.T) {
 	t.Run("200 on success", func(t *testing.T) {
 		svc := mocks.NewMockServiceInterface(t)

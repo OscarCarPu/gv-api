@@ -557,6 +557,62 @@ func (_c *MockServiceInterface_GetActiveTree_Call) RunAndReturn(run func(context
 	return _c
 }
 
+// GetDueSoonSlack provides a mock function with given fields: ctx
+func (_m *MockServiceInterface) GetDueSoonSlack(ctx context.Context) (tasks.DueSoonSlackResponse, error) {
+	ret := _m.Called(ctx)
+
+	if len(ret) == 0 {
+		panic("no return value specified for GetDueSoonSlack")
+	}
+
+	var r0 tasks.DueSoonSlackResponse
+	var r1 error
+	if rf, ok := ret.Get(0).(func(context.Context) (tasks.DueSoonSlackResponse, error)); ok {
+		return rf(ctx)
+	}
+	if rf, ok := ret.Get(0).(func(context.Context) tasks.DueSoonSlackResponse); ok {
+		r0 = rf(ctx)
+	} else {
+		r0 = ret.Get(0).(tasks.DueSoonSlackResponse)
+	}
+
+	if rf, ok := ret.Get(1).(func(context.Context) error); ok {
+		r1 = rf(ctx)
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
+}
+
+// MockServiceInterface_GetDueSoonSlack_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'GetDueSoonSlack'
+type MockServiceInterface_GetDueSoonSlack_Call struct {
+	*mock.Call
+}
+
+// GetDueSoonSlack is a helper method to define mock.On call
+//   - ctx context.Context
+func (_e *MockServiceInterface_Expecter) GetDueSoonSlack(ctx interface{}) *MockServiceInterface_GetDueSoonSlack_Call {
+	return &MockServiceInterface_GetDueSoonSlack_Call{Call: _e.mock.On("GetDueSoonSlack", ctx)}
+}
+
+func (_c *MockServiceInterface_GetDueSoonSlack_Call) Run(run func(ctx context.Context)) *MockServiceInterface_GetDueSoonSlack_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].(context.Context))
+	})
+	return _c
+}
+
+func (_c *MockServiceInterface_GetDueSoonSlack_Call) Return(_a0 tasks.DueSoonSlackResponse, _a1 error) *MockServiceInterface_GetDueSoonSlack_Call {
+	_c.Call.Return(_a0, _a1)
+	return _c
+}
+
+func (_c *MockServiceInterface_GetDueSoonSlack_Call) RunAndReturn(run func(context.Context) (tasks.DueSoonSlackResponse, error)) *MockServiceInterface_GetDueSoonSlack_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // GetProject provides a mock function with given fields: ctx, id
 func (_m *MockServiceInterface) GetProject(ctx context.Context, id int32) (tasks.ProjectDetailResponse, error) {
 	ret := _m.Called(ctx, id)

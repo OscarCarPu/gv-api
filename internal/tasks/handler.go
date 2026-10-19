@@ -34,6 +34,7 @@ type ServiceInterface interface {
 	GetProjectChildren(ctx context.Context, projectID int32) (ProjectChildrenResponse, error)
 	GetTaskTimeEntries(ctx context.Context, taskID int32) (TaskTimeEntriesResponse, error)
 	GetTasksByDueDate(ctx context.Context, minPriority *int32) ([]TaskByDueDateResponse, error)
+	GetDueSoonSlack(ctx context.Context) (DueSoonSlackResponse, error)
 	DeleteProject(ctx context.Context, id int32) error
 	DeleteTask(ctx context.Context, id int32) error
 	DeleteTodo(ctx context.Context, id int32) error
@@ -66,6 +67,7 @@ func (h *Handler) RegisterRoutes(r chi.Router) {
 	r.Delete("/tasks/projects/{id}", h.DeleteProject)
 
 	r.Get("/tasks/tasks/by-due-date", h.GetTasksByDueDate)
+	r.Get("/tasks/tasks/by-due-date/slack", h.GetDueSoonSlack)
 	r.Get("/tasks/tasks/list-fast", h.ListTasksFast)
 	r.Get("/tasks/tasks/{id}", h.GetTask)
 	r.Get("/tasks/tasks/{id}/time-entries", h.GetTaskTimeEntries)
@@ -482,6 +484,15 @@ func (h *Handler) GetTasksByDueDate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	core.JSON(w, http.StatusOK, tasks)
+}
+
+func (h *Handler) GetDueSoonSlack(w http.ResponseWriter, r *http.Request) {
+	slack, err := h.service.GetDueSoonSlack(r.Context())
+	if err != nil {
+		core.InternalError(w, r, err, "Failed to get due-soon slack")
+		return
+	}
+	core.JSON(w, http.StatusOK, slack)
 }
 
 func parseMinPriority(r *http.Request) (*int32, error) {

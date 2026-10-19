@@ -293,7 +293,7 @@ func (s *Service) GetTasksByDueDate(ctx context.Context, minPriority *int32) ([]
 	}
 	// Run urgency over the unfiltered set: a hidden low-priority task can still head a chain.
 	priority := chainPriorities(rows)
-	if err := s.applyUrgency(ctx, rows, priority); err != nil {
+	if _, err := s.applyUrgency(ctx, rows, priority); err != nil {
 		return nil, err
 	}
 
@@ -306,6 +306,18 @@ func (s *Service) GetTasksByDueDate(ctx context.Context, minPriority *int32) ([]
 		visible = append(visible, t)
 	}
 	return visible, nil
+}
+
+func (s *Service) GetDueSoonSlack(ctx context.Context) (DueSoonSlackResponse, error) {
+	rows, err := s.repo.GetTasksByDueDate(ctx)
+	if err != nil {
+		return DueSoonSlackResponse{}, err
+	}
+	minutes, err := s.applyUrgency(ctx, rows, chainPriorities(rows))
+	if err != nil {
+		return DueSoonSlackResponse{}, err
+	}
+	return DueSoonSlackResponse{SlackMinutes: minutes}, nil
 }
 
 func (s *Service) today() time.Time {
@@ -384,9 +396,12 @@ func urgencyDayCap(capacityHours decimal.Decimal, daysFromToday int) decimal.Dec
 //
 // Tasks are back-filled from the end of each dependency chain: in A → B → C, A has to fit
 // A+B+C's hours before C's deadline.
-func (s *Service) applyUrgency(ctx context.Context, rows []TaskByDueDateResponse, priority []int32) error {
+//
+// It returns today's slack in minutes: the free hours nothing claims, or, when work did not fit
+// even by starting today, minus the hours that overflow.
+func (s *Service) applyUrgency(ctx context.Context, rows []TaskByDueDateResponse, priority []int32) (int, error) {
 	if s.capacity == nil || s.plan == nil {
-		return nil
+		return 0, nil
 	}
 
 	today := s.today()
@@ -406,7 +421,7 @@ func (s *Service) applyUrgency(ctx context.Context, rows []TaskByDueDateResponse
 		}
 	}
 	if len(estimatedIDs) == 0 {
-		return nil
+		return 0, nil
 	}
 
 	// Every task already due: urgent, start today, and FreeBusyRange would get a reversed range.
@@ -415,7 +430,7 @@ func (s *Service) applyUrgency(ctx context.Context, rows []TaskByDueDateResponse
 		var err error
 		series, err = s.capacity.FreeBusyRange(ctx, today, maxDue.AddDate(0, 0, 1))
 		if err != nil {
-			return err
+			return 0, err
 		}
 	}
 	freeByDate := make(map[string]decimal.Decimal, len(series))
@@ -425,7 +440,7 @@ func (s *Service) applyUrgency(ctx context.Context, rows []TaskByDueDateResponse
 
 	plannedByTask, err := s.plan.PlannedHoursByTask(ctx, estimatedIDs, today)
 	if err != nil {
-		return err
+		return 0, err
 	}
 
 	// Finished or out-of-set dependents place no constraint.
@@ -481,6 +496,7 @@ func (s *Service) applyUrgency(ctx context.Context, rows []TaskByDueDateResponse
 			id:       rows[i].ID,
 		}
 	}
+	overflow := decimal.Zero
 	for len(remaining) > 0 {
 		// Filling backwards reverses the work order (priority, then soonest deadline): the lowest
 		// priority, latest deadline claims first so the most important work lands closest to today.
@@ -542,13 +558,18 @@ func (s *Service) applyUrgency(ctx context.Context, rows []TaskByDueDateResponse
 		for dateStr, amt := range consumed {
 			freeByDate[dateStr] = freeByDate[dateStr].Sub(amt)
 		}
+		if acc.LessThan(rem) {
+			overflow = overflow.Add(rem.Sub(acc))
+		}
 
 		chainStart[pick] = startBy
 		startByStr := startBy.Format("2006-01-02")
 		t.StartBy = &startByStr
 		t.Urgent = !startBy.After(today)
 	}
-	return nil
+
+	slack := decimal.Max(freeByDate[today.Format("2006-01-02")], decimal.Zero).Sub(overflow)
+	return int(slack.Mul(decimal.NewFromInt(60)).Round(0).IntPart()), nil
 }
 
 func isEstimated(t TaskByDueDateResponse) bool {

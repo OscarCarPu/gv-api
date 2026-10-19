@@ -1180,3 +1180,65 @@ func TestService_GetTasksByDueDate_WorkOrderTieBreaks(t *testing.T) {
 		assert.Less(t, *byID[1].WorkOrder, *byID[2].WorkOrder, "6h before 2h, whatever the IDs")
 	})
 }
+
+func TestService_GetDueSoonSlack(t *testing.T) {
+	loc, err := time.LoadLocation("Europe/Madrid")
+	require.NoError(t, err)
+
+	now := time.Now().In(loc)
+	today := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, loc)
+	dueIn3Days := time.Date(today.Year(), today.Month(), today.Day()+3, 0, 0, 0, 0, time.UTC)
+	longAgo := time.Date(today.Year(), today.Month(), today.Day()-20, 0, 0, 0, 0, time.UTC)
+
+	freeDays := func(hours string) []capacity.DayFreeBusy {
+		days := make([]capacity.DayFreeBusy, 0, 4)
+		for i := 0; i < 4; i++ {
+			days = append(days, capacity.DayFreeBusy{
+				Date:          today.AddDate(0, 0, i).Format("2006-01-02"),
+				CapacityHours: decimal.RequireFromString("8"),
+				FreeHours:     decimal.RequireFromString(hours),
+			})
+		}
+		return days
+	}
+	est := func(h string) *decimal.Decimal {
+		d := decimal.RequireFromString(h)
+		return &d
+	}
+
+	run := func(t *testing.T, rows []tasks.TaskByDueDateResponse, days []capacity.DayFreeBusy) int {
+		t.Helper()
+		repo := mocks.NewMockRepository(t)
+		repo.EXPECT().GetTasksByDueDate(mock.Anything).Return(rows, nil)
+		svc := tasks.NewService(repo, loc)
+		svc.SetUrgencyProviders(stubCapacityProvider{days: days}, stubPlannedHoursProvider{})
+		got, err := svc.GetDueSoonSlack(context.Background())
+		require.NoError(t, err)
+		return got.SlackMinutes
+	}
+
+	t.Run("hours nothing claims today are free", func(t *testing.T) {
+		rows := []tasks.TaskByDueDateResponse{{ID: 1, TaskType: "standard", DueAt: &dueIn3Days, EstimateHours: est("2")}}
+		assert.Equal(t, 8*60, run(t, rows, freeDays("8")))
+	})
+
+	t.Run("work that reaches today eats into today's hours", func(t *testing.T) {
+		rows := []tasks.TaskByDueDateResponse{{ID: 1, TaskType: "standard", DueAt: &dueIn3Days, EstimateHours: est("20")}}
+		assert.Equal(t, 2*60+30, run(t, rows, freeDays("8")), "days 0-2 hold 8+7.5+7h after the per-day decay; 20h leaves 2.5h today")
+	})
+
+	t.Run("hours that fit nowhere are negative", func(t *testing.T) {
+		rows := []tasks.TaskByDueDateResponse{{ID: 1, TaskType: "standard", DueAt: &dueIn3Days, EstimateHours: est("30.5")}}
+		assert.Equal(t, -12*60-30, run(t, rows, freeDays("6")), "3 days x 6h hold 18h; 30.5h overflows by 12.5h")
+	})
+
+	t.Run("overdue work counts fully as overflow when nothing is free", func(t *testing.T) {
+		rows := []tasks.TaskByDueDateResponse{{ID: 1, TaskType: "standard", DueAt: &longAgo, EstimateHours: est("3")}}
+		assert.Equal(t, -3*60, run(t, rows, nil))
+	})
+
+	t.Run("no estimates, no slack", func(t *testing.T) {
+		rows := []tasks.TaskByDueDateResponse{{ID: 1, TaskType: "standard", DueAt: &dueIn3Days}}
+		assert.Equal(t, 0, run(t, rows, freeDays("8")))
+	})
+}

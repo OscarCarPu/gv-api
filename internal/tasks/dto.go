@@ -322,6 +322,10 @@ type TaskFullResponse struct {
 	Todos         []TodoResponse   `json:"todos"`
 }
 
+type DueSoonSlackResponse struct {
+	SlackMinutes int `json:"slack_minutes"`
+}
+
 type TaskByDueDateResponse struct {
 	ID          int32      `json:"id"`
 	Name        string     `json:"name"`
