@@ -24,6 +24,7 @@ type Service struct {
 	location *time.Location
 	capacity capacityProvider
 	plan     plannedHoursProvider
+	now      func() time.Time
 }
 
 func NewService(repo Repository, loc *time.Location) *Service {
@@ -35,6 +36,10 @@ func NewService(repo Repository, loc *time.Location) *Service {
 
 // SetUrgencyProviders wires urgency's dependencies. A setter because plan.Service depends on
 // tasks.Service.
+func (s *Service) SetClock(now func() time.Time) {
+	s.now = now
+}
+
 func (s *Service) SetUrgencyProviders(capacity capacityProvider, plan plannedHoursProvider) {
 	s.capacity = capacity
 	s.plan = plan
@@ -320,8 +325,15 @@ func (s *Service) GetDueSoonSlack(ctx context.Context) (DueSoonSlackResponse, er
 	return DueSoonSlackResponse{SlackMinutes: minutes}, nil
 }
 
+func (s *Service) clock() time.Time {
+	if s.now != nil {
+		return s.now().In(s.location)
+	}
+	return time.Now().In(s.location)
+}
+
 func (s *Service) today() time.Time {
-	now := time.Now().In(s.location)
+	now := s.clock()
 	return time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, s.location)
 }
 
@@ -436,6 +448,10 @@ func (s *Service) applyUrgency(ctx context.Context, rows []TaskByDueDateResponse
 	freeByDate := make(map[string]decimal.Decimal, len(series))
 	for i, d := range series {
 		freeByDate[d.Date] = decimal.Min(d.FreeHours, urgencyDayCap(d.CapacityHours, i))
+	}
+	if todayStr := today.Format("2006-01-02"); freeByDate[todayStr].IsPositive() {
+		left := decimal.NewFromFloat(today.AddDate(0, 0, 1).Sub(s.clock()).Hours())
+		freeByDate[todayStr] = decimal.Max(decimal.Min(freeByDate[todayStr], left), decimal.Zero)
 	}
 
 	plannedByTask, err := s.plan.PlannedHoursByTask(ctx, estimatedIDs, today)

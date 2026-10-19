@@ -554,7 +554,7 @@ func TestService_GetTimeEntryHistory_DefaultDatesDaily(t *testing.T) {
 		).
 		Return([]history.Point{{Date: "2026-04-22", Value: 2.5}}, nil)
 
-	svc := tasks.NewService(repo, loc)
+	svc := newTestService(repo, loc)
 	resp, err := svc.GetTimeEntryHistory(context.Background(), "daily", "", "")
 	require.NoError(t, err)
 
@@ -583,7 +583,7 @@ func TestService_GetTimeEntriesByDateRange(t *testing.T) {
 
 		start := time.Date(2026, 3, 1, 0, 0, 0, 0, loc)
 		end := time.Date(2026, 3, 31, 0, 0, 0, 0, loc)
-		svc := tasks.NewService(repo, loc)
+		svc := newTestService(repo, loc)
 		result, err := svc.GetTimeEntriesByDateRange(context.Background(), start, &end)
 		require.NoError(t, err)
 		require.Len(t, result, 1)
@@ -605,7 +605,7 @@ func TestService_GetTimeEntriesByDateRange(t *testing.T) {
 			Return([]tasks.TimeEntryWithTaskResponse{}, nil)
 
 		start := time.Date(2026, 3, 1, 0, 0, 0, 0, loc)
-		svc := tasks.NewService(repo, loc)
+		svc := newTestService(repo, loc)
 		result, err := svc.GetTimeEntriesByDateRange(context.Background(), start, nil)
 		require.NoError(t, err)
 		assert.Empty(t, result)
@@ -717,7 +717,7 @@ func TestService_GetTasksByDueDate_UrgencyAgreesAcrossOffset(t *testing.T) {
 			{ID: 2, TaskType: "standard", DueAt: &dueTomorrow, EstimateHours: &fitsToday},
 		}, nil)
 
-	svc := tasks.NewService(repo, loc)
+	svc := newTestService(repo, loc)
 	svc.SetUrgencyProviders(
 		stubCapacityProvider{days: []capacity.DayFreeBusy{
 			{Date: today.Format("2006-01-02"), FreeHours: decimal.RequireFromString("14")},
@@ -751,7 +751,7 @@ func TestService_GetTasksByDueDate_AllEstimatedTasksOverdue(t *testing.T) {
 			{ID: 2, TaskType: "standard", DueAt: &longAgo},
 		}, nil)
 
-	svc := tasks.NewService(repo, loc)
+	svc := newTestService(repo, loc)
 	svc.SetUrgencyProviders(
 		capacity.NewService(decimal.RequireFromString("8"), stubBusyProvider{}),
 		stubPlannedHoursProvider{},
@@ -804,7 +804,7 @@ func TestService_GetTasksByDueDate_UrgencyAccountsForCompetingTasks(t *testing.T
 			{ID: 2, Priority: 3, TaskType: "standard", DueAt: &dueIn5Days, EstimateHours: decPtr("3")},
 		}, nil)
 
-	svc := tasks.NewService(repo, loc)
+	svc := newTestService(repo, loc)
 	svc.SetUrgencyProviders(
 		stubCapacityProvider{days: days},
 		stubPlannedHoursProvider{},
@@ -848,7 +848,7 @@ func TestService_GetTasksByDueDate_UrgencyFollowsPriorityThenDeadline(t *testing
 		{ID: 3, Name: "pec", Priority: 2, TaskType: "standard", DueAt: dayUTC(2), EstimateHours: decPtr("8")},
 	}, nil)
 
-	svc := tasks.NewService(repo, loc)
+	svc := newTestService(repo, loc)
 	svc.SetUrgencyProviders(stubCapacityProvider{days: days}, stubPlannedHoursProvider{})
 	got, err := svc.GetTasksByDueDate(context.Background(), nil)
 	require.NoError(t, err)
@@ -893,7 +893,7 @@ func TestService_GetTasksByDueDate_ChainAccumulatesEstimates(t *testing.T) {
 			{ID: 1, Name: "A", Priority: 3, TaskType: "standard", DueAt: &dueIn5Days, EstimateHours: decPtr("4"), Blocks: link(2, "B")},
 		}, nil)
 
-		svc := tasks.NewService(repo, loc)
+		svc := newTestService(repo, loc)
 		svc.SetUrgencyProviders(stubCapacityProvider{days: days}, stubPlannedHoursProvider{})
 		got, err := svc.GetTasksByDueDate(context.Background(), nil)
 		require.NoError(t, err)
@@ -965,7 +965,7 @@ func TestService_GetTasksByDueDate_FutureDaysCapped(t *testing.T) {
 		{ID: 3, Priority: 3, TaskType: "standard", DueAt: dayUTC(11), EstimateHours: decPtr("17")},
 	}, nil)
 
-	svc := tasks.NewService(repo, loc)
+	svc := newTestService(repo, loc)
 	svc.SetUrgencyProviders(stubCapacityProvider{days: days}, stubPlannedHoursProvider{})
 	got, err := svc.GetTasksByDueDate(context.Background(), nil)
 	require.NoError(t, err)
@@ -1002,7 +1002,7 @@ func TestService_GetTasksByDueDate_ChainInheritsPriority(t *testing.T) {
 		{ID: 3, Name: "chore", Priority: 3, TaskType: "standard", DueAt: dayUTC(1), EstimateHours: decPtr("4")},
 	}, nil).Times(2)
 
-	svc := tasks.NewService(repo, loc)
+	svc := newTestService(repo, loc)
 	svc.SetUrgencyProviders(stubCapacityProvider{days: days}, stubPlannedHoursProvider{})
 
 	got, err := svc.GetTasksByDueDate(context.Background(), nil)
@@ -1058,7 +1058,7 @@ func TestService_GetTasksByDueDate_RecurringTasksTakeNoPartInUrgency(t *testing.
 			{ID: 2, Priority: 3, TaskType: "standard", DueAt: &dueIn3Days, EstimateHours: decPtr("8")},
 		}, nil)
 
-	svc := tasks.NewService(repo, loc)
+	svc := newTestService(repo, loc)
 	svc.SetUrgencyProviders(
 		stubCapacityProvider{days: days},
 		stubPlannedHoursProvider{},
@@ -1090,7 +1090,7 @@ func TestService_GetTimeEntrySummary(t *testing.T) {
 		).
 		Return(tasks.TimeEntrySummaryResponse{Today: 1800, Week: 7200}, nil)
 
-	svc := tasks.NewService(repo, loc)
+	svc := newTestService(repo, loc)
 	got, err := svc.GetTimeEntrySummary(context.Background())
 	require.NoError(t, err)
 	assert.Equal(t, tasks.WeeklyTaskTargetSeconds, got.WeeklyTargetSeconds)
@@ -1134,7 +1134,7 @@ func TestService_GetTasksByDueDate_WorkOrderTieBreaks(t *testing.T) {
 	run := func(t *testing.T, free string, rows []tasks.TaskByDueDateResponse) map[int32]tasks.TaskByDueDateResponse {
 		repo := mocks.NewMockRepository(t)
 		repo.EXPECT().GetTasksByDueDate(mock.Anything).Return(rows, nil)
-		svc := tasks.NewService(repo, loc)
+		svc := newTestService(repo, loc)
 		svc.SetUrgencyProviders(stubCapacityProvider{days: days(free)}, stubPlannedHoursProvider{})
 		got, err := svc.GetTasksByDueDate(context.Background(), nil)
 		require.NoError(t, err)
@@ -1210,7 +1210,7 @@ func TestService_GetDueSoonSlack(t *testing.T) {
 		t.Helper()
 		repo := mocks.NewMockRepository(t)
 		repo.EXPECT().GetTasksByDueDate(mock.Anything).Return(rows, nil)
-		svc := tasks.NewService(repo, loc)
+		svc := newTestService(repo, loc)
 		svc.SetUrgencyProviders(stubCapacityProvider{days: days}, stubPlannedHoursProvider{})
 		got, err := svc.GetDueSoonSlack(context.Background())
 		require.NoError(t, err)
@@ -1256,7 +1256,7 @@ func TestService_GetDueSoonSlack_DueTodayUsesToday(t *testing.T) {
 	repo.EXPECT().GetTasksByDueDate(mock.Anything).Return([]tasks.TaskByDueDateResponse{
 		{ID: 1, TaskType: "standard", DueAt: &dueToday, EstimateHours: &estimate},
 	}, nil)
-	svc := tasks.NewService(repo, loc)
+	svc := newTestService(repo, loc)
 	svc.SetUrgencyProviders(
 		stubCapacityProvider{days: []capacity.DayFreeBusy{
 			{Date: today.Format("2006-01-02"), CapacityHours: decimal.NewFromInt(14), FreeHours: decimal.NewFromInt(8)},
@@ -1267,4 +1267,46 @@ func TestService_GetDueSoonSlack_DueTodayUsesToday(t *testing.T) {
 	got, err := svc.GetDueSoonSlack(context.Background())
 	require.NoError(t, err)
 	assert.Equal(t, 3*60, got.SlackMinutes, "a task due today has all of today to fit in")
+}
+
+func newTestService(repo tasks.Repository, loc *time.Location) *tasks.Service {
+	svc := tasks.NewService(repo, loc)
+	now := time.Now().In(loc)
+	svc.SetClock(func() time.Time {
+		return time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, loc)
+	})
+	return svc
+}
+
+func TestService_GetDueSoonSlack_TodayShrinksWithTheClock(t *testing.T) {
+	loc, err := time.LoadLocation("Europe/Madrid")
+	require.NoError(t, err)
+
+	now := time.Now().In(loc)
+	today := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, loc)
+	dueTomorrow := time.Date(today.Year(), today.Month(), today.Day()+1, 0, 0, 0, 0, time.UTC)
+	estimate := decimal.RequireFromString("5")
+
+	slackAt := func(hour int) int {
+		repo := mocks.NewMockRepository(t)
+		repo.EXPECT().GetTasksByDueDate(mock.Anything).Return([]tasks.TaskByDueDateResponse{
+			{ID: 1, TaskType: "standard", DueAt: &dueTomorrow, EstimateHours: &estimate},
+		}, nil)
+		svc := tasks.NewService(repo, loc)
+		svc.SetClock(func() time.Time { return today.Add(time.Duration(hour) * time.Hour) })
+		svc.SetUrgencyProviders(
+			stubCapacityProvider{days: []capacity.DayFreeBusy{
+				{Date: today.Format("2006-01-02"), CapacityHours: decimal.NewFromInt(14), FreeHours: decimal.NewFromInt(14)},
+				{Date: today.AddDate(0, 0, 1).Format("2006-01-02"), CapacityHours: decimal.NewFromInt(14), FreeHours: decimal.NewFromInt(2)},
+			}},
+			stubPlannedHoursProvider{},
+		)
+		got, err := svc.GetDueSoonSlack(context.Background())
+		require.NoError(t, err)
+		return got.SlackMinutes
+	}
+
+	assert.Equal(t, 11*60, slackAt(0), "midnight: 2h tomorrow absorb 2 of the 5h, today holds the other 3 of its 14h")
+	assert.Equal(t, 3*60, slackAt(18), "18:00: only 6h of today are left, 3 of them go to the task")
+	assert.Equal(t, -60, slackAt(22), "22:00: 2h left today cannot hold the 3h that tomorrow cannot")
 }
