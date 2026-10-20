@@ -1310,3 +1310,91 @@ func TestService_GetDueSoonSlack_TodayShrinksWithTheClock(t *testing.T) {
 	assert.Equal(t, 3*60, slackAt(18), "18:00: only 6h of today are left, 3 of them go to the task")
 	assert.Equal(t, -60, slackAt(22), "22:00: 2h left today cannot hold the 3h that tomorrow cannot")
 }
+
+func TestService_GetTasksByDueDate_ShortageLandsOnLowestPriority(t *testing.T) {
+	loc, err := time.LoadLocation("Europe/Madrid")
+	require.NoError(t, err)
+
+	now := time.Now().In(loc)
+	today := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, loc)
+	dueIn3Days := time.Date(today.Year(), today.Month(), today.Day()+3, 0, 0, 0, 0, time.UTC)
+
+	days := make([]capacity.DayFreeBusy, 0, 4)
+	for i := 0; i < 4; i++ {
+		d := today.AddDate(0, 0, i)
+		days = append(days, capacity.DayFreeBusy{Date: d.Format("2006-01-02"), CapacityHours: decimal.NewFromInt(14), FreeHours: decimal.RequireFromString("6")})
+	}
+
+	repo := mocks.NewMockRepository(t)
+	repo.EXPECT().
+		GetTasksByDueDate(mock.Anything).
+		Return([]tasks.TaskByDueDateResponse{
+			{ID: 1, Priority: 2, TaskType: "standard", DueAt: &dueIn3Days, EstimateHours: decPtr("12")},
+			{ID: 2, Priority: 3, TaskType: "standard", DueAt: &dueIn3Days, EstimateHours: decPtr("18")},
+		}, nil)
+
+	svc := newTestService(repo, loc)
+	svc.SetUrgencyProviders(stubCapacityProvider{days: days}, stubPlannedHoursProvider{})
+
+	got, err := svc.GetTasksByDueDate(context.Background(), nil)
+	require.NoError(t, err)
+
+	byID := map[int32]tasks.TaskByDueDateResponse{}
+	for _, r := range got {
+		byID[r.ID] = r
+	}
+
+	assert.False(t, byID[1].Urgent, "the p2 task keeps the last two days")
+	assert.Equal(t, today.AddDate(0, 0, 2).Format("2006-01-02"), *byID[1].StartBy)
+	assert.True(t, byID[2].Urgent, "30h do not fit in 24h, so the p3 task is the one that overflows")
+	assert.Less(t, *byID[1].WorkOrder, *byID[2].WorkOrder, "p2 is still worked first")
+}
+
+// Chain A → B → C → D (p2, 17h) and loose p2 work due the same day, against a p3 chain that
+// would otherwise hold the late days: the p3 chain overflows, not the p2 one.
+func TestService_GetTasksByDueDate_ShortageKeepsDependencyChainOnItsDays(t *testing.T) {
+	loc, err := time.LoadLocation("Europe/Madrid")
+	require.NoError(t, err)
+
+	now := time.Now().In(loc)
+	today := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, loc)
+	due := time.Date(today.Year(), today.Month(), today.Day()+3, 0, 0, 0, 0, time.UTC)
+
+	days := make([]capacity.DayFreeBusy, 0, 4)
+	for i := 0; i < 4; i++ {
+		d := today.AddDate(0, 0, i)
+		days = append(days, capacity.DayFreeBusy{Date: d.Format("2006-01-02"), CapacityHours: decimal.NewFromInt(14), FreeHours: decimal.RequireFromString("6")})
+	}
+
+	ref := func(id int32) []tasks.TaskDepRef { return []tasks.TaskDepRef{{ID: id}} }
+	repo := mocks.NewMockRepository(t)
+	repo.EXPECT().
+		GetTasksByDueDate(mock.Anything).
+		Return([]tasks.TaskByDueDateResponse{
+			{ID: 1, Priority: 2, TaskType: "standard", DueAt: &due, EstimateHours: decPtr("4"), Blocks: ref(2)},
+			{ID: 2, Priority: 2, TaskType: "standard", DueAt: &due, EstimateHours: decPtr("6"), DependsOn: ref(1), Blocks: ref(3)},
+			{ID: 3, Priority: 2, TaskType: "standard", DueAt: &due, EstimateHours: decPtr("3"), DependsOn: ref(2), Blocks: ref(4)},
+			{ID: 4, Priority: 2, TaskType: "standard", DueAt: &due, EstimateHours: decPtr("5"), DependsOn: ref(3)},
+			{ID: 5, Priority: 3, TaskType: "standard", DueAt: &due, EstimateHours: decPtr("15")},
+		}, nil)
+
+	svc := newTestService(repo, loc)
+	svc.SetUrgencyProviders(stubCapacityProvider{days: days}, stubPlannedHoursProvider{})
+
+	got, err := svc.GetTasksByDueDate(context.Background(), nil)
+	require.NoError(t, err)
+
+	byID := map[int32]tasks.TaskByDueDateResponse{}
+	for _, r := range got {
+		byID[r.ID] = r
+	}
+
+	assert.True(t, byID[5].Urgent, "the p3 task overflows")
+	assert.Equal(t, today.Format("2006-01-02"), *byID[5].StartBy)
+	assert.Equal(t, due.Format("2006-01-02"), *byID[4].FinishBy)
+	for _, id := range []int32{1, 2, 3, 4} {
+		assert.Falsef(t, byID[id].Urgent, "task %d is p2 and keeps its days: start_by=%v", id, byID[id].StartBy)
+	}
+	assert.Equal(t, today.AddDate(0, 0, 1).Format("2006-01-02"), *byID[1].StartBy)
+	assert.Equal(t, due.Format("2006-01-02"), *byID[4].StartBy)
+}

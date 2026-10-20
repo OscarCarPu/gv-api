@@ -466,6 +466,52 @@ func (s *Service) applyUrgency(ctx context.Context, rows []TaskByDueDateResponse
 			idxByID[t.ID] = i
 		}
 	}
+	remHours := make(map[int]decimal.Decimal, len(idxByID))
+	for _, i := range idxByID {
+		remHours[i] = remainingHours(rows[i], plannedByTask[rows[i].ID])
+	}
+
+	// When the week does not fit, rerun with the highest priority claiming first so the shortage lands on the lowest.
+	dues := make([]time.Time, len(rows))
+	for i := range rows {
+		if d := s.normalizedDue(rows[i]); d != nil {
+			dues[i] = *d
+		}
+	}
+	scheduled := append([]TaskByDueDateResponse(nil), rows...)
+	free, overflow := backfill(scheduled, dues, idxByID, remHours, priority, freeByDate, today, false)
+	if overflow.IsPositive() {
+		workOrder := make([]*int32, len(scheduled))
+		for i := range scheduled {
+			workOrder[i] = scheduled[i].WorkOrder
+		}
+		scheduled = append(scheduled[:0], rows...)
+		free, overflow = backfill(scheduled, dues, idxByID, remHours, priority, freeByDate, today, true)
+		for i := range scheduled {
+			scheduled[i].WorkOrder = workOrder[i]
+		}
+	}
+	copy(rows, scheduled)
+
+	slack := decimal.Max(free[today.Format("2006-01-02")], decimal.Zero).Sub(overflow)
+	return int(slack.Mul(decimal.NewFromInt(60)).Round(0).IntPart()), nil
+}
+
+func backfill(
+	rows []TaskByDueDateResponse,
+	dues []time.Time,
+	idxByID map[int32]int,
+	remHours map[int]decimal.Decimal,
+	priority []int32,
+	freeByDate map[string]decimal.Decimal,
+	today time.Time,
+	highFirst bool,
+) (map[string]decimal.Decimal, decimal.Decimal) {
+	free := make(map[string]decimal.Decimal, len(freeByDate))
+	for k, v := range freeByDate {
+		free[k] = v
+	}
+
 	pendingDependents := make(map[int]int, len(idxByID))
 	for _, i := range idxByID {
 		for _, b := range rows[i].Blocks {
@@ -479,7 +525,7 @@ func (s *Service) applyUrgency(ctx context.Context, rows []TaskByDueDateResponse
 	chainStart := make(map[int]time.Time, len(idxByID))
 	// lastDay is the due date itself (the work may use all of it), or the day a dependent starts (sharing its hours).
 	finishBy := func(i int) time.Time {
-		finish := *s.normalizedDue(rows[i])
+		finish := dues[i]
 		for _, b := range rows[i].Blocks {
 			if j, ok := idxByID[b.ID]; ok && chainStart[j].Before(finish) {
 				finish = chainStart[j]
@@ -488,7 +534,7 @@ func (s *Service) applyUrgency(ctx context.Context, rows []TaskByDueDateResponse
 		return finish
 	}
 	lastDay := func(i int) time.Time {
-		last := *s.normalizedDue(rows[i])
+		last := dues[i]
 		for _, b := range rows[i].Blocks {
 			if j, ok := idxByID[b.ID]; ok && chainStart[j].Before(last) {
 				last = chainStart[j]
@@ -498,16 +544,18 @@ func (s *Service) applyUrgency(ctx context.Context, rows []TaskByDueDateResponse
 	}
 
 	remaining := make(map[int]bool, len(idxByID))
-	remHours := make(map[int]decimal.Decimal, len(idxByID))
 	for _, i := range idxByID {
 		remaining[i] = true
-		remHours[i] = remainingHours(rows[i], plannedByTask[rows[i].ID])
 	}
 	claimOf := func(i int, last time.Time) claim {
+		p := priority[i]
+		if highFirst {
+			p = -p
+		}
 		return claim{
-			priority: priority[i],
+			priority: p,
 			last:     last,
-			due:      *s.normalizedDue(rows[i]),
+			due:      dues[i],
 			hours:    remHours[i],
 			id:       rows[i].ID,
 		}
@@ -561,7 +609,7 @@ func (s *Service) applyUrgency(ctx context.Context, rows []TaskByDueDateResponse
 		consumed := make(map[string]decimal.Decimal)
 		for d := pickLast; !d.Before(today); d = d.AddDate(0, 0, -1) {
 			dateStr := d.Format("2006-01-02")
-			if avail := freeByDate[dateStr]; avail.GreaterThan(decimal.Zero) {
+			if avail := free[dateStr]; avail.GreaterThan(decimal.Zero) {
 				take := decimal.Min(avail, rem.Sub(acc))
 				acc = acc.Add(take)
 				consumed[dateStr] = take
@@ -572,7 +620,7 @@ func (s *Service) applyUrgency(ctx context.Context, rows []TaskByDueDateResponse
 			}
 		}
 		for dateStr, amt := range consumed {
-			freeByDate[dateStr] = freeByDate[dateStr].Sub(amt)
+			free[dateStr] = free[dateStr].Sub(amt)
 		}
 		if acc.LessThan(rem) {
 			overflow = overflow.Add(rem.Sub(acc))
@@ -584,8 +632,7 @@ func (s *Service) applyUrgency(ctx context.Context, rows []TaskByDueDateResponse
 		t.Urgent = !startBy.After(today)
 	}
 
-	slack := decimal.Max(freeByDate[today.Format("2006-01-02")], decimal.Zero).Sub(overflow)
-	return int(slack.Mul(decimal.NewFromInt(60)).Round(0).IntPart()), nil
+	return free, overflow
 }
 
 func isEstimated(t TaskByDueDateResponse) bool {
