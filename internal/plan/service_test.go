@@ -265,6 +265,7 @@ func TestService_GetToday(t *testing.T) {
 			WeeklyTargetSeconds: tasks.WeeklyTaskTargetSeconds,
 		},
 	}, time.UTC)
+	svc.SetClock(func() time.Time { return time.Date(2026, 5, 10, 8, 0, 0, 0, time.UTC) })
 
 	resp, err := svc.GetToday(context.Background())
 	require.NoError(t, err)
@@ -368,4 +369,20 @@ func TestService_DeleteCommitment_DeletesFutureBlocksFirst(t *testing.T) {
 	svc := plan.NewService(repo, stubTasksSummary{}, time.UTC)
 
 	require.NoError(t, svc.DeleteCommitment(context.Background(), 7))
+}
+
+func TestService_GetToday_FreeTimeCountsOnlyWhatIsAhead(t *testing.T) {
+	repo := mocks.NewMockRepository(t)
+	repo.EXPECT().ListByDate(mock.Anything, mock.Anything).Return([]plan.PlanBlockResponse{
+		{ID: 1, StartedAt: time.Date(2026, 5, 10, 9, 0, 0, 0, time.UTC), EndedAt: time.Date(2026, 5, 10, 11, 0, 0, 0, time.UTC), Label: "gone"},
+		{ID: 2, StartedAt: time.Date(2026, 5, 10, 13, 0, 0, 0, time.UTC), EndedAt: time.Date(2026, 5, 10, 15, 0, 0, 0, time.UTC), Label: "running"},
+		{ID: 3, StartedAt: time.Date(2026, 5, 10, 16, 0, 0, 0, time.UTC), EndedAt: time.Date(2026, 5, 10, 17, 0, 0, 0, time.UTC), Label: "ahead"},
+	}, nil)
+
+	svc := plan.NewService(repo, stubTasksSummary{}, time.UTC)
+	svc.SetClock(func() time.Time { return time.Date(2026, 5, 10, 14, 0, 0, 0, time.UTC) })
+
+	resp, err := svc.GetToday(context.Background())
+	require.NoError(t, err)
+	assert.Equal(t, int64(2*3600), resp.Totals.FreeSeconds, "1h left of the running block + 1h ahead")
 }

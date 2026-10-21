@@ -19,17 +19,20 @@ type Service struct {
 	repo     Repository
 	tasksSvc tasksSummaryProvider
 	location *time.Location
+	clock    func() time.Time
 }
 
 func NewService(repo Repository, tasksSvc tasksSummaryProvider, loc *time.Location) *Service {
 	if loc == nil {
 		loc = time.UTC
 	}
-	return &Service{repo: repo, tasksSvc: tasksSvc, location: loc}
+	return &Service{repo: repo, tasksSvc: tasksSvc, location: loc, clock: time.Now}
 }
 
+func (s *Service) SetClock(clock func() time.Time) { s.clock = clock }
+
 func (s *Service) GetToday(ctx context.Context) (PlanTodayResponse, error) {
-	now := time.Now().In(s.location)
+	now := s.clock().In(s.location)
 	today := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, s.location)
 
 	blocks, err := s.repo.ListByDate(ctx, today)
@@ -42,8 +45,9 @@ func (s *Service) GetToday(ctx context.Context) (PlanTodayResponse, error) {
 		secs := int64(b.EndedAt.Sub(b.StartedAt).Seconds())
 		if b.TaskID != nil {
 			taskSecs += secs
-		} else {
-			freeSecs += secs
+		} else if b.EndedAt.After(now) {
+			// Free time already gone can no longer be used: count only what is still ahead.
+			freeSecs += int64(b.EndedAt.Sub(laterOf(b.StartedAt, now)).Seconds())
 		}
 	}
 
@@ -318,4 +322,11 @@ func (s *Service) resolveLabel(ctx context.Context, taskID *int32, label *string
 	}
 
 	return "", ErrLabelRequired
+}
+
+func laterOf(a, b time.Time) time.Time {
+	if a.After(b) {
+		return a
+	}
+	return b
 }
