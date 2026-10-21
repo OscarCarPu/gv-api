@@ -73,3 +73,14 @@ func TestService_FreeBusyRange(t *testing.T) {
 		assert.Zero(t, busy.calls, "no point asking the plan about a range with no days")
 	})
 }
+
+func TestService_FreeBusyRange_TodayShrinksWithTheClock(t *testing.T) {
+	svc := capacity.NewService(decimal.RequireFromString("14"), &stubBusy{})
+	svc.SetToday(time.UTC, func() time.Time { return time.Date(2026, 5, 10, 23, 30, 0, 0, time.UTC) })
+
+	got, err := svc.FreeBusyRange(context.Background(), day(2026, 5, 10), day(2026, 5, 12))
+	require.NoError(t, err)
+	require.Len(t, got, 2)
+	assert.True(t, got[0].FreeHours.Equal(decimal.RequireFromString("0.5")), "today keeps only the half hour left: %s", got[0].FreeHours)
+	assert.True(t, got[1].FreeHours.Equal(decimal.RequireFromString("14")), "tomorrow is untouched")
+}

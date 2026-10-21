@@ -147,6 +147,7 @@ func main() {
 
 	// tasks <-> plan depend on each other, so urgency providers are wired with a setter.
 	capacityService := capacity.NewService(decimal.NewFromFloat(cfg.DailyCapacityHours), planService)
+	capacityService.SetToday(loc, time.Now)
 	capacityHandler := capacity.NewHandler(capacityService)
 	taskService.SetUrgencyProviders(capacityService, planService)
 
