@@ -433,7 +433,8 @@ func (s *Service) applyUrgency(ctx context.Context, rows []TaskByDueDateResponse
 		}
 	}
 	if len(estimatedIDs) == 0 {
-		return 0, nil
+		// Nothing to schedule, so none of today is claimed: all of what is left of it is free.
+		maxDue = today
 	}
 
 	// Every task overdue: urgent, start today, and FreeBusyRange would get a reversed range.

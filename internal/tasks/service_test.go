@@ -1237,9 +1237,9 @@ func TestService_GetDueSoonSlack(t *testing.T) {
 		assert.Equal(t, -3*60, run(t, rows, nil))
 	})
 
-	t.Run("no estimates, no slack", func(t *testing.T) {
+	t.Run("no estimates, all of today is free", func(t *testing.T) {
 		rows := []tasks.TaskByDueDateResponse{{ID: 1, TaskType: "standard", DueAt: &dueIn3Days}}
-		assert.Equal(t, 0, run(t, rows, freeDays("8")))
+		assert.Equal(t, 8*60, run(t, rows, freeDays("8")))
 	})
 }
 
