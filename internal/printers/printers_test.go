@@ -260,3 +260,42 @@ func TestCameraStreamNeedsSignature(t *testing.T) {
 	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &body))
 	assert.Contains(t, body["url"], "/camera/stream?exp=")
 }
+
+func TestAutoRecorder(t *testing.T) {
+	on := func(state string) Telemetry { return Telemetry{Online: true, State: state} }
+
+	t.Run("starts when a print starts and stops when it ends", func(t *testing.T) {
+		var a autoRecorder
+		start, stop := a.observe(on("IDLE"))
+		assert.False(t, start || stop)
+		start, stop = a.observe(on("PRINTING"))
+		assert.True(t, start)
+		assert.False(t, stop)
+		a.started = true
+		start, stop = a.observe(on("PAUSED"))
+		assert.False(t, start || stop, "a pause keeps recording")
+		start, stop = a.observe(on("PRINTING"))
+		assert.False(t, start || stop)
+		_, stop = a.observe(on("FINISHED"))
+		assert.True(t, stop)
+	})
+
+	t.Run("a print already running at boot is only a baseline", func(t *testing.T) {
+		var a autoRecorder
+		start, _ := a.observe(on("PRINTING"))
+		assert.False(t, start)
+		_, stop := a.observe(on("IDLE"))
+		assert.False(t, stop, "it never started this recording")
+	})
+
+	t.Run("an offline reading changes nothing", func(t *testing.T) {
+		var a autoRecorder
+		a.observe(on("IDLE"))
+		a.observe(on("PRINTING"))
+		a.started = true
+		start, stop := a.observe(Telemetry{})
+		assert.False(t, start || stop)
+		_, stop = a.observe(on("STOPPED"))
+		assert.True(t, stop)
+	})
+}

@@ -40,6 +40,7 @@ With `FAILOVER_SIDE=aws` every endpoint here answers `503` before reaching the h
 ## Notes
 
 - Large uploads must be chunked: the tunnel in front of the API rejects bodies over 100 MB. Chunks stage on disk (`PRINTER_UPLOADS_DIR`) and the assembled file streams to the printer in the background, so the request returns before the slow USB write.
+- Recording is automatic: a watcher polls the printer every 5s and starts a recording when its state turns `PRINTING` (a pause keeps it going) and stops it when the print ends. It only stops a recording it started, treats the first reading after boot as a baseline (a restart mid-print starts nothing) and ignores offline polls. It does not run on the failover instance.
 - Recordings are their own metadata: name = UTC start time, mtime = end, size = size. Fragmented MP4, so a killed ffmpeg leaves a playable file. The directory must be a volume (`printer_recordings` in compose, owned by uid 1000).
 - The status overlay burned into recordings (`PRINTER_RECORDING_OVERLAY`) needs a libx264 encode; `0` goes back to `-c:v copy`.
 - An upstream 401 from PrusaLink is returned as 502, so a bad printer password never reads as an expired session.

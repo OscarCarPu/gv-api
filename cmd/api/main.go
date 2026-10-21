@@ -241,6 +241,7 @@ func main() {
 
 	if !cfg.OnFailover() {
 		lightsService.StartPolling(workerCtx, cfg.LightsPollInterval)
+		printersService.Run(workerCtx)
 	}
 
 	quit := make(chan os.Signal, 1)
