@@ -19,6 +19,8 @@ type Config struct {
 	Location            *time.Location
 	AllowedOrigins      []string
 	FailoverSide        string
+	// Shared with the failover Lambda. Empty leaves /failover unmounted.
+	FailoverToken string
 
 	// Domotics lights. LIGHTS_DRIVER unset uses the in-memory mock.
 	LightsDriver  string
@@ -88,6 +90,7 @@ func Load() (*Config, error) {
 		Timezone:            getEnv("TIMEZONE", "Europe/Madrid"),
 		AllowedOrigins:      allowedOrigins,
 		FailoverSide:        strings.ToLower(strings.TrimSpace(getEnv("FAILOVER_SIDE", "home"))),
+		FailoverToken:       os.Getenv("FAILOVER_TOKEN"),
 
 		LightsDriver:  getEnv("LIGHTS_DRIVER", "mock"),
 		LightsAdapter: getEnv("LIGHTS_ADAPTER", "hci0"),

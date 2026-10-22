@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"sync/atomic"
 	"syscall"
 	"time"
 	_ "time/tzdata"
@@ -18,6 +19,7 @@ import (
 	"gv-api/internal/config"
 	"gv-api/internal/core"
 	"gv-api/internal/database"
+	"gv-api/internal/failover"
 	"gv-api/internal/finance"
 	"gv-api/internal/habits"
 	"gv-api/internal/lights"
@@ -31,6 +33,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	chimiddleware "github.com/go-chi/chi/v5/middleware"
 	"github.com/go-chi/cors"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/shopspring/decimal"
 )
 
@@ -51,9 +54,23 @@ func main() {
 		os.Exit(runBackup(cfg))
 	}
 
-	if err := database.Migrate(cfg.DBUrl, "db/migrations"); err != nil {
-		slog.Error("failed to run migrations", "error", err)
+	var pool atomic.Pointer[pgxpool.Pool]
+	failoverCtl, err := newFailover(context.Background(), cfg, func() {
+		if p := pool.Load(); p != nil {
+			p.Reset()
+		}
+	})
+	if err != nil {
+		slog.Error("failed to set up the failover", "error", err)
 		os.Exit(1)
+	}
+
+	// A held home may be an empty database; migrating it would hide that from the merge.
+	if failoverCtl == nil || failoverCtl.Mode() == failover.ModeNormal {
+		if err := database.Migrate(cfg.DBUrl, "db/migrations"); err != nil {
+			slog.Error("failed to run migrations", "error", err)
+			os.Exit(1)
+		}
 	}
 
 	db, err := database.New(context.Background(), cfg.DBUrl)
@@ -61,6 +78,7 @@ func main() {
 		slog.Error("failed to connect to database", "error", err)
 		os.Exit(1)
 	}
+	pool.Store(db)
 
 	//nolint:errcheck // if the db is closed, the program has already exited
 	defer db.Close()
@@ -159,6 +177,10 @@ func main() {
 	r.Use(chimiddleware.Recoverer)
 	r.Use(core.RequestID)
 	r.Use(cors.Handler(core.CORSOptions(cfg.AllowedOrigins)))
+	if failoverCtl != nil {
+		r.Use(failoverCtl.Lock)
+		failoverCtl.Routes(r)
+	}
 
 	r.Get("/health", core.Health(db, cfg.HealthTimeout))
 
@@ -197,6 +219,9 @@ func main() {
 		calendarHandler.RegisterRoutes(r)
 		capacityHandler.RegisterRoutes(r)
 		backupHandler.RegisterRoutes(r)
+		if failoverCtl != nil {
+			failoverCtl.MergeRoutes(r)
+		}
 	})
 
 	server := &http.Server{
@@ -210,7 +235,11 @@ func main() {
 
 	workerCtx, stopWorker := context.WithCancel(context.Background())
 	defer stopWorker()
-	go backup.NewWorker(backupService, cfg.BackupInterval).Run(workerCtx)
+	backupWorker := backup.NewWorker(backupService, cfg.BackupInterval)
+	if failoverCtl != nil {
+		backupWorker.Gated(failoverCtl.Allowed)
+	}
+	go backupWorker.Run(workerCtx)
 
 	if !cfg.OnFailover() {
 		lightsService.StartPolling(workerCtx, cfg.LightsPollInterval)
