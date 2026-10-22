@@ -108,3 +108,7 @@ make sqlc            # db/queries -> internal/database/gvdb
 make generate-mocks  # interfaces -> internal/*/mocks (typed .EXPECT() helpers)
 ```
 
+
+## Disclaimer
+
+This project was developed partially with the help of [Claude Code](https://claude.com/claude-code). The code is being reviewed and modified to clean up the architecture and take full ownership of the project.
