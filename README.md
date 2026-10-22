@@ -31,6 +31,8 @@ Go, chi, PostgreSQL via pgx + sqlc, testify + mockery. See [architecture](docs/a
    make run
    ```
 
+   `make up` runs the whole stack in Docker and adds a fake AWS (SSM and S3) so the failover restore can be rehearsed locally, see [docs/dev-failover.md](docs/dev-failover.md).
+
 ## Environment Variables
 
 All variables are in `.env.example` with their defaults. Required: `DATABASE_URL`, `PASSWORD`,
@@ -72,7 +74,7 @@ degrade gracefully when unset.
 
 ## Backups
 
-gv-api dumps its own database with `pg_dump` every `BACKUP_INTERVAL_MS` (default 1 h, at the top of the hour; `0` turns the schedule off). The dumps are gzipped plain SQL.
+gv-api dumps its own database with `pg_dump` every `BACKUP_INTERVAL_MS` (default 5 min, on the clock; `0` turns the schedule off). The dumps are gzipped plain SQL.
 
 **On demand:** run the same backup outside the schedule from the running container. Only one backup runs at a time, so this is safe while the schedule or another run is active:
 

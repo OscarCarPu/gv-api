@@ -19,7 +19,11 @@ func NewS3Uploader(ctx context.Context, bucket string) (*S3Uploader, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &S3Uploader{client: s3.NewFromConfig(cfg), bucket: bucket}, nil
+	client := s3.NewFromConfig(cfg, func(o *s3.Options) {
+		// A custom endpoint (the local fake AWS) has no bucket.host name to resolve.
+		o.UsePathStyle = os.Getenv("AWS_ENDPOINT_URL") != ""
+	})
+	return &S3Uploader{client: client, bucket: bucket}, nil
 }
 
 func (u *S3Uploader) Upload(ctx context.Context, key, file string) error {

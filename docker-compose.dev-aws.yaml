@@ -1,0 +1,31 @@
+# Local stand-in for the AWS side of the failover (SSM parameters and the dump bucket), so the
+# merge screen and the restore can be tried without touching real AWS.
+#
+# Dev only: `make up` and `make reset` add it, the deploy workflow never does. Never use it on the
+# home server, where gv-api must talk to the real SSM and S3.
+services:
+  aws:
+    image: motoserver/moto:5.1.17
+    container_name: gv_aws
+    ports:
+      - "5000:5000"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:5000/moto-api/')"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks:
+      - gv
+    restart: unless-stopped
+
+  gv-api:
+    depends_on:
+      aws:
+        condition: service_healthy
+    environment:
+      AWS_ENDPOINT_URL: http://aws:5000
+      AWS_REGION: eu-south-2
+      AWS_ACCESS_KEY_ID: test
+      AWS_SECRET_ACCESS_KEY: test
+      BACKUP_S3_BUCKET: gv-dev
+      FAILOVER_TOKEN: dev-token

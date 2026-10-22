@@ -1,4 +1,4 @@
-// Package restore replaces the home database with the one restored from EC2, merging what home
+// Package restore replaces the home database with the one restored from EC2 and reports what home
 // wrote since the dump both started from. It works on local dump files and never touches S3.
 package restore
 
@@ -9,12 +9,14 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"time"
 
 	"gv-api/internal/backup"
-	"gv-api/internal/merge"
+	"gv-api/internal/report"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -30,8 +32,9 @@ type Config struct {
 	// Home is the live database name.
 	Home string
 	// Dir keeps the pre-restore dumps and the done markers.
-	Dir    string
-	Psql   string
+	Dir  string
+	Psql string
+	// Ignore lists, per table, the columns a trigger derives; the report does not compare them.
 	Ignore map[string][]string
 	// Release closes whatever the application holds open on Home; it runs right before the swap.
 	Release func()
@@ -39,17 +42,14 @@ type Config struct {
 
 type Request struct {
 	// ID names this restore (the failback dump's key); it keys the pre-restore dump and the done marker.
-	ID        string
-	Base      string
-	EC2       string
-	Decisions map[merge.Ref]merge.Choice
-	Commit    bool
+	ID   string
+	Base string
+	EC2  string
 }
 
 type Outcome struct {
-	Result *merge.Result
-	// Skipped is set when home has no tables, so there is nothing to merge and EC2's data is used as is.
-	Skipped     bool
+	// Report is nil when the restore had already been done.
+	Report      *report.Report
 	Swapped     bool
 	AlreadyDone bool
 	PreRestore  string
@@ -66,13 +66,13 @@ func New(cfg Config) *Runner {
 	return &Runner{cfg: cfg}
 }
 
-func (r *Runner) baseDB() string { return r.cfg.Home + "_merge_base" }
-func (r *Runner) ec2DB() string  { return r.cfg.Home + "_merge_ec2" }
+func (r *Runner) baseDB() string { return r.cfg.Home + "_restore_base" }
+func (r *Runner) ec2DB() string  { return r.cfg.Home + "_restore_ec2" }
 func (r *Runner) oldDB() string  { return r.cfg.Home + "_pre_restore" }
 
-// Run loads both dumps into scratch databases and merges home into the EC2 one. It starts from
-// scratch every time, so it can be run again after a conflict is answered or after a crash.
-// The swap happens only when the merge was committed.
+// Run loads both dumps into scratch databases, reports what home holds that the EC2 dump does not,
+// and swaps the EC2 database into place. It starts from scratch every time, so it can be run
+// again after a crash. A report that cannot be built is recorded in the report, never fatal.
 func (r *Runner) Run(ctx context.Context, req Request) (*Outcome, error) {
 	marker := filepath.Join(r.cfg.Dir, "swapped-"+req.ID)
 	if _, err := os.Stat(marker); err == nil {
@@ -96,39 +96,7 @@ func (r *Runner) Run(ctx context.Context, req Request) (*Outcome, error) {
 		return nil, err
 	}
 
-	pools, err := r.open(ctx, r.baseDB(), r.ec2DB(), r.cfg.Home)
-	if err != nil {
-		return nil, err
-	}
-	base, ec2, home := pools[0], pools[1], pools[2]
-	defer func() {
-		for _, p := range pools {
-			p.Close()
-		}
-	}()
-
-	tables, err := merge.Introspect(ctx, home)
-	if err != nil {
-		return nil, err
-	}
-	out.Skipped = len(tables) == 0
-	if !out.Skipped {
-		out.Result, err = merge.Merge(ctx, base, home, ec2, merge.Options{
-			Ignore: r.cfg.Ignore, Decisions: req.Decisions, Commit: req.Commit,
-		})
-		if err != nil {
-			return nil, err
-		}
-		if len(out.Result.Conflicts) > 0 || !out.Result.Committed {
-			return out, nil
-		}
-	} else if !req.Commit {
-		return out, nil
-	}
-
-	for _, p := range pools {
-		p.Close()
-	}
+	out.Report = r.report(ctx)
 	if r.cfg.Release != nil {
 		r.cfg.Release()
 	}
@@ -140,6 +108,28 @@ func (r *Runner) Run(ctx context.Context, req Request) (*Outcome, error) {
 	}
 	out.Swapped = true
 	return out, nil
+}
+
+func (r *Runner) report(ctx context.Context) *report.Report {
+	rep, err := r.build(ctx)
+	if err != nil {
+		slog.Error("restore: cannot build the report", "error", err)
+		return &report.Report{At: time.Now().UTC(), Items: []report.Item{}, Error: err.Error()}
+	}
+	return rep
+}
+
+func (r *Runner) build(ctx context.Context) (*report.Report, error) {
+	pools, err := r.open(ctx, r.baseDB(), r.cfg.Home, r.ec2DB())
+	if err != nil {
+		return nil, err
+	}
+	defer func() {
+		for _, p := range pools {
+			p.Close()
+		}
+	}()
+	return report.Build(ctx, pools[0], pools[1], pools[2], r.cfg.Ignore)
 }
 
 // verify reads the whole gzip stream, so a truncated download is caught before anything changes.
@@ -243,24 +233,40 @@ func (r *Runner) open(ctx context.Context, dbs ...string) ([]*pgxpool.Pool, erro
 }
 
 // swap renames the live database out of the way and the merged one into its place.
+//
+// New connections to home are refused first: the app's pool reconnects the moment its sessions are
+// terminated, and a rename fails while any session is open. A failure puts everything back.
 func (r *Runner) swap(ctx context.Context) error {
 	home, merged, old := pgx.Identifier{r.cfg.Home}.Sanitize(), pgx.Identifier{r.ec2DB()}.Sanitize(), pgx.Identifier{r.oldDB()}.Sanitize()
-
-	_, err := r.cfg.Admin.Exec(ctx,
-		"SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = ANY($1) AND pid <> pg_backend_pid()",
-		[]string{r.cfg.Home, r.ec2DB(), r.baseDB()})
-	if err != nil {
+	exec := func(sql string, args ...any) error {
+		_, err := r.cfg.Admin.Exec(ctx, sql, args...)
 		return err
 	}
-	for _, sql := range []string{
-		"DROP DATABASE IF EXISTS " + old + " WITH (FORCE)",
-		"ALTER DATABASE " + home + " RENAME TO " + old,
-		"ALTER DATABASE " + merged + " RENAME TO " + home,
-		"DROP DATABASE IF EXISTS " + pgx.Identifier{r.baseDB()}.Sanitize() + " WITH (FORCE)",
-	} {
-		if _, err := r.cfg.Admin.Exec(ctx, sql); err != nil {
-			return err
-		}
+	undo := context.WithoutCancel(ctx)
+
+	if err := exec("ALTER DATABASE " + home + " ALLOW_CONNECTIONS false"); err != nil {
+		return err
 	}
-	return nil
+	err := exec("SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = ANY($1) AND pid <> pg_backend_pid()",
+		[]string{r.cfg.Home, r.ec2DB(), r.baseDB()})
+	if err == nil {
+		err = exec("DROP DATABASE IF EXISTS " + old + " WITH (FORCE)")
+	}
+	if err == nil {
+		err = exec("ALTER DATABASE " + home + " RENAME TO " + old)
+	}
+	if err != nil {
+		_, _ = r.cfg.Admin.Exec(undo, "ALTER DATABASE "+home+" ALLOW_CONNECTIONS true")
+		return err
+	}
+
+	if err := exec("ALTER DATABASE " + merged + " RENAME TO " + home); err != nil {
+		_, _ = r.cfg.Admin.Exec(undo, "ALTER DATABASE "+old+" RENAME TO "+home)
+		_, _ = r.cfg.Admin.Exec(undo, "ALTER DATABASE "+home+" ALLOW_CONNECTIONS true")
+		return err
+	}
+	if err := exec("ALTER DATABASE " + old + " ALLOW_CONNECTIONS true"); err != nil {
+		return err
+	}
+	return exec("DROP DATABASE IF EXISTS " + pgx.Identifier{r.baseDB()}.Sanitize() + " WITH (FORCE)")
 }

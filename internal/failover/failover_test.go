@@ -14,7 +14,7 @@ import (
 	"time"
 
 	"gv-api/internal/failover"
-	"gv-api/internal/merge"
+	"gv-api/internal/report"
 	"gv-api/internal/restore"
 
 	"github.com/go-chi/chi/v5"
@@ -85,14 +85,9 @@ func (r *restorer) count() int {
 
 var swapped = func(int) (*restore.Outcome, error) { return &restore.Outcome{Swapped: true}, nil }
 
-var clash = merge.Ref{Table: "parents", Key: "[2]"}
-
-func conflicting(call int) (*restore.Outcome, error) {
-	if call > 1 {
-		return &restore.Outcome{Swapped: true}, nil
-	}
-	return &restore.Outcome{Result: &merge.Result{Conflicts: []merge.Conflict{{
-		Ref: clash, Op: merge.Update, Reason: "same row edited on both sides",
+func reporting(int) (*restore.Outcome, error) {
+	return &restore.Outcome{Swapped: true, Report: &report.Report{Items: []report.Item{{
+		Table: "parents", Key: "[2]", Op: report.Update,
 		Base: map[string]any{"name": "two"}, Home: map[string]any{"name": "h"}, EC2: map[string]any{"name": "e"},
 	}}}}, nil
 }
@@ -141,7 +136,7 @@ func (f *fixture) routes(c *failover.Controller) http.Handler {
 	r.Get("/habits", ok)
 	r.Post("/login", ok)
 	c.Routes(r)
-	c.MergeRoutes(r)
+	c.ReportRoutes(r)
 	return r
 }
 
@@ -206,7 +201,7 @@ func TestLock_AnswersMergePendingExceptForTheRoutesTheFailoverNeeds(t *testing.T
 	rec := f.do("GET", "/habits", "", "")
 	assert.Equal(t, http.StatusServiceUnavailable, rec.Code)
 	assert.JSONEq(t, `{"error":"Restoring data after the failover. Back in a moment.","code":"merge_pending"}`, rec.Body.String())
-	for _, route := range [][2]string{{"GET", "/health"}, {"POST", "/login"}, {"GET", "/merge"}, {"GET", "/failover/status"}} {
+	for _, route := range [][2]string{{"GET", "/health"}, {"POST", "/login"}, {"GET", "/report"}, {"GET", "/failover/status"}} {
 		assert.NotEqual(t, http.StatusServiceUnavailable, f.do(route[0], route[1], token, "").Code, route[1])
 	}
 }
@@ -235,35 +230,56 @@ func TestMerge_DownloadsBothDumpsRunsAndUnlocks(t *testing.T) {
 	assert.Equal(t, 1, f.after)
 	assert.ElementsMatch(t, []string{"gv-db/hourly/base.sql.gz", "gv-db/hourly/dump.sql.gz"}, f.store.keys)
 	req := f.run.runs[0]
-	assert.Equal(t, "dump.sql.gz", req.ID)
-	assert.True(t, req.Commit)
+	assert.Equal(t, "dump", req.ID)
 	assert.Equal(t, filepath.Join(f.dir, "downloads", "base.sql.gz"), req.Base)
 	assert.Equal(t, filepath.Join(f.dir, "downloads", "dump.sql.gz"), req.EC2)
 }
 
-func TestMerge_AConflictWaitsForAnswersThenFinishes(t *testing.T) {
-	f := newFixture(t, state("FAILING_BACK"), conflicting)
-	require.Equal(t, http.StatusOK, f.do("POST", "/failover", token, `{"mode":"merge"}`).Code)
-	f.waitFor(t, failover.MergeNeedsAnswers)
-	assert.Equal(t, failover.ModeMerge, f.ctl.Mode(), "still locked")
-
+func (f *fixture) report(t *testing.T) *struct{ Items []map[string]any } {
+	t.Helper()
 	var got struct {
-		Conflicts []map[string]any
+		Report *struct{ Items []map[string]any }
 	}
-	require.NoError(t, json.Unmarshal(f.do("GET", "/merge", "", "").Body.Bytes(), &got))
-	require.Len(t, got.Conflicts, 1)
-	assert.Equal(t, "parents", got.Conflicts[0]["table"])
-	assert.Equal(t, "[2]", got.Conflicts[0]["key"])
+	rec := f.do("GET", "/report", "", "")
+	require.Equal(t, http.StatusOK, rec.Code)
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &got))
+	return got.Report
+}
 
-	assert.Equal(t, http.StatusConflict, f.do("POST", "/merge/apply", "", "").Code, "unanswered")
-	assert.Equal(t, http.StatusNotFound, f.do("POST", "/merge/decisions", "", `{"table":"x","key":"[1]","choice":"home"}`).Code)
-	assert.Equal(t, http.StatusBadRequest, f.do("POST", "/merge/decisions", "", `{"table":"parents","key":"[2]","choice":"both"}`).Code)
-	require.Equal(t, http.StatusNoContent, f.do("POST", "/merge/decisions", "", `{"table":"parents","key":"[2]","choice":"home"}`).Code)
-
-	assert.Equal(t, http.StatusAccepted, f.do("POST", "/merge/apply", "", "").Code)
+func TestReport_IsKeptAfterTheRestoreUntilDismissed(t *testing.T) {
+	f := newFixture(t, state("FAILING_BACK"), reporting)
+	assert.Nil(t, f.report(t))
+	require.Equal(t, http.StatusOK, f.do("POST", "/failover", token, `{"mode":"merge"}`).Code)
 	f.waitFor(t, failover.MergeDone)
+
+	got := f.report(t)
+	require.NotNil(t, got)
+	require.Len(t, got.Items, 1)
+	assert.Equal(t, "parents", got.Items[0]["table"])
 	assert.Equal(t, failover.ModeNormal, f.ctl.Mode())
-	assert.Equal(t, merge.Home, f.run.runs[1].Decisions[clash], "the second run carries the answer")
+
+	restarted := f.controller(token)
+	f.router = f.routes(restarted)
+	assert.NotNil(t, f.report(t), "the report survives a restart")
+
+	assert.Equal(t, http.StatusNoContent, f.do("DELETE", "/report", "", "").Code)
+	assert.Nil(t, f.report(t))
+	assert.NoFileExists(t, filepath.Join(f.dir, "report.json"))
+}
+
+func TestReport_ARestoreAlreadyDoneKeepsTheEarlierReport(t *testing.T) {
+	f := newFixture(t, state("FAILING_BACK"), reporting)
+	require.Equal(t, http.StatusOK, f.do("POST", "/failover", token, `{"mode":"merge"}`).Code)
+	f.waitFor(t, failover.MergeDone)
+
+	restarted := f.controller(token)
+	f.router = f.routes(restarted)
+	f.run.outcome = func(int) (*restore.Outcome, error) { return &restore.Outcome{Swapped: true, AlreadyDone: true}, nil }
+	f.params.set("/home-lab-failover/state", state("PENDING_MERGE"))
+	restarted.Start(context.Background())
+
+	require.Eventually(t, func() bool { return f.run.count() == 2 }, 2*time.Second, 5*time.Millisecond)
+	assert.NotNil(t, f.report(t))
 }
 
 func TestMerge_AFailureIsReportedAndCanBeRetried(t *testing.T) {
@@ -278,7 +294,7 @@ func TestMerge_AFailureIsReportedAndCanBeRetried(t *testing.T) {
 	assert.Contains(t, f.do("GET", "/failover/status", token, "").Body.String(), "disk full")
 	assert.Equal(t, failover.ModeMerge, f.ctl.Mode())
 
-	assert.Equal(t, http.StatusAccepted, f.do("POST", "/merge/apply", "", "").Code)
+	require.Equal(t, http.StatusOK, f.do("POST", "/failover", token, `{"mode":"merge"}`).Code)
 	f.waitFor(t, failover.MergeDone)
 }
 
@@ -356,20 +372,4 @@ func TestAllowed(t *testing.T) {
 	assert.False(t, f.ctl.Allowed(ctx))
 	assert.Equal(t, failover.ModeHold, f.ctl.Mode(), "a failover the push never reached holds the app")
 	assert.False(t, f.ctl.Allowed(ctx))
-}
-
-func TestDecisionsSurviveARestart(t *testing.T) {
-	f := newFixture(t, state("FAILING_BACK"), conflicting)
-	require.Equal(t, http.StatusOK, f.do("POST", "/failover", token, `{"mode":"merge"}`).Code)
-	f.waitFor(t, failover.MergeNeedsAnswers)
-	require.Equal(t, http.StatusNoContent, f.do("POST", "/merge/decisions", "", `{"table":"parents","key":"[2]","choice":"ec2"}`).Code)
-
-	restarted := f.controller(token)
-	f.router = f.routes(restarted)
-	restarted.Start(context.Background())
-	f.params.set("/home-lab-failover/state", state("PENDING_MERGE"))
-	restarted.Start(context.Background())
-
-	require.Eventually(t, func() bool { return f.run.count() >= 2 }, 2*time.Second, 5*time.Millisecond)
-	assert.Equal(t, merge.EC2, f.run.runs[1].Decisions[clash])
 }

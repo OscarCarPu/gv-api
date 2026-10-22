@@ -8,13 +8,15 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
-	"gv-api/internal/merge"
 	"gv-api/internal/restore"
 	"gv-api/internal/testutil"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -27,11 +29,6 @@ INSERT INTO parents (name) VALUES ('one'), ('two'), ('three');
 INSERT INTO children (parent_id, label) VALUES (1, 'c1'), (2, 'c2');
 `
 
-const offsetSequences = `
-SELECT setval(format('%I.%I', schemaname, sequencename)::regclass, coalesce(last_value, start_value) + 1000000)
-FROM pg_sequences WHERE schemaname = 'public';
-`
-
 const homeChanges = `
 INSERT INTO parents (name) VALUES ('home-new');
 UPDATE parents SET name = 'home-edit' WHERE id = 1;
@@ -42,6 +39,11 @@ const ec2Changes = `
 INSERT INTO parents (name) VALUES ('ec2-new');
 UPDATE parents SET name = 'ec2-clash' WHERE id = 2;
 `
+
+var (
+	homeNames = []string{"home-edit", "home-clash", "three", "home-new"}
+	ec2Names  = []string{"one", "ec2-clash", "three", "ec2-new"}
+)
 
 type env struct {
 	admin *pgxpool.Pool
@@ -67,16 +69,15 @@ func setup(t *testing.T, homeSQL string) *env {
 	_, err := e.admin.Exec(ctx, "CREATE DATABASE "+e.home)
 	require.NoError(t, err)
 	t.Cleanup(func() {
-		for _, db := range []string{e.home, e.home + "_merge_base", e.home + "_merge_ec2", e.home + "_pre_restore"} {
+		for _, db := range []string{e.home, e.home + "_restore_base", e.home + "_restore_ec2", e.home + "_pre_restore"} {
 			_, _ = e.admin.Exec(ctx, `DROP DATABASE IF EXISTS "`+db+`" WITH (FORCE)`)
 		}
 	})
 	if homeSQL != "" {
 		e.exec(t, e.home, homeSQL)
 	}
-
 	e.base = e.dump(t, "base.sql.gz", schema)
-	e.ec2 = e.dump(t, "ec2.sql.gz", schema+offsetSequences+ec2Changes)
+	e.ec2 = e.dump(t, "ec2.sql.gz", schema+ec2Changes)
 	return e
 }
 
@@ -132,25 +133,29 @@ func (e *env) runner(released *bool) *restore.Runner {
 	})
 }
 
-func (e *env) request(commit bool, decisions map[merge.Ref]merge.Choice) restore.Request {
-	return restore.Request{ID: "dump-1", Base: e.base, EC2: e.ec2, Decisions: decisions, Commit: commit}
+func (e *env) request() restore.Request {
+	return restore.Request{ID: "dump-1", Base: e.base, EC2: e.ec2}
 }
 
-var clash = merge.Ref{Table: "parents", Key: "[2]"}
-
-func TestRun_MergesAndSwaps(t *testing.T) {
+func TestRun_RestoresEC2AndReportsWhatHomeHad(t *testing.T) {
 	e := setup(t, schema+homeChanges)
 	var released bool
 
-	out, err := e.runner(&released).Run(context.Background(), e.request(true, map[merge.Ref]merge.Choice{clash: merge.Home}))
+	out, err := e.runner(&released).Run(context.Background(), e.request())
 
 	require.NoError(t, err)
 	assert.True(t, out.Swapped)
 	assert.True(t, released, "the app's pool is released before the swap")
-	assert.Equal(t, []string{"home-edit", "home-clash", "three", "home-new", "ec2-new"}, e.names(t, e.home))
-	assert.Equal(t, []string{"home-edit", "home-clash", "three", "home-new"}, e.names(t, e.home+"_pre_restore"),
-		"the old home database is kept")
+	assert.Equal(t, ec2Names, e.names(t, e.home), "EC2's data is restored as it is")
+	assert.Equal(t, homeNames, e.names(t, e.home+"_pre_restore"), "the old home database is kept")
 	assert.FileExists(t, filepath.Join(e.dir, "failback", "swapped-dump-1"))
+
+	require.Empty(t, out.Report.Error)
+	var seen []string
+	for _, it := range out.Report.Items {
+		seen = append(seen, fmt.Sprint(it.Op, " ", it.Home["name"]))
+	}
+	assert.ElementsMatch(t, []string{"insert home-new", "update home-edit", "update home-clash"}, seen)
 
 	f, err := os.Open(out.PreRestore)
 	require.NoError(t, err)
@@ -161,7 +166,7 @@ func TestRun_MergesAndSwaps(t *testing.T) {
 	require.NoError(t, err)
 	assert.Contains(t, string(body), "home-new", "the pre-restore dump holds what home had")
 
-	for _, scratch := range []string{"_merge_base", "_merge_ec2"} {
+	for _, scratch := range []string{"_restore_base", "_restore_ec2"} {
 		var n int
 		require.NoError(t, e.admin.QueryRow(context.Background(),
 			"SELECT count(*) FROM pg_database WHERE datname = $1", e.home+scratch).Scan(&n))
@@ -169,44 +174,64 @@ func TestRun_MergesAndSwaps(t *testing.T) {
 	}
 }
 
-func TestRun_AConflictStopsBeforeTheSwap(t *testing.T) {
+func TestRun_SwapsEvenWhileTheAppKeepsReconnecting(t *testing.T) {
 	e := setup(t, schema+homeChanges)
+	// a leftover from an earlier restore makes the drop before the rename take its time
+	_, err := e.admin.Exec(context.Background(), "CREATE DATABASE "+e.home+"_pre_restore")
+	require.NoError(t, err)
+	ctx, stop := context.WithCancel(context.Background())
+	var clients sync.WaitGroup
+	var connects atomic.Int64
+	for range 8 {
+		clients.Add(1)
+		go func() {
+			defer clients.Done()
+			for ctx.Err() == nil {
+				if conn, err := pgx.Connect(ctx, e.url(e.home)); err == nil {
+					connects.Add(1)
+					_, _ = conn.Exec(ctx, "SELECT pg_sleep(0.2)")
+					_ = conn.Close(ctx)
+				}
+			}
+		}()
+	}
+	t.Cleanup(func() { stop(); clients.Wait() })
 
-	out, err := e.runner(nil).Run(context.Background(), e.request(true, nil))
+	out, err := e.runner(nil).Run(context.Background(), e.request())
 
 	require.NoError(t, err)
-	require.Len(t, out.Result.Conflicts, 1)
-	assert.Equal(t, clash, out.Result.Conflicts[0].Ref)
-	assert.False(t, out.Swapped)
-	assert.Equal(t, []string{"home-edit", "home-clash", "three", "home-new"}, e.names(t, e.home), "home is untouched")
-
-	again, err := e.runner(nil).Run(context.Background(), e.request(true, map[merge.Ref]merge.Choice{clash: merge.EC2}))
-
-	require.NoError(t, err)
-	assert.True(t, again.Swapped)
-	assert.Equal(t, []string{"home-edit", "ec2-clash", "three", "home-new", "ec2-new"}, e.names(t, e.home))
-}
-
-func TestRun_DryRunDoesNotSwap(t *testing.T) {
-	e := setup(t, schema+homeChanges)
-
-	out, err := e.runner(nil).Run(context.Background(), e.request(false, map[merge.Ref]merge.Choice{clash: merge.EC2}))
-
-	require.NoError(t, err)
-	assert.False(t, out.Swapped)
-	assert.Empty(t, out.Result.Conflicts)
-	assert.Equal(t, []string{"home-edit", "home-clash", "three", "home-new"}, e.names(t, e.home))
+	assert.True(t, out.Swapped)
+	assert.Equal(t, ec2Names, e.names(t, e.home))
+	for _, db := range []string{e.home, e.home + "_pre_restore"} {
+		var allowed bool
+		require.NoError(t, e.admin.QueryRow(context.Background(),
+			"SELECT datallowconn FROM pg_database WHERE datname = $1", db).Scan(&allowed))
+		assert.True(t, allowed, "%s accepts connections again", db)
+	}
+	assert.Greater(t, connects.Load(), int64(8), "the clients must have been reconnecting")
 }
 
 func TestRun_AnEmptyHomeTakesEC2AsIs(t *testing.T) {
 	e := setup(t, "")
 
-	out, err := e.runner(nil).Run(context.Background(), e.request(true, nil))
+	out, err := e.runner(nil).Run(context.Background(), e.request())
 
 	require.NoError(t, err)
-	assert.True(t, out.Skipped)
 	assert.True(t, out.Swapped)
-	assert.Equal(t, []string{"one", "ec2-clash", "three", "ec2-new"}, e.names(t, e.home))
+	assert.Empty(t, out.Report.Items)
+	assert.Equal(t, ec2Names, e.names(t, e.home))
+}
+
+func TestRun_AReportThatCannotBeBuiltDoesNotStopTheRestore(t *testing.T) {
+	e := setup(t, schema+homeChanges)
+	e.base = e.dump(t, "base.sql.gz", "CREATE TABLE unrelated (id INT PRIMARY KEY);")
+
+	out, err := e.runner(nil).Run(context.Background(), e.request())
+
+	require.NoError(t, err)
+	assert.True(t, out.Swapped)
+	assert.NotEmpty(t, out.Report.Error)
+	assert.Equal(t, ec2Names, e.names(t, e.home))
 }
 
 func TestRun_ATruncatedDumpChangesNothing(t *testing.T) {
@@ -215,22 +240,22 @@ func TestRun_ATruncatedDumpChangesNothing(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, os.WriteFile(e.ec2, raw[:len(raw)/2], 0o600))
 
-	_, err = e.runner(nil).Run(context.Background(), e.request(true, nil))
+	_, err = e.runner(nil).Run(context.Background(), e.request())
 
 	assert.ErrorIs(t, err, restore.ErrBadDump)
-	assert.Equal(t, []string{"home-edit", "home-clash", "three", "home-new"}, e.names(t, e.home))
+	assert.Equal(t, homeNames, e.names(t, e.home))
 	assert.NoDirExists(t, filepath.Join(e.dir, "failback"), "nothing was written")
 }
 
 func TestRun_ARepeatedRunIsAlreadyDone(t *testing.T) {
 	e := setup(t, schema+homeChanges)
-	decisions := map[merge.Ref]merge.Choice{clash: merge.EC2}
-	_, err := e.runner(nil).Run(context.Background(), e.request(true, decisions))
+	_, err := e.runner(nil).Run(context.Background(), e.request())
 	require.NoError(t, err)
 
-	out, err := e.runner(nil).Run(context.Background(), e.request(true, decisions))
+	out, err := e.runner(nil).Run(context.Background(), e.request())
 
 	require.NoError(t, err)
 	assert.True(t, out.AlreadyDone)
-	assert.Equal(t, []string{"home-edit", "ec2-clash", "three", "home-new", "ec2-new"}, e.names(t, e.home))
+	assert.Nil(t, out.Report)
+	assert.Equal(t, ec2Names, e.names(t, e.home))
 }

@@ -127,7 +127,7 @@ func Load() (*Config, error) {
 		BackupDir:        getEnv("BACKUP_DIR", "/backups"),
 		BackupKeepHourly: time.Duration(getEnvInt("BACKUP_KEEP_HOURLY_DAYS", 2)) * 24 * time.Hour,
 		BackupKeepDaily:  time.Duration(getEnvInt("BACKUP_KEEP_DAILY_DAYS", 30)) * 24 * time.Hour,
-		BackupInterval:   getEnvDuration("BACKUP_INTERVAL_MS", 60*60*1000),
+		BackupInterval:   getEnvDuration("BACKUP_INTERVAL_MS", 5*60*1000),
 		BackupS3Bucket:   os.Getenv("BACKUP_S3_BUCKET"),
 	}
 

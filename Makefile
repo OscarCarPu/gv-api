@@ -2,6 +2,7 @@ BACKUP_DIR_OWNER=docker run --rm -v "$(CURDIR)/backups:/b" alpine:3.22 sh -c "mk
 
 .PHONY: setup-project sqlc generate-mocks pgcli-db demo run build lint \
 	up reset logs up-logs reset-logs down \
+	failover-bucket failover-scenario failover-merge failover-status failover-finish \
 	test test-unit test-integration test-e2e test-bench test-silent \
 	test-api-setup test-db-cleanup auth code
 
@@ -50,17 +51,24 @@ demo:
 
 # --- DOCKER OPERATIONS ---
 
+# Local runs also start a fake AWS (SSM + S3) for the failover, see docs/dev-failover.md.
+# `make up DEV_AWS=0` leaves it out. The deploy workflow calls docker compose directly and never adds it.
+DEV_AWS ?= 1
+COMPOSE = docker compose $(if $(filter 1,$(DEV_AWS)),-f docker-compose.yaml -f docker-compose.dev-aws.yaml)
+
 up:
 	@$(BACKUP_DIR_OWNER)
-	docker compose --progress plain up --build --wait -d
+	$(COMPOSE) --progress plain up --build --wait -d
+	@$(MAKE) --no-print-directory failover-bucket
 
 reset:
 	@$(BACKUP_DIR_OWNER)
-	docker compose down -v --remove-orphans
-	docker compose --progress plain up --build --wait -d
+	$(COMPOSE) down -v --remove-orphans
+	$(COMPOSE) --progress plain up --build --wait -d
+	@$(MAKE) --no-print-directory failover-bucket
 
 logs:
-	docker compose logs -f
+	$(COMPOSE) logs -f
 
 up-logs:
 	make up
@@ -71,7 +79,25 @@ reset-logs:
 	make logs
 
 down:
-	docker compose down
+	$(COMPOSE) down
+
+# --- FAILOVER (local, against the fake AWS) ---
+
+failover-bucket:
+	@if [ "$(DEV_AWS)" = 1 ]; then ./scripts/failover-dev.sh bucket; fi
+
+failover-scenario:
+	./scripts/failover-dev.sh scenario
+
+failover-merge:
+	./scripts/failover-dev.sh merge
+
+failover-status:
+	./scripts/failover-dev.sh status
+
+failover-finish:
+	./scripts/failover-dev.sh finish
+
 
 # --- TESTING ---
 

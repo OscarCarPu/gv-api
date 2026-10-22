@@ -63,7 +63,7 @@ func TestFlow_PushToSwapThroughTheRealRunner(t *testing.T) {
 	_, err := admin.Exec(ctx, "CREATE DATABASE "+home)
 	require.NoError(t, err)
 	t.Cleanup(func() {
-		for _, db := range []string{home, home + "_merge_base", home + "_merge_ec2", home + "_pre_restore"} {
+		for _, db := range []string{home, home + "_restore_base", home + "_restore_ec2", home + "_pre_restore"} {
 			_, _ = admin.Exec(ctx, `DROP DATABASE IF EXISTS "`+db+`" WITH (FORCE)`)
 		}
 	})
@@ -102,7 +102,7 @@ func TestFlow_PushToSwapThroughTheRealRunner(t *testing.T) {
 	r := chi.NewRouter()
 	r.Use(ctl.Lock)
 	ctl.Routes(r)
-	ctl.MergeRoutes(r)
+	ctl.ReportRoutes(r)
 	call := func(method, path, tok, body string) *httptest.ResponseRecorder {
 		req := httptest.NewRequest(method, path, strings.NewReader(body))
 		req.Header.Set("X-Failover-Token", tok)
@@ -112,7 +112,7 @@ func TestFlow_PushToSwapThroughTheRealRunner(t *testing.T) {
 	}
 	status := func() string {
 		body := call("GET", "/failover/status", token, "").Body.String()
-		for _, s := range []string{"needs_answers", "running", "done", "failed"} {
+		for _, s := range []string{"running", "done", "failed"} {
 			if strings.Contains(body, `"merge":"`+s+`"`) {
 				return s
 			}
@@ -121,11 +121,6 @@ func TestFlow_PushToSwapThroughTheRealRunner(t *testing.T) {
 	}
 
 	require.Equal(t, http.StatusOK, call("POST", "/failover", token, `{"mode":"merge"}`).Code)
-	require.Eventually(t, func() bool { return status() == "needs_answers" }, 10*time.Second, 20*time.Millisecond)
-	assert.Zero(t, released, "nothing is swapped while a conflict is open")
-
-	require.Equal(t, http.StatusNoContent, call("POST", "/merge/decisions", "", `{"table":"parents","key":"[2]","choice":"ec2"}`).Code)
-	require.Equal(t, http.StatusAccepted, call("POST", "/merge/apply", "", "").Code)
 	require.Eventually(t, func() bool { return status() == "done" }, 10*time.Second, 20*time.Millisecond)
 
 	assert.Equal(t, failover.ModeNormal, ctl.Mode())
@@ -140,5 +135,9 @@ func TestFlow_PushToSwapThroughTheRealRunner(t *testing.T) {
 		require.NoError(t, rows.Scan(&n))
 		names = append(names, n)
 	}
-	assert.Equal(t, []string{"one", "ec2-clash", "three", "home-new", "ec2-new"}, names)
+	assert.Equal(t, []string{"one", "ec2-clash", "three", "ec2-new"}, names, "the EC2 data is restored as it is")
+
+	body := call("GET", "/report", "", "").Body.String()
+	assert.Contains(t, body, "home-clash", "the report holds what home had edited")
+	assert.Contains(t, body, "home-new", "the report holds what home had created")
 }

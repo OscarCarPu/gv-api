@@ -47,7 +47,11 @@ func NewS3(ctx context.Context, bucket string) (*S3, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &S3{client: s3.NewFromConfig(cfg), bucket: bucket}, nil
+	client := s3.NewFromConfig(cfg, func(o *s3.Options) {
+		// A custom endpoint (the local fake AWS) has no bucket.host name to resolve.
+		o.UsePathStyle = os.Getenv("AWS_ENDPOINT_URL") != ""
+	})
+	return &S3{client: client, bucket: bucket}, nil
 }
 
 // Download writes the object to dest through a temporary file, so dest is never half written.

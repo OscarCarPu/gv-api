@@ -1,8 +1,8 @@
 // Package failover is home's side of an AWS failover: it holds the app while the backup server
-// owns the data, and merges what that server wrote back into home's database.
+// owns the data, then restores that server's data and keeps a report of what home had besides.
 //
 // The AWS state machine is the authority. Requests only say what to do; every one is checked
-// against the state stored in SSM, so a leaked token cannot start a merge or choose a dump.
+// against the state stored in SSM, so a leaked token cannot start a restore or choose a dump.
 package failover
 
 import (
@@ -20,7 +20,7 @@ import (
 	"time"
 
 	"gv-api/internal/core"
-	"gv-api/internal/merge"
+	"gv-api/internal/report"
 	"gv-api/internal/restore"
 )
 
@@ -62,11 +62,10 @@ const (
 type Merge string
 
 const (
-	MergeIdle         Merge = ""
-	MergeRunning      Merge = "running"
-	MergeNeedsAnswers Merge = "needs_answers"
-	MergeDone         Merge = "done"
-	MergeFailed       Merge = "failed"
+	MergeIdle    Merge = ""
+	MergeRunning Merge = "running"
+	MergeDone    Merge = "done"
+	MergeFailed  Merge = "failed"
 )
 
 type Options struct {
@@ -74,9 +73,9 @@ type Options struct {
 	Params   Params
 	Store    Store
 	Restorer Restorer
-	// Dir keeps the downloaded dumps and the answers given so far.
+	// Dir keeps the downloaded dumps and the report.
 	Dir string
-	// After runs once a merge swapped the database, before the app unlocks.
+	// After runs once a restore swapped the database, before the app unlocks.
 	After func()
 	// Retry is how often an unreadable state is tried again while the app is held.
 	Retry time.Duration
@@ -86,21 +85,20 @@ type Controller struct {
 	opt Options
 	ctx context.Context
 
-	mu        sync.Mutex
-	mode      Mode
-	merge     Merge
-	err       string
-	conflicts []merge.Conflict
-	decisions map[merge.Ref]merge.Choice
-	running   bool
+	mu      sync.Mutex
+	mode    Mode
+	merge   Merge
+	err     string
+	report  *report.Report
+	running bool
 }
 
 func New(opt Options) *Controller {
 	if opt.Retry == 0 {
 		opt.Retry = 30 * time.Second
 	}
-	c := &Controller{opt: opt, ctx: context.Background(), mode: ModeNormal, decisions: map[merge.Ref]merge.Choice{}}
-	c.loadDecisions()
+	c := &Controller{opt: opt, ctx: context.Background(), mode: ModeNormal}
+	c.loadReport()
 	return c
 }
 
@@ -108,7 +106,7 @@ func New(opt Options) *Controller {
 func (c *Controller) Enabled() bool { return c.opt.Token != "" }
 
 // Start reads the state once. Anything but NORMAL holds the app; PENDING_MERGE also resumes the
-// merge. When the state cannot be read the app is held and the read is retried until it works.
+// restore. When the state cannot be read the app is held and the read is retried until it works.
 func (c *Controller) Start(ctx context.Context) {
 	c.ctx = ctx
 	state, err := c.state(ctx)
@@ -211,7 +209,7 @@ func (c *Controller) Lock(next http.Handler) http.Handler {
 }
 
 func exempt(p string) bool {
-	for _, prefix := range []string{"/health", "/login", "/failover", "/merge"} {
+	for _, prefix := range []string{"/health", "/login", "/failover", "/report"} {
 		if p == prefix || strings.HasPrefix(p, prefix+"/") {
 			return true
 		}
@@ -235,20 +233,19 @@ func (c *Controller) runMerge() {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.running = false
-	switch {
-	case err != nil:
-		slog.Error("merge failed", "error", err)
+	if err != nil {
+		slog.Error("restore failed", "error", err)
 		c.merge, c.err = MergeFailed, err.Error()
-	case out.Swapped:
-		if c.opt.After != nil {
-			c.opt.After()
-		}
-		c.merge, c.mode, c.conflicts = MergeDone, ModeNormal, nil
-	case out.Result != nil && len(out.Result.Conflicts) > 0:
-		c.merge, c.conflicts = MergeNeedsAnswers, out.Result.Conflicts
-	default:
-		c.merge, c.err = MergeFailed, "the merge ended without a swap"
+		return
 	}
+	if c.opt.After != nil {
+		c.opt.After()
+	}
+	if out.Report != nil {
+		c.report = out.Report
+		c.saveReport()
+	}
+	c.merge, c.mode = MergeDone, ModeNormal
 }
 
 func (c *Controller) restore() (*restore.Outcome, error) {
@@ -272,15 +269,8 @@ func (c *Controller) restore() (*restore.Outcome, error) {
 		}
 	}
 
-	c.mu.Lock()
-	decisions := make(map[merge.Ref]merge.Choice, len(c.decisions))
-	for ref, choice := range c.decisions {
-		decisions[ref] = choice
-	}
-	c.mu.Unlock()
-
 	return c.opt.Restorer.Run(c.ctx, restore.Request{
-		ID: path.Base(dumpKey), Base: base, EC2: ec2, Decisions: decisions, Commit: true,
+		ID: strings.TrimSuffix(path.Base(dumpKey), ".sql.gz"), Base: base, EC2: ec2,
 	})
 }
 

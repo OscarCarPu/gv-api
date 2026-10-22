@@ -65,7 +65,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	// A held home may be an empty database; migrating it would hide that from the merge.
+	// A held home may be an empty database; migrating it would hide that from the report.
 	if failoverCtl == nil || failoverCtl.Mode() == failover.ModeNormal {
 		if err := database.Migrate(cfg.DBUrl, "db/migrations"); err != nil {
 			slog.Error("failed to run migrations", "error", err)
@@ -220,7 +220,7 @@ func main() {
 		capacityHandler.RegisterRoutes(r)
 		backupHandler.RegisterRoutes(r)
 		if failoverCtl != nil {
-			failoverCtl.MergeRoutes(r)
+			failoverCtl.ReportRoutes(r)
 		}
 	})
 
