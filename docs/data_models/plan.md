@@ -65,7 +65,7 @@ recurring_commitments (1) --< (many) recurring_commitment_skips  [ON DELETE CASC
 - `task_id IS NULL` is a free-time block, standing alone with its `label`.
 - A linked block's task state (`task_type`, `recurrence`, `started_at`, `finished_at`) is joined for the UI.
 - Deleting the task turns the block into a free-time block with its `label`.
-- `event_ref` links a block to a calendar event's `instance_id` ([calendar](calendar.md)). No FK: an occurrence may have no row of its own.
+- `event_ref` links a block to a calendar event's id ([calendar](calendar.md)). No FK.
 - `commitment_id` marks a block generated from a commitment. Pausing or deleting the commitment removes its unstarted blocks; past ones stay (the FK then nulls `commitment_id`). The partial unique index on `(commitment_id, plan_date)` stops concurrent reads generating an occurrence twice.
 
 ## Notes

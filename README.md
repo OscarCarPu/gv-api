@@ -34,8 +34,8 @@ Go, chi, PostgreSQL via pgx + sqlc, testify + mockery. See [architecture](docs/a
 ## Environment Variables
 
 All variables are in `.env.example` with their defaults. Required: `DATABASE_URL`, `PASSWORD`,
-`SEMIPRIVATE_PASSWORD`, `JWT_SECRET`, `TOTP_SECRET`, `ALLOWED_ORIGINS`, plus `GOOGLE_TOKEN_KEY`
-once `GOOGLE_CLIENT_ID` is set. Optional integrations (lights, central-pipeline, Google Calendar)
+`SEMIPRIVATE_PASSWORD`, `JWT_SECRET`, `TOTP_SECRET`, `ALLOWED_ORIGINS`.
+Optional integrations (lights, central-pipeline)
 degrade gracefully when unset.
 
 ## API
@@ -53,7 +53,7 @@ degrade gracefully when unset.
 | **Rutas** | Concello marks: which municipalities were visited and when. Semiprivate auth. | [rutas](docs/api/rutas.md) |
 | **Printers** | PrusaLink telemetry, job control, print files, camera and recordings. Semiprivate auth. | [printers](docs/api/printers.md) |
 | **Lights** | Bluetooth bulbs driven over BlueZ, with discovery and a registry. Semiprivate auth. | [lights](docs/api/lights.md) |
-| **Calendar** | Google calendars mirrored locally and editable: OAuth, incremental sync, push notifications. | [calendar](docs/api/calendar.md) |
+| **Calendar** | Events: a name and a time range, linkable from plan blocks. | [calendar](docs/api/calendar.md) |
 | **Uptime** | Lab and ESP32 watchdog uptime from central-pipeline's marts. Semiprivate auth. | [uptime](docs/api/uptime.md) |
 | **Backups** | List, take and download the API's own database dumps. | [backups](docs/api/backups.md) |
 
@@ -62,8 +62,6 @@ degrade gracefully when unset.
 | Method | Path | Auth | Description |
 |---|---|---|---|
 | `GET` | `/health` | None | 200 when the database answers, 503 otherwise. |
-| `GET` | `/calendar/google/callback` | Signed state | Google's OAuth redirect. |
-| `POST` | `/calendar/google/webhook` | Channel token | Google's push notifications. |
 
 ### Request / Response Headers
 

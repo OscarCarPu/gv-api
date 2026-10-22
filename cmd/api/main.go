@@ -14,7 +14,6 @@ import (
 	"gv-api/internal/auth"
 	"gv-api/internal/backup"
 	"gv-api/internal/calendar"
-	calendargoogle "gv-api/internal/calendar/google"
 	"gv-api/internal/capacity"
 	"gv-api/internal/config"
 	"gv-api/internal/core"
@@ -119,31 +118,7 @@ func main() {
 	})
 	printersHandler := printers.NewHandler(printersService)
 
-	calendarRepo := calendar.NewRepository(db)
-	calendarClient := calendargoogle.NewClient(calendargoogle.Config{
-		ClientID:     cfg.GoogleClientID,
-		ClientSecret: cfg.GoogleClientSecret,
-		RedirectURL:  cfg.GoogleRedirectURL,
-	})
-	calendarService, err := calendar.NewService(calendarRepo, calendarClient, calendar.Config{
-		ClientID:         cfg.GoogleClientID,
-		ClientSecret:     cfg.GoogleClientSecret,
-		RedirectURL:      cfg.GoogleRedirectURL,
-		WebAppURL:        cfg.CalendarWebAppURL,
-		WebhookEnabled:   cfg.CalendarWebhookEnabled,
-		WebhookURL:       cfg.CalendarWebhookURL,
-		WatchTTL:         cfg.CalendarWatchTTL,
-		WatchRenewBefore: cfg.CalendarWatchRenewBefore,
-		SyncInterval:     cfg.CalendarSyncInterval,
-		Debounce:         cfg.CalendarDebounce,
-		StateSecret:      []byte(cfg.JwtSecret),
-		TokenKey:         cfg.GoogleTokenKey,
-	}, loc, planService)
-	if err != nil {
-		slog.Error("failed to set up calendar", "error", err)
-		os.Exit(1)
-	}
-	calendarHandler := calendar.NewHandler(calendarService)
+	calendarHandler := calendar.NewHandler(calendar.NewService(calendar.NewRepository(db), planService))
 
 	// tasks <-> plan depend on each other, so urgency providers are wired with a setter.
 	capacityService := capacity.NewService(decimal.NewFromFloat(cfg.DailyCapacityHours), planService)
@@ -190,7 +165,6 @@ func main() {
 	// Public
 	r.Post("/login", authHandler.Login)
 	r.Post("/login/2fa", authHandler.Login2FA)
-	calendarHandler.RegisterPublicRoutes(r)
 	r.Group(func(r chi.Router) {
 		if cfg.OnFailover() {
 			r.Use(core.UnavailableOnFailover)
@@ -236,7 +210,6 @@ func main() {
 
 	workerCtx, stopWorker := context.WithCancel(context.Background())
 	defer stopWorker()
-	go calendar.NewWorker(calendarService).Run(workerCtx)
 	go backup.NewWorker(backupService, cfg.BackupInterval).Run(workerCtx)
 
 	if !cfg.OnFailover() {

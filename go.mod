@@ -16,8 +16,6 @@ require (
 	github.com/pquerna/otp v1.5.0
 	github.com/shopspring/decimal v1.2.0
 	github.com/stretchr/testify v1.11.1
-	github.com/teambition/rrule-go v1.8.2
-	golang.org/x/oauth2 v0.30.0
 )
 
 require (

@@ -52,22 +52,6 @@ type Config struct {
 	// Past this age, mart numbers are reported as stale.
 	PipelineStaleAfter time.Duration
 
-	// Calendar. Without client id/secret the domain mounts but never syncs. GoogleTokenKey is
-	// required once credentials are set: refresh tokens are stored encrypted.
-	GoogleClientID     string
-	GoogleClientSecret string
-	GoogleRedirectURL  string
-	GoogleTokenKey     string
-	// Where the OAuth callback sends the browser. Defaults to the first allowed origin.
-	CalendarWebAppURL string
-	// Push notifications need a public HTTPS URL; without one, polling alone.
-	CalendarWebhookURL       string
-	CalendarWebhookEnabled   bool
-	CalendarWatchTTL         time.Duration
-	CalendarWatchRenewBefore time.Duration
-	CalendarSyncInterval     time.Duration
-	CalendarDebounce         time.Duration
-
 	// Theoretical free hours per day.
 	DailyCapacityHours float64
 
@@ -133,19 +117,6 @@ func Load() (*Config, error) {
 		// Generous: dbt is not scheduled yet.
 		PipelineStaleAfter: getEnvDuration("PIPELINE_STALE_AFTER_MS", 2*60*60*1000),
 
-		GoogleClientID:     os.Getenv("GOOGLE_CLIENT_ID"),
-		GoogleClientSecret: os.Getenv("GOOGLE_CLIENT_SECRET"),
-		GoogleRedirectURL:  os.Getenv("GOOGLE_OAUTH_REDIRECT_URL"),
-		GoogleTokenKey:     os.Getenv("GOOGLE_TOKEN_KEY"),
-		CalendarWebAppURL:  os.Getenv("CALENDAR_WEB_APP_URL"),
-		CalendarWebhookURL: os.Getenv("CALENDAR_WEBHOOK_URL"),
-		// Channels last about a week and are replaced a day before they expire.
-		CalendarWatchTTL:         getEnvDuration("CALENDAR_WATCH_TTL_MS", 7*24*60*60*1000),
-		CalendarWatchRenewBefore: getEnvDuration("CALENDAR_WATCH_RENEW_BEFORE_MS", 24*60*60*1000),
-		// Polling is the safety net behind webhooks. Notification bursts are coalesced before syncing.
-		CalendarSyncInterval: getEnvDuration("CALENDAR_SYNC_INTERVAL_MS", 15*60*1000),
-		CalendarDebounce:     getEnvDuration("CALENDAR_DEBOUNCE_MS", 2000),
-
 		DailyCapacityHours: getEnvFloat("DAILY_CAPACITY_HOURS", 14),
 
 		HealthTimeout: getEnvDuration("HEALTH_TIMEOUT_MS", 2000),
@@ -155,10 +126,6 @@ func Load() (*Config, error) {
 		BackupKeepDaily:  time.Duration(getEnvInt("BACKUP_KEEP_DAILY_DAYS", 30)) * 24 * time.Hour,
 		BackupInterval:   getEnvDuration("BACKUP_INTERVAL_MS", 60*60*1000),
 		BackupS3Bucket:   os.Getenv("BACKUP_S3_BUCKET"),
-	}
-	cfg.CalendarWebhookEnabled = getEnvBool("CALENDAR_WEBHOOK_ENABLED", cfg.CalendarWebhookURL != "")
-	if cfg.CalendarWebAppURL == "" && len(allowedOrigins) > 0 {
-		cfg.CalendarWebAppURL = allowedOrigins[0]
 	}
 
 	var missing []string

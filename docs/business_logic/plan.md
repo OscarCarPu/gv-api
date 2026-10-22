@@ -20,8 +20,8 @@ The user's day plan: time-boxed blocks. A block is **linked** (points at a task)
 - `[started_at, ended_at)` may span several days. `plan_date` is only the start day; busy hours and `GET /plan/range` use the real interval, split across every day it touches.
 
 **Linking to a calendar event (`event_ref`)**
-- `event_ref` is a calendar event's `instance_id` (`12`, or `12@2026-08-20T07:00:00Z` for an occurrence). At most one block per event.
-- Editing the event's times moves the linked block (a passive follow, without overlap or label validation). Deleting the event, or changing its identity (a `scope=following` split, a move to another account), clears `event_ref`; the block is kept. See [calendar](calendar.md).
+- `event_ref` is a calendar event's id (`12`). At most one block per event.
+- Editing the event's times moves the linked block (a passive follow, without overlap or label validation). Deleting the event clears `event_ref`; the block is kept. See [calendar](calendar.md).
 - Events themselves never count toward capacity; only blocks do.
 
 **Capacity**

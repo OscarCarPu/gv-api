@@ -18,7 +18,7 @@ The user's day plan: time-boxed blocks linked to a task (`task_id`), a calendar 
 | `task_name`        | string \| null   | Joined from `tasks.name`. `null` for free-time blocks (or if the task was deleted).  |
 | `label`            | string           | Always set, 1–200 chars. Auto-filled with task name on Create when omitted.          |
 | `note`             | string \| null   | Optional free-form note.                                                             |
-| `event_ref`        | string \| null   | Calendar event `instance_id` this block was created from, if any. See [business_logic/plan.md](../business_logic/plan.md). |
+| `event_ref`        | string \| null   | Calendar event id this block was created from, if any. See [business_logic/plan.md](../business_logic/plan.md). |
 | `commitment_id`    | integer \| null  | Set when this block was generated from a recurring commitment.                       |
 | `task_type`        | string \| null   | Joined from `tasks.task_type` (`standard` / `continuous` / `recurring`). Read-only.  |
 | `task_recurrence`  | integer \| null  | Joined from `tasks.recurrence`. Days between recurrences.                            |
@@ -112,7 +112,7 @@ The read-only `task_*` fields are always present: the joined task state at fetch
     "task_id": 7,
     "label": "Sprint planning",
     "note": "Focus on the API v2 PRs",
-    "event_ref": "12@2026-08-20T07:00:00Z"
+    "event_ref": "12"
   }
   ```
   - `started_at` (required): RFC3339 timestamp. May span multiple days with `ended_at` (a multi-day block).
@@ -120,7 +120,7 @@ The read-only `task_*` fields are always present: the joined task state at fetch
   - `task_id` (optional): integer task id. The task must exist.
   - `label` (optional): 1–200 chars after trim. Required if `task_id` is omitted. When `task_id` is set and `label` is omitted, the server fills it with the task name.
   - `note` (optional): free-form string.
-  - `event_ref` (optional): a calendar event's `instance_id`, to link this block to that event (see [business_logic/plan.md](../business_logic/plan.md)). At most one block may link to a given event.
+  - `event_ref` (optional): a calendar event's id, to link this block to that event (see [business_logic/plan.md](../business_logic/plan.md)). At most one block may link to a given event.
 - **Success Response:**
   - **Code:** `201 Created`
   - **Content:** A `PlanBlock` (same shape as `blocks[]` items in `GET /plan/today`).

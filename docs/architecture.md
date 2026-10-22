@@ -4,7 +4,7 @@
 
 **gv-api** is a single-user REST API in Go that centralises personal data:
 habits, tasks (projects/tasks/todos/time entries), day planning, finance,
-route marks, Bluetooth light bulbs, a mirror of the user's Google calendars
+route marks, Bluetooth light bulbs, calendar events
 and the uptime of the home lab. No framework beyond a router.
 
 ## Tech Stack
@@ -19,7 +19,6 @@ and the uptime of the home lab. No framework beyond a router.
 | Migrations | [golang-migrate](https://github.com/golang-migrate/migrate), run at startup |
 | Auth | JWT ([golang-jwt/v5](https://github.com/golang-jwt/jwt)) + TOTP 2FA ([pquerna/otp](https://github.com/pquerna/otp)) |
 | Bluetooth | BlueZ over D-Bus ([godbus](https://github.com/godbus/dbus)) |
-| Google OAuth | [x/oauth2](https://pkg.go.dev/golang.org/x/oauth2) for tokens; the Calendar REST calls are hand-rolled |
 | Recurrence | [rrule-go](https://github.com/teambition/rrule-go) (RFC 5545 expansion) |
 | Testing | stdlib `testing` + [testify](https://github.com/stretchr/testify) + [mockery](https://vektra.github.io/mockery/) |
 | Containerization | Docker multi-stage build + Docker Compose |
@@ -71,10 +70,7 @@ Every domain follows the same three layers:
 Handler and service interfaces are mocked with mockery; repositories have
 integration tests against a real database.
 
-Two domains add a seam for external systems: `lights` has a `Driver` (BlueZ or
-in-memory mock) and `calendar` a `google.Client` (HTTP or an in-memory `Fake`
-that reproduces 410s, 412s and revoked grants). `calendar` also runs the only
-background worker: it drains push notifications, polls and renews channels.
+`lights` adds a seam for the hardware: a `Driver` (BlueZ or in-memory mock).
 
 ### Database Access (sqlc)
 
@@ -105,9 +101,6 @@ shared by any future domain on that pipeline:
 3. Routes are grouped by the kinds they accept: `lights`, `uptime` and `rutas`
    take `semi` or `full`, everything else requires `full`.
 
-Two public endpoints have their own guards: `GET /calendar/google/callback`
-(HMAC-signed `state`) and `POST /calendar/google/webhook` (per-channel token).
-
 Single-user system: no user table, passwords come from the environment.
 
 ## Testing
@@ -137,5 +130,4 @@ certificates and no Cloudflare Access in front:
 | `https://gv-api.lab-ocp.com` | gv-api (`VITE_API_URL`; `ALLOWED_ORIGINS` is just the web host) |
 
 Their ingress rules live in the Cloudflare dashboard, not in
-`/etc/cloudflared/config.yml` on the host. Public HTTPS is what makes the
-calendar's OAuth redirect and webhooks possible.
+`/etc/cloudflared/config.yml` on the host.
