@@ -23,7 +23,6 @@ import (
 	"gv-api/internal/finance"
 	"gv-api/internal/habits"
 	"gv-api/internal/lights"
-	"gv-api/internal/pipeline"
 	"gv-api/internal/plan"
 	"gv-api/internal/printers"
 	"gv-api/internal/rutas"
@@ -144,18 +143,11 @@ func main() {
 	capacityHandler := capacity.NewHandler(capacityService)
 	taskService.SetUrgencyProviders(capacityService, planService)
 
-	pipelineDB := &pipeline.DB{}
-	if !cfg.OnFailover() {
-		pipelineDB, err = pipeline.Connect(context.Background(), cfg.PipelineDBUrl)
-		if err != nil {
-			slog.Error("failed to configure pipeline database", "error", err)
-			os.Exit(1)
-		}
+	uptimeRepo := uptime.NewRepository(db)
+	uptimeHandler := uptime.NewHandler(uptime.NewService(uptimeRepo, time.Now))
+	if failoverCtl != nil {
+		failoverCtl.SetOutages(uptimeRepo)
 	}
-	defer pipelineDB.Close()
-
-	uptimeRepo := uptime.NewRepository(pipelineDB)
-	uptimeHandler := uptime.NewHandler(uptime.NewService(uptimeRepo, cfg.PipelineStaleAfter))
 
 	rutasRepo := rutas.NewRepository(db)
 	rutasService := rutas.NewService(rutasRepo)
@@ -242,6 +234,12 @@ func main() {
 	go backupWorker.Run(workerCtx)
 
 	if !cfg.OnFailover() {
+		heartbeat := uptime.NewHeartbeat(uptimeRepo, uptime.BeatEvery, uptime.Gap)
+		if failoverCtl != nil {
+			heartbeat.Gated(failoverCtl.Beating)
+		}
+		go heartbeat.Run(workerCtx)
+
 		lightsService.StartPolling(workerCtx, cfg.LightsPollInterval)
 		printersService.Run(workerCtx)
 	}

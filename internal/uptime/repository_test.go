@@ -5,7 +5,6 @@ import (
 	"testing"
 	"time"
 
-	"gv-api/internal/pipeline"
 	"gv-api/internal/testutil"
 	"gv-api/internal/uptime"
 
@@ -14,201 +13,190 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// central-pipeline's dbt owns these tables, so the fixture creates them with the column types
-// from its docs/sources/watchdog.md contract.
-const martsFixture = `
-CREATE SCHEMA IF NOT EXISTS marts;
-DROP TABLE IF EXISTS marts.uptime_windows;
-DROP TABLE IF EXISTS marts.uptime_aggregations;
-CREATE TABLE marts.uptime_windows (
-    device     text,
-    state      text,
-    start_time timestamptz,
-    end_time   timestamptz
-);
-CREATE TABLE marts.uptime_aggregations (
-    device      text,
-    "time"      text,
-    range_start timestamptz,
-    range_end   timestamptz,
-    uptime      double precision
-);`
+var origin = time.Date(2026, 8, 1, 0, 0, 0, 0, time.UTC)
 
-// base is the fixed instant every fixture timestamp is offset from.
-var base = time.Date(2026, 8, 1, 0, 0, 0, 0, time.UTC)
-
-func newRepo(t *testing.T) (*uptime.PipelineRepository, *pgxpool.Pool) {
+func newRepo(t *testing.T) (*uptime.PostgresRepository, *pgxpool.Pool) {
 	t.Helper()
 	pool := testutil.NewPool(t)
-	ctx := context.Background()
-	_, err := pool.Exec(ctx, martsFixture)
+	testutil.Truncate(t, pool, "outages")
+	_, err := pool.Exec(context.Background(), "INSERT INTO outages (ends_at, kind) VALUES ($1, 'start')", origin)
 	require.NoError(t, err)
-	t.Cleanup(func() {
-		//nolint:errcheck // best effort: the test database is dropped after the run anyway
-		pool.Exec(context.Background(), "DROP TABLE IF EXISTS marts.uptime_windows, marts.uptime_aggregations")
-	})
-	return uptime.NewRepository(pipeline.FromPool(pool)), pool
+	return uptime.NewRepository(pool), pool
 }
 
-// seedWindows lays down a history for both devices:
-//
-//	lab:      up  [base, base+10h)  down [base+10h, base+12h)  up  [base+12h, open)
-//	watchdog: up  [base, base+20h)  down [base+20h, open)
-func seedWindows(t *testing.T, pool *pgxpool.Pool) {
+type row struct {
+	Kind string
+	End  time.Time
+}
+
+func rows(t *testing.T, pool *pgxpool.Pool) []row {
 	t.Helper()
-	rows := []struct {
-		device string
-		state  string
-		start  time.Time
-		end    *time.Time
-	}{
-		{"lab", "up", base, ptr(base.Add(10 * time.Hour))},
-		{"lab", "down", base.Add(10 * time.Hour), ptr(base.Add(12 * time.Hour))},
-		{"lab", "up", base.Add(12 * time.Hour), nil},
-		{"watchdog", "up", base, ptr(base.Add(20 * time.Hour))},
-		{"watchdog", "down", base.Add(20 * time.Hour), nil},
+	r, err := pool.Query(context.Background(), "SELECT kind::text, ends_at FROM outages ORDER BY ends_at")
+	require.NoError(t, err)
+	defer r.Close()
+	var out []row
+	for r.Next() {
+		var x row
+		require.NoError(t, r.Scan(&x.Kind, &x.End))
+		x.End = x.End.UTC()
+		out = append(out, x)
 	}
-	for _, r := range rows {
-		_, err := pool.Exec(context.Background(),
-			"INSERT INTO marts.uptime_windows (device, state, start_time, end_time) VALUES ($1, $2, $3, $4)",
-			r.device, r.state, r.start, r.end)
+	return out
+}
+
+func minutes(n float64) time.Time {
+	return origin.Add(time.Duration(n * float64(time.Minute)))
+}
+
+func TestIntegration_Beat_FirstBeatStartsAnUpRange(t *testing.T) {
+	repo, pool := newRepo(t)
+
+	require.NoError(t, repo.Beat(context.Background(), minutes(1), uptime.Gap))
+
+	assert.Equal(t, []row{{"start", origin}, {"up", minutes(1)}}, rows(t, pool))
+}
+
+func TestIntegration_Beat_WithinTheGapExtendsTheSameRange(t *testing.T) {
+	repo, pool := newRepo(t)
+	ctx := context.Background()
+	require.NoError(t, repo.Beat(ctx, minutes(1), uptime.Gap))
+
+	require.NoError(t, repo.Beat(ctx, minutes(1.5), uptime.Gap))
+	require.NoError(t, repo.Beat(ctx, minutes(2.5), uptime.Gap))
+
+	assert.Equal(t, []row{{"start", origin}, {"up", minutes(2.5)}}, rows(t, pool))
+}
+
+func TestIntegration_Beat_ASilenceLongerThanTheGapIsDowntime(t *testing.T) {
+	repo, pool := newRepo(t)
+	ctx := context.Background()
+	require.NoError(t, repo.Beat(ctx, minutes(1), uptime.Gap))
+
+	require.NoError(t, repo.Beat(ctx, minutes(10), uptime.Gap))
+	require.NoError(t, repo.Beat(ctx, minutes(10.5), uptime.Gap))
+
+	assert.Equal(t, []row{
+		{"start", origin}, {"up", minutes(1)}, {"down", minutes(10)}, {"up", minutes(10.5)},
+	}, rows(t, pool))
+}
+
+func TestIntegration_Beat_StartsAnUpRangeAfterAFailover(t *testing.T) {
+	repo, pool := newRepo(t)
+	ctx := context.Background()
+	_, err := pool.Exec(ctx, "INSERT INTO outages (ends_at, kind) VALUES ($1, 'failover')", minutes(5))
+	require.NoError(t, err)
+
+	require.NoError(t, repo.Beat(ctx, minutes(6), uptime.Gap))
+
+	assert.Equal(t, []row{{"start", origin}, {"failover", minutes(5)}, {"up", minutes(6)}}, rows(t, pool))
+}
+
+func TestIntegration_Beat_AClockBehindTheLastRowWritesNothing(t *testing.T) {
+	repo, pool := newRepo(t)
+	ctx := context.Background()
+	require.NoError(t, repo.Beat(ctx, minutes(5), uptime.Gap))
+
+	require.NoError(t, repo.Beat(ctx, minutes(4), uptime.Gap))
+
+	assert.Equal(t, []row{{"start", origin}, {"up", minutes(5)}}, rows(t, pool))
+}
+
+func TestIntegration_Ranges_StartWhereThePreviousOneEnds(t *testing.T) {
+	repo, pool := newRepo(t)
+	ctx := context.Background()
+	for _, r := range []row{{"up", minutes(10)}, {"down", minutes(20)}, {"failover", minutes(30)}, {"up", minutes(40)}} {
+		_, err := pool.Exec(ctx, "INSERT INTO outages (ends_at, kind) VALUES ($1, $2)", r.End, r.Kind)
 		require.NoError(t, err)
 	}
-}
 
-func ptr[T any](v T) *T { return &v }
+	got, err := repo.Ranges(ctx, minutes(15), minutes(35))
 
-// sameInstant compares timestamps by instant; pgx returns them in the session's zone.
-func sameInstant(t *testing.T, want, got time.Time) {
-	t.Helper()
-	assert.WithinDuration(t, want, got, 0)
-}
-
-func TestIntegration_CurrentStates(t *testing.T) {
-	repo, pool := newRepo(t)
-	seedWindows(t, pool)
-
-	got, err := repo.CurrentStates(context.Background())
 	require.NoError(t, err)
-
-	// Exactly one open window per device — that row is the device's state right now.
-	require.Len(t, got, 2)
-	assert.Equal(t, uptime.DeviceLab, got[0].Device)
-	assert.Equal(t, uptime.StateUp, got[0].State)
-	sameInstant(t, base.Add(12*time.Hour), got[0].Since)
-	assert.Equal(t, uptime.DeviceWatchdog, got[1].Device)
-	assert.Equal(t, uptime.StateDown, got[1].State)
-	sameInstant(t, base.Add(20*time.Hour), got[1].Since)
+	for i := range got {
+		got[i].Start, got[i].End = got[i].Start.UTC(), got[i].End.UTC()
+	}
+	assert.Equal(t, []uptime.Range{
+		{Kind: uptime.KindDown, Start: minutes(10), End: minutes(20)},
+		{Kind: uptime.KindFailover, Start: minutes(20), End: minutes(30)},
+		{Kind: uptime.KindUp, Start: minutes(30), End: minutes(40)},
+	}, got)
 }
 
-func TestIntegration_CurrentStates_EmptyPipeline(t *testing.T) {
+func TestIntegration_Ranges_NeverReturnTheStartRow(t *testing.T) {
 	repo, _ := newRepo(t)
 
-	got, err := repo.CurrentStates(context.Background())
-	require.NoError(t, err)
-	assert.Empty(t, got, "no rows is a valid pipeline state, not an error")
-}
+	got, err := repo.Ranges(context.Background(), origin.Add(-time.Hour), origin.Add(time.Hour))
 
-func TestIntegration_Aggregations(t *testing.T) {
-	repo, pool := newRepo(t)
-	runAt := base.Add(24 * time.Hour)
-	// '3 months' exercises the column that shares its name with a type keyword.
-	_, err := pool.Exec(context.Background(), `
-		INSERT INTO marts.uptime_aggregations (device, "time", range_start, range_end, uptime)
-		VALUES ('lab', '3 months', $1, $2, 98.28), ('watchdog', 'all', $1, $2, 98.04)`,
-		base, runAt)
-	require.NoError(t, err)
-
-	got, err := repo.Aggregations(context.Background())
-	require.NoError(t, err)
-	require.Len(t, got, 2)
-	assert.Equal(t, uptime.DeviceLab, got[0].Device)
-	assert.Equal(t, uptime.LookbackThreeMonths, got[0].Range)
-	assert.InDelta(t, 98.28, got[0].Uptime, 0.001)
-	sameInstant(t, base, got[0].RangeStart)
-	sameInstant(t, runAt, got[0].RangeEnd)
-	assert.Equal(t, uptime.LookbackAll, got[1].Range)
-}
-
-func TestIntegration_RangeStats_ClipsToRange(t *testing.T) {
-	repo, pool := newRepo(t)
-	seedWindows(t, pool)
-	ctx := context.Background()
-
-	// 1h of the first up window, the whole 2h outage, then 4h of the open window up to `to`.
-	from, to := base.Add(9*time.Hour), base.Add(16*time.Hour)
-	got, err := repo.RangeStats(ctx, from, to, nil)
-	require.NoError(t, err)
-	require.Len(t, got, 2)
-
-	lab := got[0]
-	assert.Equal(t, uptime.DeviceLab, lab.Device)
-	assert.InDelta(t, 5*3600.0, lab.UpSeconds, 0.5)
-	assert.InDelta(t, 2*3600.0, lab.DownSeconds, 0.5)
-	assert.Equal(t, 1, lab.Outages)
-	// Clipped at the start; the open window counts up to the end of the range.
-	sameInstant(t, from, lab.CoveredFrom)
-	sameInstant(t, to, lab.CoveredTo)
-
-	// watchdog was up for the whole of it.
-	assert.Equal(t, uptime.DeviceWatchdog, got[1].Device)
-	assert.InDelta(t, 7*3600.0, got[1].UpSeconds, 0.5)
-	assert.Zero(t, got[1].DownSeconds)
-	assert.Equal(t, 0, got[1].Outages)
-}
-
-func TestIntegration_RangeStats_DeviceFilterAndNoOverlap(t *testing.T) {
-	repo, pool := newRepo(t)
-	seedWindows(t, pool)
-	ctx := context.Background()
-
-	device := uptime.DeviceWatchdog
-	got, err := repo.RangeStats(ctx, base.Add(21*time.Hour), base.Add(30*time.Hour), &device)
-	require.NoError(t, err)
-	require.Len(t, got, 1)
-	assert.Equal(t, uptime.DeviceWatchdog, got[0].Device)
-	assert.InDelta(t, 9*3600.0, got[0].DownSeconds, 0.5)
-
-	// A range entirely before the first event has nothing to report — not zero uptime.
-	got, err = repo.RangeStats(ctx, base.Add(-48*time.Hour), base.Add(-24*time.Hour), nil)
 	require.NoError(t, err)
 	assert.Empty(t, got)
 }
 
-func TestIntegration_Windows_NewestFirstAndOverLimit(t *testing.T) {
-	repo, pool := newRepo(t)
-	seedWindows(t, pool)
-	ctx := context.Background()
+func TestIntegration_TrackingStart(t *testing.T) {
+	repo, _ := newRepo(t)
 
-	got, err := repo.Windows(ctx, base, base.Add(24*time.Hour), nil, 10)
-	require.NoError(t, err)
-	require.Len(t, got, 5)
-	// Newest first, so cutting the list drops the distant past rather than today.
-	sameInstant(t, base.Add(20*time.Hour), got[0].StartTime)
-	assert.Equal(t, uptime.StateDown, got[0].State)
-	assert.Nil(t, got[0].EndTime, "the open window keeps its null end")
-	sameInstant(t, base, got[len(got)-1].StartTime)
+	got, err := repo.TrackingStart(context.Background())
 
-	// One row over the limit tells the caller there is more.
-	got, err = repo.Windows(ctx, base, base.Add(24*time.Hour), nil, 2)
 	require.NoError(t, err)
-	assert.Len(t, got, 3)
-
-	device := uptime.DeviceLab
-	got, err = repo.Windows(ctx, base, base.Add(24*time.Hour), &device, 10)
-	require.NoError(t, err)
-	require.Len(t, got, 3)
-	for _, w := range got {
-		assert.Equal(t, uptime.DeviceLab, w.Device)
-	}
+	assert.True(t, got.Equal(origin))
 }
 
-func TestIntegration_Windows_ExcludesNonOverlapping(t *testing.T) {
+func TestIntegration_RecordFailover_WritesTheDowntimeAndTheFailover(t *testing.T) {
 	repo, pool := newRepo(t)
-	seedWindows(t, pool)
+	ctx := context.Background()
+	require.NoError(t, repo.Beat(ctx, minutes(1), uptime.Gap))
+	lastAlive := minutes(1.4)
 
-	// Touching only at the boundary is not an overlap: [from, to) is half-open.
-	got, err := repo.Windows(context.Background(), base.Add(-10*time.Hour), base, nil, 10)
+	require.NoError(t, repo.RecordFailover(ctx, &lastAlive, minutes(20), minutes(60)))
+
+	assert.Equal(t, []row{
+		{"start", origin}, {"up", minutes(1.4)}, {"down", minutes(20)}, {"failover", minutes(60)},
+	}, rows(t, pool))
+}
+
+func TestIntegration_RecordFailover_TwiceChangesNothing(t *testing.T) {
+	repo, pool := newRepo(t)
+	ctx := context.Background()
+	require.NoError(t, repo.Beat(ctx, minutes(1), uptime.Gap))
+	require.NoError(t, repo.RecordFailover(ctx, nil, minutes(20), minutes(60)))
+	before := rows(t, pool)
+
+	require.NoError(t, repo.RecordFailover(ctx, nil, minutes(20), minutes(60)))
+
+	assert.Equal(t, before, rows(t, pool))
+}
+
+func TestIntegration_RecordFailover_IgnoresALastAliveOlderThanTheUpRange(t *testing.T) {
+	repo, pool := newRepo(t)
+	ctx := context.Background()
+	require.NoError(t, repo.Beat(ctx, minutes(5), uptime.Gap))
+	older := minutes(2)
+
+	require.NoError(t, repo.RecordFailover(ctx, &older, minutes(20), minutes(60)))
+
+	assert.Equal(t, row{"up", minutes(5)}, rows(t, pool)[1])
+}
+
+func TestIntegration_RecordFailover_NoDowntimeWhenEC2WasUpBeforeTheLastBeat(t *testing.T) {
+	repo, pool := newRepo(t)
+	ctx := context.Background()
+	require.NoError(t, repo.Beat(ctx, minutes(30), uptime.Gap))
+
+	require.NoError(t, repo.RecordFailover(ctx, nil, minutes(20), minutes(60)))
+
+	assert.Equal(t, []row{{"start", origin}, {"up", minutes(30)}, {"failover", minutes(60)}}, rows(t, pool))
+}
+
+func TestIntegration_LastAlive(t *testing.T) {
+	repo, pool := newRepo(t)
+	ctx := context.Background()
+
+	empty, err := uptime.LastAlive(ctx, pool)
 	require.NoError(t, err)
-	assert.Empty(t, got)
+	assert.Nil(t, empty)
+
+	require.NoError(t, repo.Beat(ctx, minutes(3), uptime.Gap))
+	got, err := uptime.LastAlive(ctx, pool)
+	require.NoError(t, err)
+	require.NotNil(t, got)
+	assert.True(t, got.Equal(minutes(3)))
 }

@@ -37,7 +37,7 @@ Go, chi, PostgreSQL via pgx + sqlc, testify + mockery. See [architecture](docs/a
 
 All variables are in `.env.example` with their defaults. Required: `DATABASE_URL`, `PASSWORD`,
 `SEMIPRIVATE_PASSWORD`, `JWT_SECRET`, `TOTP_SECRET`, `ALLOWED_ORIGINS`.
-Optional integrations (lights, central-pipeline)
+Optional integrations (lights)
 degrade gracefully when unset.
 
 ## API
@@ -56,7 +56,7 @@ degrade gracefully when unset.
 | **Printers** | PrusaLink telemetry, job control, print files, camera and recordings. Semiprivate auth. | [printers](docs/api/printers.md) |
 | **Lights** | Bluetooth bulbs driven over BlueZ, with discovery and a registry. Semiprivate auth. | [lights](docs/api/lights.md) |
 | **Calendar** | Events: a name and a time range, linkable from plan blocks. | [calendar](docs/api/calendar.md) |
-| **Uptime** | Lab and ESP32 watchdog uptime from central-pipeline's marts. Semiprivate auth. | [uptime](docs/api/uptime.md) |
+| **Uptime** | Uptime, downtime and failover time, from a heartbeat and the failover record. Semiprivate auth. | [uptime](docs/api/uptime.md) |
 | **Backups** | List, take and download the API's own database dumps. | [backups](docs/api/backups.md) |
 
 ### Infrastructure

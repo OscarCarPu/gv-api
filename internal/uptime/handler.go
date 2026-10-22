@@ -26,35 +26,24 @@ func NewHandler(s ServiceInterface) *Handler {
 	return &Handler{service: s}
 }
 
-// RegisterRoutes mounts the uptime endpoints under semiprivate auth.
 func (h *Handler) RegisterRoutes(r chi.Router) {
 	r.Get("/domotics/uptime", h.Overview)
 	r.Get("/domotics/uptime/windows", h.Windows)
 }
 
-// Overview -> GET /domotics/uptime
 func (h *Handler) Overview(w http.ResponseWriter, r *http.Request) {
 	overview, err := h.service.Overview(r.Context())
 	if err != nil {
-		h.writeError(w, r, err, "Failed to read uptime")
+		core.InternalError(w, r, err, "Failed to read uptime")
 		return
 	}
 	core.JSON(w, http.StatusOK, overview)
 }
 
-// Windows -> GET /domotics/uptime/windows?device=&from=&to=&limit=
 func (h *Handler) Windows(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 
 	var query WindowsQuery
-	if raw := q.Get("device"); raw != "" {
-		device, err := ParseDevice(raw)
-		if err != nil {
-			core.Error(w, http.StatusBadRequest, fmt.Sprintf("device must be one of %s", deviceList()))
-			return
-		}
-		query.Device = &device
-	}
 	from, err := parseTimeParam(q.Get("from"), "from")
 	if err != nil {
 		core.Error(w, http.StatusBadRequest, err.Error())
@@ -82,22 +71,12 @@ func (h *Handler) Windows(w http.ResponseWriter, r *http.Request) {
 			core.Error(w, http.StatusBadRequest, "from must be before to")
 			return
 		}
-		h.writeError(w, r, err, "Failed to read uptime windows")
+		core.InternalError(w, r, err, "Failed to read uptime windows")
 		return
 	}
 	core.JSON(w, http.StatusOK, report)
 }
 
-// writeError answers 503 when no pipeline database is wired up.
-func (h *Handler) writeError(w http.ResponseWriter, r *http.Request, err error, message string) {
-	if errors.Is(err, ErrNotConfigured) {
-		core.Error(w, http.StatusServiceUnavailable, ErrNotConfigured.Error())
-		return
-	}
-	core.InternalError(w, r, err, message)
-}
-
-// parseTimeParam accepts RFC 3339 or a plain date (UTC midnight); empty leaves the default.
 func parseTimeParam(raw, name string) (time.Time, error) {
 	if raw == "" {
 		return time.Time{}, nil
@@ -109,15 +88,4 @@ func parseTimeParam(raw, name string) (time.Time, error) {
 		return t.UTC(), nil
 	}
 	return time.Time{}, fmt.Errorf("invalid %s: must be RFC 3339 or YYYY-MM-DD", name)
-}
-
-func deviceList() string {
-	out := ""
-	for i, d := range Devices {
-		if i > 0 {
-			out += ", "
-		}
-		out += string(d)
-	}
-	return out
 }

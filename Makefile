@@ -2,7 +2,7 @@ BACKUP_DIR_OWNER=docker run --rm -v "$(CURDIR)/backups:/b" alpine:3.22 sh -c "mk
 
 .PHONY: setup-project sqlc generate-mocks pgcli-db demo run build lint \
 	up reset logs up-logs reset-logs down \
-	failover-bucket failover-scenario failover-merge failover-status failover-finish \
+	failover-bucket failover-scenario failover-merge failover-status failover-outage failover-finish \
 	test test-unit test-integration test-e2e test-bench test-silent \
 	test-api-setup test-db-cleanup auth code
 
@@ -94,6 +94,9 @@ failover-merge:
 
 failover-status:
 	./scripts/failover-dev.sh status
+
+failover-outage:
+	./scripts/failover-dev.sh outage
 
 failover-finish:
 	./scripts/failover-dev.sh finish

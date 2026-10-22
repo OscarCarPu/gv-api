@@ -49,11 +49,6 @@ type Config struct {
 	PrinterRecordingOverlay    bool
 	PrinterRecordingFont       string
 
-	// central-pipeline's database (read-only). Unset means those domains answer 503.
-	PipelineDBUrl string
-	// Past this age, mart numbers are reported as stale.
-	PipelineStaleAfter time.Duration
-
 	// Theoretical free hours per day.
 	DailyCapacityHours float64
 
@@ -115,10 +110,6 @@ func Load() (*Config, error) {
 		PrinterRecordingVideoCodec: getEnv("PRINTER_RECORDING_VIDEO_CODEC", "copy"),
 		PrinterRecordingOverlay:    getEnvBool("PRINTER_RECORDING_OVERLAY", true),
 		PrinterRecordingFont:       os.Getenv("PRINTER_RECORDING_FONT"),
-
-		PipelineDBUrl: os.Getenv("PIPELINE_DATABASE_URL"),
-		// Generous: dbt is not scheduled yet.
-		PipelineStaleAfter: getEnvDuration("PIPELINE_STALE_AFTER_MS", 2*60*60*1000),
 
 		DailyCapacityHours: getEnvFloat("DAILY_CAPACITY_HOURS", 14),
 

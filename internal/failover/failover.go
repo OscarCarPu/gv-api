@@ -35,6 +35,7 @@ const (
 	stateNormal      = "NORMAL"
 	stateFailingBack = "FAILING_BACK"
 	statePending     = "PENDING_MERGE"
+	stateHomeReady   = "HOME_READY"
 )
 
 var ErrNoParam = errors.New("parameter not found")
@@ -85,12 +86,14 @@ type Controller struct {
 	opt Options
 	ctx context.Context
 
-	mu      sync.Mutex
-	mode    Mode
-	merge   Merge
-	err     string
-	report  *report.Report
-	running bool
+	mu        sync.Mutex
+	mode      Mode
+	merge     Merge
+	err       string
+	report    *report.Report
+	lastAlive *time.Time
+	outages   Outages
+	running   bool
 }
 
 func New(opt Options) *Controller {
@@ -244,6 +247,9 @@ func (c *Controller) runMerge() {
 	if out.Report != nil {
 		c.report = out.Report
 		c.saveReport()
+	}
+	if !out.AlreadyDone {
+		c.lastAlive = out.LastAlive
 	}
 	c.merge, c.mode = MergeDone, ModeNormal
 }

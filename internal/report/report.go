@@ -52,19 +52,27 @@ type row struct {
 
 type snapshot map[string]map[string]row
 
-// Build compares home with base, and keeps what differs from the row ec2 holds. Columns in ignore,
-// per table, are derived by a trigger and are not compared.
-func Build(ctx context.Context, base, home, ec2 Querier, ignore map[string][]string) (*Report, error) {
+type Options struct {
+	// Ignore lists, per table, the columns a trigger derives; they are not compared.
+	Ignore map[string][]string
+	Skip   []string
+}
+
+// Build compares home with base, and keeps what differs from the row ec2 holds.
+func Build(ctx context.Context, base, home, ec2 Querier, opt Options) (*Report, error) {
 	tables, keyless, err := Introspect(ctx, home)
 	if err != nil {
 		return nil, err
 	}
+	skipped := func(name string) bool { return slices.Contains(opt.Skip, name) }
+	tables = slices.DeleteFunc(tables, func(t Table) bool { return skipped(t.Name) })
+	keyless = slices.DeleteFunc(keyless, skipped)
 
 	var snaps [3]snapshot
 	for i, q := range []Querier{base, home, ec2} {
 		snaps[i] = snapshot{}
 		for _, t := range tables {
-			if snaps[i][t.Name], err = read(ctx, q, t, ignore[t.Name]); err != nil {
+			if snaps[i][t.Name], err = read(ctx, q, t, opt.Ignore[t.Name]); err != nil {
 				return nil, err
 			}
 		}

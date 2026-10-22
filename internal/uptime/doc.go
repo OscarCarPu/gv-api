@@ -1,10 +1,10 @@
-// Package uptime reports how much of the time the home lab and its ESP32 watchdog have
-// been reachable.
+// Package uptime reports how much of the time the service answered, from the outages table.
 //
-// It owns no data: it reads central-pipeline's dbt marts over a separate read-only DSN.
+// The table is a timeline of ranges (up, down, failover). A heartbeat keeps the last up range
+// current, and a failover record adds the downtime and failover ranges (see internal/failover).
 //
 // Endpoints:
 //
-//	GET /domotics/uptime          - current state per device plus the four precomputed ranges
-//	GET /domotics/uptime/windows  - state changes over an arbitrary range, with its own percentage
+//	GET /domotics/uptime          - up since, plus the four lookbacks
+//	GET /domotics/uptime/windows  - the ranges over an arbitrary range, with its own percentage
 package uptime

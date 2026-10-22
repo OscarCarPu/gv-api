@@ -3,6 +3,8 @@
 //
 // It has its own DSN and pool, is read-only on the connection itself, and runs no migrations.
 // An unset DSN is normal: reads report ErrNotConfigured and the domain answers 503.
+//
+// Nothing uses it at the moment; it is kept for the next domain that reads central-pipeline.
 package pipeline
 
 import (

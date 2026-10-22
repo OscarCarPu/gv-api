@@ -11,6 +11,7 @@ import (
 	"gv-api/internal/database"
 	"gv-api/internal/failover"
 	"gv-api/internal/restore"
+	"gv-api/internal/uptime"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -57,12 +58,14 @@ func newFailover(ctx context.Context, cfg *config.Config, resetPool func()) (*fa
 		Store:  store,
 		Dir:    dir,
 		Restorer: restore.New(restore.Config{
-			Admin:   admin,
-			URL:     urlFor,
-			Home:    home,
-			Dir:     dir,
-			Ignore:  map[string][]string{"accounts": {"total"}},
-			Release: resetPool,
+			Admin:     admin,
+			URL:       urlFor,
+			Home:      home,
+			Dir:       dir,
+			Ignore:    map[string][]string{"accounts": {"total"}},
+			Skip:      []string{"outages"},
+			LastAlive: uptime.LastAlive,
+			Release:   resetPool,
 		}),
 		After: func() {
 			resetPool()

@@ -3,6 +3,7 @@
 #   scenario   build a divergence from the current dev database and stage it in the fake AWS
 #   merge      play the Lambda: hold the app, then ask it to restore
 #   status     show what the fake AWS and gv-api say
+#   outage     play the Lambda's last step: record the failover in the uptime history
 #   finish     back to NORMAL, as when the failover is over
 #   bucket     create the dump bucket (make up does it)
 set -euo pipefail
@@ -94,6 +95,15 @@ status() {
   echo
 }
 
+outage() {
+  state HOME_READY
+  home_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+  ec2_up_at=$(date -u -d '-1 minute' +%Y-%m-%dT%H:%M:%SZ)
+  curl -fsS -X POST "$API/failover/outage" -H "X-Failover-Token: $TOKEN" -H 'Content-Type: application/json' \
+    -d "{\"ec2_up_at\":\"$ec2_up_at\",\"home_at\":\"$home_at\"}"
+  echo "recorded"
+}
+
 finish() {
   state NORMAL
   forget base
@@ -103,9 +113,9 @@ finish() {
 }
 
 case "${1:-}" in
-  scenario | merge | status | finish | bucket) "$1" ;;
+  scenario | merge | status | outage | finish | bucket) "$1" ;;
   *)
-    sed -n '2,7p' "$0" | sed 's/^# \{0,1\}//' >&2
+    sed -n '2,8p' "$0" | sed 's/^# \{0,1\}//' >&2
     exit 1
     ;;
 esac

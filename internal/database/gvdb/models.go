@@ -5,12 +5,58 @@
 package gvdb
 
 import (
+	"database/sql/driver"
+	"fmt"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/shopspring/decimal"
 	txtype "gv-api/internal/finance/txtype"
 )
+
+type OutageKind string
+
+const (
+	OutageKindStart    OutageKind = "start"
+	OutageKindUp       OutageKind = "up"
+	OutageKindDown     OutageKind = "down"
+	OutageKindFailover OutageKind = "failover"
+)
+
+func (e *OutageKind) Scan(src interface{}) error {
+	switch s := src.(type) {
+	case []byte:
+		*e = OutageKind(s)
+	case string:
+		*e = OutageKind(s)
+	default:
+		return fmt.Errorf("unsupported scan type for OutageKind: %T", src)
+	}
+	return nil
+}
+
+type NullOutageKind struct {
+	OutageKind OutageKind `json:"outage_kind"`
+	Valid      bool       `json:"valid"` // Valid is true if OutageKind is not NULL
+}
+
+// Scan implements the Scanner interface.
+func (ns *NullOutageKind) Scan(value interface{}) error {
+	if value == nil {
+		ns.OutageKind, ns.Valid = "", false
+		return nil
+	}
+	ns.Valid = true
+	return ns.OutageKind.Scan(value)
+}
+
+// Value implements the driver Valuer interface.
+func (ns NullOutageKind) Value() (driver.Value, error) {
+	if !ns.Valid {
+		return nil, nil
+	}
+	return string(ns.OutageKind), nil
+}
 
 type Account struct {
 	ID        int32              `db:"id" json:"id"`
@@ -84,6 +130,12 @@ type Light struct {
 	MaxColorTemp      float64            `db:"max_color_temp" json:"max_color_temp"`
 	Options           []byte             `db:"options" json:"options"`
 	CreatedAt         pgtype.Timestamptz `db:"created_at" json:"created_at"`
+}
+
+type Outage struct {
+	ID     int64              `db:"id" json:"id"`
+	EndsAt pgtype.Timestamptz `db:"ends_at" json:"ends_at"`
+	Kind   OutageKind         `db:"kind" json:"kind"`
 }
 
 type PlanBlock struct {

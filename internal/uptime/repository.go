@@ -2,112 +2,122 @@ package uptime
 
 import (
 	"context"
+	"errors"
 	"time"
 
-	"gv-api/internal/pipeline"
+	"gv-api/internal/database/gvdb"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 type Repository interface {
-	CurrentStates(ctx context.Context) ([]CurrentState, error)
-	Aggregations(ctx context.Context) ([]Aggregation, error)
-	RangeStats(ctx context.Context, from, to time.Time, device *Device) ([]RangeStat, error)
-	Windows(ctx context.Context, from, to time.Time, device *Device, limit int) ([]WindowRow, error)
+	TrackingStart(ctx context.Context) (time.Time, error)
+	Ranges(ctx context.Context, from, to time.Time) ([]Range, error)
+	Beat(ctx context.Context, now time.Time, gap time.Duration) error
+	RecordFailover(ctx context.Context, lastAlive *time.Time, ec2UpAt, homeAt time.Time) error
 }
 
-// PipelineRepository reads the two watchdog marts. Hand-written SQL because dbt, not our
-// migrations, owns this schema; the ::text casts guard against its TEXT columns changing type.
-type PipelineRepository struct {
-	db *pipeline.DB
+type PostgresRepository struct {
+	pool *pgxpool.Pool
+	q    *gvdb.Queries
 }
 
-func NewRepository(db *pipeline.DB) *PipelineRepository {
-	return &PipelineRepository{db: db}
+func NewRepository(pool *pgxpool.Pool) *PostgresRepository {
+	return &PostgresRepository{pool: pool, q: gvdb.New(pool)}
 }
 
-func (r *PipelineRepository) CurrentStates(ctx context.Context) ([]CurrentState, error) {
-	// The open window per device is its current state.
-	const query = `
-		SELECT device::text, state::text, start_time
-		FROM marts.uptime_windows
-		WHERE end_time IS NULL
-		ORDER BY device`
-
-	return pipeline.Collect(ctx, r.db, func(rows pgx.Rows) (CurrentState, error) {
-		var s CurrentState
-		err := rows.Scan(&s.Device, &s.State, &s.Since)
-		return s, err
-	}, query)
+func ts(t time.Time) pgtype.Timestamptz {
+	return pgtype.Timestamptz{Time: t, Valid: true}
 }
 
-func (r *PipelineRepository) Aggregations(ctx context.Context) ([]Aggregation, error) {
-	// Two devices by four lookbacks. `time` is a type keyword, hence the quoting.
-	const query = `
-		SELECT device::text, "time"::text, range_start, range_end, uptime
-		FROM marts.uptime_aggregations`
-
-	return pipeline.Collect(ctx, r.db, func(rows pgx.Rows) (Aggregation, error) {
-		var a Aggregation
-		err := rows.Scan(&a.Device, &a.Range, &a.RangeStart, &a.RangeEnd, &a.Uptime)
-		return a, err
-	}, query)
+func (r *PostgresRepository) TrackingStart(ctx context.Context) (time.Time, error) {
+	t, err := r.q.OutagesStart(ctx)
+	return t.Time, err
 }
 
-func (r *PipelineRepository) RangeStats(ctx context.Context, from, to time.Time, device *Device) ([]RangeStat, error) {
-	// Windows are clipped to the range and the open one counted up to `to`. Aggregated in SQL so
-	// the numbers ignore the list limit.
-	const query = `
-		SELECT device,
-		       coalesce(sum(seconds) FILTER (WHERE state = 'up'), 0)   AS up_seconds,
-		       coalesce(sum(seconds) FILTER (WHERE state = 'down'), 0) AS down_seconds,
-		       count(*) FILTER (WHERE state = 'down')                  AS outages,
-		       min(clip_start) AS covered_from,
-		       max(clip_end)   AS covered_to
-		FROM (
-		    SELECT device::text AS device,
-		           state::text AS state,
-		           greatest(start_time, $1::timestamptz) AS clip_start,
-		           least(coalesce(end_time, $2::timestamptz), $2::timestamptz) AS clip_end,
-		           extract(epoch FROM least(coalesce(end_time, $2::timestamptz), $2::timestamptz)
-		                             - greatest(start_time, $1::timestamptz)) AS seconds
-		    FROM marts.uptime_windows
-		    WHERE start_time < $2::timestamptz
-		      AND coalesce(end_time, $2::timestamptz) > $1::timestamptz
-		      AND ($3::text IS NULL OR device::text = $3::text)
-		) clipped
-		GROUP BY device
-		ORDER BY device`
-
-	return pipeline.Collect(ctx, r.db, func(rows pgx.Rows) (RangeStat, error) {
-		var s RangeStat
-		err := rows.Scan(&s.Device, &s.UpSeconds, &s.DownSeconds, &s.Outages, &s.CoveredFrom, &s.CoveredTo)
-		return s, err
-	}, query, from, to, deviceFilter(device))
-}
-
-func (r *PipelineRepository) Windows(ctx context.Context, from, to time.Time, device *Device, limit int) ([]WindowRow, error) {
-	// Newest first; one row over the limit tells the caller there is more.
-	const query = `
-		SELECT device::text, state::text, start_time, end_time
-		FROM marts.uptime_windows
-		WHERE start_time < $2::timestamptz
-		  AND coalesce(end_time, $2::timestamptz) > $1::timestamptz
-		  AND ($3::text IS NULL OR device::text = $3::text)
-		ORDER BY start_time DESC, device
-		LIMIT $4`
-
-	return pipeline.Collect(ctx, r.db, func(rows pgx.Rows) (WindowRow, error) {
-		var w WindowRow
-		err := rows.Scan(&w.Device, &w.State, &w.StartTime, &w.EndTime)
-		return w, err
-	}, query, from, to, deviceFilter(device), limit+1)
-}
-
-func deviceFilter(device *Device) *string {
-	if device == nil {
-		return nil
+func (r *PostgresRepository) Ranges(ctx context.Context, from, to time.Time) ([]Range, error) {
+	rows, err := r.q.ListOutageRanges(ctx, gvdb.ListOutageRangesParams{FromAt: ts(from), ToAt: ts(to)})
+	if err != nil {
+		return nil, err
 	}
-	s := string(*device)
-	return &s
+	out := make([]Range, 0, len(rows))
+	for _, row := range rows {
+		if !row.StartedAt.Valid {
+			continue
+		}
+		out = append(out, Range{Kind: Kind(row.Kind), Start: row.StartedAt.Time, End: row.EndsAt.Time})
+	}
+	return out, nil
+}
+
+func (r *PostgresRepository) Beat(ctx context.Context, now time.Time, gap time.Duration) error {
+	return r.inTx(ctx, func(q *gvdb.Queries) error {
+		last, err := q.LastOutage(ctx)
+		if err != nil {
+			return err
+		}
+		if !now.After(last.EndsAt.Time) {
+			return nil
+		}
+		switch {
+		case last.Kind == gvdb.OutageKindUp && now.Sub(last.EndsAt.Time) <= gap:
+			return q.ExtendOutage(ctx, gvdb.ExtendOutageParams{ID: last.ID, EndsAt: ts(now)})
+		case last.Kind == gvdb.OutageKindUp:
+			return q.AddOutage(ctx, gvdb.AddOutageParams{EndsAt: ts(now), Kind: gvdb.OutageKindDown})
+		}
+		return q.AddOutage(ctx, gvdb.AddOutageParams{EndsAt: ts(now), Kind: gvdb.OutageKindUp})
+	})
+}
+
+func (r *PostgresRepository) RecordFailover(ctx context.Context, lastAlive *time.Time, ec2UpAt, homeAt time.Time) error {
+	return r.inTx(ctx, func(q *gvdb.Queries) error {
+		last, err := q.LastOutage(ctx)
+		if err != nil {
+			return err
+		}
+		if !last.EndsAt.Time.Before(homeAt) {
+			return nil
+		}
+
+		start := last.EndsAt.Time
+		if last.Kind == gvdb.OutageKindUp && lastAlive != nil && lastAlive.After(start) && lastAlive.Before(homeAt) {
+			start = *lastAlive
+			if err := q.ExtendOutage(ctx, gvdb.ExtendOutageParams{ID: last.ID, EndsAt: ts(start)}); err != nil {
+				return err
+			}
+		}
+		if start.Before(ec2UpAt) {
+			if err := q.AddOutage(ctx, gvdb.AddOutageParams{EndsAt: ts(ec2UpAt), Kind: gvdb.OutageKindDown}); err != nil {
+				return err
+			}
+		}
+		return q.AddOutage(ctx, gvdb.AddOutageParams{EndsAt: ts(homeAt), Kind: gvdb.OutageKindFailover})
+	})
+}
+
+func (r *PostgresRepository) inTx(ctx context.Context, fn func(*gvdb.Queries) error) error {
+	tx, err := r.pool.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	//nolint:errcheck // nothing left to undo after a failed commit
+	defer tx.Rollback(ctx)
+	if err := fn(r.q.WithTx(tx)); err != nil {
+		return err
+	}
+	return tx.Commit(ctx)
+}
+
+func LastAlive(ctx context.Context, pool *pgxpool.Pool) (*time.Time, error) {
+	var t time.Time
+	err := pool.QueryRow(ctx, "SELECT ends_at FROM outages WHERE kind = 'up' ORDER BY ends_at DESC LIMIT 1").Scan(&t)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &t, nil
 }

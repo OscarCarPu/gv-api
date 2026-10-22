@@ -234,6 +234,41 @@ func TestRun_AReportThatCannotBeBuiltDoesNotStopTheRestore(t *testing.T) {
 	assert.Equal(t, ec2Names, e.names(t, e.home))
 }
 
+func (e *env) runnerWith(hook func(context.Context, *pgxpool.Pool) (*time.Time, error)) *restore.Runner {
+	return restore.New(restore.Config{
+		Admin: e.admin, URL: e.url, Home: e.home, Dir: filepath.Join(e.dir, "failback"), LastAlive: hook,
+	})
+}
+
+func TestRun_ReadsHomesLastHeartbeatBeforeTheSwap(t *testing.T) {
+	e := setup(t, schema+homeChanges)
+	alive := time.Date(2026, 8, 1, 10, 0, 0, 0, time.UTC)
+	var seen string
+	hook := func(ctx context.Context, home *pgxpool.Pool) (*time.Time, error) {
+		err := home.QueryRow(ctx, "SELECT name FROM parents WHERE id = 1").Scan(&seen)
+		return &alive, err
+	}
+
+	out, err := e.runnerWith(hook).Run(context.Background(), e.request())
+
+	require.NoError(t, err)
+	assert.True(t, out.Swapped)
+	assert.Equal(t, "home-edit", seen)
+	assert.Equal(t, &alive, out.LastAlive)
+}
+
+func TestRun_AFailingHeartbeatReadDoesNotStopTheRestore(t *testing.T) {
+	e := setup(t, schema+homeChanges)
+	hook := func(context.Context, *pgxpool.Pool) (*time.Time, error) { return nil, fmt.Errorf("no table") }
+
+	out, err := e.runnerWith(hook).Run(context.Background(), e.request())
+
+	require.NoError(t, err)
+	assert.True(t, out.Swapped)
+	assert.Nil(t, out.LastAlive)
+	assert.Equal(t, ec2Names, e.names(t, e.home))
+}
+
 func TestRun_ATruncatedDumpChangesNothing(t *testing.T) {
 	e := setup(t, schema+homeChanges)
 	raw, err := os.ReadFile(e.ec2)

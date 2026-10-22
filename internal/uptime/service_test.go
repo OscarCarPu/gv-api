@@ -14,248 +14,171 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-const staleAfter = 2 * time.Hour
+var now = time.Date(2026, 8, 31, 12, 0, 0, 0, time.UTC)
 
-func newService(repo uptime.Repository) *uptime.Service {
-	return uptime.NewService(repo, staleAfter)
+func at(hoursAgo float64) time.Time {
+	return now.Add(-time.Duration(hoursAgo * float64(time.Hour)))
 }
 
-func TestService_Overview_FreshRun(t *testing.T) {
-	computedAt := time.Now().Add(-5 * time.Minute)
-	since := time.Now().Add(-72 * time.Hour)
+func rng(kind uptime.Kind, fromHoursAgo, toHoursAgo float64) uptime.Range {
+	return uptime.Range{Kind: kind, Start: at(fromHoursAgo), End: at(toHoursAgo)}
+}
 
+func newService(t *testing.T, since time.Time, ranges ...uptime.Range) *uptime.Service {
+	t.Helper()
 	repo := mocks.NewMockRepository(t)
-	repo.EXPECT().CurrentStates(mock.Anything).Return([]uptime.CurrentState{
-		{Device: uptime.DeviceWatchdog, State: uptime.StateDown, Since: since},
-		{Device: uptime.DeviceLab, State: uptime.StateUp, Since: since},
-	}, nil)
-	repo.EXPECT().Aggregations(mock.Anything).Return([]uptime.Aggregation{
-		{Device: uptime.DeviceLab, Range: uptime.LookbackYear, Uptime: 98.05, RangeEnd: computedAt},
-		{Device: uptime.DeviceLab, Range: uptime.LookbackMonth, Uptime: 98.92, RangeEnd: computedAt},
-		{Device: uptime.DeviceWatchdog, Range: uptime.LookbackAll, Uptime: 98.04, RangeEnd: computedAt},
-	}, nil)
+	repo.EXPECT().TrackingStart(mock.Anything).Return(since, nil)
+	repo.EXPECT().Ranges(mock.Anything, mock.Anything, mock.Anything).Return(ranges, nil).Maybe()
+	return uptime.NewService(repo, func() time.Time { return now })
+}
 
-	got, err := newService(repo).Overview(context.Background())
+func lookback(t *testing.T, o uptime.Overview, l uptime.Lookback) uptime.RangeUptime {
+	t.Helper()
+	for _, r := range o.Ranges {
+		if r.Range == l {
+			return r
+		}
+	}
+	t.Fatalf("no %s lookback", l)
+	return uptime.RangeUptime{}
+}
+
+func TestService_Overview_NothingCoveredYetHasNoPercentage(t *testing.T) {
+	o, err := newService(t, now).Overview(context.Background())
+
 	require.NoError(t, err)
-
-	require.NotNil(t, got.ComputedAt)
-	assert.WithinDuration(t, computedAt, *got.ComputedAt, time.Second)
-	assert.False(t, got.Stale)
-	assert.Equal(t, int(staleAfter.Seconds()), got.StaleAfterSeconds)
-
-	// Fixed device order; ranges shortest lookback first.
-	require.Len(t, got.Devices, 2)
-	assert.Equal(t, uptime.DeviceLab, got.Devices[0].Device)
-	assert.Equal(t, uptime.StateUp, got.Devices[0].State)
-	require.NotNil(t, got.Devices[0].Since)
-	assert.Equal(t, since, *got.Devices[0].Since)
-	require.Len(t, got.Devices[0].Ranges, 2)
-	assert.Equal(t, uptime.LookbackMonth, got.Devices[0].Ranges[0].Range)
-	assert.Equal(t, uptime.LookbackYear, got.Devices[0].Ranges[1].Range)
-	assert.InDelta(t, 98.92, got.Devices[0].Ranges[0].Uptime, 0.001)
-
-	assert.Equal(t, uptime.DeviceWatchdog, got.Devices[1].Device)
-	assert.Equal(t, uptime.StateDown, got.Devices[1].State)
-	require.Len(t, got.Devices[1].Ranges, 1)
-	assert.Equal(t, uptime.LookbackAll, got.Devices[1].Ranges[0].Range)
+	assert.Len(t, o.Ranges, 4)
+	assert.Nil(t, lookback(t, o, uptime.LookbackAll).Uptime)
+	assert.Equal(t, now, o.UpSince)
 }
 
-func TestService_Overview_StaleRun(t *testing.T) {
-	old := time.Now().Add(-3 * time.Hour)
+func TestService_Overview_OnlyUpIsOneHundred(t *testing.T) {
+	o, err := newService(t, at(10), rng(uptime.KindUp, 10, 0)).Overview(context.Background())
 
-	repo := mocks.NewMockRepository(t)
-	repo.EXPECT().CurrentStates(mock.Anything).Return([]uptime.CurrentState{}, nil)
-	repo.EXPECT().Aggregations(mock.Anything).Return([]uptime.Aggregation{
-		{Device: uptime.DeviceLab, Range: uptime.LookbackMonth, Uptime: 99, RangeEnd: old},
-	}, nil)
-
-	got, err := newService(repo).Overview(context.Background())
 	require.NoError(t, err)
-	assert.True(t, got.Stale, "a run older than staleAfter is not current")
+	all := lookback(t, o, uptime.LookbackAll)
+	require.NotNil(t, all.Uptime)
+	assert.Equal(t, 100.0, *all.Uptime)
+	assert.Equal(t, at(10), all.RangeStart)
+	assert.Equal(t, at(10), o.UpSince)
 }
 
-func TestService_Overview_UnknownDevice(t *testing.T) {
-	// A device the pipeline has never heard from still appears.
-	repo := mocks.NewMockRepository(t)
-	repo.EXPECT().CurrentStates(mock.Anything).Return([]uptime.CurrentState{
-		{Device: uptime.DeviceLab, State: uptime.StateUp, Since: time.Now()},
-	}, nil)
-	repo.EXPECT().Aggregations(mock.Anything).Return([]uptime.Aggregation{}, nil)
+func TestService_Overview_DowntimeLowersItAndFailoverDoesNot(t *testing.T) {
+	o, err := newService(t, at(10),
+		rng(uptime.KindUp, 10, 6),
+		rng(uptime.KindDown, 6, 5),
+		rng(uptime.KindFailover, 5, 3),
+		rng(uptime.KindUp, 3, 0),
+	).Overview(context.Background())
 
-	got, err := newService(repo).Overview(context.Background())
 	require.NoError(t, err)
-	require.Len(t, got.Devices, 2)
-	assert.Equal(t, uptime.StateUnknown, got.Devices[1].State)
-	assert.Nil(t, got.Devices[1].Since)
-	assert.Empty(t, got.Devices[1].Ranges)
-	assert.Nil(t, got.ComputedAt)
-	assert.True(t, got.Stale, "nothing computed yet cannot be fresh")
+	all := lookback(t, o, uptime.LookbackAll)
+	require.NotNil(t, all.Uptime)
+	assert.Equal(t, 90.0, *all.Uptime)
+	assert.Equal(t, 3600.0, all.DownSeconds)
+	assert.Equal(t, 7200.0, all.FailoverSeconds)
+	assert.Equal(t, 7*3600.0, all.UpSeconds)
+	assert.Equal(t, at(3), o.UpSince)
 }
 
-func TestService_Overview_NotConfigured(t *testing.T) {
-	// ErrNotConfigured passes through so the handler can answer 503.
+func TestService_Overview_ALookbackCutsTheRangeAndKeepsTheStart(t *testing.T) {
+	since := now.Add(-100 * 24 * time.Hour)
 	repo := mocks.NewMockRepository(t)
-	repo.EXPECT().CurrentStates(mock.Anything).Return(nil, uptime.ErrNotConfigured)
+	repo.EXPECT().TrackingStart(mock.Anything).Return(since, nil)
+	repo.EXPECT().Ranges(mock.Anything, since, now).Return([]uptime.Range{{Kind: uptime.KindUp, Start: since, End: now}}, nil)
 
-	_, err := newService(repo).Overview(context.Background())
-	assert.ErrorIs(t, err, uptime.ErrNotConfigured)
+	o, err := uptime.NewService(repo, func() time.Time { return now }).Overview(context.Background())
+
+	require.NoError(t, err)
+	assert.Equal(t, now.Add(-30*24*time.Hour), lookback(t, o, uptime.LookbackMonth).RangeStart)
+	assert.Equal(t, since, lookback(t, o, uptime.LookbackAll).RangeStart)
 }
 
 func TestService_Overview_RepoError(t *testing.T) {
 	repo := mocks.NewMockRepository(t)
-	repo.EXPECT().CurrentStates(mock.Anything).Return(nil, errors.New("db down"))
+	repo.EXPECT().TrackingStart(mock.Anything).Return(time.Time{}, errors.New("db down"))
 
-	_, err := newService(repo).Overview(context.Background())
-	assert.Error(t, err)
+	_, err := uptime.NewService(repo, func() time.Time { return now }).Overview(context.Background())
+
+	assert.EqualError(t, err, "db down")
 }
 
 func TestService_Windows_DefaultsToLastThirtyDays(t *testing.T) {
-	var gotFrom, gotTo time.Time
 	repo := mocks.NewMockRepository(t)
-	repo.EXPECT().RangeStats(mock.Anything, mock.Anything, mock.Anything, mock.Anything).
-		RunAndReturn(func(_ context.Context, from, to time.Time, _ *uptime.Device) ([]uptime.RangeStat, error) {
-			gotFrom, gotTo = from, to
-			return []uptime.RangeStat{}, nil
-		})
-	repo.EXPECT().Windows(mock.Anything, mock.Anything, mock.Anything, mock.Anything, uptime.DefaultWindowLimit).
-		Return([]uptime.WindowRow{}, nil)
+	repo.EXPECT().TrackingStart(mock.Anything).Return(now.Add(-365*24*time.Hour), nil)
+	repo.EXPECT().Ranges(mock.Anything, now.Add(-30*24*time.Hour), now).Return(nil, nil)
 
-	got, err := newService(repo).Windows(context.Background(), uptime.WindowsQuery{})
+	report, err := uptime.NewService(repo, func() time.Time { return now }).Windows(context.Background(), uptime.WindowsQuery{})
+
 	require.NoError(t, err)
-
-	assert.WithinDuration(t, time.Now(), gotTo, 2*time.Second)
-	assert.WithinDuration(t, gotTo.Add(-30*24*time.Hour), gotFrom, time.Second)
-	assert.Equal(t, gotFrom, got.From)
-	assert.Equal(t, gotTo, got.To)
-	// No stats for either device: the range is served, both devices report nothing.
-	require.Len(t, got.Devices, 2)
-	assert.Nil(t, got.Devices[0].Uptime)
-	assert.Empty(t, got.Devices[0].Windows)
+	assert.Equal(t, now, report.To)
+	assert.Empty(t, report.Windows)
+	assert.Nil(t, report.Uptime)
 }
 
-func TestService_Windows_ClampsFutureTo(t *testing.T) {
-	// A future `to` is clamped, or the open window would invent uptime.
-	var gotTo time.Time
+func TestService_Windows_ClampsAFutureToAndFromToTheStart(t *testing.T) {
+	since := at(10)
 	repo := mocks.NewMockRepository(t)
-	repo.EXPECT().RangeStats(mock.Anything, mock.Anything, mock.Anything, mock.Anything).
-		RunAndReturn(func(_ context.Context, _, to time.Time, _ *uptime.Device) ([]uptime.RangeStat, error) {
-			gotTo = to
-			return []uptime.RangeStat{}, nil
-		})
-	repo.EXPECT().Windows(mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
-		Return([]uptime.WindowRow{}, nil)
+	repo.EXPECT().TrackingStart(mock.Anything).Return(since, nil)
+	repo.EXPECT().Ranges(mock.Anything, since, now).Return(nil, nil)
 
-	_, err := newService(repo).Windows(context.Background(), uptime.WindowsQuery{
-		From: time.Now().Add(-time.Hour),
-		To:   time.Now().Add(48 * time.Hour),
+	report, err := uptime.NewService(repo, func() time.Time { return now }).Windows(context.Background(), uptime.WindowsQuery{
+		From: at(100),
+		To:   now.Add(48 * time.Hour),
 	})
+
 	require.NoError(t, err)
-	assert.WithinDuration(t, time.Now(), gotTo, 2*time.Second)
+	assert.Equal(t, since, report.From)
+	assert.Equal(t, now, report.To)
 }
 
-func TestService_Windows_RejectsBackwardsRange(t *testing.T) {
-	now := time.Now()
-	_, err := newService(mocks.NewMockRepository(t)).Windows(context.Background(), uptime.WindowsQuery{
-		From: now,
-		To:   now.Add(-time.Hour),
+func TestService_Windows_RejectsABackwardsRange(t *testing.T) {
+	repo := mocks.NewMockRepository(t)
+	repo.EXPECT().TrackingStart(mock.Anything).Return(at(100), nil)
+
+	_, err := uptime.NewService(repo, func() time.Time { return now }).Windows(context.Background(), uptime.WindowsQuery{
+		From: at(1),
+		To:   at(5),
 	})
+
 	assert.ErrorIs(t, err, uptime.ErrInvalidRange)
 }
 
-func TestService_Windows_PercentageOverCoveredTime(t *testing.T) {
-	// 9.5h up, 1h down inside a partly covered 30-day range: 90.48%, not 1.3%.
-	to := time.Now()
-	from := to.Add(-30 * 24 * time.Hour)
-	coveredFrom, coveredTo := to.Add(-10*time.Hour), to
+func TestService_Windows_ListsNewestFirstClipsAndCountsDowntimes(t *testing.T) {
+	svc := newService(t, at(20),
+		rng(uptime.KindUp, 20, 8),
+		rng(uptime.KindDown, 8, 7),
+		rng(uptime.KindFailover, 7, 4),
+		rng(uptime.KindUp, 4, 0),
+	)
 
-	device := uptime.DeviceLab
-	repo := mocks.NewMockRepository(t)
-	repo.EXPECT().RangeStats(mock.Anything, mock.Anything, mock.Anything, &device).Return([]uptime.RangeStat{{
-		Device:      uptime.DeviceLab,
-		UpSeconds:   9.5 * 3600,
-		DownSeconds: 1 * 3600,
-		Outages:     1,
-		CoveredFrom: coveredFrom,
-		CoveredTo:   coveredTo,
-	}}, nil)
-	repo.EXPECT().Windows(mock.Anything, mock.Anything, mock.Anything, &device, mock.Anything).
-		Return([]uptime.WindowRow{}, nil)
+	report, err := svc.Windows(context.Background(), uptime.WindowsQuery{From: at(10), To: now})
 
-	got, err := newService(repo).Windows(context.Background(), uptime.WindowsQuery{
-		From: from, To: to, Device: &device,
-	})
 	require.NoError(t, err)
-
-	// A device filter narrows the answer to that device alone.
-	require.Len(t, got.Devices, 1)
-	entry := got.Devices[0]
-	require.NotNil(t, entry.Uptime)
-	assert.Equal(t, 90.48, *entry.Uptime)
-	assert.Equal(t, 1, entry.Outages)
-	require.NotNil(t, entry.CoveredFrom)
-	assert.Equal(t, coveredFrom, *entry.CoveredFrom)
+	require.Len(t, report.Windows, 4)
+	assert.Equal(t, uptime.KindUp, report.Windows[0].Kind)
+	assert.Equal(t, uptime.KindUp, report.Windows[3].Kind)
+	assert.Equal(t, 2*3600.0, report.Windows[3].Seconds)
+	assert.Equal(t, 1, report.Outages)
+	assert.Equal(t, 3600.0, report.DownSeconds)
+	assert.Equal(t, 3*3600.0, report.FailoverSeconds)
+	assert.Equal(t, 6*3600.0, report.UpSeconds)
+	require.NotNil(t, report.Uptime)
+	assert.Equal(t, 90.0, *report.Uptime)
+	assert.False(t, report.Truncated)
 }
 
-func TestService_Windows_ClipsAndFlagsTruncation(t *testing.T) {
-	to := time.Now()
-	from := to.Add(-2 * time.Hour)
-	// Starts before the range, so only the part inside it counts.
-	earlier := from.Add(-10 * time.Hour)
-	closed := from.Add(30 * time.Minute)
+func TestService_Windows_FlagsTruncation(t *testing.T) {
+	svc := newService(t, at(20),
+		rng(uptime.KindUp, 20, 8),
+		rng(uptime.KindDown, 8, 7),
+		rng(uptime.KindUp, 7, 0),
+	)
 
-	repo := mocks.NewMockRepository(t)
-	repo.EXPECT().RangeStats(mock.Anything, mock.Anything, mock.Anything, mock.Anything).
-		Return([]uptime.RangeStat{}, nil)
-	// The extra row only signals truncation; it is not data.
-	repo.EXPECT().Windows(mock.Anything, mock.Anything, mock.Anything, mock.Anything, 1).
-		Return([]uptime.WindowRow{
-			{Device: uptime.DeviceLab, State: uptime.StateUp, StartTime: earlier, EndTime: &closed},
-			{Device: uptime.DeviceLab, State: uptime.StateDown, StartTime: earlier.Add(-time.Hour), EndTime: &earlier},
-		}, nil)
+	report, err := svc.Windows(context.Background(), uptime.WindowsQuery{From: at(20), To: now, Limit: 2})
 
-	got, err := newService(repo).Windows(context.Background(), uptime.WindowsQuery{From: from, To: to, Limit: 1})
 	require.NoError(t, err)
-
-	lab := got.Devices[0]
-	require.Len(t, lab.Windows, 1)
-	assert.True(t, lab.Truncated)
-	assert.InDelta(t, 30*60.0, lab.Windows[0].Seconds, 1)
-}
-
-func TestService_Windows_OpenWindowCountsUpToTo(t *testing.T) {
-	to := time.Now()
-	from := to.Add(-2 * time.Hour)
-
-	repo := mocks.NewMockRepository(t)
-	repo.EXPECT().RangeStats(mock.Anything, mock.Anything, mock.Anything, mock.Anything).
-		Return([]uptime.RangeStat{}, nil)
-	repo.EXPECT().Windows(mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
-		Return([]uptime.WindowRow{
-			{Device: uptime.DeviceLab, State: uptime.StateUp, StartTime: to.Add(-time.Hour), EndTime: nil},
-		}, nil)
-
-	got, err := newService(repo).Windows(context.Background(), uptime.WindowsQuery{From: from, To: to})
-	require.NoError(t, err)
-
-	window := got.Devices[0].Windows[0]
-	assert.Nil(t, window.EndTime, "the open window stays open in the response")
-	assert.InDelta(t, 3600.0, window.Seconds, 1)
-}
-
-func TestService_Windows_NotConfigured(t *testing.T) {
-	repo := mocks.NewMockRepository(t)
-	repo.EXPECT().RangeStats(mock.Anything, mock.Anything, mock.Anything, mock.Anything).
-		Return(nil, uptime.ErrNotConfigured)
-
-	_, err := newService(repo).Windows(context.Background(), uptime.WindowsQuery{})
-	assert.ErrorIs(t, err, uptime.ErrNotConfigured)
-}
-
-func TestParseDevice(t *testing.T) {
-	got, err := uptime.ParseDevice("watchdog")
-	require.NoError(t, err)
-	assert.Equal(t, uptime.DeviceWatchdog, got)
-
-	_, err = uptime.ParseDevice("printer")
-	assert.ErrorIs(t, err, uptime.ErrUnknownDevice)
+	assert.Len(t, report.Windows, 2)
+	assert.True(t, report.Truncated)
+	assert.Equal(t, 1, report.Outages)
 }

@@ -20,6 +20,7 @@ func (c *Controller) Routes(r chi.Router) {
 	}
 	r.Post("/failover", c.handleFailover)
 	r.Get("/failover/status", c.handleStatus)
+	r.Post("/failover/outage", c.handleOutage)
 }
 
 // ReportRoutes mounts the report screen's API. Mount it behind the normal login.

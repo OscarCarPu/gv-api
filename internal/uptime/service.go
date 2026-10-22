@@ -4,159 +4,104 @@ import (
 	"context"
 	"math"
 	"time"
-
-	"gv-api/internal/pipeline"
 )
 
 const (
-	// defaultLookback is how far back /windows goes when no range is given.
-	defaultLookback = 30 * 24 * time.Hour
-	// DefaultWindowLimit and MaxWindowLimit bound the window list (~400 windows per device a year).
+	BeatEvery = 30 * time.Second
+	Gap       = 90 * time.Second
+
+	defaultLookback    = 30 * 24 * time.Hour
 	DefaultWindowLimit = 1000
 	MaxWindowLimit     = 5000
 )
 
 type Service struct {
 	repo Repository
-	// staleAfter is how old the precomputed numbers may be before they are reported as stale.
-	staleAfter time.Duration
+	now  func() time.Time
 }
 
-func NewService(repo Repository, staleAfter time.Duration) *Service {
-	return &Service{repo: repo, staleAfter: staleAfter}
+func NewService(repo Repository, now func() time.Time) *Service {
+	return &Service{repo: repo, now: now}
 }
 
 func (s *Service) Overview(ctx context.Context) (Overview, error) {
-	states, err := s.repo.CurrentStates(ctx)
+	since, err := s.repo.TrackingStart(ctx)
 	if err != nil {
 		return Overview{}, err
 	}
-	aggregations, err := s.repo.Aggregations(ctx)
+	now := s.now()
+	ranges, err := s.repo.Ranges(ctx, since, now)
 	if err != nil {
 		return Overview{}, err
 	}
 
-	stateByDevice := make(map[Device]CurrentState, len(states))
-	for _, st := range states {
-		stateByDevice[st.Device] = st
-	}
-	rangesByDevice := make(map[Device]map[Lookback]Aggregation, len(Devices))
-	// computedAt is the newest run time present.
-	var computedAt *time.Time
-	for _, a := range aggregations {
-		if rangesByDevice[a.Device] == nil {
-			rangesByDevice[a.Device] = map[Lookback]Aggregation{}
-		}
-		rangesByDevice[a.Device][a.Range] = a
-		if computedAt == nil || a.RangeEnd.After(*computedAt) {
-			end := a.RangeEnd
-			computedAt = &end
+	out := Overview{UpSince: since, Ranges: make([]RangeUptime, 0, len(Lookbacks))}
+	for _, r := range ranges {
+		if r.Kind != KindUp {
+			out.UpSince = r.End
 		}
 	}
-
-	out := Overview{
-		ComputedAt:        computedAt,
-		StaleAfterSeconds: int(s.staleAfter.Seconds()),
-		Devices:           make([]DeviceOverview, 0, len(Devices)),
-	}
-	out.Stale = pipeline.IsStale(computedAt, s.staleAfter)
-
-	// Both devices always appear, in a fixed order.
-	for _, device := range Devices {
-		entry := DeviceOverview{Device: device, State: StateUnknown, Ranges: []RangeUptime{}}
-		if st, ok := stateByDevice[device]; ok {
-			entry.State = st.State
-			since := st.Since
-			entry.Since = &since
+	for _, l := range Lookbacks {
+		from := since
+		if d := l.Duration(); d > 0 && now.Add(-d).After(since) {
+			from = now.Add(-d)
 		}
-		for _, lookback := range Lookbacks {
-			a, ok := rangesByDevice[device][lookback]
-			if !ok {
-				continue
-			}
-			entry.Ranges = append(entry.Ranges, RangeUptime{
-				Range:      lookback,
-				Uptime:     a.Uptime,
-				RangeStart: a.RangeStart,
-				RangeEnd:   a.RangeEnd,
-			})
-		}
-		out.Devices = append(out.Devices, entry)
+		t := total(ranges, from, now)
+		out.Ranges = append(out.Ranges, RangeUptime{
+			Range: l, Uptime: t.percent(),
+			UpSeconds: t.up, DownSeconds: t.down, FailoverSeconds: t.failover,
+			RangeStart: from, RangeEnd: now,
+		})
 	}
 	return out, nil
 }
 
 func (s *Service) Windows(ctx context.Context, q WindowsQuery) (WindowsReport, error) {
-	q, err := s.normalize(q)
+	since, err := s.repo.TrackingStart(ctx)
+	if err != nil {
+		return WindowsReport{}, err
+	}
+	q, err = normalize(q, s.now(), since)
+	if err != nil {
+		return WindowsReport{}, err
+	}
+	ranges, err := s.repo.Ranges(ctx, q.From, q.To)
 	if err != nil {
 		return WindowsReport{}, err
 	}
 
-	stats, err := s.repo.RangeStats(ctx, q.From, q.To, q.Device)
-	if err != nil {
-		return WindowsReport{}, err
+	t := total(ranges, q.From, q.To)
+	report := WindowsReport{
+		From: q.From, To: q.To, Uptime: t.percent(),
+		UpSeconds: t.up, DownSeconds: t.down, FailoverSeconds: t.failover, Outages: t.outages,
+		Windows: []Window{},
 	}
-	rows, err := s.repo.Windows(ctx, q.From, q.To, q.Device, q.Limit)
-	if err != nil {
-		return WindowsReport{}, err
-	}
-
-	// One extra row is fetched to detect truncation; it is not part of the answer.
-	truncated := len(rows) > q.Limit
-	if truncated {
-		rows = rows[:q.Limit]
-	}
-
-	statByDevice := make(map[Device]RangeStat, len(stats))
-	for _, st := range stats {
-		statByDevice[st.Device] = st
-	}
-	windowsByDevice := make(map[Device][]Window, len(Devices))
-	for _, row := range rows {
-		windowsByDevice[row.Device] = append(windowsByDevice[row.Device], Window{
-			State:     row.State,
-			StartTime: row.StartTime,
-			EndTime:   row.EndTime,
-			Seconds:   clippedSeconds(row, q.From, q.To),
-		})
-	}
-
-	report := WindowsReport{From: q.From, To: q.To, Devices: make([]DeviceWindows, 0, len(Devices))}
-	for _, device := range Devices {
-		if q.Device != nil && *q.Device != device {
+	for i := len(ranges) - 1; i >= 0; i-- {
+		start, end := clip(ranges[i], q.From, q.To)
+		if !end.After(start) {
 			continue
 		}
-		entry := DeviceWindows{Device: device, Windows: windowsByDevice[device], Truncated: truncated}
-		if entry.Windows == nil {
-			entry.Windows = []Window{}
+		if len(report.Windows) == q.Limit {
+			report.Truncated = true
+			break
 		}
-		if st, ok := statByDevice[device]; ok {
-			entry.UpSeconds = st.UpSeconds
-			entry.DownSeconds = st.DownSeconds
-			entry.Outages = st.Outages
-			from, to := st.CoveredFrom, st.CoveredTo
-			entry.CoveredFrom, entry.CoveredTo = &from, &to
-			// Divide by what the windows cover, so time before the first event is not downtime.
-			if covered := st.UpSeconds + st.DownSeconds; covered > 0 {
-				// Two decimals, matching the precomputed rows.
-				uptime := math.Round(100*100*st.UpSeconds/covered) / 100
-				entry.Uptime = &uptime
-			}
-		}
-		report.Devices = append(report.Devices, entry)
+		report.Windows = append(report.Windows, Window{
+			Kind: ranges[i].Kind, StartTime: ranges[i].Start, EndTime: ranges[i].End,
+			Seconds: end.Sub(start).Seconds(),
+		})
 	}
 	return report, nil
 }
 
-// normalize fills in the defaults and rejects unservable ranges. `to` is clamped to now, since
-// the open window is counted up to it.
-func (s *Service) normalize(q WindowsQuery) (WindowsQuery, error) {
-	now := time.Now()
+func normalize(q WindowsQuery, now, since time.Time) (WindowsQuery, error) {
 	if q.To.IsZero() || q.To.After(now) {
 		q.To = now
 	}
 	if q.From.IsZero() {
 		q.From = q.To.Add(-defaultLookback)
+	}
+	if q.From.Before(since) {
+		q.From = since
 	}
 	if !q.From.Before(q.To) {
 		return q, ErrInvalidRange
@@ -170,18 +115,48 @@ func (s *Service) normalize(q WindowsQuery) (WindowsQuery, error) {
 	return q, nil
 }
 
-// clippedSeconds is how much of a window falls inside [from, to); an open window runs to `to`.
-func clippedSeconds(row WindowRow, from, to time.Time) float64 {
-	start := row.StartTime
+type totals struct {
+	up, down, failover float64
+	outages            int
+}
+
+func total(ranges []Range, from, to time.Time) totals {
+	var t totals
+	for _, r := range ranges {
+		start, end := clip(r, from, to)
+		seconds := end.Sub(start).Seconds()
+		if seconds <= 0 {
+			continue
+		}
+		switch r.Kind {
+		case KindUp:
+			t.up += seconds
+		case KindDown:
+			t.down += seconds
+			t.outages++
+		case KindFailover:
+			t.failover += seconds
+		}
+	}
+	return t
+}
+
+func (t totals) percent() *float64 {
+	covered := t.up + t.down + t.failover
+	if covered <= 0 {
+		return nil
+	}
+	v := math.Round(100*100*(t.up+t.failover)/covered) / 100
+	return &v
+}
+
+func clip(r Range, from, to time.Time) (time.Time, time.Time) {
+	start, end := r.Start, r.End
 	if start.Before(from) {
 		start = from
 	}
-	end := to
-	if row.EndTime != nil && row.EndTime.Before(to) {
-		end = *row.EndTime
+	if end.After(to) {
+		end = to
 	}
-	if !end.After(start) {
-		return 0
-	}
-	return end.Sub(start).Seconds()
+	return start, end
 }

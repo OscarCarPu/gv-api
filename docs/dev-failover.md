@@ -15,7 +15,8 @@ cd ../gv-web && make up-dev   # the web app on :5173, talking to gv-api on :8080
 2. **Play the Lambda.** `make failover-merge` pushes `hold` and then `merge` to gv-api, with the state at `FAILING_BACK` and the dump key in SSM, as the real Lambda would.
 3. **Use the web app.** While the restore runs, any page redirects to **Report** and the app is locked. When it ends the app opens with the backup server's data, and the **Report** link lists what home had besides (the new rows and the edit of the first task) until you dismiss it.
 4. **Look.** `make failover-status` shows the fake SSM state and what gv-api reports. The old database is kept as `<database>_pre_restore`.
-5. **Reset.** `make failover-finish` puts the state back to NORMAL and clears the dump keys. `make reset` wipes the database to start over.
+5. **Record the failover.** `make failover-outage` plays the Lambda's last step: it sets the state to `HOME_READY` and posts the two instants. The `outages` table then has the `up` row closed at home's last heartbeat, a `down` row and a `failover` row.
+6. **Reset.** `make failover-finish` puts the state back to NORMAL and clears the dump keys. `make reset` wipes the database to start over.
 
 Android: the phone app shows a blocking "Restoring your data" screen while the hold lasts, and leaves it by itself.
 

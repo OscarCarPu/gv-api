@@ -36,6 +36,9 @@ type Config struct {
 	Psql string
 	// Ignore lists, per table, the columns a trigger derives; the report does not compare them.
 	Ignore map[string][]string
+	Skip   []string
+	// LastAlive is called with home's database before it is replaced.
+	LastAlive func(ctx context.Context, home *pgxpool.Pool) (*time.Time, error)
 	// Release closes whatever the application holds open on Home; it runs right before the swap.
 	Release func()
 }
@@ -50,6 +53,7 @@ type Request struct {
 type Outcome struct {
 	// Report is nil when the restore had already been done.
 	Report      *report.Report
+	LastAlive   *time.Time
 	Swapped     bool
 	AlreadyDone bool
 	PreRestore  string
@@ -96,7 +100,7 @@ func (r *Runner) Run(ctx context.Context, req Request) (*Outcome, error) {
 		return nil, err
 	}
 
-	out.Report = r.report(ctx)
+	r.inspect(ctx, out)
 	if r.cfg.Release != nil {
 		r.cfg.Release()
 	}
@@ -110,26 +114,33 @@ func (r *Runner) Run(ctx context.Context, req Request) (*Outcome, error) {
 	return out, nil
 }
 
-func (r *Runner) report(ctx context.Context) *report.Report {
-	rep, err := r.build(ctx)
-	if err != nil {
-		slog.Error("restore: cannot build the report", "error", err)
-		return &report.Report{At: time.Now().UTC(), Items: []report.Item{}, Error: err.Error()}
-	}
-	return rep
-}
-
-func (r *Runner) build(ctx context.Context) (*report.Report, error) {
+func (r *Runner) inspect(ctx context.Context, out *Outcome) {
 	pools, err := r.open(ctx, r.baseDB(), r.cfg.Home, r.ec2DB())
 	if err != nil {
-		return nil, err
+		out.Report = failed(err)
+		return
 	}
 	defer func() {
 		for _, p := range pools {
 			p.Close()
 		}
 	}()
-	return report.Build(ctx, pools[0], pools[1], pools[2], r.cfg.Ignore)
+
+	if r.cfg.LastAlive != nil {
+		if out.LastAlive, err = r.cfg.LastAlive(ctx, pools[1]); err != nil {
+			slog.Warn("restore: cannot read home's last heartbeat", "error", err)
+		}
+	}
+	rep, err := report.Build(ctx, pools[0], pools[1], pools[2], report.Options{Ignore: r.cfg.Ignore, Skip: r.cfg.Skip})
+	if err != nil {
+		rep = failed(err)
+	}
+	out.Report = rep
+}
+
+func failed(err error) *report.Report {
+	slog.Error("restore: cannot build the report", "error", err)
+	return &report.Report{At: time.Now().UTC(), Items: []report.Item{}, Error: err.Error()}
 }
 
 // verify reads the whole gzip stream, so a truncated download is caught before anything changes.

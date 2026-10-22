@@ -24,25 +24,180 @@ func (_m *MockRepository) EXPECT() *MockRepository_Expecter {
 	return &MockRepository_Expecter{mock: &_m.Mock}
 }
 
-// Aggregations provides a mock function with given fields: ctx
-func (_m *MockRepository) Aggregations(ctx context.Context) ([]uptime.Aggregation, error) {
+// Beat provides a mock function with given fields: ctx, now, gap
+func (_m *MockRepository) Beat(ctx context.Context, now time.Time, gap time.Duration) error {
+	ret := _m.Called(ctx, now, gap)
+
+	if len(ret) == 0 {
+		panic("no return value specified for Beat")
+	}
+
+	var r0 error
+	if rf, ok := ret.Get(0).(func(context.Context, time.Time, time.Duration) error); ok {
+		r0 = rf(ctx, now, gap)
+	} else {
+		r0 = ret.Error(0)
+	}
+
+	return r0
+}
+
+// MockRepository_Beat_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'Beat'
+type MockRepository_Beat_Call struct {
+	*mock.Call
+}
+
+// Beat is a helper method to define mock.On call
+//   - ctx context.Context
+//   - now time.Time
+//   - gap time.Duration
+func (_e *MockRepository_Expecter) Beat(ctx interface{}, now interface{}, gap interface{}) *MockRepository_Beat_Call {
+	return &MockRepository_Beat_Call{Call: _e.mock.On("Beat", ctx, now, gap)}
+}
+
+func (_c *MockRepository_Beat_Call) Run(run func(ctx context.Context, now time.Time, gap time.Duration)) *MockRepository_Beat_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].(context.Context), args[1].(time.Time), args[2].(time.Duration))
+	})
+	return _c
+}
+
+func (_c *MockRepository_Beat_Call) Return(_a0 error) *MockRepository_Beat_Call {
+	_c.Call.Return(_a0)
+	return _c
+}
+
+func (_c *MockRepository_Beat_Call) RunAndReturn(run func(context.Context, time.Time, time.Duration) error) *MockRepository_Beat_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// Ranges provides a mock function with given fields: ctx, from, to
+func (_m *MockRepository) Ranges(ctx context.Context, from time.Time, to time.Time) ([]uptime.Range, error) {
+	ret := _m.Called(ctx, from, to)
+
+	if len(ret) == 0 {
+		panic("no return value specified for Ranges")
+	}
+
+	var r0 []uptime.Range
+	var r1 error
+	if rf, ok := ret.Get(0).(func(context.Context, time.Time, time.Time) ([]uptime.Range, error)); ok {
+		return rf(ctx, from, to)
+	}
+	if rf, ok := ret.Get(0).(func(context.Context, time.Time, time.Time) []uptime.Range); ok {
+		r0 = rf(ctx, from, to)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).([]uptime.Range)
+		}
+	}
+
+	if rf, ok := ret.Get(1).(func(context.Context, time.Time, time.Time) error); ok {
+		r1 = rf(ctx, from, to)
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
+}
+
+// MockRepository_Ranges_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'Ranges'
+type MockRepository_Ranges_Call struct {
+	*mock.Call
+}
+
+// Ranges is a helper method to define mock.On call
+//   - ctx context.Context
+//   - from time.Time
+//   - to time.Time
+func (_e *MockRepository_Expecter) Ranges(ctx interface{}, from interface{}, to interface{}) *MockRepository_Ranges_Call {
+	return &MockRepository_Ranges_Call{Call: _e.mock.On("Ranges", ctx, from, to)}
+}
+
+func (_c *MockRepository_Ranges_Call) Run(run func(ctx context.Context, from time.Time, to time.Time)) *MockRepository_Ranges_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].(context.Context), args[1].(time.Time), args[2].(time.Time))
+	})
+	return _c
+}
+
+func (_c *MockRepository_Ranges_Call) Return(_a0 []uptime.Range, _a1 error) *MockRepository_Ranges_Call {
+	_c.Call.Return(_a0, _a1)
+	return _c
+}
+
+func (_c *MockRepository_Ranges_Call) RunAndReturn(run func(context.Context, time.Time, time.Time) ([]uptime.Range, error)) *MockRepository_Ranges_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// RecordFailover provides a mock function with given fields: ctx, lastAlive, ec2UpAt, homeAt
+func (_m *MockRepository) RecordFailover(ctx context.Context, lastAlive *time.Time, ec2UpAt time.Time, homeAt time.Time) error {
+	ret := _m.Called(ctx, lastAlive, ec2UpAt, homeAt)
+
+	if len(ret) == 0 {
+		panic("no return value specified for RecordFailover")
+	}
+
+	var r0 error
+	if rf, ok := ret.Get(0).(func(context.Context, *time.Time, time.Time, time.Time) error); ok {
+		r0 = rf(ctx, lastAlive, ec2UpAt, homeAt)
+	} else {
+		r0 = ret.Error(0)
+	}
+
+	return r0
+}
+
+// MockRepository_RecordFailover_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'RecordFailover'
+type MockRepository_RecordFailover_Call struct {
+	*mock.Call
+}
+
+// RecordFailover is a helper method to define mock.On call
+//   - ctx context.Context
+//   - lastAlive *time.Time
+//   - ec2UpAt time.Time
+//   - homeAt time.Time
+func (_e *MockRepository_Expecter) RecordFailover(ctx interface{}, lastAlive interface{}, ec2UpAt interface{}, homeAt interface{}) *MockRepository_RecordFailover_Call {
+	return &MockRepository_RecordFailover_Call{Call: _e.mock.On("RecordFailover", ctx, lastAlive, ec2UpAt, homeAt)}
+}
+
+func (_c *MockRepository_RecordFailover_Call) Run(run func(ctx context.Context, lastAlive *time.Time, ec2UpAt time.Time, homeAt time.Time)) *MockRepository_RecordFailover_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].(context.Context), args[1].(*time.Time), args[2].(time.Time), args[3].(time.Time))
+	})
+	return _c
+}
+
+func (_c *MockRepository_RecordFailover_Call) Return(_a0 error) *MockRepository_RecordFailover_Call {
+	_c.Call.Return(_a0)
+	return _c
+}
+
+func (_c *MockRepository_RecordFailover_Call) RunAndReturn(run func(context.Context, *time.Time, time.Time, time.Time) error) *MockRepository_RecordFailover_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// TrackingStart provides a mock function with given fields: ctx
+func (_m *MockRepository) TrackingStart(ctx context.Context) (time.Time, error) {
 	ret := _m.Called(ctx)
 
 	if len(ret) == 0 {
-		panic("no return value specified for Aggregations")
+		panic("no return value specified for TrackingStart")
 	}
 
-	var r0 []uptime.Aggregation
+	var r0 time.Time
 	var r1 error
-	if rf, ok := ret.Get(0).(func(context.Context) ([]uptime.Aggregation, error)); ok {
+	if rf, ok := ret.Get(0).(func(context.Context) (time.Time, error)); ok {
 		return rf(ctx)
 	}
-	if rf, ok := ret.Get(0).(func(context.Context) []uptime.Aggregation); ok {
+	if rf, ok := ret.Get(0).(func(context.Context) time.Time); ok {
 		r0 = rf(ctx)
 	} else {
-		if ret.Get(0) != nil {
-			r0 = ret.Get(0).([]uptime.Aggregation)
-		}
+		r0 = ret.Get(0).(time.Time)
 	}
 
 	if rf, ok := ret.Get(1).(func(context.Context) error); ok {
@@ -54,211 +209,30 @@ func (_m *MockRepository) Aggregations(ctx context.Context) ([]uptime.Aggregatio
 	return r0, r1
 }
 
-// MockRepository_Aggregations_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'Aggregations'
-type MockRepository_Aggregations_Call struct {
+// MockRepository_TrackingStart_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'TrackingStart'
+type MockRepository_TrackingStart_Call struct {
 	*mock.Call
 }
 
-// Aggregations is a helper method to define mock.On call
+// TrackingStart is a helper method to define mock.On call
 //   - ctx context.Context
-func (_e *MockRepository_Expecter) Aggregations(ctx interface{}) *MockRepository_Aggregations_Call {
-	return &MockRepository_Aggregations_Call{Call: _e.mock.On("Aggregations", ctx)}
+func (_e *MockRepository_Expecter) TrackingStart(ctx interface{}) *MockRepository_TrackingStart_Call {
+	return &MockRepository_TrackingStart_Call{Call: _e.mock.On("TrackingStart", ctx)}
 }
 
-func (_c *MockRepository_Aggregations_Call) Run(run func(ctx context.Context)) *MockRepository_Aggregations_Call {
+func (_c *MockRepository_TrackingStart_Call) Run(run func(ctx context.Context)) *MockRepository_TrackingStart_Call {
 	_c.Call.Run(func(args mock.Arguments) {
 		run(args[0].(context.Context))
 	})
 	return _c
 }
 
-func (_c *MockRepository_Aggregations_Call) Return(_a0 []uptime.Aggregation, _a1 error) *MockRepository_Aggregations_Call {
+func (_c *MockRepository_TrackingStart_Call) Return(_a0 time.Time, _a1 error) *MockRepository_TrackingStart_Call {
 	_c.Call.Return(_a0, _a1)
 	return _c
 }
 
-func (_c *MockRepository_Aggregations_Call) RunAndReturn(run func(context.Context) ([]uptime.Aggregation, error)) *MockRepository_Aggregations_Call {
-	_c.Call.Return(run)
-	return _c
-}
-
-// CurrentStates provides a mock function with given fields: ctx
-func (_m *MockRepository) CurrentStates(ctx context.Context) ([]uptime.CurrentState, error) {
-	ret := _m.Called(ctx)
-
-	if len(ret) == 0 {
-		panic("no return value specified for CurrentStates")
-	}
-
-	var r0 []uptime.CurrentState
-	var r1 error
-	if rf, ok := ret.Get(0).(func(context.Context) ([]uptime.CurrentState, error)); ok {
-		return rf(ctx)
-	}
-	if rf, ok := ret.Get(0).(func(context.Context) []uptime.CurrentState); ok {
-		r0 = rf(ctx)
-	} else {
-		if ret.Get(0) != nil {
-			r0 = ret.Get(0).([]uptime.CurrentState)
-		}
-	}
-
-	if rf, ok := ret.Get(1).(func(context.Context) error); ok {
-		r1 = rf(ctx)
-	} else {
-		r1 = ret.Error(1)
-	}
-
-	return r0, r1
-}
-
-// MockRepository_CurrentStates_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'CurrentStates'
-type MockRepository_CurrentStates_Call struct {
-	*mock.Call
-}
-
-// CurrentStates is a helper method to define mock.On call
-//   - ctx context.Context
-func (_e *MockRepository_Expecter) CurrentStates(ctx interface{}) *MockRepository_CurrentStates_Call {
-	return &MockRepository_CurrentStates_Call{Call: _e.mock.On("CurrentStates", ctx)}
-}
-
-func (_c *MockRepository_CurrentStates_Call) Run(run func(ctx context.Context)) *MockRepository_CurrentStates_Call {
-	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].(context.Context))
-	})
-	return _c
-}
-
-func (_c *MockRepository_CurrentStates_Call) Return(_a0 []uptime.CurrentState, _a1 error) *MockRepository_CurrentStates_Call {
-	_c.Call.Return(_a0, _a1)
-	return _c
-}
-
-func (_c *MockRepository_CurrentStates_Call) RunAndReturn(run func(context.Context) ([]uptime.CurrentState, error)) *MockRepository_CurrentStates_Call {
-	_c.Call.Return(run)
-	return _c
-}
-
-// RangeStats provides a mock function with given fields: ctx, from, to, device
-func (_m *MockRepository) RangeStats(ctx context.Context, from time.Time, to time.Time, device *uptime.Device) ([]uptime.RangeStat, error) {
-	ret := _m.Called(ctx, from, to, device)
-
-	if len(ret) == 0 {
-		panic("no return value specified for RangeStats")
-	}
-
-	var r0 []uptime.RangeStat
-	var r1 error
-	if rf, ok := ret.Get(0).(func(context.Context, time.Time, time.Time, *uptime.Device) ([]uptime.RangeStat, error)); ok {
-		return rf(ctx, from, to, device)
-	}
-	if rf, ok := ret.Get(0).(func(context.Context, time.Time, time.Time, *uptime.Device) []uptime.RangeStat); ok {
-		r0 = rf(ctx, from, to, device)
-	} else {
-		if ret.Get(0) != nil {
-			r0 = ret.Get(0).([]uptime.RangeStat)
-		}
-	}
-
-	if rf, ok := ret.Get(1).(func(context.Context, time.Time, time.Time, *uptime.Device) error); ok {
-		r1 = rf(ctx, from, to, device)
-	} else {
-		r1 = ret.Error(1)
-	}
-
-	return r0, r1
-}
-
-// MockRepository_RangeStats_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'RangeStats'
-type MockRepository_RangeStats_Call struct {
-	*mock.Call
-}
-
-// RangeStats is a helper method to define mock.On call
-//   - ctx context.Context
-//   - from time.Time
-//   - to time.Time
-//   - device *uptime.Device
-func (_e *MockRepository_Expecter) RangeStats(ctx interface{}, from interface{}, to interface{}, device interface{}) *MockRepository_RangeStats_Call {
-	return &MockRepository_RangeStats_Call{Call: _e.mock.On("RangeStats", ctx, from, to, device)}
-}
-
-func (_c *MockRepository_RangeStats_Call) Run(run func(ctx context.Context, from time.Time, to time.Time, device *uptime.Device)) *MockRepository_RangeStats_Call {
-	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].(context.Context), args[1].(time.Time), args[2].(time.Time), args[3].(*uptime.Device))
-	})
-	return _c
-}
-
-func (_c *MockRepository_RangeStats_Call) Return(_a0 []uptime.RangeStat, _a1 error) *MockRepository_RangeStats_Call {
-	_c.Call.Return(_a0, _a1)
-	return _c
-}
-
-func (_c *MockRepository_RangeStats_Call) RunAndReturn(run func(context.Context, time.Time, time.Time, *uptime.Device) ([]uptime.RangeStat, error)) *MockRepository_RangeStats_Call {
-	_c.Call.Return(run)
-	return _c
-}
-
-// Windows provides a mock function with given fields: ctx, from, to, device, limit
-func (_m *MockRepository) Windows(ctx context.Context, from time.Time, to time.Time, device *uptime.Device, limit int) ([]uptime.WindowRow, error) {
-	ret := _m.Called(ctx, from, to, device, limit)
-
-	if len(ret) == 0 {
-		panic("no return value specified for Windows")
-	}
-
-	var r0 []uptime.WindowRow
-	var r1 error
-	if rf, ok := ret.Get(0).(func(context.Context, time.Time, time.Time, *uptime.Device, int) ([]uptime.WindowRow, error)); ok {
-		return rf(ctx, from, to, device, limit)
-	}
-	if rf, ok := ret.Get(0).(func(context.Context, time.Time, time.Time, *uptime.Device, int) []uptime.WindowRow); ok {
-		r0 = rf(ctx, from, to, device, limit)
-	} else {
-		if ret.Get(0) != nil {
-			r0 = ret.Get(0).([]uptime.WindowRow)
-		}
-	}
-
-	if rf, ok := ret.Get(1).(func(context.Context, time.Time, time.Time, *uptime.Device, int) error); ok {
-		r1 = rf(ctx, from, to, device, limit)
-	} else {
-		r1 = ret.Error(1)
-	}
-
-	return r0, r1
-}
-
-// MockRepository_Windows_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'Windows'
-type MockRepository_Windows_Call struct {
-	*mock.Call
-}
-
-// Windows is a helper method to define mock.On call
-//   - ctx context.Context
-//   - from time.Time
-//   - to time.Time
-//   - device *uptime.Device
-//   - limit int
-func (_e *MockRepository_Expecter) Windows(ctx interface{}, from interface{}, to interface{}, device interface{}, limit interface{}) *MockRepository_Windows_Call {
-	return &MockRepository_Windows_Call{Call: _e.mock.On("Windows", ctx, from, to, device, limit)}
-}
-
-func (_c *MockRepository_Windows_Call) Run(run func(ctx context.Context, from time.Time, to time.Time, device *uptime.Device, limit int)) *MockRepository_Windows_Call {
-	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].(context.Context), args[1].(time.Time), args[2].(time.Time), args[3].(*uptime.Device), args[4].(int))
-	})
-	return _c
-}
-
-func (_c *MockRepository_Windows_Call) Return(_a0 []uptime.WindowRow, _a1 error) *MockRepository_Windows_Call {
-	_c.Call.Return(_a0, _a1)
-	return _c
-}
-
-func (_c *MockRepository_Windows_Call) RunAndReturn(run func(context.Context, time.Time, time.Time, *uptime.Device, int) ([]uptime.WindowRow, error)) *MockRepository_Windows_Call {
+func (_c *MockRepository_TrackingStart_Call) RunAndReturn(run func(context.Context) (time.Time, error)) *MockRepository_TrackingStart_Call {
 	_c.Call.Return(run)
 	return _c
 }

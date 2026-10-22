@@ -65,9 +65,22 @@ func build(t *testing.T, homeSQL, ec2SQL string) *report.Report {
 	exec(t, home, homeSQL)
 	exec(t, ec2, ec2SQL)
 
-	rep, err := report.Build(context.Background(), base, home, ec2, ignore)
+	rep, err := report.Build(context.Background(), base, home, ec2, report.Options{Ignore: ignore})
 	require.NoError(t, err)
 	return rep
+}
+
+func TestBuild_SkipsTheTablesItIsTold(t *testing.T) {
+	base, home, ec2 := newDB(t, "base"), newDB(t, "home"), newDB(t, "ec2")
+	for _, db := range []*pgxpool.Pool{base, home, ec2} {
+		exec(t, db, miniSchema)
+	}
+	exec(t, home, `INSERT INTO parents (name) VALUES ('home-new')`)
+
+	rep, err := report.Build(context.Background(), base, home, ec2, report.Options{Skip: []string{"parents"}})
+
+	require.NoError(t, err)
+	assert.Empty(t, find(rep, "parents", "insert"))
 }
 
 func find(rep *report.Report, table, op string) []report.Item {
