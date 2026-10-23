@@ -57,6 +57,7 @@ Todos toggle `is_done`. Time entries are open until `finished_at` is set; only f
 - All tasks draw from one shared pool of free hours. Work order is priority, then soonest effective due date, then soonest last usable day, then more remaining hours first, then higher ID; filling backwards reverses it, so lower priority and later deadlines claim first and the most important work lands closest to today.
 - When the pool runs out, a task's start is squeezed to today and so is its dependencies' last usable day, which would tie unrelated chains. The effective due date is compared first, so a chain due the 12th goes before one due the 18th however squeezed their last days are.
 - Each task gets `start_by` (the day its hours are covered), `urgent = start_by <= today`, `finish_by` and `work_order` (1 = first).
+- Each task also gets `dependency_hours`: for every direct dependency, its own `remaining_hours` and `cumulative_hours` (its own plus all its transitive dependencies, each counted once; a dependency missing from the list counts as zero).
 
 **Task dependencies**
 - `depends_on` (task IDs) on create/update replaces all dependencies; omitted leaves them. Finished tasks are silently ignored.

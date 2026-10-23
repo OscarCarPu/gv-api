@@ -774,6 +774,44 @@ func TestService_GetTasksByDueDate_AllEstimatedTasksOverdue(t *testing.T) {
 	assert.Nil(t, got[1].StartBy)
 }
 
+func TestService_GetTasksByDueDate_DependencyHours(t *testing.T) {
+	loc, err := time.LoadLocation("Europe/Madrid")
+	require.NoError(t, err)
+
+	now := time.Now().In(loc)
+	due := time.Date(now.Year(), now.Month(), now.Day()+30, 0, 0, 0, 0, time.UTC)
+	two, three, four := decimal.RequireFromString("2"), decimal.RequireFromString("3"), decimal.RequireFromString("4")
+
+	repo := mocks.NewMockRepository(t)
+	repo.EXPECT().
+		GetTasksByDueDate(mock.Anything).
+		Return([]tasks.TaskByDueDateResponse{
+			{ID: 1, Name: "A", TaskType: "standard", DueAt: &due, EstimateHours: &two,
+				Blocks: []tasks.TaskDepRef{{ID: 2}}},
+			{ID: 2, Name: "B", TaskType: "standard", DueAt: &due, EstimateHours: &three, Blocked: true,
+				DependsOn: []tasks.TaskDepRef{{ID: 1, Name: "A"}}, Blocks: []tasks.TaskDepRef{{ID: 3}}},
+			{ID: 3, Name: "C", TaskType: "standard", DueAt: &due, EstimateHours: &four, Blocked: true,
+				DependsOn: []tasks.TaskDepRef{{ID: 2, Name: "B"}}},
+		}, nil)
+
+	svc := newTestService(repo, loc)
+	svc.SetUrgencyProviders(
+		capacity.NewService(decimal.RequireFromString("8"), stubBusyProvider{}),
+		stubPlannedHoursProvider{},
+	)
+
+	got, err := svc.GetTasksByDueDate(context.Background(), nil)
+	require.NoError(t, err)
+	require.Len(t, got, 3)
+
+	assert.Empty(t, got[0].DependencyHours)
+	require.Len(t, got[2].DependencyHours, 1)
+	dep := got[2].DependencyHours[0]
+	assert.Equal(t, int32(2), dep.ID)
+	assert.True(t, dep.RemainingHours.Equal(three), "own hours of B")
+	assert.True(t, dep.CumulativeHours.Equal(decimal.RequireFromString("5")), "B plus A upstream")
+}
+
 type stubBusyProvider struct{}
 
 func (stubBusyProvider) BusyHoursByDate(_ context.Context, _, _ time.Time) (map[string]decimal.Decimal, error) {

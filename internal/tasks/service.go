@@ -302,6 +302,8 @@ func (s *Service) GetTasksByDueDate(ctx context.Context, minPriority *int32) ([]
 		return nil, err
 	}
 
+	applyDependencyHours(rows)
+
 	visible := make([]TaskByDueDateResponse, 0, len(rows))
 	for i, t := range rows {
 		t.EffectivePriority = priority[i]
@@ -311,6 +313,50 @@ func (s *Service) GetTasksByDueDate(ctx context.Context, minPriority *int32) ([]
 		visible = append(visible, t)
 	}
 	return visible, nil
+}
+
+func applyDependencyHours(rows []TaskByDueDateResponse) {
+	byID := make(map[int32]int, len(rows))
+	for i, t := range rows {
+		byID[t.ID] = i
+	}
+	own := func(id int32) decimal.Decimal {
+		if i, ok := byID[id]; ok && rows[i].RemainingHours != nil {
+			return *rows[i].RemainingHours
+		}
+		return decimal.Zero
+	}
+	cumulative := func(id int32) decimal.Decimal {
+		seen := map[int32]bool{}
+		total := decimal.Zero
+		var walk func(id int32)
+		walk = func(id int32) {
+			if seen[id] {
+				return
+			}
+			seen[id] = true
+			total = total.Add(own(id))
+			if i, ok := byID[id]; ok {
+				for _, d := range rows[i].DependsOn {
+					walk(d.ID)
+				}
+			}
+		}
+		walk(id)
+		return total
+	}
+	for i := range rows {
+		rows[i].DependencyHours = make([]DepRemaining, 0, len(rows[i].DependsOn))
+		for _, d := range rows[i].DependsOn {
+			rows[i].DependencyHours = append(rows[i].DependencyHours, DepRemaining{
+				ID:              d.ID,
+				Name:            d.Name,
+				DueAt:           d.DueAt,
+				RemainingHours:  own(d.ID),
+				CumulativeHours: cumulative(d.ID),
+			})
+		}
+	}
 }
 
 func (s *Service) GetDueSoonSlack(ctx context.Context) (DueSoonSlackResponse, error) {
