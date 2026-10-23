@@ -325,7 +325,6 @@ type TaskFullResponse struct {
 type DepRemaining struct {
 	ID              int32           `json:"id"`
 	Name            string          `json:"name"`
-	DueAt           *string         `json:"due_at"`
 	RemainingHours  decimal.Decimal `json:"remaining_hours"`
 	CumulativeHours decimal.Decimal `json:"cumulative_hours"`
 }
@@ -352,15 +351,15 @@ type TaskByDueDateResponse struct {
 	// FinishBy is the due date, or earlier when a blocked task must start sooner.
 	FinishBy *string `json:"finish_by"`
 	// WorkOrder is the 1-based position in work order. Only set when urgency was computed.
-	WorkOrder       *int32         `json:"work_order"`
-	Urgent          bool           `json:"urgent"`
-	ProjectID       *int32         `json:"project_id"`
-	ProjectName     *string        `json:"project_name"`
-	ProjectDueAt    *time.Time     `json:"project_due_at"`
-	DependsOn       []TaskDepRef   `json:"depends_on"`
-	DependencyHours []DepRemaining `json:"dependency_hours"`
-	Blocks          []TaskDepRef   `json:"blocks"`
-	Blocked         bool           `json:"blocked"`
+	WorkOrder      *int32         `json:"work_order"`
+	Urgent         bool           `json:"urgent"`
+	ProjectID      *int32         `json:"project_id"`
+	ProjectName    *string        `json:"project_name"`
+	ProjectDueAt   *time.Time     `json:"project_due_at"`
+	DependsOn      []TaskDepRef   `json:"depends_on"`
+	DependentHours []DepRemaining `json:"dependent_hours"`
+	Blocks         []TaskDepRef   `json:"blocks"`
+	Blocked        bool           `json:"blocked"`
 }
 
 type TimeEntrySummaryResponse struct {

@@ -302,7 +302,7 @@ func (s *Service) GetTasksByDueDate(ctx context.Context, minPriority *int32) ([]
 		return nil, err
 	}
 
-	applyDependencyHours(rows)
+	applyDependentHours(rows)
 
 	visible := make([]TaskByDueDateResponse, 0, len(rows))
 	for i, t := range rows {
@@ -315,45 +315,64 @@ func (s *Service) GetTasksByDueDate(ctx context.Context, minPriority *int32) ([]
 	return visible, nil
 }
 
-func applyDependencyHours(rows []TaskByDueDateResponse) {
+func applyDependentHours(rows []TaskByDueDateResponse) {
 	byID := make(map[int32]int, len(rows))
 	for i, t := range rows {
 		byID[t.ID] = i
 	}
-	own := func(id int32) decimal.Decimal {
-		if i, ok := byID[id]; ok && rows[i].RemainingHours != nil {
+	own := func(i int) decimal.Decimal {
+		if rows[i].RemainingHours != nil {
 			return *rows[i].RemainingHours
 		}
 		return decimal.Zero
 	}
-	cumulative := func(id int32) decimal.Decimal {
-		seen := map[int32]bool{}
+	cumulative := func(start int) decimal.Decimal {
+		seen := map[int]bool{}
 		total := decimal.Zero
-		var walk func(id int32)
-		walk = func(id int32) {
-			if seen[id] {
+		var walk func(i int)
+		walk = func(i int) {
+			if seen[i] {
 				return
 			}
-			seen[id] = true
-			total = total.Add(own(id))
-			if i, ok := byID[id]; ok {
-				for _, d := range rows[i].DependsOn {
-					walk(d.ID)
+			seen[i] = true
+			total = total.Add(own(i))
+			for _, d := range rows[i].DependsOn {
+				if j, ok := byID[d.ID]; ok {
+					walk(j)
 				}
 			}
 		}
-		walk(id)
+		walk(start)
 		return total
 	}
 	for i := range rows {
-		rows[i].DependencyHours = make([]DepRemaining, 0, len(rows[i].DependsOn))
-		for _, d := range rows[i].DependsOn {
-			rows[i].DependencyHours = append(rows[i].DependencyHours, DepRemaining{
-				ID:              d.ID,
-				Name:            d.Name,
-				DueAt:           d.DueAt,
-				RemainingHours:  own(d.ID),
-				CumulativeHours: cumulative(d.ID),
+		seen := map[int]bool{}
+		var downstream []int
+		var walk func(k int)
+		walk = func(k int) {
+			for _, b := range rows[k].Blocks {
+				if j, ok := byID[b.ID]; ok && !seen[j] && j != i {
+					seen[j] = true
+					downstream = append(downstream, j)
+					walk(j)
+				}
+			}
+		}
+		walk(i)
+		sort.SliceStable(downstream, func(a, b int) bool {
+			wa, wb := rows[downstream[a]].WorkOrder, rows[downstream[b]].WorkOrder
+			if wa == nil || wb == nil {
+				return false
+			}
+			return *wa < *wb
+		})
+		rows[i].DependentHours = make([]DepRemaining, 0, len(downstream))
+		for _, j := range downstream {
+			rows[i].DependentHours = append(rows[i].DependentHours, DepRemaining{
+				ID:              rows[j].ID,
+				Name:            rows[j].Name,
+				RemainingHours:  own(j),
+				CumulativeHours: cumulative(j),
 			})
 		}
 	}

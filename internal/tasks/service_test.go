@@ -774,7 +774,7 @@ func TestService_GetTasksByDueDate_AllEstimatedTasksOverdue(t *testing.T) {
 	assert.Nil(t, got[1].StartBy)
 }
 
-func TestService_GetTasksByDueDate_DependencyHours(t *testing.T) {
+func TestService_GetTasksByDueDate_DependentHours(t *testing.T) {
 	loc, err := time.LoadLocation("Europe/Madrid")
 	require.NoError(t, err)
 
@@ -804,12 +804,15 @@ func TestService_GetTasksByDueDate_DependencyHours(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, got, 3)
 
-	assert.Empty(t, got[0].DependencyHours)
-	require.Len(t, got[2].DependencyHours, 1)
-	dep := got[2].DependencyHours[0]
-	assert.Equal(t, int32(2), dep.ID)
-	assert.True(t, dep.RemainingHours.Equal(three), "own hours of B")
-	assert.True(t, dep.CumulativeHours.Equal(decimal.RequireFromString("5")), "B plus A upstream")
+	assert.Empty(t, got[2].DependentHours)
+	require.Len(t, got[0].DependentHours, 2)
+	b, c := got[0].DependentHours[0], got[0].DependentHours[1]
+	assert.Equal(t, int32(2), b.ID)
+	assert.True(t, b.RemainingHours.Equal(three), "own hours of B")
+	assert.True(t, b.CumulativeHours.Equal(decimal.RequireFromString("5")), "A plus B")
+	assert.Equal(t, int32(3), c.ID)
+	assert.True(t, c.RemainingHours.Equal(four), "own hours of C")
+	assert.True(t, c.CumulativeHours.Equal(decimal.RequireFromString("9")), "A plus B plus C")
 }
 
 type stubBusyProvider struct{}

@@ -238,13 +238,13 @@ See [README](README.md) for shared `task_type` / `recurrence` / `priority` seman
         "project_name": "My Project",
         "project_due_at": "2025-12-31",
         "depends_on": [{"id": 2, "name": "Blocking Task", "due_at": null}],
-        "dependency_hours": [{"id": 2, "name": "Blocking Task", "due_at": null, "remaining_hours": "3", "cumulative_hours": "5"}],
+        "dependent_hours": [{"id": 4, "name": "Dep A", "remaining_hours": "3", "cumulative_hours": "7.5"}, {"id": 5, "name": "Dep B", "remaining_hours": "2", "cumulative_hours": "9.5"}],
         "blocks": [{"id": 4, "name": "Dep A", "due_at": null}, {"id": 5, "name": "Dep B", "due_at": null}],
         "blocked": true
       }
     ]
     ```
-  - `dependency_hours`: `depends_on` with the hours still owed on each (`[]` when nothing blocks the task). `remaining_hours` is the dependency's own; `cumulative_hours` adds everything it transitively depends on, each task counted once. A dependency that is not in the result, or has no estimate, counts as `0`.
+  - `dependent_hours`: everything this task transitively blocks, in work order (`[]` when it blocks nothing). `remaining_hours` is that task's own; `cumulative_hours` is its own plus everything it transitively depends on (this task included), each counted once. A task with no estimate counts as `0`.
   - `effective_priority`: `priority` raised to the highest priority of anything the task transitively blocks.
   - `remaining_hours`, `start_by`: `null` unless the task is `standard` with an estimate.
   - `finish_by`: the due date, or earlier when a task it blocks must start first. `work_order`: position in the order work should be done (1 = first).
