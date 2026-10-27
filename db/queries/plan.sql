@@ -141,9 +141,9 @@ GROUP BY days.day
 ORDER BY days.day;
 
 -- name: SumPlannedHoursByTask :many
--- Hours still ahead in the plan for each task (ended_at > @from_ts).
+-- Hours still ahead in the plan for each task: a block already under way counts only from @from_ts.
 SELECT task_id,
-       SUM(EXTRACT(EPOCH FROM (ended_at - started_at)) / 3600.0)::numeric AS hours
+       SUM(EXTRACT(EPOCH FROM (ended_at - GREATEST(started_at, @from_ts::timestamptz))) / 3600.0)::numeric AS hours
 FROM plan_blocks
 WHERE task_id = ANY(@task_ids::int[]) AND ended_at > @from_ts::timestamptz
 GROUP BY task_id;

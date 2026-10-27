@@ -144,6 +144,25 @@ func TestIntegration_SumPlannedHoursByTask_ExcludesPastBlocks(t *testing.T) {
 	assert.True(t, planned[taskID].Equal(decimalFromFloat(3)), "only the future block should count, got %s", planned[taskID])
 }
 
+func TestIntegration_SumPlannedHoursByTask_ClipsBlockUnderWay(t *testing.T) {
+	repo, taskRepo := newPlanRepo(t)
+	ctx := context.Background()
+	loc := madrid(t)
+	taskID := mustCreateTask(t, taskRepo, "Write report")
+
+	now := time.Now().In(loc)
+	start := now.Add(-time.Hour)
+
+	_, err := repo.Create(ctx, plan.CreatePlanBlockParams{
+		PlanDate: start, StartedAt: start, EndedAt: now.Add(2 * time.Hour), TaskID: &taskID, Label: "running",
+	})
+	require.NoError(t, err)
+
+	planned, err := repo.SumPlannedHoursByTask(ctx, []int32{taskID}, now)
+	require.NoError(t, err)
+	assert.True(t, planned[taskID].Sub(decimalFromFloat(2)).Abs().LessThan(decimalFromFloat(0.01)), "only the 2h still ahead should count, got %s", planned[taskID])
+}
+
 func TestIntegration_EnsureRecurringBlocks_GeneratesAndRespectsSkips(t *testing.T) {
 	repo, taskRepo := newPlanRepo(t)
 	ctx := context.Background()

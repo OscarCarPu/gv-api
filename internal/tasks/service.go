@@ -520,7 +520,7 @@ func (s *Service) applyUrgency(ctx context.Context, rows []TaskByDueDateResponse
 		freeByDate[todayStr] = decimal.Max(decimal.Min(freeByDate[todayStr], left), decimal.Zero)
 	}
 
-	plannedByTask, err := s.plan.PlannedHoursByTask(ctx, estimatedIDs, today)
+	plannedByTask, err := s.plan.PlannedHoursByTask(ctx, estimatedIDs, s.clock())
 	if err != nil {
 		return 0, err
 	}

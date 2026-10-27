@@ -764,15 +764,15 @@ func (q *Queries) SumBusyHoursByDate(ctx context.Context, arg SumBusyHoursByDate
 
 const sumPlannedHoursByTask = `-- name: SumPlannedHoursByTask :many
 SELECT task_id,
-       SUM(EXTRACT(EPOCH FROM (ended_at - started_at)) / 3600.0)::numeric AS hours
+       SUM(EXTRACT(EPOCH FROM (ended_at - GREATEST(started_at, $1::timestamptz))) / 3600.0)::numeric AS hours
 FROM plan_blocks
-WHERE task_id = ANY($1::int[]) AND ended_at > $2::timestamptz
+WHERE task_id = ANY($2::int[]) AND ended_at > $1::timestamptz
 GROUP BY task_id
 `
 
 type SumPlannedHoursByTaskParams struct {
-	TaskIds []int32            `db:"task_ids" json:"task_ids"`
 	FromTs  pgtype.Timestamptz `db:"from_ts" json:"from_ts"`
+	TaskIds []int32            `db:"task_ids" json:"task_ids"`
 }
 
 type SumPlannedHoursByTaskRow struct {
@@ -780,9 +780,9 @@ type SumPlannedHoursByTaskRow struct {
 	Hours  decimal.Decimal `db:"hours" json:"hours"`
 }
 
-// Hours still ahead in the plan for each task (ended_at > @from_ts).
+// Hours still ahead in the plan for each task: a block already under way counts only from @from_ts.
 func (q *Queries) SumPlannedHoursByTask(ctx context.Context, arg SumPlannedHoursByTaskParams) ([]SumPlannedHoursByTaskRow, error) {
-	rows, err := q.db.Query(ctx, sumPlannedHoursByTask, arg.TaskIds, arg.FromTs)
+	rows, err := q.db.Query(ctx, sumPlannedHoursByTask, arg.FromTs, arg.TaskIds)
 	if err != nil {
 		return nil, err
 	}
