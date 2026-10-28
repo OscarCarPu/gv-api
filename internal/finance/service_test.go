@@ -86,13 +86,13 @@ func TestService_GetOverview_AssemblesCorrectly(t *testing.T) {
 
 	income := decimal.NewFromInt(1000)
 	expense := decimal.NewFromInt(400)
-	prevPlusCurIncome := decimal.NewFromInt(1800)
-	prevPlusCurExpense := decimal.NewFromInt(700)
+	prevIncome := decimal.NewFromInt(800)
+	prevExpense := decimal.NewFromInt(300)
 
 	repo := mocks.NewMockRepository(t)
 	repo.EXPECT().GetAccountsTotal(mock.Anything).Return(decimal.NewFromInt(5000), nil)
-	repo.EXPECT().GetMonthlyTotals(mock.Anything, matchTime(monthStart)).Return(income, expense, nil)
-	repo.EXPECT().GetMonthlyTotals(mock.Anything, matchTime(prevStart)).Return(prevPlusCurIncome, prevPlusCurExpense, nil)
+	repo.EXPECT().GetMonthlyTotals(mock.Anything, matchTime(monthStart), matchTime(monthStart.AddDate(0, 1, 0))).Return(income, expense, nil)
+	repo.EXPECT().GetMonthlyTotals(mock.Anything, matchTime(prevStart), matchTime(monthStart)).Return(prevIncome, prevExpense, nil)
 	repo.EXPECT().ListRecentTransactions(mock.Anything, mock.Anything).Return(nil, nil)
 
 	got, err := finance.NewService(repo, loc).GetOverview(context.Background())

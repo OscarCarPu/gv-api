@@ -36,7 +36,7 @@ type Repository interface {
 	DeleteTransaction(ctx context.Context, id int32) error
 
 	GetAccountsTotal(ctx context.Context) (decimal.Decimal, error)
-	GetMonthlyTotals(ctx context.Context, since time.Time) (decimal.Decimal, decimal.Decimal, error)
+	GetMonthlyTotals(ctx context.Context, from, to time.Time) (decimal.Decimal, decimal.Decimal, error)
 	ListRecentTransactions(ctx context.Context, since time.Time) ([]OverviewTransaction, error)
 
 	GetNetWorthSeries(ctx context.Context, q NetWorthQuery) ([]NetWorthPoint, error)
@@ -338,8 +338,11 @@ func (r *PostgresRepository) GetAccountsTotal(ctx context.Context) (decimal.Deci
 	return r.q.GetAccountsTotal(ctx)
 }
 
-func (r *PostgresRepository) GetMonthlyTotals(ctx context.Context, since time.Time) (decimal.Decimal, decimal.Decimal, error) {
-	row, err := r.q.GetMonthlyTotals(ctx, pgtype.Timestamptz{Time: since, Valid: true})
+func (r *PostgresRepository) GetMonthlyTotals(ctx context.Context, from, to time.Time) (decimal.Decimal, decimal.Decimal, error) {
+	row, err := r.q.GetMonthlyTotals(ctx, gvdb.GetMonthlyTotalsParams{
+		FromAt: pgtype.Timestamptz{Time: from, Valid: true},
+		ToAt:   pgtype.Timestamptz{Time: to, Valid: true},
+	})
 	if err != nil {
 		return decimal.Zero, decimal.Zero, err
 	}

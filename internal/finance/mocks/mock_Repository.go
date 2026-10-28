@@ -808,9 +808,9 @@ func (_c *MockRepository_GetMonthlyStats_Call) RunAndReturn(run func(context.Con
 	return _c
 }
 
-// GetMonthlyTotals provides a mock function with given fields: ctx, since
-func (_m *MockRepository) GetMonthlyTotals(ctx context.Context, since time.Time) (decimal.Decimal, decimal.Decimal, error) {
-	ret := _m.Called(ctx, since)
+// GetMonthlyTotals provides a mock function with given fields: ctx, from, to
+func (_m *MockRepository) GetMonthlyTotals(ctx context.Context, from time.Time, to time.Time) (decimal.Decimal, decimal.Decimal, error) {
+	ret := _m.Called(ctx, from, to)
 
 	if len(ret) == 0 {
 		panic("no return value specified for GetMonthlyTotals")
@@ -819,23 +819,23 @@ func (_m *MockRepository) GetMonthlyTotals(ctx context.Context, since time.Time)
 	var r0 decimal.Decimal
 	var r1 decimal.Decimal
 	var r2 error
-	if rf, ok := ret.Get(0).(func(context.Context, time.Time) (decimal.Decimal, decimal.Decimal, error)); ok {
-		return rf(ctx, since)
+	if rf, ok := ret.Get(0).(func(context.Context, time.Time, time.Time) (decimal.Decimal, decimal.Decimal, error)); ok {
+		return rf(ctx, from, to)
 	}
-	if rf, ok := ret.Get(0).(func(context.Context, time.Time) decimal.Decimal); ok {
-		r0 = rf(ctx, since)
+	if rf, ok := ret.Get(0).(func(context.Context, time.Time, time.Time) decimal.Decimal); ok {
+		r0 = rf(ctx, from, to)
 	} else {
 		r0 = ret.Get(0).(decimal.Decimal)
 	}
 
-	if rf, ok := ret.Get(1).(func(context.Context, time.Time) decimal.Decimal); ok {
-		r1 = rf(ctx, since)
+	if rf, ok := ret.Get(1).(func(context.Context, time.Time, time.Time) decimal.Decimal); ok {
+		r1 = rf(ctx, from, to)
 	} else {
 		r1 = ret.Get(1).(decimal.Decimal)
 	}
 
-	if rf, ok := ret.Get(2).(func(context.Context, time.Time) error); ok {
-		r2 = rf(ctx, since)
+	if rf, ok := ret.Get(2).(func(context.Context, time.Time, time.Time) error); ok {
+		r2 = rf(ctx, from, to)
 	} else {
 		r2 = ret.Error(2)
 	}
@@ -850,14 +850,15 @@ type MockRepository_GetMonthlyTotals_Call struct {
 
 // GetMonthlyTotals is a helper method to define mock.On call
 //   - ctx context.Context
-//   - since time.Time
-func (_e *MockRepository_Expecter) GetMonthlyTotals(ctx interface{}, since interface{}) *MockRepository_GetMonthlyTotals_Call {
-	return &MockRepository_GetMonthlyTotals_Call{Call: _e.mock.On("GetMonthlyTotals", ctx, since)}
+//   - from time.Time
+//   - to time.Time
+func (_e *MockRepository_Expecter) GetMonthlyTotals(ctx interface{}, from interface{}, to interface{}) *MockRepository_GetMonthlyTotals_Call {
+	return &MockRepository_GetMonthlyTotals_Call{Call: _e.mock.On("GetMonthlyTotals", ctx, from, to)}
 }
 
-func (_c *MockRepository_GetMonthlyTotals_Call) Run(run func(ctx context.Context, since time.Time)) *MockRepository_GetMonthlyTotals_Call {
+func (_c *MockRepository_GetMonthlyTotals_Call) Run(run func(ctx context.Context, from time.Time, to time.Time)) *MockRepository_GetMonthlyTotals_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].(context.Context), args[1].(time.Time))
+		run(args[0].(context.Context), args[1].(time.Time), args[2].(time.Time))
 	})
 	return _c
 }
@@ -867,7 +868,7 @@ func (_c *MockRepository_GetMonthlyTotals_Call) Return(_a0 decimal.Decimal, _a1 
 	return _c
 }
 
-func (_c *MockRepository_GetMonthlyTotals_Call) RunAndReturn(run func(context.Context, time.Time) (decimal.Decimal, decimal.Decimal, error)) *MockRepository_GetMonthlyTotals_Call {
+func (_c *MockRepository_GetMonthlyTotals_Call) RunAndReturn(run func(context.Context, time.Time, time.Time) (decimal.Decimal, decimal.Decimal, error)) *MockRepository_GetMonthlyTotals_Call {
 	_c.Call.Return(run)
 	return _c
 }

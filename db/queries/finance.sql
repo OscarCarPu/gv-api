@@ -99,7 +99,8 @@ SELECT
     COALESCE(SUM(amount) FILTER (WHERE type = 'income'::transaction_type),  0::numeric)::numeric AS income,
     COALESCE(SUM(amount) FILTER (WHERE type = 'expense'::transaction_type), 0::numeric)::numeric AS expense
 FROM transactions
-WHERE occurred_at >= $1;
+WHERE occurred_at >= sqlc.arg('from_at')::timestamptz
+  AND occurred_at <  sqlc.arg('to_at')::timestamptz;
 
 -- name: GetEarliestTransactionDate :one
 SELECT MIN(occurred_at)::timestamptz AS earliest FROM transactions;

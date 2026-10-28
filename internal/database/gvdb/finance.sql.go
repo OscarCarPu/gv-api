@@ -481,16 +481,22 @@ SELECT
     COALESCE(SUM(amount) FILTER (WHERE type = 'income'::transaction_type),  0::numeric)::numeric AS income,
     COALESCE(SUM(amount) FILTER (WHERE type = 'expense'::transaction_type), 0::numeric)::numeric AS expense
 FROM transactions
-WHERE occurred_at >= $1
+WHERE occurred_at >= $1::timestamptz
+  AND occurred_at <  $2::timestamptz
 `
+
+type GetMonthlyTotalsParams struct {
+	FromAt pgtype.Timestamptz `db:"from_at" json:"from_at"`
+	ToAt   pgtype.Timestamptz `db:"to_at" json:"to_at"`
+}
 
 type GetMonthlyTotalsRow struct {
 	Income  decimal.Decimal `db:"income" json:"income"`
 	Expense decimal.Decimal `db:"expense" json:"expense"`
 }
 
-func (q *Queries) GetMonthlyTotals(ctx context.Context, occurredAt pgtype.Timestamptz) (GetMonthlyTotalsRow, error) {
-	row := q.db.QueryRow(ctx, getMonthlyTotals, occurredAt)
+func (q *Queries) GetMonthlyTotals(ctx context.Context, arg GetMonthlyTotalsParams) (GetMonthlyTotalsRow, error) {
+	row := q.db.QueryRow(ctx, getMonthlyTotals, arg.FromAt, arg.ToAt)
 	var i GetMonthlyTotalsRow
 	err := row.Scan(&i.Income, &i.Expense)
 	return i, err

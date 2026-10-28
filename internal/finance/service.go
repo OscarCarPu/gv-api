@@ -91,23 +91,21 @@ func (s *Service) GetOverview(ctx context.Context) (Overview, error) {
 	now := time.Now().In(s.loc)
 	monthStart := time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, s.loc)
 	prevMonthStart := monthStart.AddDate(0, -1, 0)
+	nextMonthStart := monthStart.AddDate(0, 1, 0)
 	last30 := now.Add(-30 * 24 * time.Hour)
 
 	accountsTotal, err := s.repo.GetAccountsTotal(ctx)
 	if err != nil {
 		return Overview{}, err
 	}
-	income, expense, err := s.repo.GetMonthlyTotals(ctx, monthStart)
+	income, expense, err := s.repo.GetMonthlyTotals(ctx, monthStart, nextMonthStart)
 	if err != nil {
 		return Overview{}, err
 	}
-	// Summing from prevMonthStart covers both months; subtract current to isolate prev.
-	prevPlusCurIncome, prevPlusCurExpense, err := s.repo.GetMonthlyTotals(ctx, prevMonthStart)
+	prevIncome, prevExpense, err := s.repo.GetMonthlyTotals(ctx, prevMonthStart, monthStart)
 	if err != nil {
 		return Overview{}, err
 	}
-	prevIncome := prevPlusCurIncome.Sub(income)
-	prevExpense := prevPlusCurExpense.Sub(expense)
 	recent, err := s.repo.ListRecentTransactions(ctx, last30)
 	if err != nil {
 		return Overview{}, err
