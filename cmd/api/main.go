@@ -52,6 +52,9 @@ func main() {
 	if len(os.Args) > 1 && os.Args[1] == "backup" {
 		os.Exit(runBackup(cfg))
 	}
+	if len(os.Args) > 1 && os.Args[1] == "prusa-login" {
+		os.Exit(runPrusaLogin(cfg))
+	}
 
 	var pool atomic.Pointer[pgxpool.Pool]
 	failoverCtl, err := newFailover(context.Background(), cfg, func() {
@@ -123,6 +126,11 @@ func main() {
 			Password: cfg.PrusaLinkPassword,
 			APIKey:   cfg.PrusaLinkAPIKey,
 			Storage:  cfg.PrusaLinkStorage,
+
+			ConnectUser:      cfg.PrusaConnectUser,
+			ConnectPassword:  cfg.PrusaConnectPassword,
+			ConnectID:        cfg.PrusaConnectPrinterID,
+			ConnectTokenFile: cfg.PrusaConnectTokenFile,
 		}},
 		RecordingsDir: cfg.PrinterRecordingsDir,
 		UploadsDir:    cfg.PrinterUploadsDir,

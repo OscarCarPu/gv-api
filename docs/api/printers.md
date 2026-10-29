@@ -15,6 +15,7 @@ Config is env-only (`PRINTER_RTSP_URL`, `PRUSALINK_*`, `PRINTER_RECORDING*`; see
 | `GET /domotics/printers` | `[{id, name, model}]` |
 | `GET /domotics/printers/{id}/status` | Telemetry. Always 200; `online:false` + `error` when PrusaLink is down |
 | `DELETE /domotics/printers/{id}/job` | Stops the running print. The API asks the printer for the job id itself; 409 when idle |
+| `GET /domotics/printers/{id}/history` | Last 10 prints from Prusa Connect: `[{state, timePrinting, fileName, material}]`. 503 without `PRUSA_CONNECT_USER/PASSWORD`; 502 when the Prusa login or Connect fails |
 | `GET /domotics/printers/{id}/files` | Files on the printer's storage, with free space |
 | `PUT …/files` | Upload. Name in `X-File-Name` (URL-encoded), optional `X-Upload-Id`, `?overwrite=1`. 202 once the bytes are staged |
 | `PATCH …/files` | One chunk of a large upload: `X-Upload-Id`, `X-Upload-Offset`, `X-Upload-Total`. Chunks are in order and idempotent; 409 carries `received`. 202 on the last one |
@@ -43,5 +44,6 @@ With `FAILOVER_SIDE=aws` every endpoint here answers `503` before reaching the h
 - Recording is automatic: a watcher polls the printer every 5s and starts a recording when its state turns `PRINTING` (a pause keeps it going) and stops it when the print ends. It only stops a recording it started, treats the first reading after boot as a baseline (a restart mid-print starts nothing) and ignores offline polls. It does not run on the failover instance.
 - Recordings are their own metadata: name = UTC start time, mtime = end, size = size. Fragmented MP4, so a killed ffmpeg leaves a playable file. The directory must be a volume (`printer_recordings` in compose, owned by uid 1000).
 - The status overlay burned into recordings (`PRINTER_RECORDING_OVERLAY`) needs a libx264 encode; `0` goes back to `-c:v copy`.
+- Print history logs in to Prusa Connect with the account email and password (OAuth code + PKCE against account.prusa3d.com, the same flow as the website), keeps the access token in memory, refreshes it with the refresh token and logs in again if that fails. From an IP Prusa does not know it asks for a code sent by email: run `make prusa-login` in gv-api, which logs in from the running container, prompts for the code and keeps the refresh token in `PRUSA_CONNECT_TOKEN_FILE` (the `prusa_connect` volume). Until then the history answers 502 asking for it. It is unofficial and can break when Prusa changes the site.
 - An upstream 401 from PrusaLink is returned as 502, so a bad printer password never reads as an expired session.
 - `scripts/fake_prusalink.py` stands in for the printer: `PRUSALINK_HOST=http://127.0.0.1:8899 PRUSALINK_USER=maker PRUSALINK_PASSWORD=test1234`.

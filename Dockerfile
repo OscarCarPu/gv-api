@@ -16,7 +16,7 @@ FROM alpine:3.22
 RUN apk add --no-cache postgresql15-client ffmpeg font-dejavu \
     && addgroup -S appgroup && adduser -S appuser -G appgroup
 
-RUN mkdir -p /data/recordings && chown 1000:1000 /data/recordings
+RUN mkdir -p /data/recordings /data/prusa && chown 1000:1000 /data/recordings /data/prusa
 
 WORKDIR /app
 

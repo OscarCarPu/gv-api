@@ -13,6 +13,8 @@ type unit struct {
 	link *link
 	cam  *camera
 	rec  *recorder
+
+	connect *connectClient
 }
 
 type PublicPrinter struct {
@@ -31,7 +33,7 @@ func NewService(cfg Config) *Service {
 	s := &Service{cfg: cfg, units: map[string]*unit{}, uploads: newUploads(cfg.UploadsDir)}
 	for _, p := range cfg.Printers {
 		l := &link{p: p}
-		s.units[p.ID] = &unit{p: p, link: l, cam: newCamera(p.RTSP), rec: &recorder{cfg: cfg, p: p, link: l}}
+		s.units[p.ID] = &unit{p: p, link: l, cam: newCamera(p.RTSP), rec: &recorder{cfg: cfg, p: p, link: l}, connect: newConnectClient(p)}
 	}
 	return s
 }

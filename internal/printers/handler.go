@@ -30,6 +30,7 @@ func (h *Handler) RegisterRoutes(r chi.Router) {
 	r.Get("/domotics/printers", h.List)
 	r.Get("/domotics/printers/{id}/status", h.Status)
 	r.Delete("/domotics/printers/{id}/job", h.StopJob)
+	r.Get("/domotics/printers/{id}/history", h.History)
 	r.Get("/domotics/printers/{id}/files", h.Files)
 	r.Put("/domotics/printers/{id}/files", h.Upload)
 	r.Patch("/domotics/printers/{id}/files", h.UploadChunk)
@@ -93,6 +94,23 @@ func (h *Handler) Status(w http.ResponseWriter, r *http.Request) {
 	if un, ok := h.unit(w, r); ok {
 		core.JSON(w, http.StatusOK, un.link.status(r.Context()))
 	}
+}
+
+func (h *Handler) History(w http.ResponseWriter, r *http.Request) {
+	un, ok := h.unit(w, r)
+	if !ok {
+		return
+	}
+	if !un.connect.configured() {
+		core.Error(w, http.StatusServiceUnavailable, "Prusa Connect not configured")
+		return
+	}
+	jobs, err := un.connect.history(r.Context())
+	if err != nil {
+		failStatus(w, err, "Could not read the print history")
+		return
+	}
+	core.JSON(w, http.StatusOK, jobs)
 }
 
 func (h *Handler) StopJob(w http.ResponseWriter, r *http.Request) {

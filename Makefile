@@ -4,7 +4,7 @@ BACKUP_DIR_OWNER=docker run --rm -v "$(CURDIR)/backups:/b" alpine:3.22 sh -c "mk
 	up reset logs up-logs reset-logs down \
 	failover-bucket failover-scenario failover-merge failover-status failover-outage failover-finish \
 	test test-unit test-integration test-e2e test-bench test-silent \
-	test-api-setup test-db-cleanup auth code
+	test-api-setup test-db-cleanup auth code prusa-login
 
 # Colors
 RED=\033[0;31m
@@ -175,6 +175,10 @@ test: test-unit test-api-setup
 # Authenticate and print a JWT token for manual testing
 auth:
 	@python scripts/auth.py
+
+# Log in to Prusa Connect from the running container; asks for the code Prusa emails
+prusa-login:
+	docker compose exec gv-api ./main prusa-login
 
 # Print just the current TOTP 2FA code
 code:

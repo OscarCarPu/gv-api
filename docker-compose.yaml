@@ -39,6 +39,7 @@ services:
       - /run/dbus/system_bus_socket:/run/dbus/system_bus_socket
       - ./backups:/backups
       - printer_recordings:/data/recordings
+      - prusa_connect:/data/prusa
     healthcheck:
       test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://localhost:8080/health"]
       interval: 5s
@@ -52,6 +53,7 @@ services:
 volumes:
   postgres_data:
   printer_recordings:
+  prusa_connect:
 
 networks:
   gv:

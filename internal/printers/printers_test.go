@@ -2,7 +2,9 @@ package printers
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -297,5 +299,184 @@ func TestAutoRecorder(t *testing.T) {
 		assert.False(t, start || stop)
 		_, stop = a.observe(on("STOPPED"))
 		assert.True(t, stop)
+	})
+}
+
+type fakeConnect struct {
+	logins, refreshes, jobCalls int
+	accessSeq                   int
+	validAccess                 string
+	needCode                    bool
+}
+
+func (f *fakeConnect) handler() http.Handler {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/o/authorize/", func(w http.ResponseWriter, r *http.Request) {
+		if _, err := r.Cookie("sessionid"); err != nil {
+			http.Redirect(w, r, "/login/?next=/o/authorize/", http.StatusFound)
+			return
+		}
+		http.Redirect(w, r, "https://connect.example/login/auth-callback?code=abc", http.StatusFound)
+	})
+	mux.HandleFunc("/login/", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodGet {
+			_, _ = w.Write([]byte(`<form><input name="x"></form><form method="post"><input type="hidden" name="csrfmiddlewaretoken" value="tok&amp;1"><input type="hidden" name="next" value="/o/authorize/"></form>`))
+			return
+		}
+		_ = r.ParseForm()
+		if r.Form.Get("csrfmiddlewaretoken") != "tok&1" || r.Form.Get("email") != "me@x" || r.Form.Get("password") != "pw" {
+			w.WriteHeader(http.StatusOK)
+			return
+		}
+		if f.needCode {
+			http.SetCookie(w, &http.Cookie{Name: "pending", Value: "p", Path: "/"})
+			http.Redirect(w, r, "/login/verify/?next=/o/authorize/", http.StatusFound)
+			return
+		}
+		f.logins++
+		http.SetCookie(w, &http.Cookie{Name: "sessionid", Value: "s", Path: "/"})
+		http.Redirect(w, r, "/passkeys/offer/", http.StatusFound)
+	})
+	mux.HandleFunc("/login/verify/", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodGet {
+			_, _ = w.Write([]byte(`<form method="post"><input type="text" name="otp_token"><input type="hidden" name="csrfmiddlewaretoken" value="v1"><input type="hidden" name="next" value="/o/authorize/"></form>`))
+			return
+		}
+		_ = r.ParseForm()
+		if r.Form.Get("otp_token") != "123456" || r.Form.Get("csrfmiddlewaretoken") != "v1" {
+			w.WriteHeader(http.StatusOK)
+			return
+		}
+		f.logins++
+		http.SetCookie(w, &http.Cookie{Name: "sessionid", Value: "s", Path: "/"})
+		http.Redirect(w, r, "/o/authorize/", http.StatusFound)
+	})
+	mux.HandleFunc("/o/token/", func(w http.ResponseWriter, r *http.Request) {
+		_ = r.ParseForm()
+		switch r.Form.Get("grant_type") {
+		case "authorization_code":
+			if r.Form.Get("code") != "abc" || r.Form.Get("code_verifier") == "" {
+				http.Error(w, "{}", http.StatusBadRequest)
+				return
+			}
+		case "refresh_token":
+			if r.Form.Get("refresh_token") != "refresh-1" {
+				http.Error(w, "{}", http.StatusBadRequest)
+				return
+			}
+			f.refreshes++
+		}
+		f.accessSeq++
+		f.validAccess = fmt.Sprintf("access-%d", f.accessSeq)
+		_, _ = fmt.Fprintf(w, `{"access_token":%q,"refresh_token":"refresh-1","expires_in":7200}`, f.validAccess)
+	})
+	auth := func(w http.ResponseWriter, r *http.Request) bool {
+		if r.Header.Get("Authorization") != "Bearer "+f.validAccess {
+			w.WriteHeader(http.StatusUnauthorized)
+			return false
+		}
+		return true
+	}
+	mux.HandleFunc("/app/printers", func(w http.ResponseWriter, r *http.Request) {
+		if auth(w, r) {
+			_, _ = w.Write([]byte(`{"printers":[{"uuid":"uuid-1"}],"pager":{}}`))
+		}
+	})
+	mux.HandleFunc("/app/printers/uuid-1/jobs", func(w http.ResponseWriter, r *http.Request) {
+		if !auth(w, r) {
+			return
+		}
+		f.jobCalls++
+		_, _ = w.Write([]byte(`{"jobs":[
+			{"state":"FIN_OK","time_printing":3600.5,"file":{"name":"A.BGC","display_name":"benchy.bgcode","meta":{"filament_type":"PLA"}}},
+			{"state":"PRINTING","time_printing":null,"file":null}],"pager":{}}`))
+	})
+	return mux
+}
+
+func TestHistory(t *testing.T) {
+	fake := &fakeConnect{}
+	srv := httptest.NewServer(fake.handler())
+	t.Cleanup(srv.Close)
+
+	router := func(user, pass string) http.Handler {
+		svc := NewService(Config{
+			Printers: []Printer{{ID: "core-one", ConnectUser: user, ConnectPassword: pass, ConnectBase: srv.URL, ConnectAccount: srv.URL}},
+			SignKey:  []byte("secret"),
+		})
+		r := chi.NewRouter()
+		NewHandler(svc).RegisterRoutes(r)
+		return r
+	}
+	get := func(r http.Handler) *httptest.ResponseRecorder {
+		return do(r, http.MethodGet, "/domotics/printers/core-one/history", "", nil)
+	}
+
+	t.Run("logs in, finds the printer and keeps only the useful fields", func(t *testing.T) {
+		r := router("me@x", "pw")
+		rec := get(r)
+		require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
+		var got []PrintHistoryEntry
+		require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &got))
+		require.Len(t, got, 2)
+		assert.Equal(t, "benchy.bgcode", got[0].FileName)
+		assert.Equal(t, "PLA", got[0].Material)
+		assert.Equal(t, "FIN_OK", got[0].State)
+		assert.Equal(t, "PRINTING", got[1].State)
+		assert.Nil(t, got[1].TimePrinting)
+
+		require.Equal(t, http.StatusOK, get(r).Code)
+		assert.Equal(t, 1, fake.logins, "the token is reused")
+	})
+
+	t.Run("a revoked access token is refreshed without logging in again", func(t *testing.T) {
+		r := router("me@x", "pw")
+		require.Equal(t, http.StatusOK, get(r).Code)
+		logins := fake.logins
+		fake.validAccess = "rotated-elsewhere"
+		require.Equal(t, http.StatusOK, get(r).Code)
+		assert.Equal(t, logins, fake.logins)
+		assert.Equal(t, 1, fake.refreshes)
+	})
+
+	t.Run("wrong password is a 502", func(t *testing.T) {
+		rec := get(router("me@x", "nope"))
+		assert.Equal(t, http.StatusBadGateway, rec.Code)
+		assert.Contains(t, rec.Body.String(), "email or password")
+	})
+
+	t.Run("unconfigured is 503", func(t *testing.T) {
+		assert.Equal(t, http.StatusServiceUnavailable, get(router("", "")).Code)
+	})
+
+	t.Run("an emailed code is asked for once, then the saved session is enough", func(t *testing.T) {
+		fake.needCode = true
+		t.Cleanup(func() { fake.needCode = false })
+		file := filepath.Join(t.TempDir(), "sub", "connect.json")
+		p := Printer{ID: "core-one", ConnectUser: "me@x", ConnectPassword: "pw", ConnectBase: srv.URL, ConnectAccount: srv.URL, ConnectTokenFile: file}
+
+		withFile := func(p Printer) http.Handler {
+			svc := NewService(Config{Printers: []Printer{p}, SignKey: []byte("secret")})
+			r := chi.NewRouter()
+			NewHandler(svc).RegisterRoutes(r)
+			return r
+		}
+
+		rec := get(withFile(p))
+		assert.Equal(t, http.StatusBadGateway, rec.Code)
+		assert.Contains(t, rec.Body.String(), "make prusa-login")
+
+		var out bytes.Buffer
+		require.Error(t, LoginConnect(context.Background(), p, strings.NewReader("000000\n"), &out))
+		assert.Contains(t, out.String(), "Code: ")
+		require.NoFileExists(t, file)
+
+		require.NoError(t, LoginConnect(context.Background(), p, strings.NewReader("123456\n"), &out))
+		require.FileExists(t, file)
+
+		logins := fake.logins
+		rec = get(withFile(p))
+		require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
+		assert.Equal(t, logins, fake.logins, "the saved refresh token is used, no new login")
 	})
 }

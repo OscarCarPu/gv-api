@@ -12,6 +12,13 @@ type Printer struct {
 	Password string
 	APIKey   string
 	Storage  string
+
+	ConnectUser      string
+	ConnectPassword  string
+	ConnectID        string
+	ConnectBase      string
+	ConnectAccount   string
+	ConnectTokenFile string
 }
 
 type Config struct {

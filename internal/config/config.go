@@ -41,6 +41,10 @@ type Config struct {
 	PrusaLinkPassword          string
 	PrusaLinkAPIKey            string
 	PrusaLinkStorage           string
+	PrusaConnectUser           string
+	PrusaConnectPassword       string
+	PrusaConnectPrinterID      string
+	PrusaConnectTokenFile      string
 	PrinterRecordingsDir       string
 	PrinterUploadsDir          string
 	PrinterRecordingMaxMinutes int
@@ -103,6 +107,10 @@ func Load() (*Config, error) {
 		PrusaLinkPassword:          os.Getenv("PRUSALINK_PASSWORD"),
 		PrusaLinkAPIKey:            os.Getenv("PRUSALINK_API_KEY"),
 		PrusaLinkStorage:           os.Getenv("PRUSALINK_STORAGE"),
+		PrusaConnectUser:           os.Getenv("PRUSA_CONNECT_USER"),
+		PrusaConnectPassword:       os.Getenv("PRUSA_CONNECT_PASSWORD"),
+		PrusaConnectPrinterID:      os.Getenv("PRUSA_CONNECT_PRINTER_ID"),
+		PrusaConnectTokenFile:      getEnv("PRUSA_CONNECT_TOKEN_FILE", "/data/prusa/connect.json"),
 		PrinterRecordingsDir:       getEnv("PRINTER_RECORDINGS_DIR", "/data/recordings"),
 		PrinterUploadsDir:          getEnv("PRINTER_UPLOADS_DIR", os.TempDir()+"/gv-print-uploads"),
 		PrinterRecordingMaxMinutes: getEnvInt("PRINTER_RECORDING_MAX_MINUTES", 30*60),
