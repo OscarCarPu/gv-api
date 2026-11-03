@@ -12,9 +12,10 @@ import (
 
 const (
 	cameraFPS     = "5"
-	cameraIdle    = 30 * time.Second
+	cameraIdle    = 5 * time.Minute
 	cameraMaxBuf  = 4_000_000
 	cameraTimeout = 5 * time.Second
+	cameraStart   = 20 * time.Second
 )
 
 var (
@@ -36,17 +37,20 @@ func newCamera(url string) *camera {
 	return &camera{url: url, changed: make(chan struct{})}
 }
 
-// next returns the first frame newer than seq, starting the stream if nobody is watching.
-func (c *camera) next(ctx context.Context, seq uint64) ([]byte, uint64, error) {
+func (c *camera) warm() {
 	c.mu.Lock()
+	defer c.mu.Unlock()
 	c.last = time.Now()
 	if !c.running {
 		c.running = true
 		go c.run()
 	}
-	c.mu.Unlock()
+}
 
-	timeout := time.After(cameraTimeout)
+// next returns the first frame newer than seq, starting the stream if nobody is watching.
+func (c *camera) next(ctx context.Context, seq uint64, wait time.Duration) ([]byte, uint64, error) {
+	c.warm()
+	timeout := time.After(wait)
 	for {
 		c.mu.Lock()
 		frame, cur, changed := c.latest, c.seq, c.changed
@@ -90,7 +94,7 @@ func (c *camera) stream() {
 	defer cancel()
 
 	cmd := exec.CommandContext(ctx, "ffmpeg", "-loglevel", "error", "-rtsp_transport", "tcp",
-		"-i", c.url, "-an", "-vf", "fps="+cameraFPS, "-f", "mjpeg", "-q:v", "6", "pipe:1")
+		"-probesize", "32768", "-analyzeduration", "0", "-i", c.url, "-an", "-vf", "fps="+cameraFPS, "-f", "mjpeg", "-q:v", "6", "pipe:1")
 	out, err := cmd.StdoutPipe()
 	if err != nil || cmd.Start() != nil {
 		return

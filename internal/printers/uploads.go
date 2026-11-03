@@ -35,14 +35,24 @@ type ActiveUpload struct {
 	UploadState
 	UploadID string `json:"uploadId"`
 	Name     string `json:"name"`
+	From     string `json:"from,omitempty"`
 }
 
 type entry struct {
 	UploadState
 	printerID string
 	name      string
+	from      string
 	updated   time.Time
 }
+
+const (
+	statusQueued      = "queued"
+	statusDownloading = "downloading"
+	statusForwarding  = "forwarding"
+)
+
+var errQueueFull = &statusError{http.StatusServiceUnavailable, "Too many transfers queued for this printer. Try again shortly."}
 
 type uploads struct {
 	dir     string
@@ -141,7 +151,10 @@ func (u *uploads) sweepStaged() {
 func (u *uploads) sweepLocked() {
 	for id, e := range u.entries {
 		ttl := settledTTL
-		if e.Status == "forwarding" {
+		switch e.Status {
+		case statusQueued:
+			continue
+		case statusDownloading, statusForwarding:
 			ttl = forwardingTTL
 		}
 		if time.Since(e.updated) > ttl {
@@ -159,26 +172,37 @@ func (u *uploads) sweepLocked() {
 	}
 }
 
-func (u *uploads) start(id, printerID, name string, total int64) {
+func (u *uploads) start(id, printerID, name, from string, total int64) {
 	u.mu.Lock()
 	defer u.mu.Unlock()
 	u.sweepLocked()
 	u.entries[id] = &entry{
-		UploadState: UploadState{Total: total, Status: "forwarding"},
-		printerID:   printerID, name: name, updated: time.Now(),
+		UploadState: UploadState{Total: total, Status: statusQueued},
+		printerID:   printerID, name: name, from: from, updated: time.Now(),
+	}
+}
+
+func (u *uploads) setStatus(id, status string, total int64) {
+	u.mu.Lock()
+	defer u.mu.Unlock()
+	if e := u.entries[id]; e != nil {
+		e.Status, e.Sent, e.updated = status, 0, time.Now()
+		if total > 0 {
+			e.Total = total
+		}
 	}
 }
 
 func (u *uploads) setSent(id string, sent int64) {
 	u.mu.Lock()
 	defer u.mu.Unlock()
-	if e := u.entries[id]; e != nil && e.Status == "forwarding" {
+	if e := u.entries[id]; e != nil && (e.Status == statusForwarding || e.Status == statusDownloading) {
 		e.Sent = sent
 		e.updated = time.Now()
 	}
 }
 
-func (u *uploads) finish(id string, errMsg string, httpStatus int) {
+func (u *uploads) finish(id string, fail *statusError) {
 	u.mu.Lock()
 	defer u.mu.Unlock()
 	e := u.entries[id]
@@ -186,11 +210,11 @@ func (u *uploads) finish(id string, errMsg string, httpStatus int) {
 		return
 	}
 	e.updated = time.Now()
-	if errMsg == "" {
+	if fail == nil {
 		e.Status, e.Sent = "done", e.Total
 		return
 	}
-	e.Status, e.Error, e.HTTPStatus = "error", errMsg, httpStatus
+	e.Status, e.Error, e.HTTPStatus = "error", fail.msg, fail.status
 }
 
 func (u *uploads) get(id string) UploadState {
@@ -210,12 +234,22 @@ func (u *uploads) list(printerID string) []ActiveUpload {
 	times := map[string]time.Time{}
 	for id, e := range u.entries {
 		if e.printerID == printerID {
-			out = append(out, ActiveUpload{e.UploadState, id, e.name})
+			out = append(out, ActiveUpload{e.UploadState, id, e.name, e.from})
 			times[id] = e.updated
 		}
 	}
 	sort.Slice(out, func(i, j int) bool { return times[out[i].UploadID].Before(times[out[j].UploadID]) })
 	return out
+}
+
+func (s *Service) enqueue(un *unit, id string, job func()) error {
+	select {
+	case un.jobs <- job:
+		return nil
+	default:
+		s.uploads.finish(id, errQueueFull)
+		return errQueueFull
+	}
 }
 
 func (s *Service) forward(un *unit, id, name string, overwrite bool) error {
@@ -224,21 +258,27 @@ func (s *Service) forward(un *unit, id, name string, overwrite bool) error {
 	if size == 0 {
 		return errors.New("nothing staged")
 	}
-	s.uploads.start(id, un.p.ID, name, size)
-
-	go func() {
+	s.uploads.start(id, un.p.ID, name, "", size)
+	err := s.enqueue(un, id, func() {
 		defer func() { _ = os.Remove(path) }()
-		open := func() (io.ReadCloser, error) { return os.Open(path) }
-		status, err := un.link.upload(bg, name, open, size, overwrite, func(n int64) { s.uploads.setSent(id, n) })
-		switch {
-		case err != nil:
-			s.uploads.finish(id, err.Error(), http.StatusBadGateway)
-		case status < 200 || status > 299:
-			s.uploads.finish(id, upstreamMessage(status, "upload"), status)
-		default:
-			s.uploads.finish(id, "", 0)
-		}
-	}()
+		s.uploads.setStatus(id, statusForwarding, 0)
+		s.uploads.finish(id, s.push(un, id, name, path, size, overwrite))
+	})
+	if err != nil {
+		_ = os.Remove(path)
+	}
+	return err
+}
+
+func (s *Service) push(un *unit, id, name, path string, size int64, overwrite bool) *statusError {
+	open := func() (io.ReadCloser, error) { return os.Open(path) }
+	status, err := un.link.upload(bg, name, open, size, overwrite, func(n int64) { s.uploads.setSent(id, n) })
+	switch {
+	case err != nil:
+		return &statusError{http.StatusBadGateway, err.Error()}
+	case status < 200 || status > 299:
+		return &statusError{status, upstreamMessage(status, "upload")}
+	}
 	return nil
 }
 

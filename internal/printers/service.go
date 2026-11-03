@@ -15,6 +15,13 @@ type unit struct {
 	rec  *recorder
 
 	connect *connectClient
+	jobs    chan func()
+}
+
+func (un *unit) work() {
+	for job := range un.jobs {
+		job()
+	}
 }
 
 type PublicPrinter struct {
@@ -33,7 +40,8 @@ func NewService(cfg Config) *Service {
 	s := &Service{cfg: cfg, units: map[string]*unit{}, uploads: newUploads(cfg.UploadsDir)}
 	for _, p := range cfg.Printers {
 		l := &link{p: p}
-		s.units[p.ID] = &unit{p: p, link: l, cam: newCamera(p.RTSP), rec: &recorder{cfg: cfg, p: p, link: l}, connect: newConnectClient(p)}
+		s.units[p.ID] = &unit{p: p, link: l, cam: newCamera(p.RTSP), rec: &recorder{cfg: cfg, p: p, link: l}, connect: newConnectClient(p), jobs: make(chan func(), maxEntries)}
+		go s.units[p.ID].work()
 	}
 	return s
 }

@@ -32,6 +32,7 @@ type request struct {
 	body    func() (io.ReadCloser, error)
 	size    int64
 	timeout time.Duration
+	sink    io.Writer
 }
 
 var challengeParam = regexp.MustCompile(`(\w+)=(?:"([^"]*)"|([^,]*))`)
@@ -154,6 +155,10 @@ func (l *link) send(ctx context.Context, rq request, auth map[string]string) (in
 		return 0, nil, err
 	}
 	defer func() { _ = res.Body.Close() }()
+	if rq.sink != nil && res.StatusCode >= 200 && res.StatusCode <= 299 {
+		_, err = io.Copy(rq.sink, res.Body)
+		return res.StatusCode, nil, err
+	}
 	data, err := io.ReadAll(res.Body)
 	return res.StatusCode, data, err
 }

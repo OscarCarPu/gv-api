@@ -5,11 +5,13 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -132,7 +134,11 @@ func fakePrusa(t *testing.T) (*httptest.Server, *[]string) {
 			_, _ = w.Write([]byte(`{"children":[{"name":"A.BGC","display_name":"a.bgcode","type":"PRINT_FILE"},{"name":"dir","type":"FOLDER"},{"name":"notes.txt"}]}`))
 			return
 		}
-		_, _ = w.Write([]byte(`{"size":42,"m_timestamp":10}`))
+		_, _ = w.Write([]byte(`{"size":42,"m_timestamp":10,"refs":{"download":"/usb/A.BGC"}}`))
+	})
+	mux.HandleFunc("/usb/", func(w http.ResponseWriter, r *http.Request) {
+		calls = append(calls, r.Method+" "+r.URL.Path)
+		_, _ = w.Write([]byte(strings.Repeat("x", 42)))
 	})
 	mux.HandleFunc("/api/v1/job", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == http.MethodGet {
@@ -183,6 +189,16 @@ func TestFilesAndStopJob(t *testing.T) {
 	assert.Equal(t, "a.bgcode", view.Files[0].DisplayName)
 	assert.Equal(t, int64(42), *view.Files[0].Size)
 	assert.Equal(t, int64(100), *view.Storage.FreeSpace)
+	assert.False(t, view.Files[0].hasMeta(), "Buddy reports no meta and Connect is not configured")
+	assert.Contains(t, view.Files[0].DownloadURL, "/domotics/printers/core-one/files/download?name=A.BGC&as=a.bgcode&exp=")
+
+	rec = do(r, http.MethodGet, view.Files[0].DownloadURL, "", nil)
+	require.Equal(t, http.StatusOK, rec.Code)
+	assert.Equal(t, strings.Repeat("x", 42), rec.Body.String())
+	assert.Equal(t, `attachment; filename=a.bgcode`, rec.Header().Get("Content-Disposition"))
+
+	rec = do(r, http.MethodGet, strings.Replace(view.Files[0].DownloadURL, "sig=", "sig=0", 1), "", nil)
+	assert.Equal(t, http.StatusUnauthorized, rec.Code)
 
 	rec = do(r, http.MethodDelete, "/domotics/printers/core-one/job", "", nil)
 	assert.Equal(t, http.StatusConflict, rec.Code)
@@ -247,6 +263,18 @@ func TestRecordingsAreSignedAndServed(t *testing.T) {
 
 	rec = do(r, http.MethodGet, "/domotics/printers/core-one/recordings/2026-08-06T14-32-05.mp4", "", nil)
 	assert.Equal(t, http.StatusUnauthorized, rec.Code)
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "2026-08-07T10-00-00.mp4"), []byte("x"), 0o644))
+	rec = do(r, http.MethodDelete, "/domotics/printers/core-one/recordings?name=2026-08-06T14-32-05.mp4&name=2026-08-07T10-00-00.mp4&name=nope.mp4", "", nil)
+	require.Equal(t, http.StatusOK, rec.Code)
+	var res struct {
+		Deleted []string          `json:"deleted"`
+		Failed  map[string]string `json:"failed"`
+	}
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &res))
+	assert.ElementsMatch(t, []string{"2026-08-06T14-32-05.mp4", "2026-08-07T10-00-00.mp4"}, res.Deleted)
+	assert.Contains(t, res.Failed, "nope.mp4")
+	_, err := os.Stat(filepath.Join(dir, "2026-08-07T10-00-00.mp4"))
+	assert.True(t, os.IsNotExist(err))
 }
 
 func TestCameraStreamNeedsSignature(t *testing.T) {
@@ -304,6 +332,8 @@ func TestAutoRecorder(t *testing.T) {
 
 type fakeConnect struct {
 	logins, refreshes, jobCalls int
+	filePages                   []string
+	printerCalls                int
 	accessSeq                   int
 	validAccess                 string
 	needCode                    bool
@@ -382,13 +412,34 @@ func (f *fakeConnect) handler() http.Handler {
 			_, _ = w.Write([]byte(`{"printers":[{"uuid":"uuid-1"}],"pager":{}}`))
 		}
 	})
+	mux.HandleFunc("/app/printers/uuid-1", func(w http.ResponseWriter, r *http.Request) {
+		if auth(w, r) {
+			f.printerCalls++
+			_, _ = w.Write([]byte(`{"state":"PRINTING","chamber":{"temp":43.9,"target_temp":50.0,"fan_1_rpm":0}}`))
+		}
+	})
+	mux.HandleFunc("/app/printers/uuid-1/files", func(w http.ResponseWriter, r *http.Request) {
+		if !auth(w, r) {
+			return
+		}
+		f.filePages = append(f.filePages, r.URL.Query().Get("offset"))
+		if r.URL.Query().Get("offset") != "0" {
+			_, _ = w.Write([]byte(`{"files":[{"type":"PRINT_FILE","path":"/usb/LATE~1.BGC","meta":{"filament_type":"ASA"}}],"pager":{}}`))
+			return
+		}
+		files := []string{`{"type":"PRINT_FILE","path":"/usb/A.BGC","meta":{"estimated_print_time":15849,"filament_type":"PLA","filament_used_g":121.74,"filament_used_mm":40817.15}}`, `{"type":"FIRMWARE","path":"/usb/FW.BBF","meta":{"filament_type":"X"}}`}
+		for len(files) < connectFilesPage {
+			files = append(files, `{"type":"FILE","path":"/usb/X.TMP"}`)
+		}
+		_, _ = fmt.Fprintf(w, `{"files":[%s],"pager":{}}`, strings.Join(files, ","))
+	})
 	mux.HandleFunc("/app/printers/uuid-1/jobs", func(w http.ResponseWriter, r *http.Request) {
 		if !auth(w, r) {
 			return
 		}
 		f.jobCalls++
 		_, _ = w.Write([]byte(`{"jobs":[
-			{"state":"FIN_OK","time_printing":3600.5,"file":{"name":"A.BGC","display_name":"benchy.bgcode","meta":{"filament_type":"PLA"}}},
+			{"state":"FIN_OK","time_printing":3600.5,"file":{"name":"A.BGC","display_name":"benchy.bgcode","meta":{"filament_type":"PLA","filament_used_g":12.46}}},
 			{"state":"PRINTING","time_printing":null,"file":null}],"pager":{}}`))
 	})
 	return mux
@@ -421,6 +472,7 @@ func TestHistory(t *testing.T) {
 		require.Len(t, got, 2)
 		assert.Equal(t, "benchy.bgcode", got[0].FileName)
 		assert.Equal(t, "PLA", got[0].Material)
+		assert.Equal(t, 12.5, *got[0].FilamentGrams)
 		assert.Equal(t, "FIN_OK", got[0].State)
 		assert.Equal(t, "PRINTING", got[1].State)
 		assert.Nil(t, got[1].TimePrinting)
@@ -479,4 +531,151 @@ func TestHistory(t *testing.T) {
 		require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
 		assert.Equal(t, logins, fake.logins, "the saved refresh token is used, no new login")
 	})
+}
+
+func TestRenameMovesTheFile(t *testing.T) {
+	srv, calls := fakePrusa(t)
+	r := testRouter(t, srv.URL)
+
+	rec := do(r, http.MethodPost, "/domotics/printers/core-one/files/rename", `{"name":"A.BGC","newName":"b"}`, nil)
+	require.Equal(t, http.StatusAccepted, rec.Code, rec.Body.String())
+	var res struct{ UploadID, Name string }
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &res))
+	assert.Equal(t, "b.bgcode", res.Name)
+
+	require.Eventually(t, func() bool {
+		rec := do(r, http.MethodGet, "/domotics/printers/core-one/files/progress?u="+res.UploadID, "", nil)
+		return strings.Contains(rec.Body.String(), `"done"`)
+	}, 3*time.Second, 20*time.Millisecond)
+	assert.Contains(t, *calls, "GET /usb/A.BGC")
+	assert.Contains(t, *calls, "PUT /api/v1/files/usb/b.bgcode")
+	assert.Contains(t, *calls, "body "+strings.Repeat("x", 42))
+	assert.Contains(t, *calls, "DELETE /api/v1/files/usb/A.BGC")
+
+	rec = do(r, http.MethodPost, "/domotics/printers/core-one/files/rename", `{"name":"A.BGC","newName":"A.bgcode"}`, nil)
+	assert.Equal(t, http.StatusBadRequest, rec.Code)
+}
+
+func TestRenameTarget(t *testing.T) {
+	cases := []struct{ display, requested, want string }{
+		{"benchy.bgcode", "boat", "boat.bgcode"},
+		{"benchy.bgcode", "boat.BGCODE", "boat.BGCODE"},
+		{"part.gcode", " v2 part ", "v2 part.gcode"},
+	}
+	for _, c := range cases {
+		got, err := renameTarget(c.display, c.requested)
+		require.NoError(t, err, c.requested)
+		assert.Equal(t, c.want, got)
+	}
+	for _, bad := range []string{"", "a/b", "x.gcode", "BENCHY", ".hidden"} {
+		_, err := renameTarget("benchy.bgcode", bad)
+		assert.Error(t, err, bad)
+	}
+}
+
+func TestParsePrintMeta(t *testing.T) {
+	m := parsePrintMeta(map[string]any{
+		"estimated printing time (normal mode)": "1d 2h 3m",
+		"filament_type":                         "PLA;PETG;PLA",
+		"filament used [g]":                     "10.04, 2.5, 0.00",
+	})
+	assert.Equal(t, int64(93780), *m.PrintSeconds)
+	assert.Equal(t, "PLA, PETG", m.Material)
+	assert.Equal(t, 12.5, *m.FilamentGrams)
+	assert.Nil(t, m.FilamentMeters)
+
+	m = parsePrintMeta(map[string]any{"estimated_print_time": float64(90)})
+	assert.Equal(t, int64(90), *m.PrintSeconds)
+
+	assert.Equal(t, 5.0, *scaleUsed(ptr(10.0), doneFraction("FIN_STOPPED", ptr(50.0), nil, nil)))
+	assert.Equal(t, 2.5, *scaleUsed(ptr(10.0), doneFraction("FIN_ERROR", nil, ptr(900.0), ptr(int64(3600)))))
+	assert.Equal(t, 10.0, *scaleUsed(ptr(10.0), doneFraction("FIN_OK", ptr(50.0), ptr(1.0), ptr(int64(10)))))
+	assert.Equal(t, 10.0, *scaleUsed(ptr(10.0), doneFraction("PRINTING", ptr(50.0), nil, nil)))
+}
+
+func ptr[T any](v T) *T { return &v }
+
+func TestUploadsReachThePrinterOneAtATime(t *testing.T) {
+	gate := make(chan struct{})
+	var mu sync.Mutex
+	active, peak := 0, 0
+	var order []string
+	mux := http.NewServeMux()
+	mux.HandleFunc("/api/v1/storage", func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(`{"storage_list":[{"path":"/usb/","available":true}]}`))
+	})
+	mux.HandleFunc("/api/v1/files/usb/", func(w http.ResponseWriter, r *http.Request) {
+		_, _ = io.Copy(io.Discard, r.Body)
+		mu.Lock()
+		active++
+		peak = max(peak, active)
+		order = append(order, r.URL.Path)
+		mu.Unlock()
+		<-gate
+		mu.Lock()
+		active--
+		mu.Unlock()
+		w.WriteHeader(http.StatusCreated)
+	})
+	srv := httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+	r := testRouter(t, srv.URL)
+
+	progress := func(id string) string {
+		return do(r, http.MethodGet, "/domotics/printers/core-one/files/progress?u="+id, "", nil).Body.String()
+	}
+	for _, n := range []string{"one", "two"} {
+		rec := do(r, http.MethodPut, "/domotics/printers/core-one/files", "data", map[string]string{"X-File-Name": n + ".gcode", "X-Upload-Id": "upload-" + n})
+		require.Equal(t, http.StatusAccepted, rec.Code)
+	}
+	require.Eventually(t, func() bool { return strings.Contains(progress("upload-one"), `"forwarding"`) }, 3*time.Second, 10*time.Millisecond)
+	time.Sleep(50 * time.Millisecond)
+	assert.Contains(t, progress("upload-two"), `"queued"`)
+
+	close(gate)
+	require.Eventually(t, func() bool { return strings.Contains(progress("upload-two"), `"done"`) }, 3*time.Second, 10*time.Millisecond)
+	mu.Lock()
+	defer mu.Unlock()
+	assert.Equal(t, 1, peak)
+	assert.Equal(t, []string{"/api/v1/files/usb/one.gcode", "/api/v1/files/usb/two.gcode"}, order)
+}
+
+func TestConnectFileMetaAndChamber(t *testing.T) {
+	fake := &fakeConnect{}
+	connect := httptest.NewServer(fake.handler())
+	t.Cleanup(connect.Close)
+	router := func(user string) http.Handler {
+		svc := NewService(Config{
+			Printers: []Printer{{ID: "core-one", ConnectUser: user, ConnectPassword: "pw", ConnectBase: connect.URL, ConnectAccount: connect.URL}},
+			SignKey:  []byte("secret"),
+		})
+		r := chi.NewRouter()
+		NewHandler(svc).RegisterRoutes(r)
+		return r
+	}
+	r := router("me@x")
+
+	rec := do(r, http.MethodGet, "/domotics/printers/core-one/files/meta", "", nil)
+	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
+	var res struct {
+		Files map[string]PrintMeta `json:"files"`
+	}
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &res))
+	f := res.Files["A.BGC"]
+	assert.Equal(t, int64(15849), *f.PrintSeconds)
+	assert.Equal(t, "PLA", f.Material)
+	assert.Equal(t, 121.7, *f.FilamentGrams)
+	assert.Equal(t, 40.82, *f.FilamentMeters)
+	assert.Equal(t, "ASA", res.Files["LATE~1.BGC"].Material)
+	assert.NotContains(t, res.Files, "FW.BBF")
+	assert.Equal(t, []string{"0", "100"}, fake.filePages, "a full page asks for the next one")
+
+	for range 2 {
+		rec = do(r, http.MethodGet, "/domotics/printers/core-one/chamber", "", nil)
+		require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
+		assert.JSONEq(t, `{"temp":43.9,"targetTemp":50}`, rec.Body.String())
+	}
+	assert.Equal(t, 1, fake.printerCalls, "the chamber reading is cached briefly")
+
+	assert.Equal(t, http.StatusServiceUnavailable, do(router(""), http.MethodGet, "/domotics/printers/core-one/chamber", "", nil).Code)
 }

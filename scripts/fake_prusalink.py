@@ -195,6 +195,9 @@ class Handler(BaseHTTPRequestHandler):
             "ro": False,
             "size": os.path.getsize(os.path.join(UPLOAD_DIR, name)),
             "m_timestamp": int(os.path.getmtime(os.path.join(UPLOAD_DIR, name))),
+            # Buddy firmware reports no "meta" here, unlike the PrusaLink spec: gv-api takes it from
+            # Prusa Connect's file list instead.
+            "refs": {"download": f"/{STORAGE}/{self._short_name(name)}"},
         }
 
     def _storage_payload(self) -> dict:
@@ -301,6 +304,13 @@ class Handler(BaseHTTPRequestHandler):
                 self._json(200, self._storage_payload())
             elif path.rstrip("/") == f"/api/v1/files/{STORAGE}":
                 self._json(200, self._files_payload())
+            elif path.startswith(f"/{STORAGE}/"):
+                stored = self._resolve(os.path.basename(unquote(path)))
+                if stored is None:
+                    self._json(404, {"message": "not found"})
+                else:
+                    with open(os.path.join(UPLOAD_DIR, stored), "rb") as fh:
+                        self._send(200, fh.read(), "application/octet-stream")
             elif path.startswith(f"/api/v1/files/{STORAGE}/"):
                 requested = os.path.basename(unquote(path))
                 stored = self._resolve(requested)

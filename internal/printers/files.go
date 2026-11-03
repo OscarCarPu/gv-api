@@ -2,6 +2,7 @@ package printers
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
@@ -22,6 +23,8 @@ type File struct {
 	Size        *int64 `json:"size,omitempty"`
 	ReadOnly    *bool  `json:"readOnly,omitempty"`
 	ModifiedAt  *int64 `json:"modifiedAt,omitempty"`
+	DownloadURL string `json:"downloadUrl,omitempty"`
+	PrintMeta
 }
 
 type Storage struct {
@@ -49,13 +52,17 @@ type rawStorage struct {
 }
 
 type rawChild struct {
-	Name        string `json:"name"`
-	DisplayName string `json:"display_name"`
-	Type        string `json:"type"`
-	Size        *int64 `json:"size"`
-	Ro          *bool  `json:"ro"`
-	ReadOnly    *bool  `json:"read_only"`
-	Timestamp   *int64 `json:"m_timestamp"`
+	Name        string         `json:"name"`
+	DisplayName string         `json:"display_name"`
+	Type        string         `json:"type"`
+	Size        *int64         `json:"size"`
+	Ro          *bool          `json:"ro"`
+	ReadOnly    *bool          `json:"read_only"`
+	Timestamp   *int64         `json:"m_timestamp"`
+	Meta        map[string]any `json:"meta"`
+	Refs        struct {
+		Download string `json:"download"`
+	} `json:"refs"`
 }
 
 func sanitizeFileName(raw string) string {
@@ -120,7 +127,7 @@ func (l *link) fillSizes(ctx context.Context, storage string, files []File) {
 	sem := make(chan struct{}, 4)
 	var wg sync.WaitGroup
 	for i := range files {
-		if files[i].Size != nil {
+		if files[i].Size != nil && files[i].hasMeta() {
 			continue
 		}
 		wg.Add(1)
@@ -132,7 +139,12 @@ func (l *link) fillSizes(ctx context.Context, storage string, files []File) {
 			if ok, err := l.getJSON(ctx, filePath(storage, f.Name), &info); err != nil || !ok {
 				return
 			}
-			f.Size = info.Size
+			if f.Size == nil {
+				f.Size = info.Size
+			}
+			if !f.hasMeta() {
+				f.PrintMeta = parsePrintMeta(info.Meta)
+			}
 			if f.ReadOnly == nil {
 				f.ReadOnly = firstBool(info.Ro, info.ReadOnly)
 			}
@@ -160,19 +172,17 @@ func (l *link) files(ctx context.Context) FilesView {
 	}
 
 	storage, info := l.storage(ctx)
-	var folder struct {
-		Children []rawChild `json:"children"`
-	}
-	if _, err := l.getJSON(ctx, "/api/v1/files/"+storage+"/", &folder); err != nil {
+	children, err := l.children(ctx, storage)
+	if err != nil {
 		view.Error = err.Error()
 		return view
 	}
 
-	for _, c := range folder.Children {
+	for _, c := range children {
 		if strings.EqualFold(c.Type, "folder") || sanitizeFileName(c.Name) == "" {
 			continue
 		}
-		f := File{Name: c.Name, DisplayName: firstString(c.DisplayName, c.Name), Size: c.Size, ReadOnly: firstBool(c.Ro, c.ReadOnly)}
+		f := File{Name: c.Name, DisplayName: firstString(c.DisplayName, c.Name), Size: c.Size, ReadOnly: firstBool(c.Ro, c.ReadOnly), PrintMeta: parsePrintMeta(c.Meta)}
 		if c.Timestamp != nil {
 			ms := *c.Timestamp * 1000
 			f.ModifiedAt = &ms
@@ -188,6 +198,10 @@ func (l *link) files(ctx context.Context) FilesView {
 func uploadTimeout(size int64) time.Duration {
 	mb := (size + 1<<20 - 1) >> 20
 	return max(time.Minute, time.Duration(mb)*10*time.Second)
+}
+
+func downloadTimeout(size int64) time.Duration {
+	return max(2*time.Minute, time.Duration(size/(16<<10))*time.Second)
 }
 
 type countReader struct {
@@ -267,4 +281,66 @@ func unescapeHeader(raw string) string {
 		return s
 	}
 	return ""
+}
+
+func (l *link) fileInfo(ctx context.Context, storage, name string) (rawChild, error) {
+	var info rawChild
+	status, data, err := l.do(ctx, request{
+		method:  http.MethodGet,
+		path:    filePath(storage, name),
+		headers: map[string]string{"Accept": "application/json"},
+		timeout: shortTimeout,
+	})
+	switch {
+	case err != nil:
+		return info, err
+	case status == http.StatusNotFound:
+		return info, &statusError{http.StatusNotFound, "That file is no longer on the printer"}
+	case status < 200 || status > 299:
+		return info, &statusError{upstreamStatus(status), upstreamMessage(status, "read")}
+	}
+	if err := json.Unmarshal(data, &info); err != nil {
+		return info, &statusError{http.StatusBadGateway, "PrusaLink returned something unexpected"}
+	}
+	return info, nil
+}
+
+func downloadPath(storage, name string, info rawChild) string {
+	if strings.HasPrefix(info.Refs.Download, "/") {
+		return info.Refs.Download
+	}
+	return "/" + storage + "/" + url.PathEscape(name)
+}
+
+func (l *link) download(ctx context.Context, path string, size int64, sink io.Writer) error {
+	status, _, err := l.do(ctx, request{method: http.MethodGet, path: path, sink: sink, timeout: downloadTimeout(size)})
+	switch {
+	case err != nil:
+		return err
+	case status < 200 || status > 299:
+		return &statusError{upstreamStatus(status), upstreamMessage(status, "download")}
+	}
+	return nil
+}
+
+func (l *link) children(ctx context.Context, storage string) ([]rawChild, error) {
+	var folder struct {
+		Children []rawChild `json:"children"`
+	}
+	_, err := l.getJSON(ctx, "/api/v1/files/"+storage+"/", &folder)
+	return folder.Children, err
+}
+
+func (l *link) printingFile(ctx context.Context) (string, string, error) {
+	var job struct {
+		File struct {
+			Name        string `json:"name"`
+			DisplayName string `json:"display_name"`
+		} `json:"file"`
+	}
+	ok, err := l.getJSON(ctx, "/api/v1/job", &job)
+	if err != nil || !ok {
+		return "", "", err
+	}
+	return job.File.Name, job.File.DisplayName, nil
 }

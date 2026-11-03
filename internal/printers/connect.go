@@ -58,6 +58,9 @@ type connectClient struct {
 	access  string
 	expires time.Time
 	refresh string
+
+	chamberCache Chamber
+	chamberAt    time.Time
 }
 
 func newConnectClient(p Printer) *connectClient {
