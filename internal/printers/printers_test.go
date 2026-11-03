@@ -679,3 +679,40 @@ func TestConnectFileMetaAndChamber(t *testing.T) {
 
 	assert.Equal(t, http.StatusServiceUnavailable, do(router(""), http.MethodGet, "/domotics/printers/core-one/chamber", "", nil).Code)
 }
+
+func TestTransfersStopOnlyWhenThePrinterStalls(t *testing.T) {
+	old := transferIdle
+	transferIdle = 300 * time.Millisecond
+	t.Cleanup(func() { transferIdle = old })
+
+	mux := http.NewServeMux()
+	mux.HandleFunc("/api/v1/storage", func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(`{"storage_list":[{"path":"/usb/","available":true}]}`))
+	})
+	mux.HandleFunc("/usb/SLOW.GCO", func(w http.ResponseWriter, _ *http.Request) {
+		for range 10 {
+			_, _ = w.Write([]byte("x"))
+			w.(http.Flusher).Flush()
+			time.Sleep(100 * time.Millisecond)
+		}
+	})
+	mux.HandleFunc("/usb/STUCK.GCO", func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte("x"))
+		w.(http.Flusher).Flush()
+		<-r.Context().Done()
+	})
+	srv := httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+	l := &link{p: Printer{Host: srv.URL}}
+
+	var got bytes.Buffer
+	start := time.Now()
+	require.NoError(t, l.download(context.Background(), "/usb/SLOW.GCO", 10, &got), "slow but moving is fine")
+	assert.Equal(t, "xxxxxxxxxx", got.String())
+	assert.Greater(t, time.Since(start), 900*time.Millisecond)
+
+	start = time.Now()
+	err := l.download(context.Background(), "/usb/STUCK.GCO", 10, io.Discard)
+	assert.ErrorIs(t, err, errStalled)
+	assert.Less(t, time.Since(start), 2*time.Second)
+}

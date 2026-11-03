@@ -195,13 +195,10 @@ func (l *link) files(ctx context.Context) FilesView {
 	return view
 }
 
-func uploadTimeout(size int64) time.Duration {
-	mb := (size + 1<<20 - 1) >> 20
-	return max(time.Minute, time.Duration(mb)*10*time.Second)
-}
+var transferIdle = 90 * time.Second
 
-func downloadTimeout(size int64) time.Duration {
-	return max(2*time.Minute, time.Duration(size/(16<<10))*time.Second)
+func transferTimeout(size int64) time.Duration {
+	return max(time.Hour, time.Duration(size/(4<<10))*time.Second)
 }
 
 type countReader struct {
@@ -233,7 +230,8 @@ func (l *link) upload(ctx context.Context, name string, open func() (io.ReadClos
 			"Overwrite":          ow,
 		},
 		size:    size,
-		timeout: uploadTimeout(size),
+		timeout: transferTimeout(size),
+		idle:    transferIdle,
 		body: func() (io.ReadCloser, error) {
 			onSent(0)
 			f, err := open()
@@ -313,7 +311,7 @@ func downloadPath(storage, name string, info rawChild) string {
 }
 
 func (l *link) download(ctx context.Context, path string, size int64, sink io.Writer) error {
-	status, _, err := l.do(ctx, request{method: http.MethodGet, path: path, sink: sink, timeout: downloadTimeout(size)})
+	status, _, err := l.do(ctx, request{method: http.MethodGet, path: path, sink: sink, timeout: transferTimeout(size), idle: transferIdle})
 	switch {
 	case err != nil:
 		return err

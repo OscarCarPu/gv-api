@@ -5,12 +5,14 @@ import (
 	"crypto/md5"
 	"crypto/rand"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
 	"regexp"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -33,6 +35,99 @@ type request struct {
 	size    int64
 	timeout time.Duration
 	sink    io.Writer
+	idle    time.Duration
+}
+
+var errStalled = errors.New("The printer stopped responding mid-transfer")
+
+const drainedGrace = 10 * time.Minute
+
+type stallWatch struct {
+	last    atomic.Int64
+	drained atomic.Bool
+}
+
+func (s *stallWatch) touch() { s.last.Store(time.Now().UnixNano()) }
+
+func (s *stallWatch) since() time.Duration { return time.Since(time.Unix(0, s.last.Load())) }
+
+type touchReader struct {
+	io.ReadCloser
+	w *stallWatch
+}
+
+func (t touchReader) Read(p []byte) (int, error) {
+	n, err := t.ReadCloser.Read(p)
+	if n > 0 {
+		t.w.touch()
+	}
+	if err == io.EOF {
+		t.w.touch()
+		t.w.drained.Store(true)
+	}
+	return n, err
+}
+
+type touchWriter struct {
+	io.Writer
+	w *stallWatch
+}
+
+func (t touchWriter) Write(p []byte) (int, error) {
+	n, err := t.Writer.Write(p)
+	if n > 0 {
+		t.w.touch()
+	}
+	return n, err
+}
+
+func (rq request) watched(ctx context.Context) (context.Context, request, func()) {
+	if rq.idle <= 0 {
+		return ctx, rq, func() {}
+	}
+	ctx, cancel := context.WithCancelCause(ctx)
+	w := &stallWatch{}
+	w.touch()
+	if body := rq.body; body != nil {
+		rq.body = func() (io.ReadCloser, error) {
+			rc, err := body()
+			if err != nil {
+				return nil, err
+			}
+			w.drained.Store(false)
+			w.touch()
+			return touchReader{rc, w}, nil
+		}
+	}
+	if rq.sink != nil {
+		rq.sink = touchWriter{rq.sink, w}
+	}
+	done := make(chan struct{})
+	go func() {
+		tick := time.NewTicker(min(rq.idle/4, 5*time.Second))
+		defer tick.Stop()
+		for {
+			select {
+			case <-done:
+				return
+			case <-ctx.Done():
+				return
+			case <-tick.C:
+				limit := rq.idle
+				if w.drained.Load() {
+					limit = drainedGrace
+				}
+				if w.since() > limit {
+					cancel(errStalled)
+					return
+				}
+			}
+		}
+	}()
+	return ctx, rq, func() {
+		close(done)
+		cancel(nil)
+	}
 }
 
 var challengeParam = regexp.MustCompile(`(\w+)=(?:"([^"]*)"|([^,]*))`)
@@ -169,6 +264,16 @@ func (l *link) do(ctx context.Context, rq request) (int, []byte, error) {
 	}
 	ctx, cancel := context.WithTimeout(ctx, rq.timeout)
 	defer cancel()
+	ctx, rq, stop := rq.watched(ctx)
+	defer stop()
+	status, data, err := l.attempt(ctx, rq)
+	if err != nil && errors.Is(context.Cause(ctx), errStalled) {
+		return 0, nil, errStalled
+	}
+	return status, data, err
+}
+
+func (l *link) attempt(ctx context.Context, rq request) (int, []byte, error) {
 
 	if l.p.APIKey != "" {
 		return l.send(ctx, rq, map[string]string{"X-Api-Key": l.p.APIKey})
