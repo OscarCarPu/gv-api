@@ -8,3 +8,7 @@ test
 **/mocks
 **/*_test.go
 *.md
+!README.md
+.venv
+**/__pycache__
+bench

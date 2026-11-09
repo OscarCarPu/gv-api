@@ -4,20 +4,20 @@ Milestones: **H0** foundations (1–5) · **H1** parity harness (6) · **H2** si
 
 ## 1. H0 · Project bootstrap
 
-- [ ] 1.1 Create `pyproject.toml` for Python 3.14 with uv, with the runtime deps from design D2 and the dev deps from D1, and commit `uv.lock`. Verify that `uv sync` succeeds on a clean checkout.
-- [ ] 1.2 Configure ruff (line length 100, rules `E,F,I,UP,B,SIM,ASYNC,RUF,S`), mypy `--strict` with the pydantic plugin, and pytest (asyncio auto mode, coverage at 85% overall and 90% on `service.py`). Verify that `uv run ruff check`, `uv run mypy src` and `uv run pytest` all pass on the empty package.
-- [ ] 1.3 Create the `src/gv_api/` layout from D3 and the `tests/{unit,integration,e2e,parity}` directories. Add `py-run`, `py-lint`, `py-test-unit`, `py-test-integration` and `py-test-e2e` Make targets next to the Go ones. Verify that each target runs.
-- [ ] 1.4 Add `Dockerfile.py` (python:3.14-slim with `postgresql15-client`-compatible `pg_dump`/`psql`, `ffmpeg`, `fonts-dejavu`, non-root uid 1000, `/data/recordings` and `/data/prusa`). Verify that the image builds and that `docker run … gv-api --help` lists `serve`, `backup` and `prusa-login`.
+- [x] 1.1 Create `pyproject.toml` for Python 3.14 with uv, with the runtime deps from design D2 and the dev deps from D1, and commit `uv.lock`. Verify that `uv sync` succeeds on a clean checkout.
+- [x] 1.2 Configure ruff (line length 100, rules `E,F,I,UP,B,SIM,ASYNC,RUF,S`), mypy `--strict` with the pydantic plugin, and pytest (asyncio auto mode, coverage at 85% overall and 90% on `service.py`). Verify that `uv run ruff check`, `uv run mypy src` and `uv run pytest` all pass on the empty package.
+- [x] 1.3 Create the `src/gv_api/` layout from D3 and the `tests/{unit,integration,e2e,parity}` directories. Add `py-run`, `py-lint`, `py-test-unit`, `py-test-integration` and `py-test-e2e` Make targets next to the Go ones. Verify that each target runs.
+- [x] 1.4 Add `Dockerfile.py` (python:3.14-slim with `postgresql15-client`-compatible `pg_dump`/`psql`, `ffmpeg`, `fonts-dejavu`, non-root uid 1000, `/data/recordings` and `/data/prusa`). Verify that the image builds and that `docker run … gv-api --help` lists `serve`, `backup` and `prusa-login`.
 
 ## 2. H0 · HTTP platform
 
-- [ ] 2.1 Implement `config.py` with pydantic-settings: every `.env.example` name and default except `LIGHTS_*`, plus the optional `TELEGRAM_*`, with the same required-variable, `FAILOVER_SIDE`, `TIMEZONE` and retention checks. Verify with unit tests ported from `internal/config`, including the exact `required env vars not set: …` message.
-- [ ] 2.2 Implement JSON logging with the `request_id` contextvar filter, and disable uvicorn's access log. Verify with a unit test that one log line is one JSON object with `time`, `level`, `msg` and `request_id`.
-- [ ] 2.3 Implement `core/encoding.py`: `ApiModel`, `Money`, `Timestamp`, `Day` and `respond()`. Verify with table tests that use Go's own outputs as fixtures (`12.50` → `"12.5"`, `100.00` → `"100"`, whole-second and sub-second timestamps, null vs `[]`).
-- [ ] 2.4 Implement `parse_body`, `parse_id`, `query` and the error helpers (`error`, `error_code`, `internal_error`). Verify with unit tests for unknown fields, null → zero value, wrong type → handler message, and invalid ids (`abc`, `0`, `4294967296`).
-- [ ] 2.5 Build the app factory with the D9 settings (no docs routes, `redirect_slashes=False`, text 404, empty-body 405 with `Allow`, no automatic HEAD, empty-body 500), plus request-id middleware, CORS and `/health`. Verify with tests for each http-platform scenario, including CORS preflight with the gv-web headers and a foreign origin.
-- [ ] 2.6 Add the `serve` command and lifespan skeleton: start and cancel a worker registry, and drain for 10 s on SIGTERM. Verify with a test that SIGTERM during a slow request lets it finish and the process exits 0.
-- [ ] 2.7 Generate `tests/parity/routes.txt` (method, path, tier) once from the Go router (a small Go program walking `chi.Walk`, minus lights), and add the route-inventory test. It starts red and turns green as domains land.
+- [x] 2.1 Implement `config.py` with pydantic-settings: every `.env.example` name and default except `LIGHTS_*`, plus the optional `TELEGRAM_*`, with the same required-variable, `FAILOVER_SIDE`, `TIMEZONE` and retention checks. Verify with unit tests ported from `internal/config`, including the exact `required env vars not set: …` message.
+- [x] 2.2 Implement JSON logging with the `request_id` contextvar filter, and disable uvicorn's access log. Verify with a unit test that one log line is one JSON object with `time`, `level`, `msg` and `request_id`.
+- [x] 2.3 Implement `core/encoding.py`: `ApiModel`, `Money`, `Timestamp`, `Day` and `respond()`. Verify with table tests that use Go's own outputs as fixtures (`12.50` → `"12.5"`, `100.00` → `"100"`, whole-second and sub-second timestamps, null vs `[]`).
+- [x] 2.4 Implement `parse_body`, `parse_id`, `query` and the error helpers (`error`, `error_code`, `internal_error`). Verify with unit tests for unknown fields, null → zero value, wrong type → handler message, and invalid ids (`abc`, `0`, `4294967296`).
+- [x] 2.5 Build the app factory with the D9 settings (no docs routes, `redirect_slashes=False`, text 404, empty-body 405 with `Allow`, no automatic HEAD, empty-body 500), plus request-id middleware, CORS and `/health`. Verify with tests for each http-platform scenario, including CORS preflight with the gv-web headers and a foreign origin.
+- [x] 2.6 Add the `serve` command and lifespan skeleton: start and cancel a worker registry, and drain for 10 s on SIGTERM. Verify with a test that SIGTERM during a slow request lets it finish and the process exits 0.
+- [x] 2.7 Generate `tests/parity/routes.txt` (method, path, tier) once from the Go router (a small Go program walking `chi.Walk`, minus lights), and add the route-inventory test. It starts red and turns green as domains land.
 
 ## 3. H0 · Database and migrations
 

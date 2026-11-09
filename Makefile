@@ -183,3 +183,38 @@ prusa-login:
 # Print just the current TOTP 2FA code
 code:
 	@python scripts/auth.py --code
+
+# --- PYTHON (FastAPI rewrite; replaces the Go targets at cutover) ---
+
+PY_TEST_DB=$(TEST_DB)-py
+PY_TEST_DB_URL=postgresql://$(POSTGRES_USER):$(POSTGRES_PASSWORD)@127.0.0.1:5432/$(PY_TEST_DB)?sslmode=disable
+
+.PHONY: py-run py-lint py-test-unit py-test-db py-test-integration py-test-e2e py-test
+
+py-run:
+	uv run gv-api serve
+
+py-lint:
+	uv run ruff check
+	uv run ruff format --check
+	uv run mypy
+
+py-test-unit:
+	uv run pytest tests/unit
+
+# Fresh database for the Python integration tests, beside the Go one.
+py-test-db:
+	@docker compose up -d --wait db > /dev/null
+	@docker compose exec -T db psql -q -U $(POSTGRES_USER) -d postgres -c 'DROP DATABASE IF EXISTS "$(PY_TEST_DB)"' -c 'CREATE DATABASE "$(PY_TEST_DB)"'
+
+py-test-integration: py-test-db
+	TEST_DB_URL=$(PY_TEST_DB_URL) uv run pytest tests/integration
+
+# Needs a running API at API_URL (default http://localhost:$(PORT)).
+py-test-e2e:
+	API_URL=$${API_URL:-http://localhost:$(PORT)} PASSWORD=$(PASSWORD) TOTP_SECRET=$(TOTP_SECRET) uv run pytest tests/e2e
+
+# Unit + integration with the coverage gate (85% overall, 90% per service.py).
+py-test: py-test-db
+	TEST_DB_URL=$(PY_TEST_DB_URL) uv run pytest tests/unit tests/integration --cov --cov-report=term --cov-report=json:coverage.json
+	uv run python scripts/check_coverage.py
