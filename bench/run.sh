@@ -28,16 +28,16 @@ psql_db() { docker exec -i gv_db psql -X -q -U "$POSTGRES_USER" -d "$1" "${@:2}"
 port=18080
 secret=bench-secret
 
-# Template: the schema from db/migrations plus golang-migrate's bookkeeping, built once.
+# Template: the app's migrations (alembic upgrade head) plus golang-migrate's bookkeeping row,
+# so the Go release (frozen at version 36) also starts on it. Built once.
 if ! psql_db postgres -Atc "select 1 from pg_database where datname='gv_bench_template'" | grep -q 1; then
-  echo ">>> building gv_bench_template from db/migrations" >&2
+  echo ">>> building gv_bench_template with alembic upgrade head" >&2
   psql_db postgres -c "CREATE DATABASE gv_bench_template"
-  for f in $(ls "$here/../db/migrations/"*.up.sql | sort); do
-    psql_db gv_bench_template -v ON_ERROR_STOP=1 <"$f"
-  done
-  last=$(ls "$here/../db/migrations/"*.up.sql | sort | tail -1 | xargs basename | cut -d_ -f1)
-  psql_db gv_bench_template -c "CREATE TABLE schema_migrations (version bigint NOT NULL PRIMARY KEY, dirty boolean NOT NULL)" \
-    -c "INSERT INTO schema_migrations VALUES (${last#0*}, false)"
+  DATABASE_URL="postgresql://$POSTGRES_USER:$POSTGRES_PASSWORD@127.0.0.1:5432/gv_bench_template?sslmode=disable" \
+    uv run --project "$here/.." alembic -c "$here/../alembic.ini" upgrade head
+  psql_db gv_bench_template \
+    -c "CREATE TABLE schema_migrations (version bigint NOT NULL PRIMARY KEY, dirty boolean NOT NULL)" \
+    -c "INSERT INTO schema_migrations VALUES (36, false)"
 fi
 
 for s in "${scenarios[@]}"; do

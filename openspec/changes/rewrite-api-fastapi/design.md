@@ -11,7 +11,7 @@ See proposal.md for motivation and scope. The current service:
 - **External processes and services:** `pg_dump`/`psql` for backups and restore, `ffmpeg` for camera and recordings, PrusaLink (HTTP Digest), Prusa Connect, AWS SSM and S3, and the read-only central-pipeline database.
 - **Tests:** about 12k lines of Go tests. Unit tests use mockery, repository integration tests run against a real DB, and an 824-line e2e suite runs over HTTP.
 
-The constraints come from the specs: byte-compatible HTTP (`http-platform`, `auth`, `api-surface`), adoption of the golang-migrate database (`schema-migrations`), the same runtime behavior (`runtime-lifecycle`), and Telegram alerts (`error-alerts`).
+The constraints come from the specs: byte-compatible HTTP (`http-platform`, `auth`, `api-surface`), a self-contained migration history (`schema-migrations`), the same runtime behavior (`runtime-lifecycle`), and Telegram alerts (`error-alerts`).
 
 ## Goals / Non-Goals
 
@@ -22,7 +22,7 @@ The constraints come from the specs: byte-compatible HTTP (`http-platform`, `aut
 
 **Non-Goals:**
 - Fixing API warts. Known oddities are ported as they are and listed for a later change.
-- Schema changes. The baseline is exactly 001–036.
+- Schema changes. The baseline is exactly the Go release's schema at version 036.
 - Horizontal scaling. One process with one worker, as today.
 - Porting lights.
 
@@ -55,13 +55,13 @@ src/gv_api/
   config.py            # pydantic-settings; same env names and defaults
   core/                # encoding types, errors, body/id/query parsing, request id,
                        # logging, CORS, health, failover-side guard, route helpers
-  db/                  # engines, shared MetaData, migration runner + adoption
+  db/                  # engines, shared MetaData, startup migration runner
   alerts/              # Telegram logging handler
   auth/ habits/ tasks/ plan/ capacity/ finance/ calendar/ rutas/
   uptime/ pipeline/ backup/ failover/ restore/ report/ history/ printers/
       router.py  service.py  repository.py  schemas.py  tables.py  errors.py
-migrations/            # alembic env.py + versions/ (one linear history)
-db/migrations/*.sql    # kept byte for byte; read by the baseline revision
+migrations/            # alembic env.py, versions/ (one linear history), baseline.sql
+alembic.ini            # for the alembic CLI (the deploy's one-time stamp)
 tests/{unit,integration,e2e,parity}/
 ```
 
@@ -133,13 +133,16 @@ Path parameters are declared as `str` and query parameters are not declared, so 
 
 ### D11. Migrations with Alembic
 
-- **Baseline:** revision `0001_baseline` runs `db/migrations/001…036.up.sql` in order through `exec_driver_sql`, without parameters, so multi-statement files work.
-- **Adoption at startup:** the runner runs before `upgrade head`. When `alembic_version` is absent and `schema_migrations = (36, false)`, it runs `stamp 0001_baseline` and logs the adoption. Any other golang-migrate state stops startup.
-- **Rollback safety:** `schema_migrations` is never touched.
+The Go migrations are history, not something the new app builds on. Nothing in Python, the image or `bench/` reads `db/`, so `db/` goes away at cutover.
+
+- **Baseline:** `migrations/baseline.sql` is a `pg_dump --schema-only --no-owner --no-privileges` of an empty database migrated by the `go-final` image, without `schema_migrations`. Revision `0001_baseline` runs it on the asyncpg driver connection, inside Alembic's transaction, because asyncpg's prepared statements take one statement at a time.
+- **Startup:** the runner only does `alembic upgrade head`, in one transaction, under a `pg_advisory_xact_lock`. It does not look at `schema_migrations`. A populated database without history fails on the baseline's first `CREATE`, rolls back and stops startup.
+- **Cutover is a deployment step:** before starting the new container, the cutover deploy runs `alembic stamp 0001_baseline` against production, only when `alembic current` reports no revision, so later deploys skip it. Development databases are stamped once by hand (`make py-db-stamp`).
+- **Rollback safety:** `schema_migrations` is never touched. The Go image carries its own migrations, so it starts on the stamped database until a newer revision exists.
 - **When it runs:** `lifespan` calls the runner through `run_sync`. It is skipped while the failover holds the app, and it runs again after a restore swap, mirroring Go.
 - New migrations are hand-written Alembic revisions. Autogenerate is allowed as a starting point, but it misses views, functions and triggers.
 
-*Alternative:* a golang-migrate-compatible runner. Rejected at the user's request. Alembic is the standard tool, and adoption covers the transition.
+*Alternatives:* a golang-migrate-compatible runner (rejected: Alembic is the standard tool), and adoption logic at startup (rejected: it carries a one-time transition into the app forever; the deploy step does the same once).
 
 ### D12. Logging and Telegram alerts
 
@@ -174,7 +177,7 @@ Each domain group ports that domain's existing Go tests, and its coverage counts
 ### D15. Parity harness
 
 - **What it runs:** `docker compose --profile parity` starts both apps at the same time, each on its own copy of the same snapshot. The Go reference image is built from tag `go-final` (`d32ab42`).
-- **Snapshot:** cloned with `CREATE DATABASE … TEMPLATE`. Either `db/demo.sql` or a local production backup from `./backups` (`PARITY_SNAPSHOT=...`), which exercises real data shapes.
+- **Snapshot:** cloned with `CREATE DATABASE … TEMPLATE`. Either the demo seed (`db/demo.sql`, moved to `scripts/demo.sql` at cutover) or a local production backup from `./backups` (`PARITY_SNAPSHOT=...`), which exercises real data shapes.
 - **Corpus:** one YAML file per domain in `tests/parity/corpus/`. Each entry has the method, path, tier, body, and a list of volatile JSON paths. Ids created by earlier writes are captured and substituted by name.
 - **Runner:** sends each request to both apps concurrently and compares status, selected headers and decoded bodies. At the end it compares both databases table by table, ignoring volatile columns.
 - **Printers:** reads (status, files, history, chamber, recordings list) run against the real printer, with telemetry paths marked volatile. Writes are not replayed, because each write would hit the physical printer twice. They are covered by recorded-response unit tests and a manual checklist (task 14.x).
@@ -187,7 +190,7 @@ Each domain group ports that domain's existing Go tests, and its coverage counts
 - **[Framework defaults leak (422, 307, HEAD, `/docs`)]** → D9 settings plus explicit tests for each.
 - **[Lax coercion accepts `"5"` for an int]** → Accepted and written into the http-platform spec. No client sends this.
 - **[Event loop blocked by sync work]** → Rule: boto3, file and subprocess IO always go through threads or async subprocesses. Ruff's `ASYNC` rules flag blocking calls.
-- **[First deploy adopts the production DB wrongly]** → Adoption refuses any state other than `(36, false)`. The CI pre-deploy backup still runs, and the adoption line is checked in the logs.
+- **[Cutover stamp forgotten or run on the wrong database]** → Forgetting it fails safe: the baseline's first `CREATE` errors, the transaction rolls back and the app does not start. The stamp only runs when `alembic current` is empty, and the CI pre-deploy backup still runs first.
 - **[Rollback window closes on the first new migration]** → Documented. Rolling back after that needs a down step written at that time.
 - **[Python slower than Go]** → The baseline in `benchmarks.md` shows the heavy endpoints are SQL-bound (Go CPU is 0.5–12 ms per request against 25–200 ms in Postgres), and the D7 encoding already matches Go's cost on a 5,000-row payload. Gate: at scenario `5y` of `bench/run.sh`, on the same machine, every endpoint's median p95 over 3 runs ≤ max(1.5 × Go's, Go's + 5 ms). There is a checkpoint after H3 and the full gate before cutover.
 - **[Telegram noise]** → 10 s batching and deduplication. ERROR-level discipline stays as in Go.
@@ -205,8 +208,8 @@ Each domain group ports that domain's existing Go tests, and its coverage counts
 4. Tag `go-final`, then in one commit on `develop`:
    - switch the Dockerfile, compose (drop the D-Bus mount), Makefile and CI to Python
    - add `TELEGRAM_*` to `.env.example`
-   - delete `cmd/`, `internal/`, `test/`, `go.*`, `sqlc.yaml`, `.mockery.yaml` and `db/queries/`
+   - delete `cmd/`, `internal/`, `test/`, `go.*`, `sqlc.yaml`, `.mockery.yaml` and the whole `db/` directory, after moving `db/demo.sql` to `scripts/demo.sql`
    - rewrite README and `docs/architecture.md`, and delete `docs/api/lights.md`
-5. Merge to `main`. The pre-deploy backup step runs against the container that is still up, which is Go on the cutover deploy. So the new `deploy.yml` calls `gv-api backup || ./main backup`, and **that one deploy treats a failed backup as fatal** instead of a warning. Then `docker compose up --build --wait` runs, and the logs must show the adoption line.
+5. Merge to `main`. The pre-deploy backup step runs against the container that is still up, which is Go on the cutover deploy. So the new `deploy.yml` calls `gv-api backup || ./main backup`, and **that one deploy treats a failed backup as fatal** instead of a warning. Then the new image is built and `alembic stamp 0001_baseline` runs against production through `docker compose run`, only if `alembic current` is empty. Then `docker compose up --build --wait` runs, and the logs must show no pending migration. **Cutover only with the failover state `NORMAL`**: a dump restored from the Go era would have no Alembic history.
 6. **Rollback:** redeploy the `go-final` image. No data step is needed while no new migration exists.
 7. **Follow-ups outside this change:** remove the lights screens in gv-web and Android, and later drop the `lights` table and `schema_migrations`.

@@ -19,7 +19,7 @@ RUN apk add --no-cache postgresql15-client ffmpeg font-dejavu \
 
 WORKDIR /app
 COPY --from=builder /app/.venv /app/.venv
-COPY db/migrations ./db/migrations
+COPY alembic.ini ./
 COPY migrations ./migrations
 ENV PATH=/app/.venv/bin:$PATH PYTHONUNBUFFERED=1
 

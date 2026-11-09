@@ -54,7 +54,11 @@ async def test_failing_worker_is_logged_not_fatal(caplog: pytest.LogCaptureFixtu
     assert caplog.records[0].__dict__["worker"] == "broken"
 
 
-async def test_lifespan_runs_and_stops_workers() -> None:
+async def test_lifespan_runs_and_stops_workers(monkeypatch: pytest.MonkeyPatch) -> None:
+    async def no_migrations(*_: object) -> None:
+        return None
+
+    monkeypatch.setattr("gv_api.main.migrate", no_migrations)
     cfg = Config(
         database_url="postgresql://u:p@127.0.0.1:1/db?sslmode=disable",
         password="p",
@@ -157,3 +161,23 @@ def test_sigterm_lets_inflight_request_finish_and_exits_0() -> None:
     assert result == {"status": 200, "body": "done"}, out
     assert code == 0, out
     assert '"msg": "server stopped"' in out
+
+
+def test_serve_exits_non_zero_when_migrations_fail(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    env = {
+        "DATABASE_URL": "postgresql://u:p@127.0.0.1:1/db?sslmode=disable",
+        "PASSWORD": "p",
+        "SEMIPRIVATE_PASSWORD": "s",
+        "JWT_SECRET": "j",
+        "TOTP_SECRET": "t",
+        "ALLOWED_ORIGINS": "http://x",
+        "PORT": str(free_port()),
+    }
+    for key, value in env.items():
+        monkeypatch.setenv(key, value)
+    assert main(["serve"]) == 1
+    msgs = [json.loads(line)["msg"] for line in capsys.readouterr().out.splitlines()]
+    assert "failed to run migrations" in msgs
+    assert "server stopped" not in msgs

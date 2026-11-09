@@ -25,7 +25,7 @@ bench/run.sh "gv-api serve" py-<sha> prod 5y 5y_x3
 
 The API command runs in the foreground from the repository root, with its configuration in the environment (background work turned off).
 
-The first run builds `gv_bench_template` from `db/migrations/*.up.sql`, with `schema_migrations` at the latest version. `5y_x3` takes several minutes, mostly in `by-due-date` and `slack`.
+The first run builds `gv_bench_template` with `alembic upgrade head`, plus golang-migrate's `schema_migrations` row so the Go release starts on it too. `5y_x3` takes several minutes, mostly in `by-due-date` and `slack`.
 
 ## Notes
 

@@ -23,8 +23,7 @@ def serve(_: argparse.Namespace) -> int:
     cfg = _config()
     if cfg is None:
         return 1
-    run_server(build(cfg), cfg)
-    return 0
+    return run_server(build(cfg), cfg)
 
 
 def _not_ready(name: str) -> Callable[[argparse.Namespace], int]:

@@ -2,16 +2,16 @@
 
 ## Purpose
 
-Keeps the gv-api database schema current. The service itself applies an ordered migration history at startup, and adopts databases migrated by earlier releases without re-running their history.
+Keeps the gv-api database schema current through a self-contained migration history that the service applies at startup, so that nothing depends on the Go release's migration files once the stack migration is done.
 
 ## ADDED Requirements
 
 ### Requirement: Migrations applied at startup
-On startup, before serving requests, the service SHALL apply every pending migration in order. If a migration fails, the service SHALL log the error and exit non-zero without serving.
+On startup, before serving requests, the service SHALL apply every pending migration in order, all in one transaction. If a migration fails, the service SHALL log the error, leave the schema as it was, and exit non-zero without serving.
 
 #### Scenario: Fresh database
 - **WHEN** the service starts against an empty database
-- **THEN** the full history (the original 001–036 schema, then any later migration) is applied and the service starts serving
+- **THEN** the baseline and any later migration are applied and the service starts serving
 
 #### Scenario: Up-to-date database
 - **WHEN** the service starts against a database already at the latest migration
@@ -19,32 +19,43 @@ On startup, before serving requests, the service SHALL apply every pending migra
 
 #### Scenario: Failing migration
 - **WHEN** a migration raises an SQL error
-- **THEN** the process logs the error and exits non-zero
+- **THEN** the process logs the error and exits non-zero, and no part of the pending migrations is applied
 
-### Requirement: Adoption of a database migrated by the Go release
-When the database has no record of the new migration history but its golang-migrate `schema_migrations` row is version 36 and not dirty, the service SHALL mark the baseline (the 001–036 schema) as applied without executing it, and then apply any later migration. A dirty or different golang-migrate version SHALL stop startup with a non-zero exit.
+### Requirement: Self-contained baseline
+The first migration SHALL create the schema of the Go release at golang-migrate version 36 from a schema snapshot kept with the migrations. Nothing the service, its image or its tooling uses SHALL read the `db/` directory, so `db/` can be deleted after the cutover.
 
-#### Scenario: First deploy over the production database
-- **WHEN** the new service first starts on a database whose `schema_migrations` is `(36, false)`
-- **THEN** no schema statement runs, the baseline is recorded as applied, and a log line reports the adoption
+#### Scenario: Same schema as the Go release
+- **WHEN** an empty database is migrated by the service and another by the Go release `d32ab42`
+- **THEN** their `pg_dump --schema-only` outputs are equal, apart from each tool's bookkeeping table (`alembic_version` and `schema_migrations`)
 
-#### Scenario: Unexpected golang-migrate state
-- **WHEN** `schema_migrations` holds a dirty row, or a version other than 36
-- **THEN** the service logs the found state and exits non-zero without changing the schema
+#### Scenario: Built without db/
+- **WHEN** the image is built and the migrations run from a checkout without the `db/` directory
+- **THEN** both succeed
+
+### Requirement: No automatic adoption
+The service SHALL NOT infer migration state from golang-migrate's `schema_migrations`. A database that has tables but no migration history SHALL make startup fail, without changing any data.
+
+#### Scenario: Populated database without history
+- **WHEN** the service starts on a database migrated by the Go release that has not been stamped
+- **THEN** the baseline fails because the objects already exist, the transaction is rolled back, and the process exits non-zero
+
+### Requirement: Cutover stamp as a deployment step
+The cutover deploy SHALL mark the existing production database as being at the baseline before the new service starts, and SHALL do so only when the database has no migration history yet. Running the deploy again SHALL leave the stamp unchanged.
+
+#### Scenario: Cutover deploy
+- **WHEN** the deploy that switches to the Python image runs against the production database
+- **THEN** the database is stamped at the baseline without running any schema statement, and the new service starts with no pending migration
+
+#### Scenario: Later deploys
+- **WHEN** a later deploy runs on an already stamped database
+- **THEN** the stamp step does nothing
 
 ### Requirement: Rollback window to the Go release
-The service SHALL NOT modify or drop the `schema_migrations` table. As long as no migration newer than the baseline has been applied, the Go release SHALL start on the same database without error.
+The service SHALL NOT modify or drop the `schema_migrations` table. As long as no migration newer than the baseline has been applied, the Go release SHALL start on the production database without error.
 
 #### Scenario: Rollback right after cutover
-- **WHEN** the Go image is redeployed on a database the new service adopted, before any new migration
+- **WHEN** the Go image is redeployed on the stamped production database, before any new migration
 - **THEN** golang-migrate reads version 36 and starts without error
-
-### Requirement: Existing migrations are immutable
-The SQL of migrations `001` to `036` SHALL be reused byte for byte as the baseline. Schema changes after the rewrite SHALL be added as new migrations in the single linear history.
-
-#### Scenario: Checksum of existing files
-- **WHEN** the rewrite is complete
-- **THEN** every file in `db/migrations/` that existed at `d32ab42` is unchanged
 
 ### Requirement: Migrations under the failover
 On the home side with the failover enabled, startup migrations SHALL run only when the failover mode is normal. After a successful restore swaps the database in, the service SHALL apply pending migrations to the restored database before leaving the hold.

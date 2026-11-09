@@ -65,7 +65,8 @@ init_typed = true
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 asyncio_mode = "auto"
-asyncio_default_fixture_loop_scope = "function"
+asyncio_default_fixture_loop_scope = "session"
+asyncio_default_test_loop_scope = "session"
 addopts = "-ra --strict-markers"
 markers = [
     "integration: needs the test database (TEST_DB_URL)",

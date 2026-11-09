@@ -4,7 +4,7 @@ import logging
 import signal
 import threading
 from collections.abc import AsyncGenerator, Iterator
-from contextlib import asynccontextmanager, contextmanager
+from contextlib import asynccontextmanager, contextmanager, suppress
 from dataclasses import dataclass, field
 
 import uvicorn
@@ -15,6 +15,7 @@ from gv_api.config import Config
 from gv_api.core.app import create_app
 from gv_api.core.workers import Workers
 from gv_api.db.engine import create_engine, ping
+from gv_api.db.migrate import migrate
 
 log = logging.getLogger("gv_api")
 
@@ -33,6 +34,12 @@ def build(cfg: Config) -> FastAPI:
 
     @asynccontextmanager
     async def lifespan(_: FastAPI) -> AsyncGenerator[None]:
+        try:
+            await migrate(container.engine)
+        except Exception as err:
+            log.error("failed to run migrations", extra={"error": str(err)})
+            await container.engine.dispose()
+            raise
         container.workers.start()
         try:
             yield
@@ -63,7 +70,7 @@ class _Server(uvicorn.Server):
                 signal.signal(sig, handler)
 
 
-def run_server(app: FastAPI, cfg: Config) -> None:
+def run_server(app: FastAPI, cfg: Config) -> int:
     if cfg.on_failover:
         log.warning(
             "running on the backup server: printers and uptime answer 503",
@@ -81,5 +88,9 @@ def run_server(app: FastAPI, cfg: Config) -> None:
         )
     )
     log.info("server starting", extra={"port": cfg.port})
-    server.run()
+    with suppress(SystemExit):  # uvicorn exits this way when the lifespan fails to start
+        server.run()
+    if not server.started:
+        return 1
     log.info("server stopped")
+    return 0

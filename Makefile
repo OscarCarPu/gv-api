@@ -189,7 +189,21 @@ code:
 PY_TEST_DB=$(TEST_DB)-py
 PY_TEST_DB_URL=postgresql://$(POSTGRES_USER):$(POSTGRES_PASSWORD)@127.0.0.1:5432/$(PY_TEST_DB)?sslmode=disable
 
-.PHONY: py-run py-lint py-test-unit py-test-db py-test-integration py-test-e2e py-test
+.PHONY: py-run py-lint py-test-unit py-test-db py-test-integration py-test-e2e py-test py-db-stamp py-check-rollback
+
+# One-time cutover step: mark a database the Go release migrated as being at the Alembic baseline.
+# Only when it has no Alembic history yet. DB_URL defaults to the local development database.
+DB_URL ?= postgresql://$(POSTGRES_USER):$(POSTGRES_PASSWORD)@127.0.0.1:5432/$(POSTGRES_DB)?sslmode=disable
+py-db-stamp:
+	@if [ -n "$$(DATABASE_URL='$(DB_URL)' uv run alembic current 2>/dev/null)" ]; then \
+		echo "already stamped"; \
+	else \
+		DATABASE_URL='$(DB_URL)' uv run alembic stamp 0001_baseline && echo "stamped at 0001_baseline"; \
+	fi
+
+# Go release -> stamp -> Python -> Go again, on a throwaway database.
+py-check-rollback:
+	./scripts/check_rollback.sh
 
 py-run:
 	uv run gv-api serve
