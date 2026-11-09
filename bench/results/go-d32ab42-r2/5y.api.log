@@ -1,0 +1,5 @@
+{"time":"2026-11-09T20:35:09.259097042+01:00","level":"INFO","msg":"light status polling on","every":60000000000}
+{"time":"2026-11-09T20:35:09.259099535+01:00","level":"INFO","msg":"backup: schedule disabled"}
+{"time":"2026-11-09T20:35:09.25931988+01:00","level":"INFO","msg":"server starting","port":"18080"}
+{"time":"2026-11-09T20:37:26.635844201+01:00","level":"INFO","msg":"shutting down server"}
+{"time":"2026-11-09T20:37:26.635970199+01:00","level":"INFO","msg":"server stopped"}
