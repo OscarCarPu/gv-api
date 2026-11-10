@@ -54,8 +54,8 @@ Milestones: **H0** foundations (1–5) · **H1** parity harness (6) · **H2** si
 
 ## 8. H2 · Rutas
 
-- [ ] 8.1 Port the rutas tables, repository, service and router (semi tier) with their Go tests. Verify that unit and integration tests pass.
-- [ ] 8.2 Add `tests/parity/corpus/rutas.yaml` covering CRUD with semi and full tokens and the date parsing errors. Verify that parity is green.
+- [x] 8.1 Port the rutas tables, repository, service and router (semi tier) with their Go tests. Verify that unit and integration tests pass.
+- [x] 8.2 Add `tests/parity/corpus/rutas.yaml` covering CRUD with semi and full tokens and the date parsing errors. Verify that parity is green.
 
 ## 9. H3 · Tasks
 

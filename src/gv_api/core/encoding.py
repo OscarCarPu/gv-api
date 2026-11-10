@@ -69,10 +69,46 @@ def go_float32(x: float) -> float | int:
     return short
 
 
+def go_midnight(d: date) -> str:
+    """A SQL date that pgx scanned into a time.Time: midnight UTC."""
+    return d.strftime("%Y-%m-%dT00:00:00Z")
+
+
+_ESCAPES = {
+    "\a": "\\a",
+    "\b": "\\b",
+    "\f": "\\f",
+    "\n": "\\n",
+    "\r": "\\r",
+    "\t": "\\t",
+    "\v": "\\v",
+}
+
+
+def go_quote(s: str) -> str:
+    """strconv.Quote (fmt's %q) for valid UTF-8."""
+    out = []
+    for ch in s:
+        if ch in ('"', "\\"):
+            out.append("\\" + ch)
+        elif ch in _ESCAPES:
+            out.append(_ESCAPES[ch])
+        elif ch.isprintable():
+            out.append(ch)
+        elif ord(ch) < 0x80:
+            out.append(f"\\x{ord(ch):02x}")
+        elif ord(ch) <= 0xFFFF:
+            out.append(f"\\u{ord(ch):04x}")
+        else:
+            out.append(f"\\U{ord(ch):08x}")
+    return '"' + "".join(out) + '"'
+
+
 Money = Annotated[Decimal, PlainSerializer(go_decimal, return_type=str)]
 Float32 = Annotated[float, PlainSerializer(go_float32, return_type=float | int)]
 Timestamp = Annotated[datetime, PlainSerializer(go_time, return_type=str)]
 Day = Annotated[date, PlainSerializer(go_date, return_type=str)]
+DayTime = Annotated[date, PlainSerializer(go_midnight, return_type=str)]
 
 
 def jsonable(value: Any) -> Any:
