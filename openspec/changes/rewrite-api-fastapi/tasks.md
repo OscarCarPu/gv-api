@@ -41,10 +41,10 @@ Milestones: **H0** foundations (1–5) · **H1** parity harness (6) · **H2** si
 
 ## 6. H1 · Parity harness and e2e
 
-- [ ] 6.1 Tag `go-final` at `d32ab42`, and add a compose `parity` profile running the Go image, the Python image and a Postgres with template cloning from `db/demo.sql` or `PARITY_SNAPSHOT`. Verify that `make parity-up` brings both apps up healthy on separate DB copies.
-- [ ] 6.2 Implement the corpus format (YAML per domain, captured ids, volatile paths) and the runner. The runner sends each request to both apps concurrently, diffs status, headers and decoded bodies, records latency, and diffs the final databases table by table. Verify that a deliberately broken Python response fails the run with a readable diff.
-- [ ] 6.3 Write corpora for health, auth, the 404/405/CORS behavior and `/domotics/lights/*` returning 404 (an expected difference listed in `tests/parity/ACCEPTED.md`). Verify that `make parity` is green for them.
-- [ ] 6.4 Port the Go e2e harness (`test/e2e/setup.go`, `client.go`) and `auth_test.go` and `health_test.go` to `tests/e2e`. Verify that `make py-test-e2e` passes against the Python container.
+- [x] 6.1 Tag `go-final` at `d32ab42`, and add a compose `parity` profile running the Go image, the Python image and a Postgres with template cloning from `db/demo.sql` or `PARITY_SNAPSHOT`. Verify that `make parity-up` brings both apps up healthy on separate DB copies.
+- [x] 6.2 Implement the corpus format (YAML per domain, captured ids, volatile paths) and the runner. The runner sends each request to both apps concurrently, diffs status, headers and decoded bodies, records latency, and diffs the final databases table by table. Verify that a deliberately broken Python response fails the run with a readable diff.
+- [x] 6.3 Write corpora for health, auth, the 404/405/CORS behavior and `/domotics/lights/*` returning 404 (an expected difference listed in `tests/parity/ACCEPTED.md`). Verify that `make parity` is green for them.
+- [x] 6.4 Port the Go e2e harness (`test/e2e/setup.go`, `client.go`) and `auth_test.go` and `health_test.go` to `tests/e2e`. Verify that `make py-test-e2e` passes against the Python container.
 
 ## 7. H2 · Habits
 

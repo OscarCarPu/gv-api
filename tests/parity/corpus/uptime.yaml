@@ -1,0 +1,4 @@
+# The heartbeat worker writes `outages` on its own clock (a row at start, ends_at every 30 s).
+# Until task 14.3 ports it only Go writes them: drop db_ignore then, and keep ends_at volatile.
+db_ignore: [outages]
+db_volatile: [outages.ends_at]

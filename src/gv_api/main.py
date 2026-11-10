@@ -94,7 +94,8 @@ def run_server(app: FastAPI, cfg: Config) -> int:
     server = _Server(
         uvicorn.Config(
             app,
-            host="0.0.0.0",  # noqa: S104 (container port)
+            # Every interface, IPv4 and IPv6, like Go's ":8080": healthchecks dial localhost (::1).
+            host="",
             port=int(cfg.port),
             log_config=None,
             access_log=False,

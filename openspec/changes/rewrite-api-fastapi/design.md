@@ -176,9 +176,9 @@ Each domain group ports that domain's existing Go tests, and its coverage counts
 
 ### D15. Parity harness
 
-- **What it runs:** `docker compose --profile parity` starts both apps at the same time, each on its own copy of the same snapshot. The Go reference image is built from tag `go-final` (`d32ab42`).
+- **What it runs:** a separate compose project (`docker-compose.parity.yaml`, driven by `make parity-up`) starts both apps at the same time with their own Postgres, each on its own copy of the same snapshot, without touching the dev stack. The Go reference image is built from tag `go-final` (`d32ab42`).
 - **Snapshot:** cloned with `CREATE DATABASE … TEMPLATE`. Either the demo seed (`db/demo.sql`, moved to `scripts/demo.sql` at cutover) or a local production backup from `./backups` (`PARITY_SNAPSHOT=...`), which exercises real data shapes.
-- **Corpus:** one YAML file per domain in `tests/parity/corpus/`. Each entry has the method, path, tier, body, and a list of volatile JSON paths. Ids created by earlier writes are captured and substituted by name.
+- **Corpus:** one YAML file per domain in `tests/parity/corpus/`. Each entry has the method, path, tier, body, and a list of volatile JSON paths. Ids created by earlier writes are captured and substituted by name. Tables written only by background workers (the uptime heartbeat) can be ignored per corpus until that worker is ported.
 - **Runner:** sends each request to both apps concurrently and compares status, selected headers and decoded bodies. At the end it compares both databases table by table, ignoring volatile columns.
 - **Printers:** reads (status, files, history, chamber, recordings list) run against the real printer, with telemetry paths marked volatile. Writes are not replayed, because each write would hit the physical printer twice. They are covered by recorded-response unit tests and a manual checklist (task 14.x).
 - **Ownership:** each domain group adds its own corpus file and must pass it before the group is done.

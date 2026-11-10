@@ -1,0 +1,5 @@
+requests:
+  - name: health
+    path: /health
+  - name: health with a query string
+    path: /health?verbose=1

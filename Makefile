@@ -224,9 +224,27 @@ py-test-db:
 py-test-integration: py-test-db
 	TEST_DB_URL=$(PY_TEST_DB_URL) uv run pytest tests/integration
 
-# Needs a running API at API_URL (default http://localhost:$(PORT)).
-py-test-e2e:
-	API_URL=$${API_URL:-http://localhost:$(PORT)} PASSWORD=$(PASSWORD) TOTP_SECRET=$(TOTP_SECRET) uv run pytest tests/e2e
+# Against the parity stack's Python app (rebuilt and on a fresh database), with its credentials.
+py-test-e2e: parity-up
+	set -a; . tests/parity/parity.env; set +a; \
+	API_URL=http://127.0.0.1:18181 \
+	TEST_DB_URL=postgresql://parity:parity@127.0.0.1:15432/parity_py?sslmode=disable \
+	uv run pytest tests/e2e --no-cov
+
+# --- PARITY (design D15): the Go release (tag go-final) and Python side by side ---
+# PARITY_SNAPSHOT=backups/daily/<dump>.sql.gz replays on production data instead of the demo seed.
+# CORPUS="auth http" runs only those files of tests/parity/corpus.
+
+.PHONY: parity-up parity-down parity
+
+parity-up:
+	tests/parity/stack.sh up
+
+parity-down:
+	tests/parity/stack.sh down
+
+parity: parity-up
+	uv run python -m tests.parity.runner $(CORPUS)
 
 # Unit + integration with the coverage gate (85% overall, 90% per service.py).
 py-test: py-test-db

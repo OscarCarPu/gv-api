@@ -54,5 +54,6 @@ def setup_logging(stream: TextIO | None = None, level: int = logging.INFO) -> No
         logging.getLogger(name).propagate = True
     logging.getLogger("uvicorn.access").disabled = True
     # httpx logs every request URL at INFO, and the Telegram URL carries the bot token.
-    for name in ("httpx", "httpcore"):
+    # alembic logs its plugin setup at INFO on every start.
+    for name in ("httpx", "httpcore", "alembic"):
         logging.getLogger(name).setLevel(logging.WARNING)
