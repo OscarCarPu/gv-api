@@ -36,8 +36,8 @@ Milestones: **H0** foundations (1–5) · **H1** parity harness (6) · **H2** si
 
 ## 5. H0 · Auth
 
-- [ ] 5.1 Port the auth service (PyJWT HS256 with `exp`, `iat` and `kind`; pyotp with SHA-1, 30 s steps and ±1 skew) and the `/login` and `/login/2fa` routes. Verify with tests ported from `internal/auth`, plus a test that a token signed by the Go service is accepted and vice versa.
-- [ ] 5.2 Add the tier dependencies (`full`; `semi` or `full`) with the exact 401 bodies. Verify with auth spec scenarios covering a semi token on a full route, a missing `Bearer `, an `alg: none` token and an expired token.
+- [x] 5.1 Port the auth service (PyJWT HS256 with `exp`, `iat` and `kind`; pyotp with SHA-1, 30 s steps and ±1 skew) and the `/login` and `/login/2fa` routes. Verify with tests ported from `internal/auth`, plus a test that a token signed by the Go service is accepted and vice versa.
+- [x] 5.2 Add the tier dependencies (`full`; `semi` or `full`) with the exact 401 bodies. Verify with auth spec scenarios covering a semi token on a full route, a missing `Bearer `, an `alg: none` token and an expired token.
 
 ## 6. H1 · Parity harness and e2e
 

@@ -72,6 +72,8 @@ markers = [
     "integration: needs the test database (TEST_DB_URL)",
     "e2e: needs the running API",
 ]
+# pytest resets warning filters per test; gv_api.auth.service ignores this one in production too
+filterwarnings = ["ignore::jwt.warnings.InsecureKeyLengthWarning"]
 
 [tool.coverage.run]
 source = ["gv_api"]
