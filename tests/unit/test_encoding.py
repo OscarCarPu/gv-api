@@ -6,7 +6,17 @@ from zoneinfo import ZoneInfo
 import pytest
 from pydantic import Field
 
-from gv_api.core.encoding import ApiModel, Day, Money, Timestamp, go_decimal, go_time, respond
+from gv_api.core.encoding import (
+    ApiModel,
+    Day,
+    Float32,
+    Money,
+    Timestamp,
+    go_decimal,
+    go_float32,
+    go_time,
+    respond,
+)
 
 MADRID = ZoneInfo("Europe/Madrid")
 
@@ -111,3 +121,25 @@ def test_respond_list_of_models() -> None:
 def test_respond_keeps_non_ascii() -> None:
     resp = respond(200, {"name": "Café <b>"})
     assert json.loads(resp.body) == {"name": "Café <b>"}
+
+
+# Values from Go: json.Marshal(float32(x)).
+@pytest.mark.parametrize(
+    ("value", "expected"),
+    [
+        (64.22000122070312, "64.22"),
+        (0.10000000149011612, "0.1"),
+        (5.0, "5"),
+        (0.0, "0"),
+        (-2.5, "-2.5"),
+        (16777216.0, "16777216"),
+        (1.0000000116860974e-07, "1e-7"),
+        (3.4028234663852886e38, "3.4028235e+38"),
+    ],
+)
+def test_float32(value: float, expected: str) -> None:
+    class M(ApiModel):
+        v: Float32
+
+    assert json.loads(respond(200, M(v=value)).body) == {"v": json.loads(expected)}
+    assert go_float32(value) == json.loads(expected)

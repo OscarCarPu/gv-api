@@ -219,12 +219,23 @@ def body_diff(left: Any, right: Any, names: tuple[str, str] = ("go", "py")) -> l
     return list(lines)
 
 
+# chi builds Allow from a Go map, so its order changes from one request to the next.
+UNORDERED = ("allow",)
+
+
+def _header(reply: Reply, name: str) -> list[str] | None:
+    values = reply.headers.get(name)
+    if values is not None and name in UNORDERED:
+        return sorted(values)
+    return values
+
+
 def compare(entry: Entry, go: Reply, py: Reply) -> list[str]:
     problems = []
     if go.status != py.status:
         problems.append(f"status: go={go.status} py={py.status}")
     for h in sorted(set(go.headers) | set(py.headers)):
-        if go.headers.get(h) != py.headers.get(h):
+        if _header(go, h) != _header(py, h):
             problems.append(f"header {h}: go={go.headers.get(h)} py={py.headers.get(h)}")
     left, right = go.body, py.body
     if go.is_json and py.is_json:

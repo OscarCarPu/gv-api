@@ -1,0 +1,339 @@
+# /habits (full tier). Ids from the demo seed: 1 Exercise (daily), 3 Meditation (weekly),
+# 6 Weight (range, carry-forward), 7 Running (monthly). Numeric captured ids go in `raw` bodies,
+# since a substituted `body` value would be a string.
+db_volatile: [habits.created_at]
+requests:
+  # Tiers
+  - name: no token
+    path: /habits
+  - name: semi token on a full route
+    path: /habits
+    tier: semi
+  - name: tmp token on a full route
+    path: /habits
+    headers: {Authorization: "Bearer {{token.tmp}}"}
+  - name: token without the Bearer prefix
+    path: /habits
+    headers: {Authorization: "{{token.full}}"}
+  - name: garbage token
+    path: /habits
+    headers: {Authorization: "Bearer abc.def.ghi"}
+
+  # Daily view
+  - name: daily view for today
+    path: /habits
+    tier: full
+  - name: daily view with an empty date
+    path: /habits?date=
+    tier: full
+  - name: daily view for an explicit today
+    path: /habits?date={{today}}
+    tier: full
+  - name: daily view on a day without logs
+    path: /habits?date=2025-01-31
+    tier: full
+  - name: daily view in the future
+    path: /habits?date=2099-01-01
+    tier: full
+  - name: daily view with a bad date
+    path: /habits?date=bad
+    tier: full
+  - name: daily view on a day that does not exist
+    path: /habits?date=2026-02-30
+    tier: full
+  - name: daily view with a loose date format
+    path: /habits?date=2026-3-1
+    tier: full
+
+  # Create
+  - name: create daily with target
+    method: POST
+    path: /habits
+    tier: full
+    body: {name: Parity daily, description: made by the corpus, target_min: 1, foo: 1}
+    capture: {daily_id: id}
+  - name: create never-do habit
+    method: POST
+    path: /habits
+    tier: full
+    body: {name: Parity never, frequency: daily, target_max: 0}
+    capture: {never_id: id}
+  - name: create weekly range without recording
+    method: POST
+    path: /habits
+    tier: full
+    body:
+      name: Parity weekly
+      frequency: weekly
+      target_min: 2.5
+      target_max: 5.1
+      recording_required: false
+    capture: {weekly_id: id}
+  - name: create monthly with nulls
+    method: POST
+    path: /habits
+    tier: full
+    body: {name: Parity monthly, description: null, frequency: monthly, target_min: null}
+    capture: {monthly_id: id}
+  - name: create with a 40-byte name
+    method: POST
+    path: /habits
+    tier: full
+    body: {name: "0123456789012345678901234567890123456789"}
+  - name: create with an empty name
+    method: POST
+    path: /habits
+    tier: full
+    body: {name: ""}
+  - name: create with a null body
+    method: POST
+    path: /habits
+    tier: full
+    raw: "null"
+  - name: create with a 41-byte name
+    method: POST
+    path: /habits
+    tier: full
+    body: {name: "01234567890123456789012345678901234567890"}
+  - name: create with a 21-character, 42-byte name
+    method: POST
+    path: /habits
+    tier: full
+    body: {name: "ñññññññññññññññññññññ"}
+  - name: create with an empty frequency
+    method: POST
+    path: /habits
+    tier: full
+    body: {name: x, frequency: ""}
+  - name: create with an unknown frequency
+    method: POST
+    path: /habits
+    tier: full
+    body: {name: x, frequency: yearly}
+  - name: create with a negative target_min
+    method: POST
+    path: /habits
+    tier: full
+    body: {name: x, target_min: -1}
+  - name: create with a negative target_max
+    method: POST
+    path: /habits
+    tier: full
+    body: {name: x, target_max: -0.5}
+  - name: create with target_min above target_max
+    method: POST
+    path: /habits
+    tier: full
+    body: {name: x, target_min: 10, target_max: 5}
+  - name: create with a name of the wrong type
+    method: POST
+    path: /habits
+    tier: full
+    body: {name: 123}
+  - name: create not json
+    method: POST
+    path: /habits
+    tier: full
+    raw: not json
+
+  # Log
+  - name: log today
+    method: POST
+    path: /habits/log
+    tier: full
+    raw: '{"habit_id": {{daily_id}}, "date": "{{today}}", "value": 1}'
+  - name: log a float32 value
+    method: POST
+    path: /habits/log
+    tier: full
+    raw: '{"habit_id": {{weekly_id}}, "date": "{{today}}", "value": 64.22}'
+  - name: log again on the same day replaces
+    method: POST
+    path: /habits/log
+    tier: full
+    raw: '{"habit_id": {{weekly_id}}, "date": "{{today}}", "value": 0.1}'
+  - name: log a past day
+    method: POST
+    path: /habits/log
+    tier: full
+    raw: '{"habit_id": {{daily_id}}, "date": "2026-01-10", "value": 3}'
+  - name: log a slip on the never-do habit
+    method: POST
+    path: /habits/log
+    tier: full
+    raw: '{"habit_id": {{never_id}}, "date": "2026-01-10", "value": 2}'
+  - name: log on a demo habit without targets
+    method: POST
+    path: /habits/log
+    tier: full
+    body: {habit_id: 5, date: "{{today}}", value: 7.5}
+  - name: log on the demo carry-forward habit
+    method: POST
+    path: /habits/log
+    tier: full
+    body: {habit_id: 6, date: "{{today}}", value: 70.3}
+  - name: log with a bad date
+    method: POST
+    path: /habits/log
+    tier: full
+    body: {habit_id: 1, date: bad, value: 1}
+  - name: log on an unknown habit
+    method: POST
+    path: /habits/log
+    tier: full
+    body: {habit_id: 999999, date: "{{today}}", value: 1}
+  - name: log with a string habit id
+    method: POST
+    path: /habits/log
+    tier: full
+    body: {habit_id: abc}
+  - name: log with a numeric date
+    method: POST
+    path: /habits/log
+    tier: full
+    body: {habit_id: 1, date: 20260110}
+  - name: log not json
+    method: POST
+    path: /habits/log
+    tier: full
+    raw: "{"
+  - name: daily view after logging
+    path: /habits?date={{today}}
+    tier: full
+  - name: daily view on the logged past day
+    path: /habits?date=2026-01-10
+    tier: full
+
+  # Update
+  - name: update to weekly
+    method: PUT
+    path: /habits/{{daily_id}}
+    tier: full
+    body:
+      name: Parity renamed
+      description: null
+      frequency: weekly
+      target_min: 2
+      target_max: null
+      recording_required: true
+  - name: update an unknown habit
+    method: PUT
+    path: /habits/999999
+    tier: full
+    body: {name: x, frequency: daily}
+  - name: update without a frequency
+    method: PUT
+    path: /habits/{{daily_id}}
+    tier: full
+    body: {name: x}
+  - name: update with an empty name
+    method: PUT
+    path: /habits/{{daily_id}}
+    tier: full
+    body: {name: "", frequency: daily}
+  - name: update with target_min above target_max
+    method: PUT
+    path: /habits/{{daily_id}}
+    tier: full
+    body: {name: x, frequency: daily, target_min: 3, target_max: 1}
+  - name: update not json
+    method: PUT
+    path: /habits/{{daily_id}}
+    tier: full
+    raw: not json
+  - name: update with an invalid id
+    method: PUT
+    path: /habits/abc
+    tier: full
+    body: {name: x, frequency: daily}
+  - name: update with id zero
+    method: PUT
+    path: /habits/0
+    tier: full
+    raw: not json
+  - name: put on /habits/log is an update with an invalid id
+    method: PUT
+    path: /habits/log
+    tier: full
+    body: {name: x, frequency: daily}
+
+  # History
+  - name: history with the habit's frequency and default dates
+    path: /habits/1/history
+    tier: full
+  - name: daily habit viewed weekly (average)
+    path: /habits/1/history?frequency=weekly
+    tier: full
+  - name: daily habit viewed monthly (average)
+    path: /habits/1/history?frequency=monthly
+    tier: full
+  - name: weekly habit viewed daily (sum)
+    path: /habits/3/history?frequency=daily
+    tier: full
+  - name: weekly habit by default
+    path: /habits/3/history
+    tier: full
+  - name: carry-forward habit only returns logged days
+    path: /habits/6/history
+    tier: full
+  - name: monthly habit
+    path: /habits/7/history
+    tier: full
+  - name: explicit range snapped to weeks
+    path: /habits/1/history?frequency=weekly&start_at=2026-03-18&end_at=2026-03-18
+    tier: full
+  - name: explicit range with logs
+    path: /habits/{{daily_id}}/history?frequency=daily&start_at=2026-01-08&end_at=2026-01-12
+    tier: full
+  - name: range on the edited habit (now weekly)
+    path: /habits/{{weekly_id}}/history?start_at=2025-12-01
+    tier: full
+  - name: history with an unknown frequency
+    path: /habits/1/history?frequency=yearly
+    tier: full
+  - name: history with a bad start_at
+    path: /habits/1/history?start_at=bad
+    tier: full
+  - name: history with a bad end_at
+    path: /habits/1/history?end_at=2026-13-01
+    tier: full
+  - name: history of an unknown habit
+    path: /habits/999999/history
+    tier: full
+  - name: history with an invalid id
+    path: /habits/abc/history
+    tier: full
+
+  # Delete
+  - name: delete
+    method: DELETE
+    path: /habits/{{monthly_id}}
+    tier: full
+  - name: delete again
+    method: DELETE
+    path: /habits/{{monthly_id}}
+    tier: full
+  - name: delete with an invalid id
+    method: DELETE
+    path: /habits/abc
+    tier: full
+  - name: delete with an overflowing id
+    method: DELETE
+    path: /habits/4294967296
+    tier: full
+
+  # Routing
+  - name: wrong method on /habits
+    method: PATCH
+    path: /habits
+    tier: full
+  - name: GET on /habits/{id}
+    path: /habits/1
+    tier: full
+  - name: trailing slash
+    path: /habits/
+    tier: full
+
+  - name: final daily view
+    path: /habits
+    tier: full

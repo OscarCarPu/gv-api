@@ -5,15 +5,19 @@ import logging
 import re
 from typing import Annotated, Any
 
-from pydantic import AwareDatetime, Field, ValidationError, model_validator
+from pydantic import AfterValidator, AwareDatetime, Field, ValidationError, model_validator
 from starlette.requests import Request
 from starlette.responses import Response
 
-from gv_api.core.encoding import ApiModel, respond
+from gv_api.core.encoding import ApiModel, as_float32, respond
 
 log = logging.getLogger("gv_api")
 
 Int32 = Annotated[int, Field(ge=-(2**31), le=2**31 - 1)]
+# encoding/json refuses a number outside float32's range for a float32 field.
+F32 = Annotated[
+    float, Field(ge=-3.4028234663852886e38, le=3.4028234663852886e38), AfterValidator(as_float32)
+]
 InTime = AwareDatetime
 
 _ID = re.compile(r"[+-]?[0-9]+")

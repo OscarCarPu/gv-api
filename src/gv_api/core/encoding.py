@@ -1,6 +1,8 @@
 """JSON encoding that matches the Go service's encoding/json output (design D7)."""
 
 import json
+import math
+import struct
 from datetime import UTC, date, datetime
 from decimal import Decimal
 from typing import Annotated, Any
@@ -42,7 +44,33 @@ def go_date(d: date) -> str:
     return d.strftime("%Y-%m-%d")
 
 
+_F32_MAX = 3.4028234663852886e38
+_F32_LIMIT = 2.0**128 - 2.0**103  # halfway past the largest float32: rounds up to inf
+
+
+def as_float32(x: float) -> float:
+    """x rounded to the nearest float32 (struct refuses values that round down to the max)."""
+    try:
+        return float(struct.unpack("f", struct.pack("f", x))[0])
+    except OverflowError:
+        return math.copysign(_F32_MAX if abs(x) < _F32_LIMIT else math.inf, x)
+
+
+def go_float32(x: float) -> float | int:
+    """A float32 as encoding/json writes it: the shortest decimal that reads back as the same
+    float32 (64.22, not 64.22000122070312), and no ".0" on whole numbers."""
+    x32 = as_float32(x)
+    for digits in range(1, 10):
+        short = float(f"{x32:.{digits}g}")
+        if as_float32(short) == x32:
+            break
+    if short.is_integer() and abs(short) < 1e21:
+        return int(short)
+    return short
+
+
 Money = Annotated[Decimal, PlainSerializer(go_decimal, return_type=str)]
+Float32 = Annotated[float, PlainSerializer(go_float32, return_type=float | int)]
 Timestamp = Annotated[datetime, PlainSerializer(go_time, return_type=str)]
 Day = Annotated[date, PlainSerializer(go_date, return_type=str)]
 

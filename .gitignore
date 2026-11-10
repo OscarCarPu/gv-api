@@ -10,3 +10,4 @@ htmlcov/
 
 # Parity runner output
 /tests/parity/results/
+coverage.json

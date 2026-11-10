@@ -98,6 +98,18 @@ async def test_status_and_header_differences_are_reported() -> None:
     assert "  +404 page not found" in outcome.problems
 
 
+def test_allow_order_is_ignored_but_its_methods_are_not() -> None:
+    entry = runner.Entry(name="x", path="/x")
+
+    def reply(*allow: str) -> runner.Reply:
+        return runner.Reply(405, {"allow": list(allow)}, "", False, 0)
+
+    assert runner.compare(entry, reply("PUT", "DELETE"), reply("DELETE", "PUT")) == []
+    assert runner.compare(entry, reply("PUT", "DELETE"), reply("PUT")) == [
+        "header allow: go=['PUT', 'DELETE'] py=['PUT']"
+    ]
+
+
 async def test_accepted_deviation_checks_python_against_its_expectation(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Any
 ) -> None:

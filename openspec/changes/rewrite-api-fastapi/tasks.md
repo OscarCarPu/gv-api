@@ -48,9 +48,9 @@ Milestones: **H0** foundations (1–5) · **H1** parity harness (6) · **H2** si
 
 ## 7. H2 · Habits
 
-- [ ] 7.1 Port the habits tables, repository (including the streak function and history queries) and its integration tests from `internal/habits/repository_test.go`. Verify with `py-test-integration -k habits`.
-- [ ] 7.2 Port the habits service, the shared `history` period maths and the router, with unit tests from `service_test.go`, `handler_test.go` and `internal/history`. Verify that coverage on the habits service is ≥ 90%.
-- [ ] 7.3 Port `test/e2e/habits_test.go` and add `tests/parity/corpus/habits.yaml` (daily view with and without a date, CRUD, logging, history per frequency, validation errors). Verify that e2e and parity are green.
+- [x] 7.1 Port the habits tables, repository (including the streak function and history queries) and its integration tests from `internal/habits/repository_test.go`. Verify with `py-test-integration -k habits`.
+- [x] 7.2 Port the habits service, the shared `history` period maths and the router, with unit tests from `service_test.go`, `handler_test.go` and `internal/history`. Verify that coverage on the habits service is ≥ 90%.
+- [x] 7.3 Port `test/e2e/habits_test.go` and add `tests/parity/corpus/habits.yaml` (daily view with and without a date, CRUD, logging, history per frequency, validation errors). Verify that e2e and parity are green.
 
 ## 8. H2 · Rutas
 

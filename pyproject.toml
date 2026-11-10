@@ -52,6 +52,8 @@ select = ["E", "F", "I", "UP", "B", "SIM", "ASYNC", "RUF", "S"]
 
 [tool.ruff.lint.per-file-ignores]
 "tests/**" = ["S101", "S105", "S106"]
+# Pydantic copies mutable defaults (`list[X] = []`, design D7); ruff only sees direct BaseModels.
+"src/gv_api/**/schemas.py" = ["RUF012"]
 
 [tool.mypy]
 strict = true
