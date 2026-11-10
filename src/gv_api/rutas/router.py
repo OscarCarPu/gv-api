@@ -53,7 +53,7 @@ async def create_mark(request: Request, svc: Svc) -> Response:
     req.name = req.name.strip()
     if not req.name:
         return error(400, "name is required")
-    if len(req.name.encode()) > 200:
+    if len(req.name) > 200:
         return error(400, "name too long")
     if msg := _date_error(req.visited_on):
         return error(400, msg)

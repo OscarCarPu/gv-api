@@ -1,4 +1,4 @@
-"""E2E harness ported from test/e2e/setup.go and client.go: HTTP against a running API.
+"""E2E harness: HTTP against a running API.
 
 API_URL selects the API (`make py-test-e2e` starts the parity stack's Python app); PASSWORD and
 TOTP_SECRET are that API's. TEST_DB_URL is its database, for the suites that truncate tables.

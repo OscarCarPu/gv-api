@@ -1,8 +1,6 @@
-"""JSON encoding that matches the Go service's encoding/json output (design D7)."""
+"""Wire encoding of API values (design D7): one JSON line, typed amounts, dates and times."""
 
 import json
-import math
-import struct
 from datetime import UTC, date, datetime
 from decimal import Decimal
 from typing import Annotated, Any
@@ -16,8 +14,8 @@ class ApiModel(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
 
-def go_decimal(d: Decimal) -> str:
-    """shopspring/decimal: plain notation, trailing fractional zeros trimmed, quoted."""
+def decimal_str(d: Decimal) -> str:
+    """Plain notation, trailing fractional zeros trimmed: 12.50 -> "12.5", 1E+2 -> "100"."""
     s = format(d, "f")
     if "." in s:
         s = s.rstrip("0").rstrip(".")
@@ -29,8 +27,8 @@ def _is_utc(t: datetime) -> bool:
     return tz is None or tz is UTC or (isinstance(tz, ZoneInfo) and tz.key in ("UTC", "Etc/UTC"))
 
 
-def go_time(t: datetime) -> str:
-    """time.RFC3339Nano: fraction only when non-zero, trailing zeros trimmed, Z only for UTC."""
+def time_str(t: datetime) -> str:
+    """RFC 3339: fraction only when non-zero, trailing zeros trimmed, Z for UTC."""
     base = t.strftime("%Y-%m-%dT%H:%M:%S")
     if t.microsecond:
         base += "." + f"{t.microsecond:06d}".rstrip("0")
@@ -40,75 +38,25 @@ def go_time(t: datetime) -> str:
     return f"{base}{offset[:3]}:{offset[3:5]}"
 
 
-def go_date(d: date) -> str:
+def date_str(d: date) -> str:
     return d.strftime("%Y-%m-%d")
 
 
-_F32_MAX = 3.4028234663852886e38
-_F32_LIMIT = 2.0**128 - 2.0**103  # halfway past the largest float32: rounds up to inf
+def real_number(x: float) -> float:
+    """A SQL real read as a double (64.22000122070312) back to the digits a real holds (64.22)."""
+    return float(f"{x:.7g}")
 
 
-def as_float32(x: float) -> float:
-    """x rounded to the nearest float32 (struct refuses values that round down to the max)."""
-    try:
-        return float(struct.unpack("f", struct.pack("f", x))[0])
-    except OverflowError:
-        return math.copysign(_F32_MAX if abs(x) < _F32_LIMIT else math.inf, x)
-
-
-def go_float32(x: float) -> float | int:
-    """A float32 as encoding/json writes it: the shortest decimal that reads back as the same
-    float32 (64.22, not 64.22000122070312), and no ".0" on whole numbers."""
-    x32 = as_float32(x)
-    for digits in range(1, 10):
-        short = float(f"{x32:.{digits}g}")
-        if as_float32(short) == x32:
-            break
-    if short.is_integer() and abs(short) < 1e21:
-        return int(short)
-    return short
-
-
-def go_midnight(d: date) -> str:
-    """A SQL date that pgx scanned into a time.Time: midnight UTC."""
+def midnight_utc(d: date) -> str:
+    """A date column in a field the API types as a timestamp: midnight UTC."""
     return d.strftime("%Y-%m-%dT00:00:00Z")
 
 
-_ESCAPES = {
-    "\a": "\\a",
-    "\b": "\\b",
-    "\f": "\\f",
-    "\n": "\\n",
-    "\r": "\\r",
-    "\t": "\\t",
-    "\v": "\\v",
-}
-
-
-def go_quote(s: str) -> str:
-    """strconv.Quote (fmt's %q) for valid UTF-8."""
-    out = []
-    for ch in s:
-        if ch in ('"', "\\"):
-            out.append("\\" + ch)
-        elif ch in _ESCAPES:
-            out.append(_ESCAPES[ch])
-        elif ch.isprintable():
-            out.append(ch)
-        elif ord(ch) < 0x80:
-            out.append(f"\\x{ord(ch):02x}")
-        elif ord(ch) <= 0xFFFF:
-            out.append(f"\\u{ord(ch):04x}")
-        else:
-            out.append(f"\\U{ord(ch):08x}")
-    return '"' + "".join(out) + '"'
-
-
-Money = Annotated[Decimal, PlainSerializer(go_decimal, return_type=str)]
-Float32 = Annotated[float, PlainSerializer(go_float32, return_type=float | int)]
-Timestamp = Annotated[datetime, PlainSerializer(go_time, return_type=str)]
-Day = Annotated[date, PlainSerializer(go_date, return_type=str)]
-DayTime = Annotated[date, PlainSerializer(go_midnight, return_type=str)]
+Money = Annotated[Decimal, PlainSerializer(decimal_str, return_type=str)]
+Real = Annotated[float, PlainSerializer(real_number, return_type=float)]
+Timestamp = Annotated[datetime, PlainSerializer(time_str, return_type=str)]
+Day = Annotated[date, PlainSerializer(date_str, return_type=str)]
+DayTime = Annotated[date, PlainSerializer(midnight_utc, return_type=str)]
 
 
 def jsonable(value: Any) -> Any:
@@ -119,18 +67,20 @@ def jsonable(value: Any) -> Any:
     if isinstance(value, dict):
         return {k: jsonable(v) for k, v in value.items()}
     if isinstance(value, Decimal):
-        return go_decimal(value)
+        return decimal_str(value)
     if isinstance(value, datetime):
-        return go_time(value)
+        return time_str(value)
     if isinstance(value, date):
-        return go_date(value)
+        return date_str(value)
     return value
 
 
-class GoJSONResponse(JSONResponse):
+class JSONLineResponse(JSONResponse):
+    """Compact JSON ending in a newline."""
+
     def render(self, content: Any) -> bytes:
         return (json.dumps(content, ensure_ascii=False, separators=(",", ":")) + "\n").encode()
 
 
 def respond(status: int, data: Any) -> Response:
-    return GoJSONResponse(jsonable(data), status_code=status)
+    return JSONLineResponse(jsonable(data), status_code=status)

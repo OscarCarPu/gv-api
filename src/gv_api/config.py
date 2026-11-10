@@ -21,7 +21,7 @@ class ConfigError(Exception):
     pass
 
 
-# The Go service fell back to the default on an empty or unparsable value instead of failing.
+# An empty or unparsable value falls back to the default instead of failing.
 def _lenient(parse: Any) -> BeforeValidator:
     def validate(raw: Any) -> Any:
         if not isinstance(raw, str):

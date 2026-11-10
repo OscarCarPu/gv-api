@@ -1,7 +1,6 @@
--- gv-api schema baseline: the Go release (d32ab42) at golang-migrate version 036.
--- pg_dump --schema-only --no-owner --no-privileges --exclude-table=schema_migrations of an
--- empty database migrated by that release, with the session SETs removed. Run by revision
--- 0001_baseline, which also inserts the row migration 036 seeded. Never edit: add revisions.
+-- gv-api schema baseline (pg_dump --schema-only --no-owner --no-privileges, session SETs
+-- removed). Run by revision 0001_baseline, which also inserts the first uptime marker.
+-- Never edit: add revisions.
 
 SET LOCAL check_function_bodies = false;
 

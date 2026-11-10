@@ -1,4 +1,4 @@
-"""From internal/rutas/service_test.go and handler_test.go."""
+"""RutasService and the rutas router, over a hand-written repository fake."""
 
 from dataclasses import dataclass, field
 from datetime import date, timedelta
@@ -184,7 +184,7 @@ async def test_get() -> None:
         ("not json", "invalid body"),
         ('{"name": "   ", "visited_on": "2026-06-11"}', "name is required"),
         ('{"name": "' + "a" * 201 + '", "visited_on": "2026-06-11"}', "name too long"),
-        ('{"name": "' + "á" * 101 + '", "visited_on": "2026-06-11"}', "name too long"),
+        ('{"name": "' + "á" * 201 + '", "visited_on": "2026-06-11"}', "name too long"),
         ('{"name": "Arzúa"}', "visited_on is required"),
         (
             '{"name": "Arzúa", "visited_on": "11/06/2026"}',

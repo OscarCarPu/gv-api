@@ -95,11 +95,11 @@ requests:
     path: /habits
     tier: full
     body: {name: "01234567890123456789012345678901234567890"}
-  - name: create with a 21-character, 42-byte name
+  - name: create with a 41-character name (see name-length-in-characters)
     method: POST
     path: /habits
     tier: full
-    body: {name: "ñññññññññññññññññññññ"}
+    body: {name: "ñññññññññññññññññññññññññññññññññññññññññ"}
   - name: create with an empty frequency
     method: POST
     path: /habits
@@ -264,6 +264,7 @@ requests:
   - name: daily habit viewed weekly (average)
     path: /habits/1/history?frequency=weekly
     tier: full
+    volatile: ["data[*].value"]  # averages need 8+ digits: real-seven-digits in ACCEPTED.md
   - name: daily habit viewed monthly (average)
     path: /habits/1/history?frequency=monthly
     tier: full

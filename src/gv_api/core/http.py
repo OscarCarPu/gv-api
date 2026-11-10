@@ -1,23 +1,19 @@
-"""Request parsing and error responses with the Go service's messages (design D8)."""
+"""Request parsing and error responses (design D8)."""
 
 import json
 import logging
 import re
 from typing import Annotated, Any
 
-from pydantic import AfterValidator, AwareDatetime, Field, ValidationError, model_validator
+from pydantic import AwareDatetime, Field, ValidationError, model_validator
 from starlette.requests import Request
 from starlette.responses import Response
 
-from gv_api.core.encoding import ApiModel, as_float32, respond
+from gv_api.core.encoding import ApiModel, respond
 
 log = logging.getLogger("gv_api")
 
 Int32 = Annotated[int, Field(ge=-(2**31), le=2**31 - 1)]
-# encoding/json refuses a number outside float32's range for a float32 field.
-F32 = Annotated[
-    float, Field(ge=-3.4028234663852886e38, le=3.4028234663852886e38), AfterValidator(as_float32)
-]
 InTime = AwareDatetime
 
 _ID = re.compile(r"[+-]?[0-9]+")
@@ -34,7 +30,7 @@ class ApiError(Exception):
 
 
 class Body(ApiModel):
-    """Request body decoded like Go's encoding/json: a JSON null leaves the zero value."""
+    """A JSON request body: unknown keys are ignored and a null leaves the field's default."""
 
     @model_validator(mode="before")
     @classmethod
@@ -74,7 +70,7 @@ async def parse_body[M: Body](request: Request, model: type[M], message: str) ->
 
 
 def parse_id(raw: str, entity: str) -> int:
-    """strconv.ParseInt(s, 10, 32) and id > 0."""
+    """A positive id that fits in 32 bits (the SQL integer columns)."""
     if _ID.fullmatch(raw):
         value = int(raw)
         if 0 < value <= 2**31 - 1:
@@ -83,6 +79,6 @@ def parse_id(raw: str, entity: str) -> int:
 
 
 def query(request: Request, key: str) -> str:
-    """url.Values.Get: the first value, or "" when absent."""
+    """The first value of a query parameter, or "" when absent."""
     values = request.query_params.getlist(key)
     return values[0] if values else ""

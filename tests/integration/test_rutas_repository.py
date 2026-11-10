@@ -1,4 +1,4 @@
-"""From internal/rutas/repository_test.go."""
+"""RutasRepository against the test database."""
 
 from datetime import date
 

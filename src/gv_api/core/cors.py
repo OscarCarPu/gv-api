@@ -1,4 +1,4 @@
-"""A port of go-chi/cors v1.2.2 with the options gv-api used, so preflights answer the same."""
+"""CORS for the browser clients: allowed origins, methods and headers, 300 s preflight cache."""
 
 from starlette.datastructures import Headers, MutableHeaders
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
@@ -19,7 +19,7 @@ MAX_AGE = 300
 
 
 def canonical(key: str) -> str:
-    """http.CanonicalHeaderKey."""
+    """Header name in canonical form: content-type -> Content-Type."""
     return "-".join(part[:1].upper() + part[1:].lower() for part in key.split("-"))
 
 

@@ -1,9 +1,9 @@
-from gv_api.core.encoding import ApiModel, Day, Float32
+from gv_api.core.encoding import ApiModel, Day, Real
 
 
 class Point(ApiModel):
     date: Day
-    value: Float32
+    value: Real
 
 
 class Response(ApiModel):

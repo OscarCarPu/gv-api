@@ -25,7 +25,7 @@ class RequestIDFilter(logging.Filter):
 
 
 class JSONFormatter(logging.Formatter):
-    """One JSON object per line, shaped like Go's slog JSON handler."""
+    """One JSON object per line: time, level, msg and the record's extra attributes."""
 
     def format(self, record: logging.LogRecord) -> str:
         out: dict[str, Any] = {

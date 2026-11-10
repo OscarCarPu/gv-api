@@ -77,7 +77,7 @@ async def test_up_to_date_database_runs_nothing(new_db: NewDB) -> None:
 
 
 async def test_populated_database_without_history_fails_untouched(new_db: NewDB) -> None:
-    """A Go-migrated database that the cutover deploy forgot to stamp."""
+    """A database that already has the schema but was never stamped."""
     engine, raw = await new_db()
     await raw.execute(BASELINE_SQL.read_text().replace("SET LOCAL", "SET"))
     await raw.execute("INSERT INTO habits (name, frequency) VALUES ('Read', 'daily')")

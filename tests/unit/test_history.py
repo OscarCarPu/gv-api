@@ -1,4 +1,4 @@
-"""From internal/history/history_test.go, plus Go's date parsing and AddDate."""
+"""History period maths and the date helpers."""
 
 from datetime import UTC, date, datetime, timedelta
 from zoneinfo import ZoneInfo
@@ -66,7 +66,7 @@ def test_default_start_date(frequency: str, expected: str) -> None:
 
 
 def test_default_start_date_rolls_over_like_go() -> None:
-    # time.AddDate(0, -1, 0) on Mar 31 is "Feb 31", which Go normalizes to Mar 3.
+    # One month before Mar 31 is "Feb 31", which rolls over to Mar 3.
     assert history.default_start_date(d("2026-03-31"), "daily") == d("2026-03-03")
     assert history.default_start_date(d("2028-02-29"), "monthly") == d("2027-03-01")
 

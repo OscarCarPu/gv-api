@@ -1,4 +1,4 @@
-"""The auth spec's route tiers, from internal/auth/middleware_test.go."""
+"""The auth spec's route tiers."""
 
 import time
 from datetime import UTC, datetime, timedelta

@@ -2,7 +2,6 @@ from datetime import date
 from typing import Protocol
 
 from gv_api.core.dates import parse_day
-from gv_api.core.encoding import go_quote
 from gv_api.rutas.schemas import ConcelloMark, CreateMarkRequest, UpdateMarkRequest
 
 
@@ -18,7 +17,7 @@ def parse_date(raw: str) -> date:
     try:
         return parse_day(raw)
     except ValueError:
-        raise ValueError(f"invalid date {go_quote(raw)}: must be YYYY-MM-DD") from None
+        raise ValueError(f'invalid date "{raw}": must be YYYY-MM-DD') from None
 
 
 class RutasService:

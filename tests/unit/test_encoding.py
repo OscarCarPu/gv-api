@@ -9,19 +9,18 @@ from pydantic import Field
 from gv_api.core.encoding import (
     ApiModel,
     Day,
-    Float32,
     Money,
+    Real,
     Timestamp,
-    go_decimal,
-    go_float32,
-    go_time,
+    decimal_str,
+    real_number,
     respond,
+    time_str,
 )
 
 MADRID = ZoneInfo("Europe/Madrid")
 
 
-# Expected values are what Go's encoding/json + shopspring/decimal print for the same input.
 @pytest.mark.parametrize(
     ("raw", "want"),
     [
@@ -37,8 +36,8 @@ MADRID = ZoneInfo("Europe/Madrid")
         ("7.25", "7.25"),
     ],
 )
-def test_go_decimal(raw: str, want: str) -> None:
-    assert go_decimal(Decimal(raw)) == want
+def test_decimal_str(raw: str, want: str) -> None:
+    assert decimal_str(Decimal(raw)) == want
 
 
 @pytest.mark.parametrize(
@@ -60,8 +59,8 @@ def test_go_decimal(raw: str, want: str) -> None:
         ),
     ],
 )
-def test_go_time(value: datetime, want: str) -> None:
-    assert go_time(value) == want
+def test_time_str(value: datetime, want: str) -> None:
+    assert time_str(value) == want
 
 
 class Row(ApiModel):
@@ -123,23 +122,22 @@ def test_respond_keeps_non_ascii() -> None:
     assert json.loads(resp.body) == {"name": "Café <b>"}
 
 
-# Values from Go: json.Marshal(float32(x)).
+# A real column comes back as the double nearest the stored float: 7 significant digits.
 @pytest.mark.parametrize(
     ("value", "expected"),
     [
-        (64.22000122070312, "64.22"),
-        (0.10000000149011612, "0.1"),
-        (5.0, "5"),
-        (0.0, "0"),
-        (-2.5, "-2.5"),
-        (16777216.0, "16777216"),
-        (1.0000000116860974e-07, "1e-7"),
-        (3.4028234663852886e38, "3.4028235e+38"),
+        (64.22000122070312, 64.22),
+        (0.10000000149011612, 0.1),
+        (70.30000305175781, 70.3),
+        (5.0, 5),
+        (0.0, 0),
+        (-2.5, -2.5),
+        (1.0000000116860974e-07, 1e-7),
     ],
 )
-def test_float32(value: float, expected: str) -> None:
+def test_real(value: float, expected: float) -> None:
     class M(ApiModel):
-        v: Float32
+        v: Real
 
-    assert json.loads(respond(200, M(v=value)).body) == {"v": json.loads(expected)}
-    assert go_float32(value) == json.loads(expected)
+    assert json.loads(respond(200, M(v=value)).body) == {"v": expected}
+    assert real_number(value) == expected

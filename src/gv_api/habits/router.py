@@ -24,7 +24,7 @@ def validate_habit_fields(
     """The checks shared by create and update; a frequency of None is not checked."""
     if not name:
         return "name is required"
-    if len(name.encode()) > 40:
+    if len(name) > 40:
         return "name must be at most 40 characters"
     if frequency is not None and frequency not in FREQUENCIES:
         return _BAD_FREQUENCY
@@ -43,8 +43,7 @@ async def get_daily(request: Request, svc: Svc) -> Response:
         habits = await svc.get_daily_view(query(request, "date"))
     except Exception as err:
         return internal_error(err, "Failed to get daily habits")
-    # Go's nil slice: an empty view is null
-    return respond(200, habits or None)
+    return respond(200, habits or None)  # an empty view is null, not []
 
 
 @router.post("/habits")

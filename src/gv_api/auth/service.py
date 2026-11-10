@@ -12,18 +12,18 @@ from gv_api.config import Config
 TMP_TTL = timedelta(minutes=5)
 LONG_TTL = timedelta(days=30)
 
-# golang-jwt accepted any HMAC method, and v5 checks neither iat nor aud unless asked to.
+# Any HMAC method is accepted; iat and aud are not checked.
 _ALGORITHMS = ["HS256", "HS384", "HS512"]
 _OPTIONS: jwt.types.Options = {"verify_iat": False, "verify_aud": False}
 
-# JWT_SECRET is the existing one; golang-jwt never asked for a minimum HMAC key length.
+# JWT_SECRET has no minimum length requirement.
 warnings.filterwarnings("ignore", category=jwt.warnings.InsecureKeyLengthWarning)
 
 TOTPValidator = Callable[[str, str], bool]
 
 
 def validate_totp(passcode: str, secret: str) -> bool:
-    """pquerna/otp totp.Validate: 6 digits, SHA-1, 30 s steps, one step of skew either way."""
+    """6 digits, SHA-1, 30 s steps, one step of skew either way."""
     passcode = passcode.strip()
     if len(passcode) != 6:
         return False

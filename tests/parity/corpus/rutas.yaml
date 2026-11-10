@@ -69,6 +69,10 @@ requests:
     path: /rutas/marks
     tier: semi
     body: {name: Arzúa, visited_on: "2026\"06"}
+    accepted: error-text-unescaped
+    expect_py:
+      status: 400
+      body: {error: 'invalid date "2026"06": must be YYYY-MM-DD'}
   - name: create with a numeric date
     method: POST
     path: /rutas/marks

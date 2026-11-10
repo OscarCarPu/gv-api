@@ -1,4 +1,4 @@
-"""Composition root: builds every service and the app, like cmd/api/main.go (design D4)."""
+"""Composition root: builds every service and the app (design D4)."""
 
 import logging
 import signal
@@ -76,7 +76,7 @@ def build(cfg: Config, alerts: TelegramHandler | None = None) -> FastAPI:
 class _Server(uvicorn.Server):
     @contextmanager
     def capture_signals(self) -> Iterator[None]:
-        # uvicorn re-raises the signal after shutdown; the Go service exited 0 on SIGTERM.
+        # uvicorn re-raises the signal after shutdown; a SIGTERM shutdown must exit 0.
         if threading.current_thread() is not threading.main_thread():
             yield
             return
@@ -99,7 +99,7 @@ def run_server(app: FastAPI, cfg: Config) -> int:
     server = _Server(
         uvicorn.Config(
             app,
-            # Every interface, IPv4 and IPv6, like Go's ":8080": healthchecks dial localhost (::1).
+            # Every interface, IPv4 and IPv6: healthchecks dial localhost (::1).
             host="",
             port=int(cfg.port),
             log_config=None,

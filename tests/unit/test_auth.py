@@ -1,4 +1,4 @@
-"""Ported from internal/auth/service_test.go and handler_test.go, plus token compatibility."""
+"""AuthService and the login routes, plus token compatibility."""
 
 import base64
 import json
@@ -74,7 +74,7 @@ def test_rejects_incorrect_password(password: str) -> None:
         AuthService(config()).login(password)
 
 
-def test_token_bytes_match_golang_jwt() -> None:
+def test_token_layout() -> None:
     now = datetime(2026, 11, 10, 12, 0, 0, 750_000, tzinfo=UTC)
     token = AuthService(config(), now=lambda: now).generate_token(timedelta(minutes=5), "tmp")
     assert segment(token, 0) == b'{"alg":"HS256","typ":"JWT"}'
@@ -121,9 +121,9 @@ def test_token_validation_rules() -> None:
     exp = int(time.time()) + 3600
     claims = {"exp": exp, "iat": exp - 3600, "kind": "full"}
     assert svc.token_kind(jwt.encode(claims, SECRET, algorithm="HS256")) == "full"
-    # any HMAC, as golang-jwt's SigningMethodHMAC check allowed
+    # any HMAC method
     assert svc.token_kind(jwt.encode(claims, SECRET, algorithm="HS512")) == "full"
-    # no exp is accepted by golang-jwt v5 too; iat and aud are not checked
+    # no exp is accepted; iat and aud are not checked
     assert svc.token_kind(jwt.encode({"kind": "full"}, SECRET, algorithm="HS256")) == "full"
     future_iat = {**claims, "iat": exp + 999, "aud": "x"}
     assert svc.token_kind(jwt.encode(future_iat, SECRET, algorithm="HS256")) == "full"
@@ -143,7 +143,7 @@ def test_token_validation_rules() -> None:
     assert svc.token_kind(jwt.encode({**claims, "kind": 1}, SECRET, algorithm="HS256")) is None
 
 
-def test_validate_totp_like_pquerna() -> None:
+def test_validate_totp() -> None:
     totp = pyotp.TOTP(TOTP_SECRET)
     now = int(time.time())
     assert validate_totp(totp.at(now), TOTP_SECRET)
@@ -223,7 +223,7 @@ async def test_login_2fa_errors() -> None:
             assert (resp.status_code, resp.text) == (status, expected), body
 
 
-# compatibility with the Go service, while its code is in the tree
+# Migration tooling (removed at cutover): tokens interchangeable with the previous service.
 
 GO_HELPER = """package main
 

@@ -34,7 +34,7 @@ class RequestIDMiddleware:
 
 
 class RecoverMiddleware:
-    """chi's Recoverer: log the failure and answer 500 with an empty body."""
+    """Log an unhandled failure and answer 500 with an empty body."""
 
     def __init__(self, app: ASGIApp) -> None:
         self.app = app

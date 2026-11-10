@@ -1,7 +1,7 @@
-"""Baseline: the Go release's schema at golang-migrate version 036 (migrations/baseline.sql).
+"""Baseline: the initial schema (migrations/baseline.sql).
 
-The production database already has this schema; the cutover deploy stamps it at this
-revision instead of running it.
+The production database already has this schema; it is stamped at this revision instead of
+running it.
 
 Revision ID: 0001_baseline
 Revises:
@@ -27,7 +27,7 @@ def upgrade() -> None:
     # on the driver connection, still inside Alembic's transaction.
     driver = op.get_bind().connection.driver_connection
     await_only(driver.execute(BASELINE.read_text()))
-    # Data the Go migration 036 seeded: uptime counts from this marker.
+    # Uptime counts from this marker.
     op.execute("INSERT INTO outages (ends_at, kind) VALUES (now(), 'start')")
 
 

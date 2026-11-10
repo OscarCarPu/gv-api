@@ -1,4 +1,4 @@
-"""From internal/habits/service_test.go, with a hand-written repository fake."""
+"""HabitsService over a hand-written repository fake."""
 
 from dataclasses import dataclass, field
 from datetime import UTC, date, datetime, timedelta

@@ -1,4 +1,4 @@
-"""The FastAPI app with the Go service's HTTP behavior (design D9)."""
+"""The FastAPI app and its routing conventions (design D9)."""
 
 import asyncio
 import logging
@@ -25,7 +25,7 @@ Lifespan = Callable[[FastAPI], AbstractAsyncContextManager[None]]
 
 
 def not_found() -> Response:
-    """http.NotFound."""
+    """Plain-text 404 for an unknown path."""
     return Response(
         "404 page not found\n",
         status_code=404,
@@ -38,7 +38,7 @@ _METHODS = ("CONNECT", "DELETE", "GET", "HEAD", "OPTIONS", "PATCH", "POST", "PUT
 
 
 def method_not_allowed(request: Request) -> Response:
-    """chi lists every method registered on the path, one Allow header each."""
+    """405 with one Allow header per method registered on the path."""
     resp = Response(status_code=405)
     for method in _METHODS:
         scope = {**request.scope, "method": method}

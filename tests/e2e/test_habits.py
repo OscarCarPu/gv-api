@@ -1,4 +1,4 @@
-"""From test/e2e/habits_test.go."""
+"""Habits over HTTP against the running API."""
 
 from tests.e2e.conftest import APIClient, truncate_tables
 

@@ -1,4 +1,4 @@
-"""From internal/habits/repository_test.go."""
+"""HabitsRepository against the test database."""
 
 from datetime import UTC, date, datetime, timedelta
 
