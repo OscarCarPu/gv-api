@@ -1,0 +1,63 @@
+# /capacity/free-busy and the urgency it feeds: /tasks/tasks/by-due-date and its slack (full
+# tier). Reading capacity generates the demo commitment's blocks ("Trabajo", Mon-Fri 09:00-17:00
+# Madrid), which count as busy. Today's free hours shrink with the clock.
+db_volatile:
+  - plan_blocks.created_at
+  - plan_blocks.updated_at
+  - recurring_commitments.created_at
+  - recurring_commitments.updated_at
+requests:
+  - name: no token
+    path: /capacity/free-busy?from=2027-03-01&to=2027-03-08
+  - name: semi token
+    path: /capacity/free-busy?from=2027-03-01&to=2027-03-08
+    tier: semi
+  - name: without from
+    path: /capacity/free-busy?to=2027-03-08
+    tier: full
+  - name: with a bad to
+    path: /capacity/free-busy?from=2027-03-01&to=x
+    tier: full
+  - name: ending on its start
+    path: /capacity/free-busy?from=2027-03-01&to=2027-03-01
+    tier: full
+  - name: 91 days
+    path: /capacity/free-busy?from=2027-03-01&to=2027-05-31
+    tier: full
+  - name: 90 days
+    path: /capacity/free-busy?from=2027-03-01&to=2027-05-30
+    tier: full
+  - name: from today
+    path: /capacity/free-busy?from={{today}}&to=2027-01-01
+    tier: full
+    volatile: ["days[0].free_hours"]
+
+  # Urgency
+  - name: by due date
+    path: /tasks/tasks/by-due-date
+    tier: full
+  - name: by due date from priority 2
+    path: /tasks/tasks/by-due-date?min_priority=2
+    tier: full
+  - name: by due date with a bad min_priority
+    path: /tasks/tasks/by-due-date?min_priority=0
+    tier: full
+  - name: slack
+    path: /tasks/tasks/by-due-date/slack
+    tier: full
+
+  # A plan block for an estimated task takes its hours off what remains.
+  - name: plan an estimated task
+    method: POST
+    path: /plan/blocks
+    tier: full
+    body: {started_at: "2027-03-06T09:00:00Z", ended_at: "2027-03-06T11:00:00Z", task_id: 18}
+  - name: by due date with the block
+    path: /tasks/tasks/by-due-date
+    tier: full
+  - name: busy Saturday
+    path: /capacity/free-busy?from=2027-03-06&to=2027-03-07
+    tier: full
+  - name: slack with the block
+    path: /tasks/tasks/by-due-date/slack
+    tier: full

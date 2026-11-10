@@ -72,9 +72,9 @@ Milestones: **H0** foundations (1–5) · **H1** parity harness (6) · **H2** si
 
 ## 11. H3 · Capacity and urgency
 
-- [ ] 11.1 Port the capacity service and router (`DAILY_CAPACITY_HOURS`, busy hours from plan, injected today/clock) with unit tests. Verify that tests pass.
-- [ ] 11.2 Wire the tasks ↔ plan ↔ capacity cycle in the composition root with `set_urgency_providers`. Verify with a unit test that urgency uses both providers.
-- [ ] 11.3 Add `by-due-date` and `by-due-date/slack` to the parity corpus, plus `capacity.yaml`. Verify that parity is green.
+- [x] 11.1 Port the capacity service and router (`DAILY_CAPACITY_HOURS`, busy hours from plan, injected today/clock) with unit tests. Verify that tests pass.
+- [x] 11.2 Wire the tasks ↔ plan ↔ capacity cycle in the composition root with `set_urgency_providers`. Verify with a unit test that urgency uses both providers.
+- [x] 11.3 Add `by-due-date` and `by-due-date/slack` to the parity corpus, plus `capacity.yaml`. Verify that parity is green.
 
 ## 12. H3 · Calendar
 

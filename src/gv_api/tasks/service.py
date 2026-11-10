@@ -1,3 +1,4 @@
+from collections.abc import Sequence
 from datetime import date, datetime, time, timedelta
 from decimal import ROUND_HALF_UP, Decimal
 from typing import Any, Protocol
@@ -115,7 +116,7 @@ class DayFreeBusy(Protocol):
 
 
 class CapacityProvider(Protocol):
-    async def free_busy_range(self, start: date, end: date) -> list[DayFreeBusy]: ...
+    async def free_busy_range(self, start: date, end: date) -> Sequence[DayFreeBusy]: ...
 
 
 class PlannedHoursProvider(Protocol):
