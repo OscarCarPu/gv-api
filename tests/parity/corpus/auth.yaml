@@ -52,6 +52,8 @@ requests:
     method: POST
     path: /login
     raw: '{"password": "wrong"} trailing'
+    accepted: strict-json
+    expect_py: {status: 400, body: {error: Invalid Request}}
 
   - name: 2fa wrong code
     method: POST

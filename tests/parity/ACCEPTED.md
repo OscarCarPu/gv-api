@@ -7,7 +7,7 @@ and `<id>` must be one of the headings below.
 ## lights-removed
 
 The lights domain (`/domotics/lights/*`) is retired with the rewrite (spec `api-surface`): the
-bulbs are driven from gv-web's BLE bridge. Every lights route answers the plain 404 of an
+bulbs are driven from gv-web's BLE bridge. Every lights route answers the 404 of an
 unknown path. The `lights` table is kept until a later change drops it.
 
 ## name-length-in-characters
@@ -39,3 +39,23 @@ CORS uses Starlette's middleware with the same origins, methods, headers, expose
 300 s cache. Its preflights list every allowed method and header instead of echoing the
 requested ones, and a refused preflight (foreign origin, method or header) is a 400 instead of
 a 200 without CORS headers. The browser outcome is the same.
+
+## framework-errors
+
+Unknown paths and methods get FastAPI's answers: 404 `{"detail": "Not Found"}` and 405
+`{"detail": "Method Not Allowed"}` with one comma-separated `Allow` header. The runner checks the
+status and the allowed methods of these replies, not their bodies.
+
+## strict-json
+
+A body with content after the JSON value is malformed (400). Go read the first value and
+ignored the rest.
+
+## jwt-hs256-only
+
+Only HS256 tokens with an `exp` claim are accepted, and PyJWT's `iat` and `aud` checks apply.
+Every token either service issued is HS256 with `exp`, so none is affected.
+
+## unhandled-500-text
+
+An unhandled failure answers Starlette's `Internal Server Error` text instead of an empty body.

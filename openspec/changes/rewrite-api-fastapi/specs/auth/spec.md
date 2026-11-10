@@ -37,14 +37,14 @@ Controls who can call the single-user API: password login, a TOTP second factor 
 - **THEN** the response is 401 with `{"error": "invalid token"}`
 
 ### Requirement: Token format compatibility
-Tokens SHALL be HS256 JWTs signed with `JWT_SECRET` that carry `exp`, `iat` and `kind` claims. Tokens issued by the Go service SHALL be accepted, and tokens issued by the new service SHALL be accepted by the Go service, for as long as they are unexpired.
+Tokens SHALL be HS256 JWTs signed with `JWT_SECRET` that carry `exp`, `iat` and `kind` claims; a token with another algorithm or without `exp` SHALL be rejected. Tokens issued by the Go service SHALL be accepted, and tokens issued by the new service SHALL be accepted by the Go service, for as long as they are unexpired.
 
 #### Scenario: Token issued before the switch
 - **WHEN** a `full` token issued by the Go service before cutover is presented to the new service
 - **THEN** it is accepted on full-private routes until its `exp`
 
-#### Scenario: Non-HMAC algorithm
-- **WHEN** a token signed with an algorithm other than HMAC, or with `alg: none`, is presented
+#### Scenario: Other algorithm
+- **WHEN** a token signed with an algorithm other than HS256, or with `alg: none`, is presented
 - **THEN** it is rejected with 401
 
 ### Requirement: Route tiers

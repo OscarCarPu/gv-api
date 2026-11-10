@@ -7,10 +7,9 @@ from contextlib import AbstractAsyncContextManager
 from typing import Any
 
 from fastapi import APIRouter, FastAPI
-from starlette.exceptions import HTTPException
 from starlette.middleware.cors import CORSMiddleware
 from starlette.requests import Request
-from starlette.responses import Response
+from starlette.responses import JSONResponse, Response
 from starlette.routing import Match
 
 from gv_api.config import Config
@@ -25,36 +24,22 @@ Ping = Callable[[], Awaitable[object]]
 Lifespan = Callable[[FastAPI], AbstractAsyncContextManager[None]]
 
 
-def not_found() -> Response:
-    """Plain-text 404 for an unknown path."""
-    return Response(
-        "404 page not found\n",
-        status_code=404,
-        media_type="text/plain",
-        headers={"X-Content-Type-Options": "nosniff"},
+_METHODS = ("DELETE", "GET", "HEAD", "OPTIONS", "PATCH", "POST", "PUT")
+
+
+async def method_not_allowed(request: Request, exc: Exception) -> Response:
+    """405 listing every method the path supports; Starlette's lists only the first route's."""
+    allowed = [
+        method
+        for method in _METHODS
+        if any(
+            route.matches({**request.scope, "method": method})[0] is Match.FULL
+            for route in request.app.router.routes
+        )
+    ]
+    return JSONResponse(
+        {"detail": "Method Not Allowed"}, status_code=405, headers={"Allow": ", ".join(allowed)}
     )
-
-
-_METHODS = ("CONNECT", "DELETE", "GET", "HEAD", "OPTIONS", "PATCH", "POST", "PUT", "TRACE")
-
-
-def method_not_allowed(request: Request) -> Response:
-    """405 with one Allow header per method registered on the path."""
-    resp = Response(status_code=405)
-    for method in _METHODS:
-        scope = {**request.scope, "method": method}
-        if any(route.matches(scope)[0] is Match.FULL for route in request.app.router.routes):
-            resp.headers.append("Allow", method)
-    return resp
-
-
-async def http_exception(request: Request, exc: Exception) -> Response:
-    status = exc.status_code if isinstance(exc, HTTPException) else 500
-    if status == 405:
-        return method_not_allowed(request)
-    if status == 404:
-        return not_found()
-    return Response(status_code=status)
 
 
 async def api_error(_: Request, exc: Exception) -> Response:
@@ -92,7 +77,7 @@ def create_app(
     """`middleware` sits between CORS and the routes, outermost first (the failover lock)."""
     app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None, lifespan=lifespan)
     app.router.redirect_slashes = False
-    app.add_exception_handler(HTTPException, http_exception)
+    app.add_exception_handler(405, method_not_allowed)
     app.add_exception_handler(ApiError, api_error)
 
     app.include_router(health_router(ping, cfg.health_timeout.total_seconds()))

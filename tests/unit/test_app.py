@@ -61,11 +61,9 @@ def client() -> httpx.AsyncClient:
     )
 
 
-async def test_unknown_path_is_plain_404(client: httpx.AsyncClient) -> None:
+async def test_unknown_path_is_404(client: httpx.AsyncClient) -> None:
     resp = await client.get("/does-not-exist")
-    assert resp.status_code == 404
-    assert resp.text == "404 page not found\n"
-    assert resp.headers["content-type"].startswith("text/plain")
+    assert (resp.status_code, resp.json()) == (404, {"detail": "Not Found"})
 
 
 async def test_trailing_slash_is_not_redirected(client: httpx.AsyncClient) -> None:
@@ -75,9 +73,8 @@ async def test_trailing_slash_is_not_redirected(client: httpx.AsyncClient) -> No
 
 async def test_wrong_method_lists_every_method_of_the_path(client: httpx.AsyncClient) -> None:
     resp = await client.patch("/habits")
-    assert resp.status_code == 405
-    assert resp.content == b""
-    assert sorted(resp.headers.get_list("allow")) == ["GET", "POST"]
+    assert (resp.status_code, resp.json()) == (405, {"detail": "Method Not Allowed"})
+    assert resp.headers["allow"] == "GET, POST"
 
 
 async def test_head_is_not_added_to_get_routes(client: httpx.AsyncClient) -> None:
@@ -102,13 +99,12 @@ async def test_invalid_path_id(client: httpx.AsyncClient) -> None:
     assert (resp.status_code, resp.json()) == (400, {"error": "invalid habit id"})
 
 
-async def test_unhandled_error_is_empty_500_with_request_id(
+async def test_unhandled_error_is_500_with_request_id(
     client: httpx.AsyncClient, caplog: pytest.LogCaptureFixture
 ) -> None:
     with caplog.at_level(logging.ERROR):
         resp = await client.get("/boom", headers={"Origin": ORIGIN})
-    assert resp.status_code == 500
-    assert resp.content == b""
+    assert (resp.status_code, resp.text) == (500, "Internal Server Error")
     assert resp.headers["x-request-id"]
     assert resp.headers["access-control-allow-origin"] == ORIGIN
     assert any("kaput" in str(r.__dict__.get("error", r.exc_info)) for r in caplog.records)

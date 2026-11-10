@@ -34,7 +34,7 @@ class RequestIDMiddleware:
 
 
 class RecoverMiddleware:
-    """Log an unhandled failure and answer 500 with an empty body."""
+    """Log an unhandled failure, inside the request id, and answer a plain 500."""
 
     def __init__(self, app: ASGIApp) -> None:
         self.app = app
@@ -54,14 +54,14 @@ class RecoverMiddleware:
         try:
             await self.app(scope, receive, tracking_send)
         except Exception:
-            log.exception("panic recovered", extra={"path": scope.get("path", "")})
+            log.exception("unhandled error", extra={"path": scope.get("path", "")})
             if started:
                 raise
             await send(
                 {
                     "type": "http.response.start",
                     "status": 500,
-                    "headers": [(b"content-length", b"0")],
+                    "headers": [(b"content-type", b"text/plain; charset=utf-8")],
                 }
             )
-            await send({"type": "http.response.body", "body": b""})
+            await send({"type": "http.response.body", "body": b"Internal Server Error"})

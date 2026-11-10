@@ -12,9 +12,7 @@ from gv_api.config import Config
 TMP_TTL = timedelta(minutes=5)
 LONG_TTL = timedelta(days=30)
 
-# Any HMAC method is accepted; iat and aud are not checked.
-_ALGORITHMS = ["HS256", "HS384", "HS512"]
-_OPTIONS: jwt.types.Options = {"verify_iat": False, "verify_aud": False}
+_OPTIONS: jwt.types.Options = {"require": ["exp"]}
 
 # JWT_SECRET has no minimum length requirement.
 warnings.filterwarnings("ignore", category=jwt.warnings.InsecureKeyLengthWarning)
@@ -24,13 +22,7 @@ TOTPValidator = Callable[[str, str], bool]
 
 def validate_totp(passcode: str, secret: str) -> bool:
     """6 digits, SHA-1, 30 s steps, one step of skew either way."""
-    passcode = passcode.strip()
-    if len(passcode) != 6:
-        return False
-    try:
-        return pyotp.TOTP(secret.strip().upper()).verify(passcode, valid_window=1)
-    except ValueError:  # secret is not base32
-        return False
+    return pyotp.TOTP(secret).verify(passcode, valid_window=1)
 
 
 def _same(a: str, b: str) -> bool:
@@ -63,9 +55,7 @@ class AuthService:
     def token_kind(self, token: str) -> str | None:
         """The `kind` of a valid, unexpired token, or None."""
         try:
-            claims = jwt.decode(
-                token, self._cfg.jwt_secret, algorithms=_ALGORITHMS, options=_OPTIONS
-            )
+            claims = jwt.decode(token, self._cfg.jwt_secret, algorithms=["HS256"], options=_OPTIONS)
         except jwt.InvalidTokenError:
             return None
         kind = claims.get("kind")

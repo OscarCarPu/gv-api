@@ -110,6 +110,20 @@ def test_allow_order_is_ignored_but_its_methods_are_not() -> None:
     ]
 
 
+def test_framework_errors_compare_status_and_allowed_methods() -> None:
+    entry = runner.Entry(name="x", path="/x")
+    go = runner.Reply(405, {"allow": ["GET", "POST"]}, "", False, 0)
+    py = runner.Reply(405, {"allow": ["GET, POST"]}, {"detail": "Method Not Allowed"}, True, 0)
+    assert runner.compare(entry, go, py) == []
+    fewer = runner.Reply(405, {"allow": ["GET"]}, {"detail": "Method Not Allowed"}, True, 0)
+    assert runner.compare(entry, go, fewer) == ["header allow: go=['GET', 'POST'] py=['GET']"]
+    not_found = runner.Reply(404, {}, {"detail": "Not Found"}, True, 0)
+    assert (
+        runner.compare(entry, runner.Reply(404, {}, "404 page not found\n", False, 0), not_found)
+        == []
+    )
+
+
 async def test_accepted_deviation_checks_python_against_its_expectation(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Any
 ) -> None:

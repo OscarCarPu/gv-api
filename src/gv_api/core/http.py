@@ -56,8 +56,8 @@ def internal_error(err: BaseException, message: str) -> Response:
 async def parse_body[M: Body](request: Request, model: type[M], message: str) -> M:
     raw = await request.body()
     try:
-        data = json.JSONDecoder().raw_decode(raw.decode().lstrip())[0]
-    except ValueError, UnicodeDecodeError:
+        data = json.loads(raw)
+    except ValueError:
         raise ApiError(400, message) from None
     if data is None:
         data = {}

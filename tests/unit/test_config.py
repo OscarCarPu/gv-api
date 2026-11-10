@@ -105,28 +105,35 @@ def test_backup_retention_bounds(monkeypatch: pytest.MonkeyPatch, hourly: str, d
 @pytest.mark.parametrize(
     ("key", "raw", "attr", "want"),
     [
-        ("HEALTH_TIMEOUT_MS", "abc", "health_timeout_ms", 2000),
-        ("HEALTH_TIMEOUT_MS", "-5", "health_timeout_ms", 2000),
         ("HEALTH_TIMEOUT_MS", "", "health_timeout_ms", 2000),
         ("HEALTH_TIMEOUT_MS", "750", "health_timeout_ms", 750),
         ("BACKUP_INTERVAL_MS", "0", "backup_interval_ms", 0),
-        ("PRINTER_RECORDING_MAX_MINUTES", "x", "printer_recording_max_minutes", 1800),
         ("PRINTER_RECORDINGS_MAX_GB", "1.5", "printer_recordings_max_gb", 1.5),
-        ("DAILY_CAPACITY_HOURS", "nope", "daily_capacity_hours", 14.0),
         ("PRINTER_RECORDING_OVERLAY", "0", "printer_recording_overlay", False),
         ("PRINTER_RECORDING_OVERLAY", "yes", "printer_recording_overlay", True),
+        ("PRINTER_RTSP_URL", "", "printer_rtsp_url", "rtsp://192.168.1.211/live"),
     ],
 )
-def test_lenient_values_fall_back_like_go(
+def test_typed_values_and_empty_is_unset(
     monkeypatch: pytest.MonkeyPatch, key: str, raw: str, attr: str, want: object
 ) -> None:
     monkeypatch.setenv(key, raw)
     assert getattr(load(), attr) == want
 
 
-def test_set_but_empty_string_is_kept(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("PRINTER_RTSP_URL", "")
-    assert load().printer_rtsp_url == ""
+@pytest.mark.parametrize(
+    ("key", "raw"),
+    [
+        ("HEALTH_TIMEOUT_MS", "abc"),
+        ("HEALTH_TIMEOUT_MS", "-5"),
+        ("DAILY_CAPACITY_HOURS", "nope"),
+        ("PRINTER_RECORDING_OVERLAY", "maybe"),
+    ],
+)
+def test_invalid_value_is_an_error(monkeypatch: pytest.MonkeyPatch, key: str, raw: str) -> None:
+    monkeypatch.setenv(key, raw)
+    with pytest.raises(ConfigError, match=f"invalid env vars: {key}"):
+        load()
 
 
 def test_prusalink_host_trailing_slash(monkeypatch: pytest.MonkeyPatch) -> None:

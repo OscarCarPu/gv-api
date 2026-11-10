@@ -1,28 +1,28 @@
-# The lights domain is retired: every route is an unknown path (ACCEPTED.md#lights-removed).
+# The lights domain is retired: every route is an unknown path (ACCEPTED.md#lights-removed and #framework-errors).
 # Only reads, so the Go database is not changed.
 requests:
   - name: GET /domotics/lights
     path: /domotics/lights
     tier: semi
     accepted: lights-removed
-    expect_py: {status: 404, text: "404 page not found\n"}
+    expect_py: {status: 404, body: {detail: Not Found}}
   - name: GET /domotics/lights/state
     path: /domotics/lights/state
     tier: semi
     accepted: lights-removed
-    expect_py: {status: 404, text: "404 page not found\n"}
+    expect_py: {status: 404, body: {detail: Not Found}}
   - name: GET /domotics/lights/discover
     path: /domotics/lights/discover
     tier: semi
     accepted: lights-removed
-    expect_py: {status: 404, text: "404 page not found\n"}
+    expect_py: {status: 404, body: {detail: Not Found}}
   - name: GET /domotics/lights/protocols
     path: /domotics/lights/protocols
     tier: semi
     accepted: lights-removed
-    expect_py: {status: 404, text: "404 page not found\n"}
+    expect_py: {status: 404, body: {detail: Not Found}}
   - name: GET /domotics/lights/1
     path: /domotics/lights/1
     tier: semi
     accepted: lights-removed
-    expect_py: {status: 404, text: "404 page not found\n"}
+    expect_py: {status: 404, body: {detail: Not Found}}

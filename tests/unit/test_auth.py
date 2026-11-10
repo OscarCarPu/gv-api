@@ -121,14 +121,10 @@ def test_token_validation_rules() -> None:
     exp = int(time.time()) + 3600
     claims = {"exp": exp, "iat": exp - 3600, "kind": "full"}
     assert svc.token_kind(jwt.encode(claims, SECRET, algorithm="HS256")) == "full"
-    # any HMAC method
-    assert svc.token_kind(jwt.encode(claims, SECRET, algorithm="HS512")) == "full"
-    # no exp is accepted; iat and aud are not checked
-    assert svc.token_kind(jwt.encode({"kind": "full"}, SECRET, algorithm="HS256")) == "full"
-    future_iat = {**claims, "iat": exp + 999, "aud": "x"}
-    assert svc.token_kind(jwt.encode(future_iat, SECRET, algorithm="HS256")) == "full"
 
     rejected = [
+        jwt.encode(claims, SECRET, algorithm="HS512"),
+        jwt.encode({"kind": "full"}, SECRET, algorithm="HS256"),
         jwt.encode(claims, "another-secret-of-enough-length", algorithm="HS256"),
         jwt.encode({**claims, "exp": int(time.time()) - 1}, SECRET, algorithm="HS256"),
         jwt.encode({**claims, "nbf": exp}, SECRET, algorithm="HS256"),
@@ -149,13 +145,10 @@ def test_validate_totp() -> None:
     assert validate_totp(totp.at(now), TOTP_SECRET)
     assert validate_totp(totp.at(now - 30), TOTP_SECRET)
     assert validate_totp(totp.at(now + 30), TOTP_SECRET)
-    assert validate_totp(f" {totp.at(now)}\n", TOTP_SECRET)
-    assert validate_totp(totp.at(now), TOTP_SECRET.lower())
     two_steps = {totp.at(now - 60), totp.at(now + 60)} - {totp.at(now + d) for d in (-30, 0, 30)}
     assert not any(validate_totp(code, TOTP_SECRET) for code in two_steps)
     assert not validate_totp(totp.at(now)[:5], TOTP_SECRET)
     assert not validate_totp(totp.at(now) + "0", TOTP_SECRET)
-    assert not validate_totp("123456", "test-totp-secret")  # not base32
 
 
 # handlers
@@ -175,20 +168,20 @@ async def test_login_returns_token_and_kind(password: str, kind: str) -> None:
     assert resp.status_code == 200
     assert resp.headers["content-type"] == "application/json"
     assert resp.text.startswith(f'{{"kind":"{kind}","token":"ey')
-    assert resp.text.endswith('"}\n')
+    assert resp.text.endswith('"}')
     AuthService(config()).validate_token(resp.json()["token"], kind)
 
 
 @pytest.mark.parametrize(
     ("body", "status", "expected"),
     [
-        ("not json", 400, '{"error":"Invalid Request"}\n'),
-        ('{"password": 123}', 400, '{"error":"Invalid Request"}\n'),
-        ("[]", 400, '{"error":"Invalid Request"}\n'),
-        ("", 400, '{"error":"Invalid Request"}\n'),
-        ('{"password": "wrong"}', 401, '{"error":"invalid password"}\n'),
-        ("null", 401, '{"error":"invalid password"}\n'),
-        ('{"password": null, "extra": 1}', 401, '{"error":"invalid password"}\n'),
+        ("not json", 400, '{"error":"Invalid Request"}'),
+        ('{"password": 123}', 400, '{"error":"Invalid Request"}'),
+        ("[]", 400, '{"error":"Invalid Request"}'),
+        ("", 400, '{"error":"Invalid Request"}'),
+        ('{"password": "wrong"}', 401, '{"error":"invalid password"}'),
+        ("null", 401, '{"error":"invalid password"}'),
+        ('{"password": null, "extra": 1}', 401, '{"error":"invalid password"}'),
     ],
 )
 async def test_login_errors(body: str, status: int, expected: str) -> None:
@@ -212,10 +205,10 @@ async def test_login_2fa_errors() -> None:
     tmp, _ = svc.login("Abc123..")
     semi, _ = svc.login("semi-pass")
     cases = [
-        ("not json", 400, '{"error":"Invalid Request"}\n'),
-        (json.dumps({"token": "bad-token", "code": "123456"}), 401, '{"error":"invalid token"}\n'),
-        (json.dumps({"token": semi, "code": "123456"}), 401, '{"error":"invalid token"}\n'),
-        (json.dumps({"token": tmp, "code": "000000x"}), 401, '{"error":"invalid 2fa code"}\n'),
+        ("not json", 400, '{"error":"Invalid Request"}'),
+        (json.dumps({"token": "bad-token", "code": "123456"}), 401, '{"error":"invalid token"}'),
+        (json.dumps({"token": semi, "code": "123456"}), 401, '{"error":"invalid token"}'),
+        (json.dumps({"token": tmp, "code": "000000x"}), 401, '{"error":"invalid 2fa code"}'),
     ]
     async with client() as c:
         for body, status, expected in cases:

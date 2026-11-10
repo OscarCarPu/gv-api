@@ -11,7 +11,7 @@ Each route SHALL behave as `docs/api/` and `docs/business_logic/` describe, with
 
 #### Scenario: Recorded request replayed
 - **WHEN** a request from the parity corpus is sent at the same moment to the new service and to the Go release, each running against its own copy of the same database snapshot
-- **THEN** both return the same status and equal decoded bodies, ignoring only fields marked as volatile in the corpus (signatures, `computed_at`, live printer telemetry)
+- **THEN** both return the same status and equal decoded bodies, ignoring fields marked as volatile in the corpus (signatures, `computed_at`, live printer telemetry) and the differences listed in `tests/parity/ACCEPTED.md`
 
 #### Scenario: Database state after replay
 - **WHEN** the whole corpus, writes included, has been replayed against both services
@@ -76,7 +76,7 @@ The service SHALL NOT serve any route under `/domotics/lights`, and SHALL NOT re
 
 #### Scenario: Former lights endpoint
 - **WHEN** a client calls `GET /domotics/lights/state` with a `full` token
-- **THEN** the response is 404 with body `404 page not found`
+- **THEN** the response is 404 with body `{"detail": "Not Found"}`
 
 #### Scenario: Data kept for rollback
 - **WHEN** the new service has run its startup migrations on a database holding lights rows

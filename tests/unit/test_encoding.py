@@ -106,7 +106,6 @@ def test_respond_encodes_nested_values() -> None:
     assert resp.status_code == 201
     assert resp.headers["content-type"] == "application/json"
     assert json.loads(resp.body) == {"total": "3.1", "rows": [{"day": "2026-01-02"}], "x": None}
-    assert resp.body.endswith(b"\n")
 
 
 def test_respond_list_of_models() -> None:

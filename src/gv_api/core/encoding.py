@@ -1,6 +1,5 @@
-"""Wire encoding of API values (design D7): one JSON line, typed amounts, dates and times."""
+"""Wire encoding of API values (design D7): typed amounts, dates and times."""
 
-import json
 from datetime import UTC, date, datetime
 from decimal import Decimal
 from typing import Annotated, Any
@@ -75,12 +74,5 @@ def jsonable(value: Any) -> Any:
     return value
 
 
-class JSONLineResponse(JSONResponse):
-    """Compact JSON ending in a newline."""
-
-    def render(self, content: Any) -> bytes:
-        return (json.dumps(content, ensure_ascii=False, separators=(",", ":")) + "\n").encode()
-
-
 def respond(status: int, data: Any) -> Response:
-    return JSONLineResponse(jsonable(data), status_code=status)
+    return JSONResponse(jsonable(data), status_code=status)

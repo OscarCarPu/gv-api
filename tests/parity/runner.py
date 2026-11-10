@@ -230,8 +230,22 @@ def _header(reply: Reply, name: str) -> list[str] | None:
     return values
 
 
+# framework-errors in ACCEPTED.md: Python answers unknown paths and methods with FastAPI's JSON.
+FRAMEWORK_ERRORS = {404: {"detail": "Not Found"}, 405: {"detail": "Method Not Allowed"}}
+
+
+def _allowed(reply: Reply) -> set[str]:
+    return {m.strip() for value in reply.headers.get("allow", []) for m in value.split(",")}
+
+
 def compare(entry: Entry, go: Reply, py: Reply) -> list[str]:
     problems = []
+    if go.status == py.status in FRAMEWORK_ERRORS and (
+        py.body == FRAMEWORK_ERRORS[py.status] or entry.method == "HEAD"  # HEAD has no body
+    ):
+        if _allowed(go) != _allowed(py):
+            problems.append(f"header allow: go={sorted(_allowed(go))} py={sorted(_allowed(py))}")
+        return problems
     if go.status != py.status:
         problems.append(f"status: go={go.status} py={py.status}")
     for h in sorted(set(go.headers) | set(py.headers)):

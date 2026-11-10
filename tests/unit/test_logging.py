@@ -30,7 +30,7 @@ def test_one_json_object_per_line(stream: io.StringIO) -> None:
     assert first["level"] == "INFO"
     assert first["port"] == "8080"
     assert isinstance(first["time"], str) and "T" in first["time"]
-    assert second["level"] == "WARN"
+    assert second["level"] == "WARNING"
     assert "request_id" not in first
 
 

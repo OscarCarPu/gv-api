@@ -11,7 +11,7 @@ See proposal.md for motivation and scope. The current service:
 - **External processes and services:** `pg_dump`/`psql` for backups and restore, `ffmpeg` for camera and recordings, PrusaLink (HTTP Digest), Prusa Connect, AWS SSM and S3, and the read-only central-pipeline database.
 - **Tests:** about 12k lines of Go tests. Unit tests use mockery, repository integration tests run against a real DB, and an 824-line e2e suite runs over HTTP.
 
-The constraints come from the specs: byte-compatible HTTP (`http-platform`, `auth`, `api-surface`), a self-contained migration history (`schema-migrations`), the same runtime behavior (`runtime-lifecycle`), and Telegram alerts (`error-alerts`).
+The constraints come from the specs: client-compatible HTTP (`http-platform`, `auth`, `api-surface`), a self-contained migration history (`schema-migrations`), the same runtime behavior (`runtime-lifecycle`), and Telegram alerts (`error-alerts`).
 
 ## Goals / Non-Goals
 
@@ -19,6 +19,7 @@ The constraints come from the specs: byte-compatible HTTP (`http-platform`, `aut
 - Reach parity that is proven by an automated comparison against the last Go release, not only argued.
 - Keep one obvious place for each concern, with the same layering as today so domains port almost one to one.
 - Keep the Python code small: no duplicated model layers, and comments only where the reason is not obvious.
+- Prefer simple, idiomatic Python over byte-for-byte parity. When matching the Go service would need extra code (hand-made encoders, ports of Go library behavior, accidental orderings), the simpler behavior wins: the difference goes into `tests/parity/ACCEPTED.md`, and gv-web is changed if it depends on it. The code does not refer to the Go service.
 
 **Non-Goals:**
 - Fixing API warts. Known oddities are ported as they are and listed for a later change.
@@ -96,34 +97,34 @@ There is a single model per request or response shape, shared by router and serv
 
 Shared building blocks live in `core/encoding.py`:
 
-- `ApiModel(BaseModel)` with `extra="ignore"` and lax mode, where every field has a Go zero-value default.
-- `Money = Annotated[Decimal, PlainSerializer(go_decimal)]` gives a plain string with trailing zeros removed and no exponent.
-- `Timestamp = Annotated[datetime, PlainSerializer(go_rfc3339nano)]` gives `Z` for UTC and trims fractional zeros.
-- `Day` gives `YYYY-MM-DD`.
+- `ApiModel(BaseModel)` with `extra="ignore"` and lax mode; request fields default to their zero value.
+- `Money = Annotated[Decimal, PlainSerializer(decimal_str)]` gives a plain string with trailing zeros removed and no exponent.
+- `Timestamp = Annotated[datetime, PlainSerializer(time_str)]` gives `Z` for UTC and trims fractional zeros.
+- `Day` gives `YYYY-MM-DD`; `DayTime` writes a date column as midnight UTC where the API types it as a timestamp.
+- `Real` writes a SQL `real` with 7 significant digits.
 
-Null versus `[]` is decided per field by its declared type: `list[X] | None = None` where Go emitted `null`, and `list[X] = []` where it emitted `[]`. The parity harness catches any mistake.
+Null versus `[]` is decided per field by its declared type: `list[X] | None = None` where Go emitted `null`, and `list[X] = []` where it emitted `[]`. Every field is always serialized: keys Go left out when empty are present as `null` or `[]`, so there is no `omitempty` machinery. The parity harness catches any other mistake.
 
 Responses go through `core.respond(status, model_or_list)`. It calls `model_dump(mode="json")` and returns a `JSONResponse`. FastAPI's `response_model` is not used, which avoids validating twice and keeps encoding in one place.
 
 ### D8. Request parsing
 
-These are the simplest form that keeps Go's error messages:
+These are the simplest form that keeps the existing error messages:
 
 - `body = await parse_body(request, Model, "Invalid Body")` returns the handler's 400 on invalid JSON or a value that cannot be coerced.
 - `id = parse_id(raw, "habit")` returns 400 `invalid habit id` unless the value is a positive int32.
-- `q = query(request, "date")` returns the first value, or `""`, like Go's `Query().Get`.
+- `q = query(request, "date")` returns the first value, or `""`.
 
-Path parameters are declared as `str` and query parameters are not declared, so FastAPI never produces a 422.
+Path parameters are declared as `str` and query parameters are not declared, so FastAPI never produces a 422. Bodies are parsed with `json.loads`, so content after the JSON value is a 400. A PATCH field where `null` means "clear" and absence means "keep" is told apart with `model_fields_set`.
 
-### D9. HTTP parity settings
+### D9. HTTP settings
 
 - `FastAPI(docs_url=None, redoc_url=None, openapi_url=None)`: no extra public routes.
-- `redirect_slashes=False`, because chi returns 404 for `/habits/` instead of redirecting.
-- Unmatched routes return 404 `text/plain` with `404 page not found\n`. A wrong method returns 405 with an empty body and an `Allow` header.
+- `redirect_slashes=False`: `/habits/` is a 404, not a redirect.
+- Unmatched routes, wrong methods and unhandled exceptions use the framework defaults: 404 `{"detail": "Not Found"}`, 405 with an `Allow` header, and a logged traceback with Starlette's plain 500.
 - HEAD is not added to GET routes.
-- Unhandled exceptions are logged with their traceback and return 500 with an empty body, like chi's `Recoverer`.
 - Static subpaths (`list-fast`, `by-due-date`, `future`, `active`, `summary`, `history`, `meta`, `progress`, `rename`, …) are registered before `{id}` routes. A route-inventory test compares the app's (method, path, tier) table with `tests/parity/routes.txt`, which is generated once from the Go router.
-- Middleware is pure ASGI, ordered as in Go: request id, then CORS (Starlette `CORSMiddleware` with Go's lists and `max_age=300`), then the failover hold lock, then the routes. Auth and the AWS-side guard are router-level dependencies per tier, like chi groups.
+- Middleware is pure ASGI, outermost first: request id, then CORS (Starlette `CORSMiddleware` with the spec's lists and `max_age=300`), then the failover hold lock, then the routes. Auth and the AWS-side guard are router-level dependencies per tier.
 
 ### D10. Time
 
@@ -189,6 +190,7 @@ Each domain group ports that domain's existing Go tests, and its coverage counts
 - **[Encoding drift: null vs `[]`, decimals, timestamps]** → Use the typed helpers from D7 only, and the harness diffs decoded bodies.
 - **[Framework defaults leak (422, 307, HEAD, `/docs`)]** → D9 settings plus explicit tests for each.
 - **[Lax coercion accepts `"5"` for an int]** → Accepted and written into the http-platform spec. No client sends this.
+- **[A client relies on a detail that changed]** → Each difference is in `ACCEPTED.md`; gv-web was checked for absent-vs-null fields and CORS, and is changed in its own repo if a difference matters.
 - **[Event loop blocked by sync work]** → Rule: boto3, file and subprocess IO always go through threads or async subprocesses. Ruff's `ASYNC` rules flag blocking calls.
 - **[Cutover stamp forgotten or run on the wrong database]** → Forgetting it fails safe: the baseline's first `CREATE` errors, the transaction rolls back and the app does not start. The stamp only runs when `alembic current` is empty, and the CI pre-deploy backup still runs first.
 - **[Rollback window closes on the first new migration]** → Documented. Rolling back after that needs a down step written at that time.

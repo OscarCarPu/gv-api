@@ -3,8 +3,7 @@ from datetime import timedelta
 from typing import Annotated, Any
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
-from pydantic import BeforeValidator, Field
-from pydantic_core import PydanticUseDefault
+from pydantic import BeforeValidator, Field, ValidationError
 from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
 REQUIRED = (
@@ -21,50 +20,19 @@ class ConfigError(Exception):
     pass
 
 
-# An empty or unparsable value falls back to the default instead of failing.
-def _lenient(parse: Any) -> BeforeValidator:
-    def validate(raw: Any) -> Any:
-        if not isinstance(raw, str):
-            return raw
-        if raw == "":
-            raise PydanticUseDefault
-        try:
-            return parse(raw)
-        except ValueError:
-            raise PydanticUseDefault from None
-
-    return BeforeValidator(validate)
-
-
-def _parse_ms(raw: str) -> int:
-    ms = int(raw)
-    if ms < 0:
-        raise ValueError
-    return ms
-
-
-def _parse_bool(raw: str) -> bool:
-    if raw in ("1", "t", "T", "TRUE", "true", "True"):
-        return True
-    if raw in ("0", "f", "F", "FALSE", "false", "False"):
-        return False
-    raise ValueError
-
-
 def _origins(raw: Any) -> Any:
     if isinstance(raw, str):
         return [o.strip() for o in raw.split(",") if o.strip()]
     return raw
 
 
-Ms = Annotated[int, _lenient(_parse_ms)]
-Int = Annotated[int, _lenient(int)]
-Float = Annotated[float, _lenient(float)]
-Bool = Annotated[bool, _lenient(_parse_bool)]
+Ms = Annotated[int, Field(ge=0)]
 
 
 class Config(BaseSettings):
-    model_config = SettingsConfigDict(case_sensitive=False, extra="ignore", frozen=True)
+    model_config = SettingsConfigDict(
+        case_sensitive=False, extra="ignore", frozen=True, env_ignore_empty=True
+    )
 
     database_url: str = ""
     port: str = "8080"
@@ -93,18 +61,18 @@ class Config(BaseSettings):
     printer_uploads_dir: str = Field(
         default_factory=lambda: tempfile.gettempdir() + "/gv-print-uploads"
     )
-    printer_recording_max_minutes: Int = 30 * 60
-    printer_recordings_max_gb: Float = 30.0
+    printer_recording_max_minutes: int = 30 * 60
+    printer_recordings_max_gb: float = 30.0
     printer_recording_video_codec: str = "copy"
-    printer_recording_overlay: Bool = True
+    printer_recording_overlay: bool = True
     printer_recording_font: str = ""
 
-    daily_capacity_hours: Float = 14.0
+    daily_capacity_hours: float = 14.0
     health_timeout_ms: Ms = 2000
 
     backup_dir: str = "/backups"
-    backup_keep_hourly_days: Int = 2
-    backup_keep_daily_days: Int = 30
+    backup_keep_hourly_days: int = 2
+    backup_keep_daily_days: int = 30
     backup_interval_ms: Ms = 5 * 60 * 1000
     backup_s3_bucket: str = ""
 
@@ -141,7 +109,11 @@ class Config(BaseSettings):
 
 
 def load() -> Config:
-    cfg = Config()
+    try:
+        cfg = Config()
+    except ValidationError as err:
+        names = sorted({str(e["loc"][0]).upper() for e in err.errors() if e["loc"]})
+        raise ConfigError("invalid env vars: " + ", ".join(names)) from None
     missing = [name for name in REQUIRED if not getattr(cfg, name.lower())]
     if missing:
         raise ConfigError("required env vars not set: " + ", ".join(missing))

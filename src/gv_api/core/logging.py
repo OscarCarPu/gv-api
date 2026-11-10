@@ -13,7 +13,6 @@ _STANDARD = set(logging.makeLogRecord({}).__dict__) | {
     "taskName",
     "color_message",  # uvicorn
 }
-_LEVELS = {"WARNING": "WARN", "CRITICAL": "ERROR"}
 
 
 class RequestIDFilter(logging.Filter):
@@ -30,7 +29,7 @@ class JSONFormatter(logging.Formatter):
     def format(self, record: logging.LogRecord) -> str:
         out: dict[str, Any] = {
             "time": datetime.fromtimestamp(record.created).astimezone().isoformat(),
-            "level": _LEVELS.get(record.levelname, record.levelname),
+            "level": record.levelname,
             "msg": record.getMessage(),
         }
         for key, value in record.__dict__.items():

@@ -2,12 +2,12 @@
 
 ## Purpose
 
-Defines the wire conventions every gv-api endpoint shares, so that clients (gv-web, Android, the failover Lambda) see byte-compatible responses whatever implementation serves them.
+Defines the wire conventions every gv-api endpoint shares, so that clients (gv-web, Android, the failover Lambda) keep working whatever implementation serves them. Exact bytes may differ from the Go service where the simpler implementation was chosen; each such difference is listed in `tests/parity/ACCEPTED.md`.
 
 ## ADDED Requirements
 
 ### Requirement: JSON responses
-Every JSON response SHALL carry `Content-Type: application/json` and a body that decodes to the same value the Go service returned for the same request and data. Field names, presence of keys, value types, and the choice between `null` and an empty array or object for each field SHALL match.
+Every JSON response SHALL carry `Content-Type: application/json` and a body that decodes to the same value the Go service returned for the same request and data, apart from the differences listed in `tests/parity/ACCEPTED.md`. Field names, value types, and the choice between `null` and an empty array for each field SHALL match. Every field of a response shape SHALL always be present, as `null` or `[]` when it has no value.
 
 #### Scenario: Empty collection keeps its encoding
 - **WHEN** a client requests a resource whose list field is empty, and the Go service encoded that field as `null` (or as `[]`)
@@ -15,7 +15,11 @@ Every JSON response SHALL carry `Content-Type: application/json` and a body that
 
 #### Scenario: Optional field absent from data
 - **WHEN** a nullable column is NULL for the requested row
-- **THEN** the corresponding key is present with value `null`, unless the Go service omitted the key, in which case it is omitted
+- **THEN** the corresponding key is present with value `null`
+
+#### Scenario: Field the Go service omitted when empty
+- **WHEN** a task without recurrence is returned, a field the Go service left out when empty
+- **THEN** the key is present with value `null`
 
 ### Requirement: Decimal encoding
 Monetary and hour amounts held as SQL `numeric` SHALL encode as JSON strings in plain decimal notation with trailing fractional zeros removed and no exponent, matching the Go service.
@@ -51,7 +55,7 @@ Error responses SHALL be JSON objects `{"error": "<message>"}`, with an added `"
 - **THEN** the response is 500 with body `{"error": "Failed to get daily habits"}` and the cause is logged, not returned
 
 ### Requirement: Lenient request body decoding
-Unknown body fields SHALL be ignored, and missing fields SHALL take their zero value (`""`, `0`, `false`, or null for optional fields). A malformed body, or a value that cannot be coerced to the field's type, SHALL return the handler's own 400 message, never a 422 or a framework error shape. Coercible values such as `"5"` for an integer MAY be accepted.
+Unknown body fields SHALL be ignored, and missing fields SHALL take their zero value (`""`, `0`, `false`, or null for optional fields). A malformed body (including content after the JSON value), or a value that cannot be coerced to the field's type, SHALL return the handler's own 400 message, never a 422 or a framework error shape. Coercible values such as `"5"` for an integer MAY be accepted.
 
 #### Scenario: Unknown field
 - **WHEN** a client posts a habit log with an extra key `"foo": 1`
@@ -73,11 +77,11 @@ Numeric path ids SHALL be accepted only as positive integers that fit in 32 bits
 - **THEN** the response is 400 with body `{"error": "invalid habit id"}`
 
 ### Requirement: Unmatched routes and methods
-A path no route matches SHALL return 404 with a `text/plain` body `404 page not found`. A known path called with an unsupported method SHALL return 405 with an `Allow` header listing the supported methods. Neither SHALL require authentication.
+A path no route matches SHALL return 404 with body `{"detail": "Not Found"}`. A known path called with an unsupported method SHALL return 405 with an `Allow` header listing the supported methods. Neither SHALL require authentication.
 
 #### Scenario: Unknown path
 - **WHEN** a client calls `GET /does-not-exist` without a token
-- **THEN** the response is 404 with body `404 page not found`
+- **THEN** the response is 404 with body `{"detail": "Not Found"}`
 
 #### Scenario: Wrong method
 - **WHEN** a client calls `PATCH /habits`

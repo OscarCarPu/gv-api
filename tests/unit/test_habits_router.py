@@ -99,7 +99,7 @@ async def test_daily_view() -> None:
 async def test_empty_daily_view_is_null() -> None:
     async with client(FakeRepo()) as c:
         resp = await c.get("/habits", headers=FULL)
-    assert (resp.status_code, resp.text) == (200, "null\n")
+    assert (resp.status_code, resp.text) == (200, "null")
 
 
 @pytest.mark.parametrize("path", ["/habits?date=bad", "/habits?date=2026-02-30"])
@@ -323,4 +323,4 @@ async def test_wrong_method_lists_allow() -> None:
     async with client(FakeRepo()) as c:
         resp = await c.patch("/habits", headers=FULL)
     assert resp.status_code == 405
-    assert resp.headers.get_list("allow") == ["GET", "POST"]
+    assert resp.headers["allow"] == "GET, POST"

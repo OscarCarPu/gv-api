@@ -61,14 +61,23 @@ async def test_null_body_is_all_zero_values() -> None:
     assert req.habit_id == 0
 
 
-async def test_trailing_data_after_first_value_is_ignored() -> None:
-    req = await parse_body(make_request(b' {"habit_id": 2} garbage'), LogReq, "Invalid Body")
+async def test_surrounding_whitespace_is_fine() -> None:
+    req = await parse_body(make_request(b' {"habit_id": 2}\n'), LogReq, "Invalid Body")
     assert req.habit_id == 2
 
 
 @pytest.mark.parametrize(
     "body",
-    [b"", b"{", b"[]", b'"x"', b'{"habit_id": "abc"}', b'{"habit_id": 4294967296}', b"\xff"],
+    [
+        b"",
+        b"{",
+        b"[]",
+        b'"x"',
+        b'{"habit_id": 2} garbage',
+        b'{"habit_id": "abc"}',
+        b'{"habit_id": 4294967296}',
+        b"\xff",
+    ],
 )
 async def test_bad_bodies_give_the_handler_message(body: bytes) -> None:
     with pytest.raises(ApiError) as err:

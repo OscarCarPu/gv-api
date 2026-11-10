@@ -7,11 +7,15 @@ Describes how the gv-api process starts, which background work it runs and when,
 ## ADDED Requirements
 
 ### Requirement: Configuration from the environment
-The process SHALL read its configuration from the environment with the variable names and defaults of `.env.example`. `LIGHTS_*` variables are no longer read. It SHALL exit non-zero, naming the missing ones, when any of `DATABASE_URL`, `PASSWORD`, `SEMIPRIVATE_PASSWORD`, `JWT_SECRET`, `TOTP_SECRET` or `ALLOWED_ORIGINS` is unset. It SHALL also exit non-zero when `FAILOVER_SIDE` is not `home` or `aws`, `TIMEZONE` is unknown, or the backup retention bounds are inconsistent.
+The process SHALL read its configuration from the environment with the variable names and defaults of `.env.example`. `LIGHTS_*` variables are no longer read. It SHALL exit non-zero, naming the missing ones, when any of `DATABASE_URL`, `PASSWORD`, `SEMIPRIVATE_PASSWORD`, `JWT_SECRET`, `TOTP_SECRET` or `ALLOWED_ORIGINS` is unset. It SHALL also exit non-zero on an invalid value: wrong type, `FAILOVER_SIDE` not `home` or `aws`, unknown `TIMEZONE`, or inconsistent backup retention.
 
 #### Scenario: Missing secrets
 - **WHEN** the process starts without `JWT_SECRET` and `TOTP_SECRET`
 - **THEN** it exits non-zero and logs `required env vars not set: JWT_SECRET, TOTP_SECRET`
+
+#### Scenario: Invalid or empty value
+- **WHEN** `PORT=abc` is set, or `PORT` is set to an empty string
+- **THEN** the first exits non-zero naming `PORT`, and the second starts on the default port
 
 #### Scenario: Leftover lights config
 - **WHEN** `LIGHTS_DRIVER=bluez` is still set

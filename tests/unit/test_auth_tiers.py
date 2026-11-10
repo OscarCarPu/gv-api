@@ -23,7 +23,7 @@ CFG = Config(
     allowed_origins=["http://x"],
 )
 SVC = AuthService(CFG)
-UNAUTHORIZED = (401, '{"error":"Unauthorized"}\n')
+UNAUTHORIZED = (401, '{"error":"Unauthorized"}')
 
 
 async def ping() -> None:
