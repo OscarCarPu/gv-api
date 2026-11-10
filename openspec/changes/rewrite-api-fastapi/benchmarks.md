@@ -189,3 +189,48 @@ None of these are regressions or blockers. Fixing them changes queries or the co
 - The heavy endpoints are SQL-bound, so porting the same SQL keeps the latency. The real risk is limited to per-request framework overhead (around 1 ms, to be measured) and encoding large payloads, which was already measured with equivalent results.
 - **Run-to-run noise:** repeating the `prod` scenario gave a median p95 ratio of 0.92, but single endpoints ranged from 0.40× to 1.53× (all of them under 15 ms). One run is not enough to compare.
 - **Latency gate (replaces the 2× tasks/habits rule in design D15/Risks):** at scenario `5y`, for **every** endpoint, the median of 3 runs of Python p95 ≤ max(1.5 × median of 3 runs of Go p95, Go + 5 ms), measured with `bench/run.sh` on the same machine. An extra checkpoint at the end of H3 (task 12.3) catches problems before finance, printers and the rest.
+
+## H3 checkpoint (task 12.3)
+
+Python at scenario `5y` on the same i7-1360P, median p95 of 3 runs (`bench/results/py-h3e`, `-r2`, `-r3`), for the endpoints ported so far. "First port" is the median of 3 runs before the changes below. Every endpoint meets the gate.
+
+| Endpoint | Go | Limit | First port | Now |
+|---|---:|---:|---:|---:|
+| `health` | 0.4 | 5.4 | 2.4 | 1.5 |
+| `habits.daily` | 66.0 | 99.0 | 71.2 | 61.5 |
+| `habits.history.1y` | 1.8 | 6.8 | 8.4 | 5.1 |
+| `tasks.tree` | 8.1 | 13.1 | 27.2 | 12.3 |
+| `tasks.projects.roots` | 0.8 | 5.8 | 6.2 | 3.2 |
+| `tasks.projects.list-fast` | 1.0 | 6.0 | 6.7 | 4.2 |
+| `tasks.tasks.list-fast` | 2.3 | 7.3 | 9.1 | 5.0 |
+| `tasks.project` | 6.1 | 11.1 | 12.2 | 6.7 |
+| `tasks.project.children` | 37.2 | 55.7 | 41.8 | 30.9 |
+| `tasks.project.parent-candidates` | 2.7 | 7.7 | 11.1 | 6.1 |
+| `tasks.task` | 1.3 | 6.3 | 7.7 | 2.6 |
+| `tasks.task.time-entries` | 1.1 | 6.1 | 8.3 | 2.4 |
+| `tasks.by-due-date` | 95.0 | 142.6 | 119.7 | 100.5 |
+| `tasks.by-due-date.slack` | 90.4 | 135.5 | 116.5 | 99.8 |
+| `tasks.time-entries.week` | 5.9 | 10.9 | 14.4 | 10.0 |
+| `tasks.time-entries.active` | 0.5 | 5.5 | 3.7 | 2.1 |
+| `tasks.time-entries.summary` | 2.0 | 7.0 | 6.0 | 2.2 |
+| `tasks.time-entries.history.30d` | 10.3 | 15.4 | 14.8 | 9.2 |
+| `tasks.time-entries.history.5y` | 41.3 | 62.0 | 45.9 | 34.0 |
+| `plan.today` | 2.9 | 7.9 | 10.2 | 5.8 |
+| `plan.range.2w` | 5.8 | 10.8 | 23.9 | 7.3 |
+| `plan.commitments` | 0.6 | 5.6 | 5.0 | 1.4 |
+| `capacity.30d` | 39.3 | 58.9 | 47.1 | 33.4 |
+| `calendar.month` | 0.9 | 5.9 | 6.0 | 4.0 |
+| `rutas.marks` | 1.4 | 6.4 | 8.7 | 3.8 |
+| `w.habits.log` | 32.2 | 48.3 | 39.9 | 30.0 |
+| `w.tasks.task` | 15.3 | 22.9 | 24.8 | 17.1 |
+| `w.tasks.time-entry` | 8.0 | 13.0 | 13.4 | 11.0 |
+| `w.plan.block` | 9.8 | 14.8 | 18.3 | 13.7 |
+| `w.calendar.event` | 7.8 | 12.8 | 12.2 | 10.6 |
+
+The first port missed the gate on 18 of 30 endpoints. The cause was a fixed cost of about 4 ms per query: each read made 4 round trips (pre-ping, `BEGIN`, the query, `ROLLBACK` on checkin) where Go makes 1. Changes:
+
+- **Engine** (`db/engine.py`): no pool pre-ping and a LIFO pool. `connect()` runs in autocommit, for reads and single-statement writes; `begin()` is the transaction for several statements. A connection Postgres dropped now fails one request, after which SQLAlchemy discards the pool.
+- **Fewer queries**: `plan/range` reads the taken dates of every commitment in one query, and a plan block is written and returned joined with its task in one statement.
+- **`tasks.tree`**: projects and open tasks come as one JSON array each (`json_agg`), parsed by Pydantic's compiled validator, and the tree is built from dicts and validated in one pass. Model responses are serialized with `pydantic_core.to_json` (same bytes as before).
+
+Process: about 590 ms to start, 105 MB RSS idle and 112 MB peak (Go: 73 ms, 28 MB and 83 MB). That is well under the 512 MB limit.

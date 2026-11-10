@@ -22,6 +22,5 @@ def _upgrade(conn: Connection, script_location: Path) -> None:
 async def migrate(engine: AsyncEngine, script_location: Path | None = None) -> None:
     """Apply pending migrations; a failure rolls all of them back."""
     location = script_location or Path.cwd() / "migrations"
-    async with engine.connect() as conn:
+    async with engine.begin() as conn:
         await conn.run_sync(_upgrade, location)
-        await conn.commit()

@@ -5,6 +5,7 @@ from zoneinfo import ZoneInfo
 
 import pytest
 from pydantic import Field
+from pydantic_core import TzInfo
 
 from gv_api.core.encoding import (
     ApiModel,
@@ -140,3 +141,11 @@ def test_real(value: float, expected: float) -> None:
 
     assert json.loads(respond(200, M(v=value)).body) == {"v": expected}
     assert real_number(value) == expected
+
+
+def test_fixed_zero_offset_is_utc() -> None:
+    base = datetime(2026, 1, 5, 9, 30)
+    assert time_str(base.replace(tzinfo=TzInfo(0))) == "2026-01-05T09:30:00Z"
+    assert time_str(base.replace(tzinfo=timezone(timedelta(0)))) == "2026-01-05T09:30:00Z"
+    assert time_str(base.replace(tzinfo=ZoneInfo("Europe/London"))) == "2026-01-05T09:30:00+00:00"
+    assert time_str(base.replace(tzinfo=TzInfo(3600))) == "2026-01-05T09:30:00+01:00"

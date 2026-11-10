@@ -78,9 +78,9 @@ Milestones: **H0** foundations (1–5) · **H1** parity harness (6) · **H2** si
 
 ## 12. H3 · Calendar
 
-- [ ] 12.1 Port the calendar tables, repository, service (linked to the plan service) and router, with the Go tests and `test/e2e/calendar_test.go`. Verify that unit, integration and e2e tests pass.
-- [ ] 12.2 Add `tests/parity/corpus/calendar.yaml` (RFC 3339 and date-only filters, links from plan blocks). Verify that it is green.
-- [ ] 12.3 Latency checkpoint: run `bench/run.sh` with the Python app at scenario `5y`. Verify that the habits, tasks, plan, capacity and calendar endpoints meet the gate in design (median p95 over 3 runs ≤ max(1.5 × Go, Go + 5 ms)); investigate any miss before starting H4.
+- [x] 12.1 Port the calendar tables, repository, service (linked to the plan service) and router, with the Go tests and `test/e2e/calendar_test.go`. Verify that unit, integration and e2e tests pass.
+- [x] 12.2 Add `tests/parity/corpus/calendar.yaml` (RFC 3339 and date-only filters, links from plan blocks). Verify that it is green.
+- [x] 12.3 Latency checkpoint: run `bench/run.sh` with the Python app at scenario `5y`. Verify that the habits, tasks, plan, capacity and calendar endpoints meet the gate in design (median p95 over 3 runs ≤ max(1.5 × Go, Go + 5 ms)); investigate any miss before starting H4.
 
 ## 13. H4 · Finance
 

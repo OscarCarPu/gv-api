@@ -3,6 +3,7 @@ from datetime import date, datetime
 from decimal import Decimal
 from typing import Any
 
+from pydantic import TypeAdapter
 from sqlalchemy import Row, Table, delete, select, text, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine
@@ -106,21 +107,31 @@ WHERE t.finished_at IS NULL AND (t.project_id IS NULL OR pt.id IS NOT NULL)
 ORDER BY CASE WHEN t.project_id IS NULL THEN 1 ELSE 0 END, pt.sort_path, t.name
 """)
 
+# One JSON array, parsed in compiled code: much faster than a row and a model per task.
 _UNFINISHED_TASKS = text(f"""
-SELECT t.id, t.project_id, t.name, t.description, e.effective_due_at AS due_at,
-    t.started_at, t.task_type, t.recurrence, t.priority, {_DEPS}
-FROM tasks t JOIN task_effective_due e ON e.task_id = t.id
-WHERE t.finished_at IS NULL
-  AND (CAST(:min_priority AS int) IS NULL OR t.priority <= CAST(:min_priority AS int))
-ORDER BY
-  CASE
-    WHEN t.task_type = 'standard' AND t.started_at IS NOT NULL THEN 0
-    WHEN t.task_type = 'continuous' THEN 1
-    WHEN t.task_type = 'recurring' THEN 2
-    ELSE 3
-  END,
-  t.name
+SELECT COALESCE(json_agg(q ORDER BY q.type_rank, q.name), '[]')::text FROM (
+    SELECT t.id, t.project_id, t.name, t.description, e.effective_due_at AS due_at,
+        t.started_at, t.task_type, t.recurrence, t.priority, {_DEPS},
+        CASE
+            WHEN t.task_type = 'standard' AND t.started_at IS NOT NULL THEN 0
+            WHEN t.task_type = 'continuous' THEN 1
+            WHEN t.task_type = 'recurring' THEN 2
+            ELSE 3
+        END AS type_rank
+    FROM tasks t JOIN task_effective_due e ON e.task_id = t.id
+    WHERE t.finished_at IS NULL
+      AND (CAST(:min_priority AS int) IS NULL OR t.priority <= CAST(:min_priority AS int))
+) q
 """)  # noqa: S608
+_UNFINISHED_LIST = TypeAdapter(list[UnfinishedTask])
+
+_ACTIVE_PROJECTS = text("""
+SELECT COALESCE(json_agg(q ORDER BY q.name), '[]')::text FROM (
+    SELECT id, parent_id, name, due_at FROM projects
+    WHERE started_at IS NOT NULL AND finished_at IS NULL
+) q
+""")
+_ACTIVE_PROJECT_LIST = TypeAdapter(list[ActiveProject])
 
 _PROJECT_WITH_DESCENDANTS = text("""
 WITH RECURSIVE project_tree AS (
@@ -489,12 +500,9 @@ class TasksRepository:
         return [ProjectResponse.model_construct(**r._mapping) for r in await self._all(stmt)]
 
     async def get_active_projects(self) -> list[ActiveProject]:
-        stmt = (
-            select(projects.c.id, projects.c.parent_id, projects.c.name, projects.c.due_at)
-            .where(projects.c.started_at.is_not(None), projects.c.finished_at.is_(None))
-            .order_by(projects.c.name)
-        )
-        return [ActiveProject.model_construct(**r._mapping) for r in await self._all(stmt)]
+        row = await self._one(_ACTIVE_PROJECTS)
+        assert row is not None  # noqa: S101 - an aggregate always returns a row
+        return _ACTIVE_PROJECT_LIST.validate_json(row[0])
 
     async def get_project(self, id: int) -> ProjectDetailResponse:
         row = await self._one(_PROJECT, {"id": id})
@@ -584,8 +592,9 @@ class TasksRepository:
         return TaskResponse.model_construct(**row._mapping)
 
     async def get_unfinished_tasks(self, min_priority: int | None) -> list[UnfinishedTask]:
-        rows = await self._all(_UNFINISHED_TASKS, {"min_priority": min_priority})
-        return [UnfinishedTask.model_construct(**_with_deps(r)) for r in rows]
+        row = await self._one(_UNFINISHED_TASKS, {"min_priority": min_priority})
+        assert row is not None  # noqa: S101 - an aggregate always returns a row
+        return _UNFINISHED_LIST.validate_json(row[0])
 
     async def get_task(self, id: int) -> TaskFullResponse:
         row = await self._one(_TASK, {"id": id})

@@ -88,8 +88,8 @@ Background workers are `asyncio` tasks started in the lifespan and cancelled on 
 
 - **Tables:** each domain declares its own tables in `tables.py` on one shared `MetaData` (`db/metadata.py`). Alembic imports every domain's `tables.py`. An integration test compares the declared metadata with the migrated schema (columns, types, nullability), so the declarations cannot drift.
 - **Queries:** queries are ported from `db/queries/<domain>.sql` to SQLAlchemy Core expressions. Recursive CTEs, the effective-due view, and calls to SQL functions such as the habit streak function may use `text()` with bound parameters, where that is clearer than Core. The `.sql` files are deleted once their domain is ported.
-- **Transactions:** a repository method opens `async with engine.begin()` when it needs one, and multi-step service operations receive a connection explicitly.
-- **Row mapping:** repositories return Pydantic models built with `Model.model_construct(**row._mapping)`, which skips validation for trusted DB data (see D7).
+- **Connections and transactions:** the pool has no pre-ping and is LIFO. `engine.connect()` runs in autocommit, one round trip per statement, and serves reads and single-statement writes; `engine.begin()` is a transaction, for several statements that must apply together. Multi-step service operations receive a connection explicitly.
+- **Row mapping:** repositories return Pydantic models built with `Model.model_construct(**row._mapping)`, which skips validation for trusted DB data (see D7). Large lists can instead come from Postgres as one `json_agg` array, validated with a `TypeAdapter` in compiled code.
 
 ### D7. One Pydantic model per shape
 
@@ -105,7 +105,7 @@ Shared building blocks live in `core/encoding.py`:
 
 Null versus `[]` is decided per field by its declared type: `list[X] | None = None` where Go emitted `null`, and `list[X] = []` where it emitted `[]`. Every field is always serialized: keys Go left out when empty are present as `null` or `[]`, so there is no `omitempty` machinery. The parity harness catches any other mistake.
 
-Responses go through `core.respond(status, model_or_list)`. It calls `model_dump(mode="json")` and returns a `JSONResponse`. FastAPI's `response_model` is not used, which avoids validating twice and keeps encoding in one place.
+Responses go through `core.respond(status, model_or_list)`. Models and lists of models are serialized with `pydantic_core.to_json`; anything else (dicts of plain values) goes through `jsonable` and a `JSONResponse`. Both write the same bytes. FastAPI's `response_model` is not used, which avoids validating twice and keeps encoding in one place.
 
 ### D8. Request parsing
 

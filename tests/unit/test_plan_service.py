@@ -309,8 +309,11 @@ async def test_generation_fills_matching_weekdays_not_existing_or_skipped() -> N
     monday = date(2026, 5, 4)
     repo = FakeRepo(
         list_active_commitments=[commitment(days_of_week=[1, 3, 5, 0])],
-        list_block_dates={monday},
-        list_skips={monday + timedelta(days=2)},
+        list_taken_dates={
+            (7, monday),
+            (7, monday + timedelta(days=2)),
+            (8, monday + timedelta(days=4)),
+        },
     )
     await svc(repo, MADRID).ensure_recurring_blocks(monday, monday + timedelta(days=7))
     created: list[NewBlock] = [c[1] for c in repo.calls if c[0] == "create_generated"]

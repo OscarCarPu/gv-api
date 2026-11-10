@@ -29,9 +29,8 @@ def run(connection: Connection) -> None:
 async def run_with_own_engine() -> None:
     engine = create_engine(os.environ["DATABASE_URL"], pool_size=1)
     try:
-        async with engine.connect() as conn:
+        async with engine.begin() as conn:
             await conn.run_sync(run)
-            await conn.commit()
     finally:
         await engine.dispose()
 

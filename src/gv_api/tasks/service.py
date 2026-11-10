@@ -4,6 +4,8 @@ from decimal import ROUND_HALF_UP, Decimal
 from typing import Any, Protocol
 from zoneinfo import ZoneInfo
 
+from pydantic import TypeAdapter
+
 from gv_api import history
 from gv_api.core.dates import Clock, utcnow
 from gv_api.tasks import budget, urgency
@@ -39,6 +41,7 @@ from gv_api.tasks.schemas import (
 )
 
 DEFAULT_PRIORITY = 3
+_TREE = TypeAdapter(list[ActiveTreeNode])
 
 
 class Repository(Protocol):
@@ -191,29 +194,34 @@ class TasksService:
     async def get_active_tree(self, min_priority: int | None) -> list[ActiveTreeNode]:
         projects = await self._repo.get_active_projects()
         tasks = await self._repo.get_unfinished_tasks(min_priority)
-        kids: dict[int, list[ActiveTreeNode]] = {p.id: [] for p in projects}
+        # Plain dicts, validated into nodes in one compiled pass at the end.
+        kids: dict[int, list[dict[str, Any]]] = {p.id: [] for p in projects}
         nodes = {
-            p.id: ActiveTreeNode.model_construct(
-                id=p.id, type="project", name=p.name, due_at=p.due_at, children=kids[p.id]
-            )
+            p.id: {
+                "id": p.id,
+                "type": "project",
+                "name": p.name,
+                "due_at": p.due_at,
+                "children": kids[p.id],
+            }
             for p in projects
         }
-        orphans: list[ActiveTreeNode] = []
+        orphans: list[dict[str, Any]] = []
         for t in tasks:
-            node = ActiveTreeNode.model_construct(
-                id=t.id,
-                type="task",
-                name=t.name,
-                description=t.description,
-                due_at=t.due_at,
-                started_at=t.started_at,
-                task_type=t.task_type,
-                recurrence=t.recurrence,
-                priority=t.priority,
-                depends_on=t.depends_on,
-                blocks=t.blocks,
-                blocked=t.blocked,
-            )
+            node = {
+                "id": t.id,
+                "type": "task",
+                "name": t.name,
+                "description": t.description,
+                "due_at": t.due_at,
+                "started_at": t.started_at,
+                "task_type": t.task_type,
+                "recurrence": t.recurrence,
+                "priority": t.priority,
+                "depends_on": t.depends_on,
+                "blocks": t.blocks,
+                "blocked": t.blocked,
+            }
             if t.project_id is None:
                 orphans.append(node)
             elif t.project_id in kids:
@@ -221,13 +229,13 @@ class TasksService:
 
         # Each sub-project is put in front of its parent's children, so they come before the
         # tasks, in reverse name order. Projects under an inactive parent are roots.
-        roots: list[ActiveTreeNode] = []
+        roots: list[dict[str, Any]] = []
         for p in projects:
             if p.parent_id is not None and p.parent_id in kids:
                 kids[p.parent_id].insert(0, nodes[p.id])
             else:
                 roots.append(nodes[p.id])
-        return roots + orphans
+        return _TREE.validate_python(roots + orphans)
 
     # Tasks
 

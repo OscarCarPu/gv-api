@@ -12,7 +12,7 @@ import uvicorn
 from fastapi import FastAPI
 from sqlalchemy.ext.asyncio import AsyncEngine
 
-from gv_api import auth, capacity, habits, plan, rutas, tasks
+from gv_api import auth, calendar, capacity, habits, plan, rutas, tasks
 from gv_api.alerts import TelegramHandler
 from gv_api.config import Config
 from gv_api.core.app import create_app
@@ -51,6 +51,9 @@ def build(cfg: Config, alerts: TelegramHandler | None = None) -> FastAPI:
     # tasks and plan depend on each other, so urgency providers are wired with a setter.
     task_service.set_urgency_providers(capacity_service, plan_service)
     container.provide(task_service, plan_service, capacity_service)
+    container.provide(
+        calendar.CalendarService(calendar.CalendarRepository(container.engine), plan_service)
+    )
     container.provide(rutas.RutasService(rutas.RutasRepository(container.engine)))
     if alerts is not None:
         container.workers.add("alerts", alerts.run)
@@ -82,6 +85,7 @@ def build(cfg: Config, alerts: TelegramHandler | None = None) -> FastAPI:
             tasks.router,
             plan.router,
             capacity.router,
+            calendar.router,
             rutas.router,
         ],
         lifespan=lifespan,

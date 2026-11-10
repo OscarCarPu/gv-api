@@ -78,7 +78,7 @@ def truncate_tables() -> None:
         try:
             await conn.execute(
                 "TRUNCATE habits, habit_logs, projects, tasks, todos, time_entries,"
-                " task_dependencies CASCADE"
+                " task_dependencies, calendar_events CASCADE"
             )
         finally:
             await conn.close()

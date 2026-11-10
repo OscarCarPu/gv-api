@@ -78,3 +78,9 @@ Go left them `null` and `0` because it did not copy them from the row.
 `POST /plan/blocks` without `started_at` or `ended_at` is a 400 `ended_at must be after
 started_at`. Go read a missing time as year 1, so a block with only `ended_at` was created on
 0001-01-01.
+
+## calendar-iso-instants
+
+`/calendar/events` filters read an instant with `datetime.fromisoformat`, which also takes ISO
+forms Go's RFC 3339 parser refused (no seconds, a space instead of `T`). It still needs an
+offset, and every value Go accepted means the same instant.

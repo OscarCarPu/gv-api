@@ -1,11 +1,12 @@
 """Wire encoding of API values (design D7): typed amounts, dates and times."""
 
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, timedelta, timezone
 from decimal import Decimal
 from typing import Annotated, Any
 from zoneinfo import ZoneInfo
 
 from pydantic import BaseModel, ConfigDict, PlainSerializer
+from pydantic_core import TzInfo, to_json
 from starlette.responses import JSONResponse, Response
 
 
@@ -23,7 +24,12 @@ def decimal_str(d: Decimal) -> str:
 
 def _is_utc(t: datetime) -> bool:
     tz = t.tzinfo
-    return tz is None or tz is UTC or (isinstance(tz, ZoneInfo) and tz.key in ("UTC", "Etc/UTC"))
+    if tz is None or tz is UTC:
+        return True
+    if isinstance(tz, ZoneInfo):
+        return tz.key in ("UTC", "Etc/UTC")
+    # A fixed zero offset, such as "+00:00" parsed from JSON.
+    return isinstance(tz, timezone | TzInfo) and tz.utcoffset(t) == timedelta(0)
 
 
 def time_str(t: datetime) -> str:
@@ -75,4 +81,9 @@ def jsonable(value: Any) -> Any:
 
 
 def respond(status: int, data: Any) -> Response:
+    if isinstance(data, BaseModel) or (
+        isinstance(data, list) and data and all(isinstance(d, BaseModel) for d in data)
+    ):
+        # Same bytes as the generic path, serialized in compiled code.
+        return Response(to_json(data), status_code=status, media_type="application/json")
     return JSONResponse(jsonable(data), status_code=status)

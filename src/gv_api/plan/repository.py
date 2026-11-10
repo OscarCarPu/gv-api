@@ -3,7 +3,7 @@ from datetime import date, datetime, time
 from decimal import Decimal
 from typing import Any
 
-from sqlalchemy import Select, delete, exists, func, select, text, update
+from sqlalchemy import Select, delete, exists, func, select, text, union, update
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine
 
@@ -15,22 +15,34 @@ from gv_api.tasks.tables import tasks
 pb = plan_blocks
 rc = recurring_commitments
 
-_BLOCKS = select(
-    pb.c.id,
-    pb.c.plan_date,
-    pb.c.started_at,
-    pb.c.ended_at,
-    pb.c.task_id,
-    pb.c.label,
-    pb.c.note,
-    pb.c.event_ref,
-    pb.c.commitment_id,
-    tasks.c.name.label("task_name"),
-    tasks.c.task_type,
-    tasks.c.recurrence.label("task_recurrence"),
-    tasks.c.started_at.label("task_started_at"),
-    tasks.c.finished_at.label("task_finished_at"),
-).select_from(pb.outerjoin(tasks, tasks.c.id == pb.c.task_id))
+_BLOCK_COLUMNS = (
+    "id",
+    "plan_date",
+    "started_at",
+    "ended_at",
+    "task_id",
+    "label",
+    "note",
+    "event_ref",
+    "commitment_id",
+)
+
+
+def _with_task(source: Any) -> Select[*tuple[Any, ...]]:
+    """The block columns of `source` (the table, or an INSERT/UPDATE ... RETURNING) with its
+    task's fields."""
+    return select(
+        *(source.c[name] for name in _BLOCK_COLUMNS),
+        tasks.c.name.label("task_name"),
+        tasks.c.task_type,
+        tasks.c.recurrence.label("task_recurrence"),
+        tasks.c.started_at.label("task_started_at"),
+        tasks.c.finished_at.label("task_finished_at"),
+    ).select_from(source.outerjoin(tasks, tasks.c.id == source.c.task_id))
+
+
+_BLOCKS = _with_task(pb)
+_RETURNING = tuple(pb.c[name] for name in _BLOCK_COLUMNS)
 
 _COMMITMENTS = (
     select(
@@ -156,11 +168,17 @@ class PlanRepository:
         async with self._engine.connect() as conn:
             return bool((await conn.execute(select(exists().where(*cond)))).scalar())
 
+    async def _write(self, stmt: Any) -> PlanBlockResponse:
+        """One statement that writes a block and returns it joined with its task."""
+        query = _with_task(stmt.returning(*_RETURNING).cte("written"))
+        async with self._engine.connect() as conn:
+            row = (await conn.execute(query)).one_or_none()
+        if row is None:
+            raise NotFoundError
+        return PlanBlockResponse.model_construct(**row._mapping)
+
     async def create(self, block: NewBlock) -> PlanBlockResponse:
-        async with self._engine.begin() as conn:
-            stmt = pb.insert().values(asdict(block)).returning(pb.c.id)
-            id = (await conn.execute(stmt)).scalar_one()
-            return await self._block(conn, id)
+        return await self._write(pb.insert().values(asdict(block)))
 
     async def create_generated(self, block: NewBlock) -> None:
         """Does nothing when a concurrent call already generated the occurrence."""
@@ -176,11 +194,7 @@ class PlanRepository:
             await conn.execute(stmt)
 
     async def update(self, id: int, values: dict[str, Any]) -> PlanBlockResponse:
-        async with self._engine.begin() as conn:
-            stmt = update(pb).where(pb.c.id == id).values(values or {"id": pb.c.id})
-            if (await conn.execute(stmt.returning(pb.c.id))).one_or_none() is None:
-                raise NotFoundError
-            return await self._block(conn, id)
+        return await self._write(update(pb).where(pb.c.id == id).values(values or {"id": pb.c.id}))
 
     async def update_times(self, id: int, start: datetime, end: datetime) -> None:
         values = {"started_at": start, "ended_at": end, "plan_date": start.date()}
@@ -253,20 +267,17 @@ class PlanRepository:
         async with self._engine.begin() as conn:
             await conn.execute(delete(rc).where(rc.c.id == id))
 
-    async def list_block_dates(self, commitment_id: int, first: date, end: date) -> set[date]:
-        query = select(pb.c.plan_date).where(
-            pb.c.commitment_id == commitment_id, pb.c.plan_date >= first, pb.c.plan_date < end
+    async def list_taken_dates(self, first: date, end: date) -> set[tuple[int, date]]:
+        """(commitment id, date) in [first, end) that already has a block or was skipped."""
+        sk = recurring_commitment_skips
+        blocks = select(pb.c.commitment_id, pb.c.plan_date).where(
+            pb.c.commitment_id.is_not(None), pb.c.plan_date >= first, pb.c.plan_date < end
+        )
+        skips = select(sk.c.commitment_id, sk.c.skip_date).where(
+            sk.c.skip_date >= first, sk.c.skip_date < end
         )
         async with self._engine.connect() as conn:
-            return set((await conn.execute(query)).scalars())
-
-    async def list_skips(self, commitment_id: int, first: date, end: date) -> set[date]:
-        s = recurring_commitment_skips
-        query = select(s.c.skip_date).where(
-            s.c.commitment_id == commitment_id, s.c.skip_date >= first, s.c.skip_date < end
-        )
-        async with self._engine.connect() as conn:
-            return set((await conn.execute(query)).scalars())
+            return {(r[0], r[1]) for r in await conn.execute(union(blocks, skips))}
 
     async def insert_skip(self, commitment_id: int, day: date) -> None:
         stmt = (

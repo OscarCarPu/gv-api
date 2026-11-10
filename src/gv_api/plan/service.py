@@ -58,8 +58,7 @@ class Repository(Protocol):
         self, id: int, values: dict[str, Any]
     ) -> RecurringCommitmentResponse: ...
     async def delete_commitment(self, id: int) -> None: ...
-    async def list_block_dates(self, commitment_id: int, first: date, end: date) -> set[date]: ...
-    async def list_skips(self, commitment_id: int, first: date, end: date) -> set[date]: ...
+    async def list_taken_dates(self, first: date, end: date) -> set[tuple[int, date]]: ...
     async def insert_skip(self, commitment_id: int, day: date) -> None: ...
     async def apply_commitment_schedule(self, id: int, from_date: date, tz: str) -> None: ...
     async def delete_future_commitment_blocks(
@@ -131,13 +130,15 @@ class PlanService:
         """A block in [first, end) for each active commitment on each of its weekdays, unless
         one exists or the date was skipped. Runs on every range read; a unique index makes
         concurrent calls safe."""
-        for c in await self._repo.list_active_commitments():
-            existing = await self._repo.list_block_dates(c.id, first, end)
-            skips = await self._repo.list_skips(c.id, first, end)
+        commitments = await self._repo.list_active_commitments()
+        if not commitments:
+            return
+        taken = await self._repo.list_taken_dates(first, end)
+        for c in commitments:
             start, finish = parse_hhmm(c.start_time), parse_hhmm(c.end_time)
             day = first
             while day < end:
-                if weekday(day) in c.days_of_week and day not in existing and day not in skips:
+                if weekday(day) in c.days_of_week and (c.id, day) not in taken:
                     await self._repo.create_generated(
                         NewBlock(
                             plan_date=day,
