@@ -238,6 +238,28 @@ def _allowed(reply: Reply) -> set[str]:
     return {m.strip() for value in reply.headers.get("allow", []) for m in value.split(",")}
 
 
+def drop_absent(go: Any, py: Any) -> Any:
+    """always-present-fields in ACCEPTED.md: Python sends null or [] for keys Go left out."""
+    if isinstance(go, dict) and isinstance(py, dict):
+        return {
+            k: drop_absent(go.get(k), v) for k, v in py.items() if k in go or v not in (None, [])
+        }
+    if isinstance(go, list) and isinstance(py, list):
+        return [drop_absent(go[i] if i < len(go) else None, v) for i, v in enumerate(py)]
+    return py
+
+
+def seven_digits(value: Any) -> Any:
+    """real-seven-digits in ACCEPTED.md: floats compare at 7 significant digits."""
+    if isinstance(value, float):
+        return float(f"{value:.7g}")
+    if isinstance(value, dict):
+        return {k: seven_digits(v) for k, v in value.items()}
+    if isinstance(value, list):
+        return [seven_digits(v) for v in value]
+    return value
+
+
 def compare(entry: Entry, go: Reply, py: Reply) -> list[str]:
     problems = []
     if go.status == py.status in FRAMEWORK_ERRORS and (
@@ -254,6 +276,8 @@ def compare(entry: Entry, go: Reply, py: Reply) -> list[str]:
     left, right = go.body, py.body
     if go.is_json and py.is_json:
         left, right = mask(left, entry.volatile), mask(right, entry.volatile)
+        right = drop_absent(left, right)
+        left, right = seven_digits(left), seven_digits(right)
     if left != right or go.is_json != py.is_json:
         problems.append("body:")
         problems += ["  " + line for line in body_diff(left, right)]

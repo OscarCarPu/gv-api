@@ -25,7 +25,8 @@ characters in it (`"2026\"06"`).
 
 `real` values (habit targets, logs, history) are written with 7 significant digits. Go printed
 the shortest decimal that reads back as the same float32; they differ only on values with more
-than 7 significant digits (Go `123456.78`, now `123456.8`).
+than 7 significant digits (Go `0.85714287`, now `0.8571429`). The runner compares floats at 7
+significant digits.
 
 ## history-start-clamped
 
@@ -59,3 +60,15 @@ Every token either service issued is HS256 with `exp`, so none is affected.
 ## unhandled-500-text
 
 An unhandled failure answers Starlette's `Internal Server Error` text instead of an empty body.
+
+## always-present-fields
+
+Every field of a response is always sent, as `null` or `[]` when empty. Go left some keys out
+when empty (`omitempty`: tree nodes, project children, `recurrence`). The runner drops a
+`null` or `[]` that Python sends where Go sent no key. gv-web reads these fields with `?.` or
+`??`, so both forms work.
+
+## root-projects-full-row
+
+`GET /tasks/projects` returns each project's real `started_at`, `finished_at` and `priority`.
+Go left them `null` and `0` because it did not copy them from the row.

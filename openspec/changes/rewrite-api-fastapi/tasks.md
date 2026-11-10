@@ -59,10 +59,10 @@ Milestones: **H0** foundations (1–5) · **H1** parity harness (6) · **H2** si
 
 ## 9. H3 · Tasks
 
-- [ ] 9.1 Port the tasks tables (projects, tasks, todos, time entries, dependencies, effective-due view) and the repositories for projects, tasks, todos and time entries, with integration tests from `repository_test.go`. Verify with `py-test-integration -k tasks`.
-- [ ] 9.2 Port validation and the service: tree, list-fast, children, parent candidates, the single active time entry, summary and history, and budget. Unit tests come from `service_test.go`, `budget_test.go` and `validation_test`. Verify coverage ≥ 90%.
-- [ ] 9.3 Port the tasks router with static subpaths ordered before `{id}`. Verify with handler tests ported from `handler_test.go` and the route-inventory rows for `/tasks/*`.
-- [ ] 9.4 Port `test/e2e/tasks_test.go` and add `tests/parity/corpus/tasks.yaml` (excluding `by-due-date`, which needs plan and capacity, see 11.3). Verify that e2e and parity are green.
+- [x] 9.1 Port the tasks tables (projects, tasks, todos, time entries, dependencies, effective-due view) and the repositories for projects, tasks, todos and time entries, with integration tests from `repository_test.go`. Verify with `py-test-integration -k tasks`.
+- [x] 9.2 Port validation and the service: tree, list-fast, children, parent candidates, the single active time entry, summary and history, and budget. Unit tests come from `service_test.go`, `budget_test.go` and `validation_test`. Verify coverage ≥ 90%.
+- [x] 9.3 Port the tasks router with static subpaths ordered before `{id}`. Verify with handler tests ported from `handler_test.go` and the route-inventory rows for `/tasks/*`.
+- [x] 9.4 Port `test/e2e/tasks_test.go` and add `tests/parity/corpus/tasks.yaml` (excluding `by-due-date`, which needs plan and capacity, see 11.3). Verify that e2e and parity are green.
 
 ## 10. H3 · Plan
 

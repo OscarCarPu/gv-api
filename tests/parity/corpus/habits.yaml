@@ -264,7 +264,6 @@ requests:
   - name: daily habit viewed weekly (average)
     path: /habits/1/history?frequency=weekly
     tier: full
-    volatile: ["data[*].value"]  # averages need 8+ digits: real-seven-digits in ACCEPTED.md
   - name: daily habit viewed monthly (average)
     path: /habits/1/history?frequency=monthly
     tier: full

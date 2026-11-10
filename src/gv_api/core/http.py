@@ -3,9 +3,10 @@
 import json
 import logging
 import re
-from typing import Annotated, Any
+from functools import cache
+from typing import Annotated, Any, get_args
 
-from pydantic import AwareDatetime, Field, ValidationError, model_validator
+from pydantic import AwareDatetime, BaseModel, Field, ValidationError, model_validator
 from starlette.requests import Request
 from starlette.responses import Response
 
@@ -30,14 +31,25 @@ class ApiError(Exception):
 
 
 class Body(ApiModel):
-    """A JSON request body: unknown keys are ignored and a null leaves the field's default."""
+    """A JSON request body: unknown keys are ignored, and a null leaves the default of a field
+    that cannot hold None (a nullable field takes the null and counts as set)."""
 
     @model_validator(mode="before")
     @classmethod
     def _drop_nulls(cls, data: Any) -> Any:
         if isinstance(data, dict):
-            return {k: v for k, v in data.items() if v is not None}
+            nullable = _nullable_fields(cls)
+            return {k: v for k, v in data.items() if v is not None or k in nullable}
         return data
+
+
+@cache
+def _nullable_fields(model: type[BaseModel]) -> frozenset[str]:
+    return frozenset(
+        name
+        for name, field in model.model_fields.items()
+        if type(None) in get_args(field.annotation)
+    )
 
 
 def error(status: int, message: str) -> Response:

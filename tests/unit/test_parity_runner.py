@@ -110,6 +110,18 @@ def test_allow_order_is_ignored_but_its_methods_are_not() -> None:
     ]
 
 
+def test_keys_go_left_out_may_be_null_or_empty() -> None:
+    go = {"a": 1, "items": [{"id": 1}]}
+    py = {"a": 1, "b": None, "items": [{"id": 1, "children": []}], "c": 0}
+    assert runner.drop_absent(go, py) == {"a": 1, "items": [{"id": 1}], "c": 0}
+
+
+def test_floats_compare_at_seven_digits() -> None:
+    assert runner.seven_digits({"v": [0.85714287, 13.083333, 5, "1.23456789"]}) == {
+        "v": [0.8571429, 13.08333, 5, "1.23456789"]
+    }
+
+
 def test_framework_errors_compare_status_and_allowed_methods() -> None:
     entry = runner.Entry(name="x", path="/x")
     go = runner.Reply(405, {"allow": ["GET", "POST"]}, "", False, 0)

@@ -6,6 +6,7 @@ from zoneinfo import ZoneInfo
 from gv_api.core.dates import Clock, add_months, parse_day, today_in, utcnow
 
 _TRUNC = {"daily": "day", "weekly": "week", "monthly": "month"}
+FREQUENCIES = tuple(_TRUNC)
 
 
 def valid_frequency(frequency: str) -> str:
