@@ -11,6 +11,7 @@ import uvicorn
 from fastapi import FastAPI
 from sqlalchemy.ext.asyncio import AsyncEngine
 
+from gv_api.alerts import TelegramHandler
 from gv_api.config import Config
 from gv_api.core.app import create_app
 from gv_api.core.workers import Workers
@@ -29,8 +30,10 @@ class Container:
     workers: Workers = field(default_factory=Workers)
 
 
-def build(cfg: Config) -> FastAPI:
+def build(cfg: Config, alerts: TelegramHandler | None = None) -> FastAPI:
     container = Container(cfg=cfg, engine=create_engine(cfg.database_url))
+    if alerts is not None:
+        container.workers.add("alerts", alerts.run)
 
     @asynccontextmanager
     async def lifespan(_: FastAPI) -> AsyncGenerator[None]:
@@ -47,6 +50,8 @@ def build(cfg: Config) -> FastAPI:
             log.info("shutting down server")
             await container.workers.stop()
             await container.engine.dispose()
+            if alerts is not None:
+                await alerts.flush_batch()
 
     app = create_app(cfg, ping=lambda: ping(container.engine), lifespan=lifespan)
     app.state.container = container

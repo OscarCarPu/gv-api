@@ -40,6 +40,12 @@ All variables are in `.env.example` with their defaults. Required: `DATABASE_URL
 Optional integrations (lights)
 degrade gracefully when unset.
 
+`TELEGRAM_BOT_TOKEN` and `TELEGRAM_CHAT_ID` (optional, Python service only) send every ERROR log
+to a Telegram chat: batched every 10 s, repeated messages collapsed with a count, and the side
+(`home` or `aws`) and `request_id` in each alert. With either one unset, alerts are off and the
+service logs that once at startup. A failed send is dropped with a WARNING and never affects
+requests or jobs.
+
 ## API
 
 ### Domains

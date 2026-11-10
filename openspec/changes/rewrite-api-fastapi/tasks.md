@@ -29,10 +29,10 @@ Milestones: **H0** foundations (1–5) · **H1** parity harness (6) · **H2** si
 
 ## 4. H0 · Telegram alerts
 
-- [ ] 4.1 Implement `alerts.TelegramHandler` and the 10 s flusher: bounded buffer, grouping with counts, the 4,096-character cap with a truncation note, and the side and `request_id` in each message. Verify with unit tests for batching, deduplication, truncation and the exact message format.
-- [ ] 4.2 Make delivery safe: httpx with a 5 s timeout, WARNING on failure from a logger excluded from the handler, and no token in any output. Verify with tests for an unreachable API, request latency left unchanged, and a token-absence check on captured logs.
-- [ ] 4.3 Add the disabled mode and the fatal-exit flush (at most 5 s) in `cli.py`. Verify with tests that unset variables produce one info line, and that a failing startup sends before exiting.
-- [ ] 4.4 Document `TELEGRAM_BOT_TOKEN` and `TELEGRAM_CHAT_ID` in `.env.example` and in the README section on environment variables.
+- [x] 4.1 Implement `alerts.TelegramHandler` and the 10 s flusher: bounded buffer, grouping with counts, the 4,096-character cap with a truncation note, and the side and `request_id` in each message. Verify with unit tests for batching, deduplication, truncation and the exact message format.
+- [x] 4.2 Make delivery safe: httpx with a 5 s timeout, WARNING on failure from a logger excluded from the handler, and no token in any output. Verify with tests for an unreachable API, request latency left unchanged, and a token-absence check on captured logs.
+- [x] 4.3 Add the disabled mode and the fatal-exit flush (at most 5 s) in `cli.py`. Verify with tests that unset variables produce one info line, and that a failing startup sends before exiting.
+- [x] 4.4 Document `TELEGRAM_BOT_TOKEN` and `TELEGRAM_CHAT_ID` in `.env.example` and in the README section on environment variables.
 
 ## 5. H0 · Auth
 

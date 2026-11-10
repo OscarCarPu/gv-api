@@ -3,6 +3,7 @@ import logging
 import sys
 from collections.abc import Callable, Sequence
 
+from gv_api import alerts
 from gv_api.config import Config, ConfigError, load
 from gv_api.core.logging import setup_logging
 
@@ -23,7 +24,13 @@ def serve(_: argparse.Namespace) -> int:
     cfg = _config()
     if cfg is None:
         return 1
-    return run_server(build(cfg), cfg)
+    handler = alerts.install(cfg)
+    try:
+        return run_server(build(cfg, handler), cfg)
+    finally:
+        if handler is not None:
+            handler.flush_on_exit()
+            alerts.uninstall(handler)
 
 
 def _not_ready(name: str) -> Callable[[argparse.Namespace], int]:
