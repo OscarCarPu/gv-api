@@ -66,9 +66,9 @@ Milestones: **H0** foundations (1–5) · **H1** parity harness (6) · **H2** si
 
 ## 10. H3 · Plan
 
-- [ ] 10.1 Port the plan tables (blocks, commitments, event refs) and the repository, with integration tests. Verify with `py-test-integration -k plan`.
-- [ ] 10.2 Port the plan service, including block generation from commitments (`generate.go`, hand-written recurrence) and clipping of in-progress blocks, with unit tests from `service_test.go`. Verify coverage ≥ 90%.
-- [ ] 10.3 Port the plan router (`/plan/today`, `/plan/range`, blocks with `future` before `{id}`, commitments). Add `tests/parity/corpus/plan.yaml` and verify that it is green.
+- [x] 10.1 Port the plan tables (blocks, commitments, event refs) and the repository, with integration tests. Verify with `py-test-integration -k plan`.
+- [x] 10.2 Port the plan service, including block generation from commitments (`generate.go`, hand-written recurrence) and clipping of in-progress blocks, with unit tests from `service_test.go`. Verify coverage ≥ 90%.
+- [x] 10.3 Port the plan router (`/plan/today`, `/plan/range`, blocks with `future` before `{id}`, commitments). Add `tests/parity/corpus/plan.yaml` and verify that it is green.
 
 ## 11. H3 · Capacity and urgency
 

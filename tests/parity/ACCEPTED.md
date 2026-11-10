@@ -12,7 +12,7 @@ unknown path. The `lights` table is kept until a later change drops it.
 
 ## name-length-in-characters
 
-Name limits (habits 40, rutas 200, tasks 40) count characters, as the `varchar` columns do. Go
+Name limits (habits 40, rutas 200, tasks 40, plan labels 200) count characters, as the `varchar` columns do. Go
 counted UTF-8 bytes, so a 21-letter name of `ñ` (42 bytes) was a 400 there and is accepted now.
 No corpus entry: it would create a row on one side only.
 
@@ -72,3 +72,9 @@ when empty (`omitempty`: tree nodes, project children, `recurrence`). The runner
 
 `GET /tasks/projects` returns each project's real `started_at`, `finished_at` and `priority`.
 Go left them `null` and `0` because it did not copy them from the row.
+
+## plan-block-times-required
+
+`POST /plan/blocks` without `started_at` or `ended_at` is a 400 `ended_at must be after
+started_at`. Go read a missing time as year 1, so a block with only `ended_at` was created on
+0001-01-01.

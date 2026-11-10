@@ -12,7 +12,7 @@ import uvicorn
 from fastapi import FastAPI
 from sqlalchemy.ext.asyncio import AsyncEngine
 
-from gv_api import auth, habits, rutas, tasks
+from gv_api import auth, habits, plan, rutas, tasks
 from gv_api.alerts import TelegramHandler
 from gv_api.config import Config
 from gv_api.core.app import create_app
@@ -41,7 +41,11 @@ def build(cfg: Config, alerts: TelegramHandler | None = None) -> FastAPI:
     container = Container(cfg=cfg, engine=create_engine(cfg.database_url))
     container.provide(auth.AuthService(cfg))
     container.provide(habits.HabitsService(habits.HabitsRepository(container.engine), cfg.location))
-    container.provide(tasks.TasksService(tasks.TasksRepository(container.engine), cfg.location))
+    task_service = tasks.TasksService(tasks.TasksRepository(container.engine), cfg.location)
+    plan_service = plan.PlanService(
+        plan.PlanRepository(container.engine), task_service, cfg.location
+    )
+    container.provide(task_service, plan_service)
     container.provide(rutas.RutasService(rutas.RutasRepository(container.engine)))
     if alerts is not None:
         container.workers.add("alerts", alerts.run)
@@ -67,7 +71,7 @@ def build(cfg: Config, alerts: TelegramHandler | None = None) -> FastAPI:
     app = create_app(
         cfg,
         ping=lambda: ping(container.engine),
-        routers=[auth.router, habits.router, tasks.router, rutas.router],
+        routers=[auth.router, habits.router, tasks.router, plan.router, rutas.router],
         lifespan=lifespan,
     )
     app.state.container = container
