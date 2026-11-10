@@ -3,7 +3,7 @@
 from datetime import date, timedelta
 from zoneinfo import ZoneInfo
 
-from gv_api.core.dates import Clock, add_date, parse_day, today_in, utcnow
+from gv_api.core.dates import Clock, add_months, parse_day, today_in, utcnow
 
 _TRUNC = {"daily": "day", "weekly": "week", "monthly": "month"}
 
@@ -20,8 +20,8 @@ def default_start_date(today: date, frequency: str) -> date:
     if frequency == "weekly":
         return today - timedelta(weeks=12)
     if frequency == "monthly":
-        return add_date(today, years=-1)
-    return add_date(today, months=-1)
+        return add_months(today, -12)
+    return add_months(today, -1)
 
 
 def period_start(d: date, frequency: str) -> date:
@@ -36,7 +36,7 @@ def next_period_start(start: date, frequency: str) -> date:
     if frequency == "weekly":
         return start + timedelta(weeks=1)
     if frequency == "monthly":
-        return add_date(start, months=1)
+        return add_months(start, 1)
     return start + timedelta(days=1)
 
 

@@ -8,12 +8,13 @@ from typing import Any
 
 from fastapi import APIRouter, FastAPI
 from starlette.exceptions import HTTPException
+from starlette.middleware.cors import CORSMiddleware
 from starlette.requests import Request
 from starlette.responses import Response
 from starlette.routing import Match
 
 from gv_api.config import Config
-from gv_api.core.cors import CORSMiddleware
+from gv_api.core import cors
 from gv_api.core.http import ApiError, error, error_code
 from gv_api.core.middleware import RecoverMiddleware, RequestIDMiddleware
 from gv_api.core.routing import tier_router
@@ -102,6 +103,13 @@ def create_app(
     app.add_middleware(RecoverMiddleware)
     for cls, options in reversed(middleware):
         app.add_middleware(cls, **options)
-    app.add_middleware(CORSMiddleware, allowed_origins=cfg.allowed_origins)
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=cfg.allowed_origins,
+        allow_methods=cors.METHODS,
+        allow_headers=cors.BROWSER_HEADERS,
+        expose_headers=cors.EXPOSED,
+        max_age=cors.MAX_AGE,
+    )
     app.add_middleware(RequestIDMiddleware)
     return app

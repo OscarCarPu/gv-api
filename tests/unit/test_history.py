@@ -6,7 +6,7 @@ from zoneinfo import ZoneInfo
 import pytest
 
 from gv_api import history
-from gv_api.core.dates import add_date, parse_day, today_in
+from gv_api.core.dates import add_months, parse_day, today_in
 
 UTC_ZONE = ZoneInfo("UTC")
 
@@ -65,10 +65,9 @@ def test_default_start_date(frequency: str, expected: str) -> None:
     assert history.default_start_date(d("2026-03-17"), frequency) == d(expected)
 
 
-def test_default_start_date_rolls_over_like_go() -> None:
-    # One month before Mar 31 is "Feb 31", which rolls over to Mar 3.
-    assert history.default_start_date(d("2026-03-31"), "daily") == d("2026-03-03")
-    assert history.default_start_date(d("2028-02-29"), "monthly") == d("2027-03-01")
+def test_default_start_date_clamps_to_the_month_end() -> None:
+    assert history.default_start_date(d("2026-03-31"), "daily") == d("2026-02-28")
+    assert history.default_start_date(d("2028-02-29"), "monthly") == d("2027-02-28")
 
 
 @pytest.mark.parametrize(
@@ -139,17 +138,17 @@ def test_parse_day() -> None:
 
 
 @pytest.mark.parametrize(
-    ("args", "expected"),
+    ("months", "expected"),
     [
-        ((0, 1, 0), "2026-05-01"),  # "Apr 31"
-        ((0, -1, 0), "2026-03-03"),
-        ((0, 0, 1), "2026-04-01"),
-        ((1, 0, 0), "2027-03-31"),
-        ((0, -15, 0), "2024-12-31"),
+        (1, "2026-04-30"),
+        (-1, "2026-02-28"),
+        (12, "2027-03-31"),
+        (-15, "2024-12-31"),
+        (-25, "2024-02-29"),
     ],
 )
-def test_add_date(args: tuple[int, int, int], expected: str) -> None:
-    assert add_date(d("2026-03-31"), *args) == d(expected)
+def test_add_months(months: int, expected: str) -> None:
+    assert add_months(d("2026-03-31"), months) == d(expected)
 
 
 def test_today_in() -> None:

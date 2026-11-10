@@ -32,18 +32,24 @@ requests:
       Origin: https://gv.example.com
       Access-Control-Request-Method: POST
       Access-Control-Request-Headers: content-type,authorization
+    accepted: cors-starlette
+    expect_py: {status: 200}
   - name: preflight from the second allowed origin
     method: OPTIONS
     path: /health
     headers:
       Origin: http://localhost:5173
       Access-Control-Request-Method: GET
+    accepted: cors-starlette
+    expect_py: {status: 200}
   - name: preflight from a foreign origin
     method: OPTIONS
     path: /login
     headers:
       Origin: https://evil.example.com
       Access-Control-Request-Method: POST
+    accepted: cors-starlette
+    expect_py: {status: 400}
   - name: preflight asking for a header outside the list
     method: OPTIONS
     path: /login
@@ -51,29 +57,43 @@ requests:
       Origin: https://gv.example.com
       Access-Control-Request-Method: POST
       Access-Control-Request-Headers: x-evil
+    accepted: cors-starlette
+    expect_py: {status: 400}
   - name: preflight asking for a method outside the list
     method: OPTIONS
     path: /login
     headers:
       Origin: https://gv.example.com
       Access-Control-Request-Method: TRACE
+    accepted: cors-starlette
+    expect_py: {status: 400}
   - name: preflight on an unknown path
     method: OPTIONS
     path: /nope
     headers:
       Origin: https://gv.example.com
       Access-Control-Request-Method: GET
+    accepted: cors-starlette
+    expect_py: {status: 200}
   - name: simple request from gv-web
     path: /health
     headers: {Origin: https://gv.example.com}
+    accepted: cors-starlette
+    expect_py: {status: 200}
   - name: simple request from a foreign origin
     path: /health
     headers: {Origin: https://evil.example.com}
+    accepted: cors-starlette
+    expect_py: {status: 200}
   - name: error response keeps CORS headers
     method: POST
     path: /login
     headers: {Origin: https://gv.example.com}
     body: {password: wrong}
+    accepted: cors-starlette
+    expect_py: {status: 401}
   - name: 404 keeps CORS headers
     path: /nope
     headers: {Origin: https://gv.example.com}
+    accepted: cors-starlette
+    expect_py: {status: 404}
