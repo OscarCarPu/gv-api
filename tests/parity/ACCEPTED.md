@@ -135,3 +135,12 @@ the tree as given; both orders are valid.
 A `real` rounded at 7 significant digits can differ in the last digit when the float32 value
 sits on a half (`12.75516` before, `12.75515` now, in time-entry history). Same cause as
 `real-seven-digits`.
+
+## native-encoding
+
+Amounts and instants use Pydantic's compiled JSON encoding: an amount keeps its scale (`"12.50"`,
+`"100.00"`; Go sent `"12.5"`, `"100"`) and an instant with a fraction has six digits
+(`…:05.120000Z`; Go trimmed it to `.12Z`). Formatting them in Python cost about 6 µs per row,
+a third of the time on large lists. gv-web reads amounts with `parseFloat` and instants with
+`Date`, and Android with `BigDecimal`/`toDouble` and `OffsetDateTime.parse`, so both forms read
+the same. The runner compares amounts by value and instants by the moment they name.

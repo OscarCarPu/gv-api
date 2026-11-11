@@ -221,13 +221,13 @@ async def test_estimation_saving_mode() -> None:
         madrid(2026, 5) - timedelta(microseconds=1),
     )
     out = got.model_dump(mode="json")
-    assert out["saving"] == "500"
+    assert out["saving"] == "500.00"
     assert out["rate"] == "0"
     assert [(p["date"], p["total"], p["estimated"]) for p in out["points"]] == [
         ("2026-03-01", "10000", False),
         ("2026-04-01", "10500", False),
-        ("2026-05-01", "11000", True),
-        ("2026-06-01", "11500", True),
+        ("2026-05-01", "11000.00", True),
+        ("2026-06-01", "11500.00", True),
     ]
 
 

@@ -70,7 +70,7 @@ def err(status: int, message: str) -> tuple[int, dict[str, str]]:
 async def test_accounts() -> None:
     assert await call(FakeRepo(list_accounts=[ACCOUNT]), "GET", "/finance/accounts") == (
         200,
-        [{"id": 1, "name": "Main", "total": "12.5", "created_at": "2026-05-10T12:00:00Z"}],
+        [{"id": 1, "name": "Main", "total": "12.50", "created_at": "2026-05-10T12:00:00Z"}],
     )
     assert (await call(FakeRepo(get_account=ACCOUNT), "GET", "/finance/accounts/1"))[0] == 200
     repo = FakeRepo(create_account=ACCOUNT)
@@ -242,7 +242,7 @@ async def test_category_errors(
 
 async def test_transactions() -> None:
     status, body = await call(FakeRepo(list_transactions=[TX]), "GET", "/finance/transactions")
-    assert (status, body[0]["amount"]) == (200, "100")
+    assert (status, body[0]["amount"]) == (200, "100.00")
     repo = FakeRepo(list_transactions=[])
     q = "?account_id=1&category_id=2&type=expense&from=2026-05-01&to=2026-05-31"
     assert (await call(repo, "GET", "/finance/transactions" + q))[0] == 200

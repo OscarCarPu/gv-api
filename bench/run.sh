@@ -6,6 +6,7 @@
 # <api-command> starts the API in the foreground and reads its config from the environment
 # from the repository root (for the Go release: a built binary; for Python: `gv-api serve`). Results go to
 # bench/results/<label>/. Runs against the local `gv_db` container; databases are gv_bench_*.
+# ONLY=<name,...> measures just those endpoints (the names in bench/load/main.go).
 set -euo pipefail
 export LC_ALL=C
 
@@ -77,6 +78,7 @@ SQL
   cpu0=$(awk '{print $14+$15}' /proc/$pid/stat)
 
   "$load" -url "http://127.0.0.1:$port" -secret $secret -scenario "$s" -task "$n_tasks" -project 1 \
+    ${ONLY:+-only "$ONLY"} \
     >"$out/$s.jsonl" 2> >(tee "$out/$s.txt" >&2)
 
   cpu1=$(awk '{print $14+$15}' /proc/$pid/stat)

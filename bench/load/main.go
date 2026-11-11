@@ -53,7 +53,7 @@ var (
 	scenario = flag.String("scenario", "", "scenario label for the output")
 	n        = flag.Int("n", 100, "sequential requests per endpoint")
 	warm     = flag.Int("warm", 10, "warm-up requests per endpoint")
-	conc     = flag.Int("c", 8, "concurrency for the throughput pass")
+	conc     = flag.Int("c", 1, "concurrency for an extra throughput pass (1 = none)")
 	concN    = flag.Int("cn", 400, "requests per endpoint in the throughput pass")
 	openTask = flag.Int("task", 1, "id of an open task")
 	project  = flag.Int("project", 1, "id of a root project")

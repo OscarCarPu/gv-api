@@ -22,18 +22,18 @@ Every JSON response SHALL carry `Content-Type: application/json` and a body that
 - **THEN** the key is present with value `null`
 
 ### Requirement: Decimal encoding
-Monetary and hour amounts held as SQL `numeric` SHALL encode as JSON strings in plain decimal notation with trailing fractional zeros removed and no exponent, matching the Go service.
+Monetary and hour amounts held as SQL `numeric` SHALL encode as JSON strings holding the decimal value with its scale, never as JSON numbers.
 
 #### Scenario: Amount with trailing zero
 - **WHEN** an account total stored as `12.50` is returned
-- **THEN** the JSON value is the string `"12.5"`
+- **THEN** the JSON value is the string `"12.50"`
 
 #### Scenario: Whole amount
 - **WHEN** a transaction amount stored as `100.00` is returned
-- **THEN** the JSON value is the string `"100"`, not `"1E+2"` and not a number
+- **THEN** the JSON value is the string `"100.00"`, not a number
 
 ### Requirement: Timestamp and date encoding
-Timestamps SHALL encode as RFC 3339 strings with fractional seconds only when non-zero, trailing zeros trimmed, and the same UTC offset the Go service emitted for that field. Calendar dates SHALL encode as `YYYY-MM-DD`.
+Timestamps SHALL encode as RFC 3339 strings, with `Z` for UTC and six fractional digits when the second has a fraction. Calendar dates SHALL encode as `YYYY-MM-DD`.
 
 #### Scenario: Whole-second timestamp
 - **WHEN** a time entry started at exactly 09:00:00 UTC is returned in a field the Go service rendered in UTC
@@ -41,7 +41,7 @@ Timestamps SHALL encode as RFC 3339 strings with fractional seconds only when no
 
 #### Scenario: Sub-second timestamp
 - **WHEN** a timestamp has 120 ms past the second
-- **THEN** the value ends in `.12` followed by the offset
+- **THEN** the value ends in `.120000Z`
 
 ### Requirement: Error envelope
 Error responses SHALL be JSON objects `{"error": "<message>"}`, with an added `"code"` key where the Go service sent one. Status codes and message texts SHALL match the Go service for the same failure.

@@ -118,7 +118,7 @@ def test_keys_go_left_out_may_be_null_or_empty() -> None:
 
 def test_floats_compare_at_seven_digits() -> None:
     assert runner.seven_digits({"v": [0.85714287, 13.083333, 5, "1.23456789"]}) == {
-        "v": [0.8571429, 13.08333, 5, "1.23456789"]
+        "v": [0.8571429, 13.08333, 5, "amount:1.23456789"]
     }
 
 
@@ -244,3 +244,12 @@ def test_an_opaque_body_and_volatile_headers_are_not_compared() -> None:
     assert runner.compare(entry, go, py) == []
     other = runner.Reply(200, {"content-type": ["text"]}, "y", False, 0)
     assert runner.compare(entry, go, other) == ["header content-type: go=['gz'] py=['text']"]
+
+
+def test_amounts_and_instants_compare_by_value() -> None:
+    norm = runner.seven_digits
+    assert norm("12.50") == norm("12.5")
+    assert norm("100.00") == norm("100")
+    assert norm("2026-01-02T03:04:05.120000Z") == norm("2026-01-02T03:04:05.12Z")
+    assert norm("12.5") != norm(12.5), "an amount sent as a number is still a difference"
+    assert norm("name 12") == "name 12"

@@ -19,6 +19,7 @@ from collections import Counter
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass, field
 from datetime import datetime
+from decimal import Decimal
 from pathlib import Path
 from typing import Any, Literal
 from zoneinfo import ZoneInfo
@@ -252,10 +253,24 @@ def drop_absent(go: Any, py: Any) -> Any:
     return py
 
 
+_AMOUNT = re.compile(r"-?\d+(\.\d+)?")
+_INSTANT = re.compile(r"\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(\.\d+)?(Z|[+-]\d\d:\d\d)")
+
+
 def seven_digits(value: Any) -> Any:
-    """real-seven-digits in ACCEPTED.md: floats compare at 7 significant digits."""
+    """real-seven-digits in ACCEPTED.md: floats compare at 7 significant digits.
+
+    native-encoding: amount strings compare by value ("12.50" == "12.5") and instants by the
+    moment they name ("…:05.120000Z" == "…:05.12Z").
+    """
     if isinstance(value, float):
         return float(f"{value:.7g}")
+    if isinstance(value, str):
+        if _AMOUNT.fullmatch(value):
+            return f"amount:{Decimal(value).normalize():f}"
+        if _INSTANT.fullmatch(value):
+            return datetime.fromisoformat(value.replace("Z", "+00:00")).isoformat()
+        return value
     if isinstance(value, dict):
         return {k: seven_digits(v) for k, v in value.items()}
     if isinstance(value, list):

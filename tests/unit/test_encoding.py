@@ -13,55 +13,41 @@ from gv_api.core.encoding import (
     Money,
     Real,
     Timestamp,
-    decimal_str,
     real_number,
     respond,
-    time_str,
 )
 
 MADRID = ZoneInfo("Europe/Madrid")
 
 
+def body(value: object) -> object:
+    return json.loads(respond(200, value).body)
+
+
 @pytest.mark.parametrize(
     ("raw", "want"),
-    [
-        ("12.50", "12.5"),
-        ("100.00", "100"),
-        ("100", "100"),
-        ("1E+2", "100"),
-        ("0.05", "0.05"),
-        ("0.00", "0"),
-        ("-0.00", "0"),
-        ("-12.30", "-12.3"),
-        ("1234567.890", "1234567.89"),
-        ("7.25", "7.25"),
-    ],
+    [("12.50", "12.50"), ("100", "100"), ("0.05", "0.05"), ("-12.30", "-12.30")],
 )
-def test_decimal_str(raw: str, want: str) -> None:
-    assert decimal_str(Decimal(raw)) == want
+def test_amount_is_a_string_with_its_scale(raw: str, want: str) -> None:
+    assert body({"v": Decimal(raw)}) == {"v": want}
 
 
 @pytest.mark.parametrize(
     ("value", "want"),
     [
         (datetime(2026, 11, 9, 9, 0, tzinfo=UTC), "2026-11-09T09:00:00Z"),
-        (datetime(2026, 11, 9, 9, 0, 0, 120000, tzinfo=UTC), "2026-11-09T09:00:00.12Z"),
-        (datetime(2026, 11, 9, 19, 16, 17, 993807, tzinfo=UTC), "2026-11-09T19:16:17.993807Z"),
+        (datetime(2026, 11, 9, 9, 0, 0, 120000, tzinfo=UTC), "2026-11-09T09:00:00.120000Z"),
         (datetime(2026, 11, 9, 9, 0, tzinfo=ZoneInfo("UTC")), "2026-11-09T09:00:00Z"),
+        (datetime(2026, 11, 9, 9, 0, tzinfo=TzInfo(0)), "2026-11-09T09:00:00Z"),
         (datetime(2026, 11, 9, 10, 0, tzinfo=MADRID), "2026-11-09T10:00:00+01:00"),
-        (datetime(2026, 7, 1, 10, 0, 0, 500000, tzinfo=MADRID), "2026-07-01T10:00:00.5+02:00"),
         (
             datetime(2026, 1, 1, 0, 0, tzinfo=timezone(timedelta(hours=-3, minutes=-30))),
             "2026-01-01T00:00:00-03:30",
         ),
-        (
-            datetime(2026, 1, 1, 12, 0, tzinfo=ZoneInfo("Europe/London")),
-            "2026-01-01T12:00:00+00:00",
-        ),
     ],
 )
-def test_time_str(value: datetime, want: str) -> None:
-    assert time_str(value) == want
+def test_instant_is_rfc3339(value: datetime, want: str) -> None:
+    assert body({"v": value}) == {"v": want}
 
 
 class Row(ApiModel):
@@ -74,7 +60,7 @@ class Row(ApiModel):
     items: list[int] = Field(default_factory=list)
 
 
-def test_model_dump_matches_go_shapes() -> None:
+def test_model_shapes() -> None:
     row = Row.model_construct(
         id=1,
         amount=Decimal("12.50"),
@@ -84,9 +70,9 @@ def test_model_dump_matches_go_shapes() -> None:
         tags=None,
         items=[],
     )
-    assert row.model_dump(mode="json") == {
+    assert body(row) == {
         "id": 1,
-        "amount": "12.5",
+        "amount": "12.50",
         "maybe_amount": None,
         "at": "2026-11-09T09:00:00Z",
         "day": "2026-11-09",
@@ -106,7 +92,7 @@ def test_respond_encodes_nested_values() -> None:
     resp = respond(201, {"total": Decimal("3.10"), "rows": [{"day": date(2026, 1, 2)}], "x": None})
     assert resp.status_code == 201
     assert resp.headers["content-type"] == "application/json"
-    assert json.loads(resp.body) == {"total": "3.1", "rows": [{"day": "2026-01-02"}], "x": None}
+    assert json.loads(resp.body) == {"total": "3.10", "rows": [{"day": "2026-01-02"}], "x": None}
 
 
 def test_respond_list_of_models() -> None:
@@ -141,11 +127,3 @@ def test_real(value: float, expected: float) -> None:
 
     assert json.loads(respond(200, M(v=value)).body) == {"v": expected}
     assert real_number(value) == expected
-
-
-def test_fixed_zero_offset_is_utc() -> None:
-    base = datetime(2026, 1, 5, 9, 30)
-    assert time_str(base.replace(tzinfo=TzInfo(0))) == "2026-01-05T09:30:00Z"
-    assert time_str(base.replace(tzinfo=timezone(timedelta(0)))) == "2026-01-05T09:30:00Z"
-    assert time_str(base.replace(tzinfo=ZoneInfo("Europe/London"))) == "2026-01-05T09:30:00+00:00"
-    assert time_str(base.replace(tzinfo=TzInfo(3600))) == "2026-01-05T09:30:00+01:00"

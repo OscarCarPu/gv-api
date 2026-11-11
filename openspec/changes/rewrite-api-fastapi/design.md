@@ -98,14 +98,13 @@ There is a single model per request or response shape, shared by router and serv
 Shared building blocks live in `core/encoding.py`:
 
 - `ApiModel(BaseModel)` with `extra="ignore"` and lax mode; request fields default to their zero value.
-- `Money = Annotated[Decimal, PlainSerializer(decimal_str)]` gives a plain string with trailing zeros removed and no exponent.
-- `Timestamp = Annotated[datetime, PlainSerializer(time_str)]` gives `Z` for UTC and trims fractional zeros.
-- `Day` gives `YYYY-MM-DD`; `DayTime` writes a date column as midnight UTC where the API types it as a timestamp.
+- `Money`, `Timestamp` and `Day` are plain `Decimal`, `datetime` and `date`, encoded by Pydantic's compiled serializer: an amount is a string that keeps its scale (`"12.50"`), an instant is RFC 3339 with `Z` and six fractional digits when it has any, a date is `YYYY-MM-DD`. Python-level serializers on these fields cost about 6 µs per row on large lists, so the exact Go formats (`"12.5"`, `.12Z`) were dropped; clients parse both.
+- `DayTime` writes a date column as midnight UTC where the API types it as a timestamp.
 - `Real` writes a SQL `real` with 7 significant digits.
 
 Null versus `[]` is decided per field by its declared type: `list[X] | None = None` where Go emitted `null`, and `list[X] = []` where it emitted `[]`. Every field is always serialized: keys Go left out when empty are present as `null` or `[]`, so there is no `omitempty` machinery. The one exception is the printer routes: gv-web's printer schemas read their fields as optional, not nullable, so printer responses leave `None` out (`exclude_none`). The parity harness catches any other mistake.
 
-Responses go through `core.respond(status, model_or_list)`. Models and lists of models are serialized with `pydantic_core.to_json`; anything else (dicts of plain values) goes through `jsonable` and a `JSONResponse`. Both write the same bytes. FastAPI's `response_model` is not used, which avoids validating twice and keeps encoding in one place.
+Responses go through `core.respond(status, data)`, which serializes models, lists and plain dicts with `pydantic_core.to_json`. FastAPI's `response_model` is not used, which avoids validating twice and keeps encoding in one place.
 
 ### D8. Request parsing
 
