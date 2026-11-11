@@ -1,4 +1,4 @@
-"""Wire encoding of API values (design D7): typed amounts, dates and times."""
+"""Wire encoding of API values: typed amounts, dates and times."""
 
 from datetime import date, datetime
 from decimal import Decimal

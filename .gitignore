@@ -8,8 +8,6 @@ __pycache__/
 .coverage
 htmlcov/
 
-# Parity runner output
-/tests/parity/results/
-/tests/parity/printer.env
 coverage.json
 .testmondata*
+/bench/results/

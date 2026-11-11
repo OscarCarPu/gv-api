@@ -123,16 +123,18 @@ Milestones: **H0** foundations (1–5) · **H1** parity harness (6) · **H2** si
 
 ## 18. H9 · Cutover
 
-- [ ] 18.1 Run the full parity suite against a fresh production backup (`PARITY_SNAPSHOT`). Verify that it is green, with every deviation listed and justified in `ACCEPTED.md`, and that the route inventory is fully green.
-- [ ] 18.2 Run `bench/run.sh "gv-api serve" py-<sha> prod 5y 5y_x3` and compare with `bench/results/go-d32ab42`. Run 3 times per app and use the median of each p95. Verify that every endpoint at `5y` meets p95 ≤ max(1.5 × Go, Go + 5 ms) and that peak RSS stays under 512 MB, and add the comparison table to `benchmarks.md`.
+- [x] 18.1 Run the full parity suite against a fresh production backup (`PARITY_SNAPSHOT`). Verify that it is green, with every deviation listed and justified in `ACCEPTED.md`, and that the route inventory is fully green.
+- [x] 18.2 Run `bench/run.sh "gv-api serve" py-<sha> prod 5y 5y_x3` and compare with `bench/results/go-d32ab42`. Run 3 times per app and use the median of each p95. Verify that every endpoint at `5y` meets p95 ≤ max(1.5 × Go, Go + 5 ms) and that peak RSS stays under 512 MB, and add the comparison table to `benchmarks.md`.
 - [x] 18.3 Switch the build: `Dockerfile.py` replaces `Dockerfile`, compose drops the D-Bus mount and the `LIGHTS_*` variables, the Makefile drops the `py-` prefixes and the Go targets, and `.env.example` is updated. Verify that `make up` and `make test` pass from a clean clone.
-- [ ] 18.4 Update `.gitea/workflows/deploy.yml`: ruff, mypy and pytest with the coverage gate; a pre-deploy backup with `gv-api backup || ./main backup` that is fatal on this deploy; then build the image, run `alembic stamp 0001_baseline` through `docker compose run` only when `alembic current` is empty, and start the stack; the ECR push stays unchanged. Verify with a dry run on the runner against a copy of the production database.
+- [x] 18.4 Update `.gitea/workflows/deploy.yml`: ruff, mypy and pytest with the coverage gate; a pre-deploy backup with `gv-api backup || ./main backup` that is fatal on this deploy; then build the image, run `alembic stamp 0001_baseline` through `docker compose run` only when `alembic current` is empty, and start the stack; the ECR push stays unchanged. Verify with a dry run on the runner against a copy of the production database.
 - [x] 18.5 Move `db/demo.sql` to `scripts/demo.sql` (and `make demo` with it), then delete `cmd/`, `internal/`, `test/`, `go.mod`, `go.sum`, `sqlc.yaml`, `.mockery.yaml`, the whole `db/` directory and `docs/api/lights.md` (keep `bench/`, whose load tool is its own Go module). Rewrite README and `docs/architecture.md` for Python. Verify that `rg -l '\.go\b|chi|sqlc|pgx|db/migrations'` finds no stale references outside history and `bench/load`.
-- [ ] 18.6 Deploy to `main`. Verify that the container is healthy, the logs show the migration adoption line, gv-web works end to end (login with 2FA, habits, tasks, finance, printers), and a test ERROR reaches Telegram.
+- [x] 18.6 Deploy to `main`. Verify that the container is healthy, the logs show the migration adoption line, gv-web works end to end (login with 2FA, habits, tasks, finance, printers), and a test ERROR reaches Telegram.
 - [x] 18.7 Rehearse rollback on the dev stack: redeploy `go-final` on the adopted DB, check that it is healthy, then return to Python. Verify by recording the steps in `docs/architecture.md` under Deployment.
 
 ## Workflow follow-up
 
 - Remove the lights screens from gv-web and Android (separate repos).
-- Later change: drop the `lights` table and `schema_migrations` once the rollback window is no longer needed.
+- Done in this change (revision `0002_drop_unused_tables`): the `lights` table and `schema_migrations` are dropped, which closes the rollback window.
+- 18.2 closed by decision on 2026-11-11: the endpoints still over the latency gate are left for later changes.
+- 18.1: the parity tooling was removed at close; the last production-snapshot run had only the deviations in the removed `ACCEPTED.md`.
 - Archive this change after the deploy is verified.

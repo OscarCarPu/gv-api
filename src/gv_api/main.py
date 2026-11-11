@@ -1,4 +1,4 @@
-"""Composition root: builds every service and the app (design D4)."""
+"""Composition root: builds every service and the app."""
 
 import logging
 import signal

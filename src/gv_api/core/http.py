@@ -1,4 +1,4 @@
-"""Request parsing and error responses (design D8)."""
+"""Request parsing and error responses."""
 
 import json
 import logging

@@ -146,8 +146,3 @@ def test_invalid_value_is_an_error(monkeypatch: pytest.MonkeyPatch, key: str, ra
 def test_prusalink_host_trailing_slash(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("PRUSALINK_HOST", "http://printer//")
     assert load().prusalink_host == "http://printer"
-
-
-def test_lights_variables_are_ignored(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("LIGHTS_DRIVER", "bluez")
-    assert not hasattr(load(), "lights_driver")

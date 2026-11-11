@@ -14,7 +14,7 @@ def tier_router(tier: Tier, dependencies: Sequence[Depends] = ()) -> APIRouter:
 
 
 def route_table(app: FastAPI) -> set[tuple[str, str, str]]:
-    """(METHOD, path, tier) for every route, as tests/parity/routes.txt lists them."""
+    """(METHOD, path, tier) for every route."""
     table: set[tuple[str, str, str]] = set()
     paths: dict[str, dict[str, Any]] = app.openapi().get("paths", {})
     for path, operations in paths.items():

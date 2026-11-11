@@ -10,7 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncEngine
 from gv_api.db.engine import create_engine
 from gv_api.db.migrate import migrate
 
-KEEP = ("schema_migrations", "alembic_version")
+KEEP = ("alembic_version",)
 
 
 def require_db_url() -> str:

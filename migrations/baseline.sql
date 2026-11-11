@@ -311,20 +311,6 @@ ALTER TABLE public.habits ALTER COLUMN id ADD GENERATED ALWAYS AS IDENTITY (
     CACHE 1
 );
 
-CREATE TABLE public.lights (
-    id text NOT NULL,
-    name text NOT NULL,
-    model text DEFAULT ''::text NOT NULL,
-    address text NOT NULL,
-    protocol text NOT NULL,
-    supports_color boolean DEFAULT true NOT NULL,
-    supports_color_temp boolean DEFAULT true NOT NULL,
-    min_color_temp double precision DEFAULT 2200 NOT NULL,
-    max_color_temp double precision DEFAULT 6500 NOT NULL,
-    options jsonb DEFAULT '{}'::jsonb NOT NULL,
-    created_at timestamp with time zone DEFAULT now() NOT NULL
-);
-
 CREATE TABLE public.outages (
     id bigint NOT NULL,
     ends_at timestamp with time zone NOT NULL,
@@ -576,12 +562,6 @@ ALTER TABLE ONLY public.habit_logs
 
 ALTER TABLE ONLY public.habits
     ADD CONSTRAINT habits_pkey PRIMARY KEY (id);
-
-ALTER TABLE ONLY public.lights
-    ADD CONSTRAINT lights_address_key UNIQUE (address);
-
-ALTER TABLE ONLY public.lights
-    ADD CONSTRAINT lights_pkey PRIMARY KEY (id);
 
 ALTER TABLE ONLY public.outages
     ADD CONSTRAINT outages_ends_at_key UNIQUE (ends_at);

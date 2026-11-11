@@ -440,7 +440,7 @@ INSERT INTO tasks (project_id, name, description, due_at, started_at, priority) 
 -- Standalone tasks (no project)
 INSERT INTO tasks (name, description, due_at, started_at, priority) VALUES
     ('Fix server logs', 'Investigate and fix log rotation issue', CURRENT_DATE + INTERVAL '2 days', NOW() - INTERVAL '1 day', 1),               -- id=18
-    ('Update dependencies', 'Bump Go modules to latest versions', CURRENT_DATE + INTERVAL '3 days', NULL, 4),                                    -- id=19
+    ('Update dependencies', 'Bump dependencies to latest versions', CURRENT_DATE + INTERVAL '3 days', NULL, 4),                                    -- id=19
     ('Write blog post', 'Draft a blog post about the new API', CURRENT_DATE + INTERVAL '14 days', NULL, 5);                                     -- id=20
 
 INSERT INTO tasks (name, description, started_at, priority) VALUES

@@ -61,9 +61,8 @@ async def revision(raw: asyncpg.Connection) -> str | None:
 async def test_fresh_database(new_db: NewDB) -> None:
     engine, raw = await new_db()
     await migrate(engine)
-    assert await revision(raw) == "0001_baseline"
+    assert await revision(raw) == "0002_drop_unused_tables"
     assert await raw.fetchval("SELECT count(*) FROM outages WHERE kind = 'start'") == 1
-    assert await raw.fetchval("SELECT to_regclass('schema_migrations') IS NULL")
 
 
 async def test_up_to_date_database_runs_nothing(new_db: NewDB) -> None:
@@ -71,7 +70,7 @@ async def test_up_to_date_database_runs_nothing(new_db: NewDB) -> None:
     await migrate(engine)
     await raw.execute("INSERT INTO habits (name, frequency) VALUES ('Read', 'daily')")
     await migrate(engine)
-    assert await revision(raw) == "0001_baseline"
+    assert await revision(raw) == "0002_drop_unused_tables"
     assert await raw.fetchval("SELECT count(*) FROM habits") == 1
     assert await raw.fetchval("SELECT count(*) FROM outages") == 1
 
@@ -89,9 +88,9 @@ async def test_populated_database_without_history_fails_untouched(new_db: NewDB)
 
 async def test_failing_migration_leaves_schema_untouched(new_db: NewDB, tmp_path: Path) -> None:
     shutil.copytree(REPO / "migrations", tmp_path / "migrations")
-    (tmp_path / "migrations" / "versions" / "0002_broken.py").write_text(
+    (tmp_path / "migrations" / "versions" / "0003_broken.py").write_text(
         "from alembic import op\n"
-        'revision = "0002_broken"\ndown_revision = "0001_baseline"\n'
+        'revision = "0003_broken"\ndown_revision = "0002_drop_unused_tables"\n'
         "branch_labels = None\ndepends_on = None\n"
         'def upgrade() -> None:\n    op.execute("ALTER TABLE nope ADD COLUMN x int")\n'
         "def downgrade() -> None:\n    pass\n"

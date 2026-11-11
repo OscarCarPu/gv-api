@@ -37,13 +37,6 @@ jobs:
       - name: Deploy
         run: |
           cd /home/ocp/docker/gv/gv-api
-          docker compose build gv-api
-          # One-time adoption of a database the previous release migrated: mark it as being at the
-          # Alembic baseline. A database with Alembic history skips this.
-          current=$(docker compose run --rm --no-deps -T gv-api alembic current 2>/dev/null)
-          if [ -z "$current" ]; then
-            docker compose run --rm --no-deps -T gv-api alembic stamp 0001_baseline
-          fi
           # --wait-timeout makes a crash-looping container fail the job instead of hanging it.
           if ! docker compose up --build --wait --wait-timeout 90 --remove-orphans -d; then
             echo "::error::gv_api did not become healthy - deploy failed"

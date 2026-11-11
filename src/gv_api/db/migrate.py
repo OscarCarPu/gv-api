@@ -1,4 +1,4 @@
-"""Startup migrations: `alembic upgrade head` in one transaction (design D11)."""
+"""Startup migrations: `alembic upgrade head` in one transaction."""
 
 from pathlib import Path
 

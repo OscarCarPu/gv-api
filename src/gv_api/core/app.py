@@ -1,4 +1,4 @@
-"""The FastAPI app and its routing conventions (design D9)."""
+"""The FastAPI app and its routing conventions."""
 
 import asyncio
 import logging

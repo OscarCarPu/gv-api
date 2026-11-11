@@ -10,7 +10,7 @@ from gv_api.core.http import ApiError
 
 @cache
 def service[T](cls: type[T]) -> Callable[[Request], Awaitable[T]]:
-    """Dependency returning the composition root's instance of `cls` (design D4)."""
+    """Dependency returning the composition root's instance of `cls`."""
 
     # async so FastAPI calls it inline instead of in the threadpool
     async def get(request: Request) -> T:

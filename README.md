@@ -109,9 +109,7 @@ pre-commit hook uses it. CI and `make test` always run everything with the cover
 ## Migrations
 
 Alembic, applied at startup in one transaction (`migrations/versions/`). The first revision,
-`0001_baseline`, creates the schema from `migrations/baseline.sql`. A database created before
-Alembic was adopted is marked once with `make db-stamp` (the deploy does this on its own).
-New migrations are hand-written revisions; autogenerate misses views, functions and triggers.
+`0001_baseline`, creates the schema from `migrations/baseline.sql`. New migrations are hand-written revisions; autogenerate misses views, functions and triggers.
 
 
 ## Disclaimer

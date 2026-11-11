@@ -40,8 +40,8 @@ gv-api/
                              # errors.py (only the files the domain needs)
   migrations/                # Alembic env, versions/, baseline.sql
   tests/{unit,integration,e2e}/
-  scripts/                   # demo data, dev failover, rollback check, operator helpers
-  bench/                     # load benchmarks (its load client is a separate Go module)
+  scripts/                   # demo data, dev failover, operator helpers
+  bench/                     # load benchmarks
   docs/                      # api/, business_logic/, data_models/
 ```
 
@@ -109,26 +109,8 @@ See the [README](../README.md#testing).
   network.
 - Migrations run from the API at startup, not from the database image.
 - Gitea Actions deploys on push to `main`: ruff, mypy and the unit tests with the coverage
-  gate; a backup from the running container; the image build; the one-time Alembic stamp when
-  the database has no Alembic history; then `docker compose up --build --wait`; and the image
-  push to ECR for the AWS side.
-
-### Rollback to the previous release
-
-The previous release (git tag `go-final`) keeps its own migrations (golang-migrate, frozen at
-version 36), and the Alembic stamp leaves `schema_migrations` untouched. While no migration newer
-than `0001_baseline` exists, rolling back needs no data step:
-
-1. Build the image from the tag: `git archive go-final | docker build -t gv-api:go-final -`.
-2. Stop the running container and start that image with the same `.env`, network and volumes
-   (on the host: retag it as `gv-api` and `docker compose up -d --no-build gv-api`). It reads
-   version 36 and starts; `/health` answers 200.
-3. To return, `docker compose up -d --build gv-api` from `main`.
-
-Rehearsed on the development stack on 2026-11-11: `go-final` came up healthy on the stamped
-database (`schema_migrations` 36, `alembic_version` `0001_baseline`), and the current image
-started again afterwards. `make check-rollback` repeats the same round trip on a throwaway
-database. Once a migration newer than the baseline exists, a rollback first needs its downgrade.
+  gate; a backup from the running container; then `docker compose up --build --wait`; and the
+  image push to ECR for the AWS side.
 
 ### Where it runs
 

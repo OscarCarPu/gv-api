@@ -1,10 +1,10 @@
 BACKUP_DIR_OWNER=docker run --rm -v "$(CURDIR)/backups:/b" alpine:3.22 sh -c "mkdir -p /b/hourly /b/daily && chown 1000:1000 /b /b/hourly /b/daily"
 
-.PHONY: setup-project run lint pgcli-db demo db-stamp check-rollback \
+.PHONY: setup-project run lint pgcli-db demo \
 	up reset logs up-logs reset-logs down \
 	failover-bucket failover-scenario failover-merge failover-status failover-outage failover-finish \
 	test test-unit test-integration test-integration-db test-e2e \
-	test-api-setup test-db-cleanup auth code prusa-login parity-up parity-down parity
+	test-api-setup test-db-cleanup auth code prusa-login
 
 # Colors
 RED=\033[0;31m
@@ -38,21 +38,6 @@ demo:
 	@printf "$(CYAN)>>> Loading demo data...$(NC)\n"
 	@docker compose exec -T db psql -U $(POSTGRES_USER) -d $(POSTGRES_DB) < scripts/demo.sql
 	@printf "$(GREEN)>>> Demo data loaded$(NC)\n"
-
-# Marks a database the previous release migrated (golang-migrate, version 36) as being at the
-# Alembic baseline. Only when it has no Alembic history yet. DB_URL defaults to the development
-# database.
-DB_URL ?= postgresql://$(POSTGRES_USER):$(POSTGRES_PASSWORD)@127.0.0.1:5432/$(POSTGRES_DB)?sslmode=disable
-db-stamp:
-	@if [ -n "$$(DATABASE_URL='$(DB_URL)' uv run alembic current 2>/dev/null)" ]; then \
-		echo "already stamped"; \
-	else \
-		DATABASE_URL='$(DB_URL)' uv run alembic stamp 0001_baseline && echo "stamped at 0001_baseline"; \
-	fi
-
-# Previous release -> stamp -> this app -> previous release again, on a throwaway database.
-check-rollback:
-	./scripts/check_rollback.sh
 
 # --- DOCKER OPERATIONS ---
 
@@ -172,16 +157,3 @@ prusa-login:
 # Print just the current TOTP 2FA code
 code:
 	@python scripts/auth.py --code
-
-# --- PARITY (design D15): the previous release (tag go-final) and this app side by side ---
-# PARITY_SNAPSHOT=backups/daily/<dump>.sql.gz replays on production data instead of the demo seed.
-# CORPUS="auth http" runs only those files of tests/parity/corpus.
-
-parity-up:
-	tests/parity/stack.sh up
-
-parity-down:
-	tests/parity/stack.sh down
-
-parity: parity-up
-	uv run python -m tests.parity.runner $(CORPUS)

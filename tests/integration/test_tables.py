@@ -1,4 +1,4 @@
-"""Every domain's tables.py against the migrated schema (design D6): columns, types, nullability."""
+"""Every domain's tables.py against the migrated schema: columns, types, nullability."""
 
 import importlib
 import pkgutil

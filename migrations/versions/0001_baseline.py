@@ -1,8 +1,5 @@
 """Baseline: the initial schema (migrations/baseline.sql).
 
-The production database already has this schema; it is stamped at this revision instead of
-running it.
-
 Revision ID: 0001_baseline
 Revises:
 Create Date: 2026-11-09

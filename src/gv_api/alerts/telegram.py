@@ -1,4 +1,4 @@
-"""ERROR logs to a Telegram chat, batched every 10 s (design D12)."""
+"""ERROR logs to a Telegram chat, batched every 10 s."""
 
 import asyncio
 import logging

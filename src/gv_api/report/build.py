@@ -12,7 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncEngine
 from gv_api.report.schemas import Item, Related, Report, Row
 
 # Bookkeeping, not data.
-_NOT_DATA = ("schema_migrations", "alembic_version")
+_NOT_DATA = ("alembic_version",)
 
 _TABLES = text("""
 SELECT c.relname FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
