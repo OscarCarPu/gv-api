@@ -66,7 +66,8 @@ An unhandled failure answers Starlette's `Internal Server Error` text instead of
 Every field of a response is always sent, as `null` or `[]` when empty. Go left some keys out
 when empty (`omitempty`: tree nodes, project children, `recurrence`). The runner drops a
 `null` or `[]` that Python sends where Go sent no key. gv-web reads these fields with `?.` or
-`??`, so both forms work.
+`??`, so both forms work. The printer routes are the exception: they leave empty fields out, as
+Go did, because gv-web's printer schemas read those fields as optional, not nullable.
 
 ## root-projects-full-row
 
@@ -108,3 +109,29 @@ to a negative id and matched nothing.
 The failover report (`GET /report`) shows each row as JSON parsed from `to_jsonb`, so a
 `numeric` reads `12.5` where Go kept Postgres's text `12.50`. Rows are still compared on the
 exact `jsonb` text. `alembic_version` is left out of the report like `schema_migrations`.
+
+## printers-download-filename
+
+A printer file download names the file in a quoted `Content-Disposition`
+(`attachment; filename="a.bgcode"`), and a non-ASCII name as `filename*=utf-8''…`. Go left a
+plain name unquoted. Browsers save both under the same name.
+
+## printers-upstream-errors
+
+When PrusaLink or Prusa Connect cannot be reached or stalls, the status codes are the same but
+the error text is the HTTP client's (`connection refused`, `PrusaLink did not answer in time`)
+instead of Go's (`Get "http://…": dial tcp …`). An `X-File-Name` with a malformed `%` escape is
+read literally instead of being refused.
+
+## tree-sibling-project-order
+
+In `GET /tasks/tree`, sub-projects of the same parent come first, in reverse name order. Go
+placed them with an unstable sort by depth, so the order of two sibling sub-projects was
+accidental: on the production snapshot of 2026-11-11 two siblings come out swapped. gv-web shows
+the tree as given; both orders are valid.
+
+## real-last-digit-rounding
+
+A `real` rounded at 7 significant digits can differ in the last digit when the float32 value
+sits on a half (`12.75516` before, `12.75515` now, in time-entry history). Same cause as
+`real-seven-digits`.

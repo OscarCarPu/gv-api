@@ -1,0 +1,13 @@
+{"time": "2026-11-11T16:41:00.968031+01:00", "level": "INFO", "msg": "telegram alerts disabled: TELEGRAM_BOT_TOKEN or TELEGRAM_CHAT_ID not set"}
+{"time": "2026-11-11T16:41:01.039361+01:00", "level": "INFO", "msg": "server starting", "port": "18080"}
+{"time": "2026-11-11T16:41:01.050446+01:00", "level": "INFO", "msg": "Started server process [23149]"}
+{"time": "2026-11-11T16:41:01.050519+01:00", "level": "INFO", "msg": "Waiting for application startup."}
+{"time": "2026-11-11T16:41:01.075220+01:00", "level": "INFO", "msg": "backup: schedule disabled"}
+{"time": "2026-11-11T16:41:01.075982+01:00", "level": "INFO", "msg": "Application startup complete."}
+{"time": "2026-11-11T16:41:01.076376+01:00", "level": "INFO", "msg": "Uvicorn running on http://:18080 (Press CTRL+C to quit)"}
+{"time": "2026-11-11T16:42:05.380879+01:00", "level": "INFO", "msg": "Shutting down"}
+{"time": "2026-11-11T16:42:05.481744+01:00", "level": "INFO", "msg": "Waiting for application shutdown."}
+{"time": "2026-11-11T16:42:05.482294+01:00", "level": "INFO", "msg": "shutting down server"}
+{"time": "2026-11-11T16:42:05.532190+01:00", "level": "INFO", "msg": "Application shutdown complete."}
+{"time": "2026-11-11T16:42:05.532377+01:00", "level": "INFO", "msg": "Finished server process [23149]"}
+{"time": "2026-11-11T16:42:05.532845+01:00", "level": "INFO", "msg": "server stopped"}

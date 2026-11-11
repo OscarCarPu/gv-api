@@ -239,7 +239,7 @@ The read-only `task_*` fields are always present: the joined task state at fetch
       }
     ]
     ```
-  - `days_of_week`: 0 (Sunday) to 6 (Saturday), matching Go's `time.Weekday`.
+  - `days_of_week`: 0 (Sunday) to 6 (Saturday).
 - **Error Responses:**
   - **Code:** `500 Internal Server Error`
     - **Content:** `Failed to list commitments`

@@ -2,12 +2,8 @@
 
 import base64
 import json
-import shutil
-import subprocess
 import time
-from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
-from pathlib import Path
 
 import httpx
 import jwt
@@ -22,7 +18,6 @@ from gv_api.main import build
 
 SECRET = "super-secret-test-key"
 TOTP_SECRET = "JBSWY3DPEHPK3PXP"
-REPO = Path(__file__).parents[2]
 
 
 def config(**overrides: str) -> Config:
@@ -214,70 +209,3 @@ async def test_login_2fa_errors() -> None:
         for body, status, expected in cases:
             resp = await c.post("/login/2fa", content=body)
             assert (resp.status_code, resp.text) == (status, expected), body
-
-
-# Migration tooling (removed at cutover): tokens interchangeable with the previous service.
-
-GO_HELPER = """package main
-
-import (
-\t"fmt"
-\t"os"
-\t"time"
-
-\t"gv-api/internal/auth"
-\t"gv-api/internal/config"
-)
-
-func main() {
-\tsvc := auth.NewService(&config.Config{JwtSecret: os.Args[2]}, nil)
-\tif os.Args[1] == "issue" {
-\t\ttok, _ := svc.GenerateToken(time.Hour, os.Args[3])
-\t\tfmt.Print(tok)
-\t\treturn
-\t}
-\tif svc.ValidateToken(os.Args[4], os.Args[3]) != nil {
-\t\tfmt.Print("invalid")
-\t\treturn
-\t}
-\tfmt.Print("valid")
-}
-"""
-
-
-@pytest.fixture(scope="module")
-def go_auth(tmp_path_factory: pytest.TempPathFactory) -> Callable[..., str]:
-    go = shutil.which("go")
-    if go is None or not (REPO / "internal" / "auth").is_dir():
-        pytest.skip("Go toolchain or internal/auth not available")
-    tmp = tmp_path_factory.mktemp("go")
-    (tmp / "main.go").write_text(GO_HELPER)
-    # A virtual package inside the module, so it may import internal/; nothing is written to REPO.
-    virtual = REPO / "internal" / "auth" / "pycompat" / "main.go"
-    (tmp / "overlay.json").write_text(json.dumps({"Replace": {str(virtual): str(tmp / "main.go")}}))
-    binary = str(tmp / "goauth")
-    overlay = str(tmp / "overlay.json")
-    build_cmd = [go, "build", "-overlay", overlay, "-o", binary, "./internal/auth/pycompat"]
-    subprocess.run(build_cmd, cwd=REPO, check=True)  # noqa: S603
-
-    def run(*args: str) -> str:
-        return subprocess.run(  # noqa: S603
-            [binary, *args], capture_output=True, check=True, text=True
-        ).stdout
-
-    return run
-
-
-def test_go_token_is_accepted_and_python_token_by_go(go_auth: Callable[..., str]) -> None:
-    run = go_auth
-    svc = AuthService(config())
-    go_full = run("issue", SECRET, "full")
-    assert svc.token_kind(go_full) == "full"
-    assert svc.token_kind(run("issue", "other-secret", "full")) is None
-
-    py_full = svc.generate_token(timedelta(days=30), "full")
-    assert run("validate", SECRET, "full", py_full) == "valid"
-    assert run("validate", SECRET, "semi", py_full) == "invalid"
-    py_semi, _ = svc.login("semi-pass")
-    assert run("validate", SECRET, "semi", py_semi) == "valid"
-    assert run("validate", "other-secret", "full", py_full) == "invalid"

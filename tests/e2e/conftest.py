@@ -1,7 +1,8 @@
 """E2E harness: HTTP against a running API.
 
-API_URL selects the API (`make py-test-e2e` starts the parity stack's Python app); PASSWORD and
-TOTP_SECRET are that API's. TEST_DB_URL is its database, for the suites that truncate tables.
+API_URL selects the API (`make test-e2e` rebuilds the compose API on the test database);
+PASSWORD and TOTP_SECRET are that API's. TEST_DB_URL is its database, for the suites that
+truncate tables.
 """
 
 import asyncio

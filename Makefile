@@ -1,10 +1,10 @@
 BACKUP_DIR_OWNER=docker run --rm -v "$(CURDIR)/backups:/b" alpine:3.22 sh -c "mkdir -p /b/hourly /b/daily && chown 1000:1000 /b /b/hourly /b/daily"
 
-.PHONY: setup-project sqlc generate-mocks pgcli-db demo run build lint \
+.PHONY: setup-project run lint pgcli-db demo db-stamp check-rollback \
 	up reset logs up-logs reset-logs down \
 	failover-bucket failover-scenario failover-merge failover-status failover-outage failover-finish \
-	test test-unit test-integration test-e2e test-bench test-silent \
-	test-api-setup test-db-cleanup auth code prusa-login
+	test test-unit test-integration test-integration-db test-e2e \
+	test-api-setup test-db-cleanup auth code prusa-login parity-up parity-down parity
 
 # Colors
 RED=\033[0;31m
@@ -16,28 +16,18 @@ NC=\033[0m
 # --- PROJECT SETUP ---
 setup-project:
 	@cp -n .env.example .env || true
-	@command -v go >/dev/null 2>&1 || { printf "$(RED)go is not installed$(NC)\n" >&2; exit 1; }
-	@command -v sqlc >/dev/null 2>&1 || { printf "$(RED)sqlc is not installed$(NC)\n" >&2; exit 1; }
-
-# --- CODE GENERATION ---
-
-sqlc:
-	sqlc generate
-
-generate-mocks:
-	@GOTOOLCHAIN=go$$(grep -m1 '^go ' go.mod | awk '{print $$2}') mockery
+	@command -v uv >/dev/null 2>&1 || { printf "$(RED)uv is not installed$(NC)\n" >&2; exit 1; }
+	uv sync
 
 # --- RUN & CHECK ---
 
 run:
-	go run ./cmd/api
-
-build:
-	go build -o bin/gv-api ./cmd/api
+	uv run gv-api serve
 
 lint:
-	@test -z "$$(gofmt -l cmd internal test)" || { printf "$(RED)gofmt: $$(gofmt -l cmd internal test)$(NC)\n"; exit 1; }
-	@go vet ./...
+	uv run ruff check
+	uv run ruff format --check
+	uv run mypy
 
 # --- DATABASE ---
 
@@ -46,8 +36,23 @@ pgcli-db:
 
 demo:
 	@printf "$(CYAN)>>> Loading demo data...$(NC)\n"
-	@docker compose exec -T db psql -U $(POSTGRES_USER) -d $(POSTGRES_DB) < db/demo.sql
+	@docker compose exec -T db psql -U $(POSTGRES_USER) -d $(POSTGRES_DB) < scripts/demo.sql
 	@printf "$(GREEN)>>> Demo data loaded$(NC)\n"
+
+# Marks a database the previous release migrated (golang-migrate, version 36) as being at the
+# Alembic baseline. Only when it has no Alembic history yet. DB_URL defaults to the development
+# database.
+DB_URL ?= postgresql://$(POSTGRES_USER):$(POSTGRES_PASSWORD)@127.0.0.1:5432/$(POSTGRES_DB)?sslmode=disable
+db-stamp:
+	@if [ -n "$$(DATABASE_URL='$(DB_URL)' uv run alembic current 2>/dev/null)" ]; then \
+		echo "already stamped"; \
+	else \
+		DATABASE_URL='$(DB_URL)' uv run alembic stamp 0001_baseline && echo "stamped at 0001_baseline"; \
+	fi
+
+# Previous release -> stamp -> this app -> previous release again, on a throwaway database.
+check-rollback:
+	./scripts/check_rollback.sh
 
 # --- DOCKER OPERATIONS ---
 
@@ -101,13 +106,14 @@ failover-outage:
 failover-finish:
 	./scripts/failover-dev.sh finish
 
-
 # --- TESTING ---
 
 include .env
 
-INNER_TEST_DB_URL=postgresql://$(POSTGRES_USER):$(POSTGRES_PASSWORD)@db:5432/$(TEST_DB)?sslmode=disable
-OUTSIDE_TEST_DB_URL=postgresql://$(POSTGRES_USER):$(POSTGRES_PASSWORD)@127.0.0.1:5432/$(TEST_DB)?sslmode=disable
+# The e2e suite runs against the compose API on $(TEST_DB); the integration suite has its own.
+E2E_DB_URL=postgresql://$(POSTGRES_USER):$(POSTGRES_PASSWORD)@127.0.0.1:5432/$(TEST_DB)?sslmode=disable
+INTEGRATION_DB=$(TEST_DB)-integration
+INTEGRATION_DB_URL=postgresql://$(POSTGRES_USER):$(POSTGRES_PASSWORD)@127.0.0.1:5432/$(INTEGRATION_DB)?sslmode=disable
 
 test-db-cleanup:
 	@printf "$(YELLOW)>>> Cleaning up test database...$(NC)\n"
@@ -129,47 +135,30 @@ test-api-setup:
 	@docker compose --progress plain -f docker-compose.yaml -f docker-compose.test.yaml up -d --wait --build gv-api > /dev/null
 	@printf "$(GREEN)>>> API ready$(NC)\n"
 
-# All tests: silent, only prints pass/fail
-test-silent: test-api-setup
-	@printf "$(CYAN)>>> Running all tests...$(NC)\n"
-	@go test -short ./internal/... > /dev/null 2>&1 || { printf "$(RED)>>> Unit tests failed$(NC)\n"; $(MAKE) test-db-cleanup --no-print-directory; exit 1; }
-	@TEST_DB_URL=$(OUTSIDE_TEST_DB_URL) go test -p 1 -run Integration ./internal/... > /dev/null 2>&1 || { printf "$(RED)>>> Integration tests failed$(NC)\n"; $(MAKE) test-db-cleanup --no-print-directory; exit 1; }
-	@TEST_DB_URL=$(OUTSIDE_TEST_DB_URL) PORT=$(PORT) PASSWORD=$(PASSWORD) TOTP_SECRET=$(TOTP_SECRET) go test ./test/e2e/... > /dev/null 2>&1 || { printf "$(RED)>>> E2E tests failed$(NC)\n"; $(MAKE) test-db-cleanup --no-print-directory; exit 1; }
-	@$(MAKE) test-db-cleanup --no-print-directory
-	@printf "$(GREEN)>>> All tests passed$(NC)\n"
-
 # Unit tests: fast, no external dependencies
 test-unit:
-	@printf "$(CYAN)>>> Running unit tests...$(NC)\n"
-	@go test -v -short ./internal/...
+	uv run pytest tests/unit
 
-# Integration tests: require a running database
-test-integration: test-api-setup
-	@printf "$(CYAN)>>> Running integration tests...$(NC)\n"
-	@TEST_DB_URL=$(OUTSIDE_TEST_DB_URL) go test -p 1 -v -run Integration ./internal/...
-	@$(MAKE) test-db-cleanup --no-print-directory
+# Fresh database for the integration tests.
+test-integration-db:
+	@docker compose up -d --wait db > /dev/null
+	@docker compose exec -T db psql -q -U $(POSTGRES_USER) -d postgres -c 'DROP DATABASE IF EXISTS "$(INTEGRATION_DB)"' -c 'CREATE DATABASE "$(INTEGRATION_DB)"'
 
-# E2E tests: require full stack (API + database)
+# Integration tests: repositories and migrations against a real database
+test-integration: test-integration-db
+	TEST_DB_URL='$(INTEGRATION_DB_URL)' uv run pytest tests/integration
+
+# E2E tests: HTTP against the compose API, rebuilt on a fresh test database
 test-e2e: test-api-setup
-	@printf "$(CYAN)>>> Running e2e tests...$(NC)\n"
-	@TEST_DB_URL=$(OUTSIDE_TEST_DB_URL) PORT=$(PORT) PASSWORD=$(PASSWORD) TOTP_SECRET=$(TOTP_SECRET) go test ./test/e2e/... -v
+	@API_URL=http://127.0.0.1:$(PORT) TEST_DB_URL='$(E2E_DB_URL)' PASSWORD='$(PASSWORD)' TOTP_SECRET='$(TOTP_SECRET)' \
+		uv run pytest tests/e2e --no-cov || { $(MAKE) test-db-cleanup --no-print-directory; exit 1; }
 	@$(MAKE) test-db-cleanup --no-print-directory
 
-# Benchmarks: require a running database. Override iterations with BENCHTIME=10x or BENCHTIME=3s.
-BENCHTIME ?= 5x
-test-bench: test-api-setup
-	@printf "$(CYAN)>>> Running benchmarks ($(BENCHTIME))...$(NC)\n"
-	@TEST_DB_URL=$(OUTSIDE_TEST_DB_URL) go test -bench=. -run='^$$' -benchtime=$(BENCHTIME) ./internal/tasks/ ./internal/habits/ \
-		| awk '{ for (i=1;i<=NF;i++) if ($$i=="ns/op") { $$(i-1)=sprintf("%.3f",$$(i-1)/1e6); $$i="ms/op" } print }'
-	@$(MAKE) test-db-cleanup --no-print-directory
-
-# All three levels with one test database setup and one cleanup
-test: test-unit test-api-setup
-	@printf "$(CYAN)>>> Running integration tests...$(NC)\n"
-	@TEST_DB_URL=$(OUTSIDE_TEST_DB_URL) go test -p 1 -v -run Integration ./internal/... || { $(MAKE) test-db-cleanup --no-print-directory; exit 1; }
-	@printf "$(CYAN)>>> Running e2e tests...$(NC)\n"
-	@TEST_DB_URL=$(OUTSIDE_TEST_DB_URL) PORT=$(PORT) PASSWORD=$(PASSWORD) TOTP_SECRET=$(TOTP_SECRET) go test ./test/e2e/... -v || { $(MAKE) test-db-cleanup --no-print-directory; exit 1; }
-	@$(MAKE) test-db-cleanup --no-print-directory
+# Unit + integration with the coverage gate (85% overall, 90% per service.py), then e2e.
+test: test-integration-db
+	TEST_DB_URL='$(INTEGRATION_DB_URL)' uv run pytest tests/unit tests/integration --cov --cov-report=term --cov-report=json:coverage.json
+	uv run python scripts/check_coverage.py
+	@$(MAKE) --no-print-directory test-e2e
 	@printf "$(GREEN)>>> All tests passed$(NC)\n"
 
 # Authenticate and print a JWT token for manual testing
@@ -178,64 +167,15 @@ auth:
 
 # Log in to Prusa Connect from the running container; asks for the code Prusa emails
 prusa-login:
-	docker compose exec gv-api ./main prusa-login
+	docker compose exec gv-api gv-api prusa-login
 
 # Print just the current TOTP 2FA code
 code:
 	@python scripts/auth.py --code
 
-# --- PYTHON (FastAPI rewrite; replaces the Go targets at cutover) ---
-
-PY_TEST_DB=$(TEST_DB)-py
-PY_TEST_DB_URL=postgresql://$(POSTGRES_USER):$(POSTGRES_PASSWORD)@127.0.0.1:5432/$(PY_TEST_DB)?sslmode=disable
-
-.PHONY: py-run py-lint py-test-unit py-test-db py-test-integration py-test-e2e py-test py-db-stamp py-check-rollback
-
-# One-time cutover step: mark a database the Go release migrated as being at the Alembic baseline.
-# Only when it has no Alembic history yet. DB_URL defaults to the local development database.
-DB_URL ?= postgresql://$(POSTGRES_USER):$(POSTGRES_PASSWORD)@127.0.0.1:5432/$(POSTGRES_DB)?sslmode=disable
-py-db-stamp:
-	@if [ -n "$$(DATABASE_URL='$(DB_URL)' uv run alembic current 2>/dev/null)" ]; then \
-		echo "already stamped"; \
-	else \
-		DATABASE_URL='$(DB_URL)' uv run alembic stamp 0001_baseline && echo "stamped at 0001_baseline"; \
-	fi
-
-# Go release -> stamp -> Python -> Go again, on a throwaway database.
-py-check-rollback:
-	./scripts/check_rollback.sh
-
-py-run:
-	uv run gv-api serve
-
-py-lint:
-	uv run ruff check
-	uv run ruff format --check
-	uv run mypy
-
-py-test-unit:
-	uv run pytest tests/unit
-
-# Fresh database for the Python integration tests, beside the Go one.
-py-test-db:
-	@docker compose up -d --wait db > /dev/null
-	@docker compose exec -T db psql -q -U $(POSTGRES_USER) -d postgres -c 'DROP DATABASE IF EXISTS "$(PY_TEST_DB)"' -c 'CREATE DATABASE "$(PY_TEST_DB)"'
-
-py-test-integration: py-test-db
-	TEST_DB_URL=$(PY_TEST_DB_URL) uv run pytest tests/integration
-
-# Against the parity stack's Python app (rebuilt and on a fresh database), with its credentials.
-py-test-e2e: parity-up
-	set -a; . tests/parity/parity.env; set +a; \
-	API_URL=http://127.0.0.1:18181 \
-	TEST_DB_URL=postgresql://parity:parity@127.0.0.1:15432/parity_py?sslmode=disable \
-	uv run pytest tests/e2e --no-cov
-
-# --- PARITY (design D15): the Go release (tag go-final) and Python side by side ---
+# --- PARITY (design D15): the previous release (tag go-final) and this app side by side ---
 # PARITY_SNAPSHOT=backups/daily/<dump>.sql.gz replays on production data instead of the demo seed.
 # CORPUS="auth http" runs only those files of tests/parity/corpus.
-
-.PHONY: parity-up parity-down parity
 
 parity-up:
 	tests/parity/stack.sh up
@@ -245,8 +185,3 @@ parity-down:
 
 parity: parity-up
 	uv run python -m tests.parity.runner $(CORPUS)
-
-# Unit + integration with the coverage gate (85% overall, 90% per service.py).
-py-test: py-test-db
-	TEST_DB_URL=$(PY_TEST_DB_URL) uv run pytest tests/unit tests/integration --cov --cov-report=term --cov-report=json:coverage.json
-	uv run python scripts/check_coverage.py

@@ -1,18 +1,16 @@
 # gv-api
 
-Single-user Go API that centralises personal data from services and devices.
+Single-user API that centralises personal data from services and devices.
 
 ## Tech Stack
 
-Go, chi, PostgreSQL via pgx + sqlc, testify + mockery. See [architecture](docs/architecture.md).
+Python 3.14, FastAPI on uvicorn, PostgreSQL via SQLAlchemy Core (asyncpg), Alembic, pytest. See [architecture](docs/architecture.md).
 
 ## Setup
 
 ### Requirements
 - Git, Docker & Docker Compose
-- Go (v1.25.6+)
-- sqlc
-- mockery (`go install github.com/vektra/mockery/v2@latest`)
+- [uv](https://docs.astral.sh/uv/) (installs Python 3.14 and the dependencies)
 
 ### Getting Started
 
@@ -25,10 +23,9 @@ Go, chi, PostgreSQL via pgx + sqlc, testify + mockery. See [architecture](docs/a
 
 2. **Edit `.env`** (every variable is listed in `.env.example`).
 
-3. **Start the database and run:**
+3. **Run the stack:**
    ```bash
-   docker compose up -d
-   make run
+   make up
    ```
 
    `make up` runs the whole stack in Docker and adds a fake AWS (SSM and S3) so the failover restore can be rehearsed locally, see [docs/dev-failover.md](docs/dev-failover.md).
@@ -37,10 +34,10 @@ Go, chi, PostgreSQL via pgx + sqlc, testify + mockery. See [architecture](docs/a
 
 All variables are in `.env.example` with their defaults. Required: `DATABASE_URL`, `PASSWORD`,
 `SEMIPRIVATE_PASSWORD`, `JWT_SECRET`, `TOTP_SECRET`, `ALLOWED_ORIGINS`.
-Optional integrations (lights)
+Optional integrations (printers, Prusa Connect, S3)
 degrade gracefully when unset.
 
-`TELEGRAM_BOT_TOKEN` and `TELEGRAM_CHAT_ID` (optional, Python service only) send every ERROR log
+`TELEGRAM_BOT_TOKEN` and `TELEGRAM_CHAT_ID` (optional) send every ERROR log
 to a Telegram chat: batched every 10 s, repeated messages collapsed with a count, and the side
 (`home` or `aws`) and `request_id` in each alert. With either one unset, alerts are off and the
 service logs that once at startup. A failed send is dropped with a WARNING and never affects
@@ -60,7 +57,6 @@ requests or jobs.
 | **Finance** | Accounts, categories, transactions, monthly/yearly budgets and stats. | [finance](docs/api/finance.md) |
 | **Rutas** | Concello marks: which municipalities were visited and when. Semiprivate auth. | [rutas](docs/api/rutas.md) |
 | **Printers** | PrusaLink telemetry, job control, print files, camera and recordings. Semiprivate auth. | [printers](docs/api/printers.md) |
-| **Lights** | Bluetooth bulbs driven over BlueZ, with discovery and a registry. Semiprivate auth. | [lights](docs/api/lights.md) |
 | **Calendar** | Events: a name and a time range, linkable from plan blocks. | [calendar](docs/api/calendar.md) |
 | **Uptime** | Uptime, downtime and failover time, from a heartbeat and the failover record. Semiprivate auth. | [uptime](docs/api/uptime.md) |
 | **Backups** | List, take and download the API's own database dumps. | [backups](docs/api/backups.md) |
@@ -85,7 +81,7 @@ gv-api dumps its own database with `pg_dump` every `BACKUP_INTERVAL_MS` (default
 **On demand:** run the same backup outside the schedule from the running container. Only one backup runs at a time, so this is safe while the schedule or another run is active:
 
 ```bash
-docker compose exec -T gv-api ./main backup
+docker compose exec -T gv-api gv-api backup
 ```
 
 The deploy workflow runs this before every deploy. The HTTP endpoints, response codes and restore steps are in [docs/api/backups.md](docs/api/backups.md).
@@ -98,21 +94,20 @@ The deploy workflow runs this before every deploy. The HTTP endpoints, response 
 
 | Command | Scope |
 |---|---|
-| `make lint` | gofmt + `go vet`. Runs in CI before the tests. |
-| `make test-unit` | Handlers and services against mocks. No database. |
-| `make test-integration` | Repositories against a real test database. |
-| `make test-e2e` | HTTP requests against the running API. |
-| `make test-bench` | Repository benchmarks (`BENCHTIME=10x` to override). |
-| `make test` | All three test levels in order. |
+| `make lint` | ruff (lint and format) and mypy `--strict`. Runs in CI before the tests. |
+| `make test-unit` | Routers and services against in-memory fakes. No database. |
+| `make test-integration` | Repositories and migrations against a real test database. |
+| `make test-e2e` | HTTP requests against the compose API, rebuilt on a fresh test database. |
+| `make test` | Unit and integration with the coverage gate (85% overall, 90% per `service.py`), then e2e. |
 
-The test database is created and dropped per run.
+The test databases are created per run. Load benchmarks live in [bench/](bench/README.md).
 
-## Code Generation
+## Migrations
 
-```bash
-make sqlc            # db/queries -> internal/database/gvdb
-make generate-mocks  # interfaces -> internal/*/mocks (typed .EXPECT() helpers)
-```
+Alembic, applied at startup in one transaction (`migrations/versions/`). The first revision,
+`0001_baseline`, creates the schema from `migrations/baseline.sql`. A database created before
+Alembic was adopted is marked once with `make db-stamp` (the deploy does this on its own).
+New migrations are hand-written revisions; autogenerate misses views, functions and triggers.
 
 
 ## Disclaimer

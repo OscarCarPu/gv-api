@@ -30,8 +30,7 @@ seed_template() {
     if [ -z "$(alembic current 2>/dev/null)" ]; then alembic stamp 0001_baseline >/dev/null 2>&1; fi
   else
     local demo=$repo/scripts/demo.sql
-    [ -f "$demo" ] || demo=$repo/db/demo.sql
-    echo ">>> template: migrations + $(basename "$(dirname "$demo")")/demo.sql" >&2
+    echo ">>> template: migrations + scripts/demo.sql" >&2
     alembic upgrade head >/dev/null 2>&1
     # golang-migrate's bookkeeping, so the Go release (frozen at 36) starts with nothing pending.
     psql -d parity_template \

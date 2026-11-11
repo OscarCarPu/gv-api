@@ -45,7 +45,7 @@ line-length = 100
 target-version = "py314"
 src = ["src", "tests"]
 # Operator scripts that predate the rewrite.
-extend-exclude = ["scripts/auth.py", "scripts/fake_prusalink.py", "Dockerfile.py"]
+extend-exclude = ["scripts/auth.py", "scripts/fake_prusalink.py"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B", "SIM", "ASYNC", "RUF", "S"]

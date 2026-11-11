@@ -8,7 +8,7 @@ A `pg_dump` of the API's database, gzipped plain SQL (`--clean --if-exists --no-
 
 - every `BACKUP_INTERVAL_MS` (default 1 h, at the top of the hour; `0` turns the schedule off);
 - on `POST /backups`;
-- from `./main backup` in the container, which the deploy workflow runs before every deploy.
+- from `gv-api backup` in the container, which the deploy workflow runs before every deploy.
 
 Only one backup runs at a time, even across processes: a Postgres advisory lock (`hashtext('backup')`) guards each run. A run that finds the lock taken gets `409` (or exit code 1 from the command).
 

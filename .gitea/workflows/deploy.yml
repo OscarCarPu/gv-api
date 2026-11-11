@@ -15,19 +15,36 @@ jobs:
           cd /home/ocp/docker/gv/gv-api
           git fetch origin
           git reset --hard origin/main
-          make lint
-          go test -short ./internal/...
+          # uv and Python come from the image, so the host only needs Docker.
+          docker run --rm --user "$(id -u):$(id -g)" -v "$PWD:/app" -w /app \
+            -e UV_CACHE_DIR=/tmp/uv -e UV_PROJECT_ENVIRONMENT=/tmp/venv -e HOME=/tmp \
+            ghcr.io/astral-sh/uv:0.13.7-python3.14-alpine sh -ec '
+              uv sync --locked
+              uv run ruff check
+              uv run ruff format --check
+              uv run mypy
+              uv run pytest tests/unit --cov --cov-report=term --cov-report=json:/tmp/coverage.json
+              uv run python scripts/check_coverage.py /tmp/coverage.json
+            '
 
       - name: Backup database
         run: |
           cd /home/ocp/docker/gv/gv-api
           docker run --rm -v "$PWD/backups:/b" alpine:3.22 sh -c "mkdir -p /b/hourly /b/daily && chown 1000:1000 /b /b/hourly /b/daily"
-          # Best-effort: a failed backup must not block the deploy.
-          docker compose exec -T gv-api ./main backup || echo "::warning::pre-deploy backup skipped or failed"
+          # Fatal while the running container may still be the previous release (./main); make it
+          # best-effort again once the cutover is deployed.
+          docker compose exec -T gv-api gv-api backup || docker compose exec -T gv-api ./main backup
 
       - name: Deploy
         run: |
           cd /home/ocp/docker/gv/gv-api
+          docker compose build gv-api
+          # One-time adoption of a database the previous release migrated: mark it as being at the
+          # Alembic baseline. A database with Alembic history skips this.
+          current=$(docker compose run --rm --no-deps -T gv-api alembic current 2>/dev/null)
+          if [ -z "$current" ]; then
+            docker compose run --rm --no-deps -T gv-api alembic stamp 0001_baseline
+          fi
           # --wait-timeout makes a crash-looping container fail the job instead of hanging it.
           if ! docker compose up --build --wait --wait-timeout 90 --remove-orphans -d; then
             echo "::error::gv_api did not become healthy - deploy failed"

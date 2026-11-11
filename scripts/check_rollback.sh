@@ -46,9 +46,9 @@ git -C "$repo" archive "$ref" | tar -x -C "$work"
 psql_admin -c "DROP DATABASE IF EXISTS $db WITH (FORCE)" -c "CREATE DATABASE $db"
 start_healthy go-first 18097 "$work" ./gv-api-go
 
-DB_URL="$url" make -s -C "$repo" py-db-stamp
+DB_URL="$url" make -s -C "$repo" db-stamp
 [ "$(revision)" = "0001_baseline (head)" ] || { echo "FAIL: not stamped: '$(revision)'"; exit 1; }
-DB_URL="$url" make -s -C "$repo" py-db-stamp | grep -q "already stamped" || { echo "FAIL: second stamp was not a no-op"; exit 1; }
+DB_URL="$url" make -s -C "$repo" db-stamp | grep -q "already stamped" || { echo "FAIL: second stamp was not a no-op"; exit 1; }
 echo "ok: stamped once, second stamp skipped"
 
 start_healthy python 18098 "$repo" "$repo/.venv/bin/gv-api" serve

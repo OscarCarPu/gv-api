@@ -2,13 +2,13 @@
 .gitea
 .env*
 backups
-bin
 docs
-test
-**/mocks
-**/*_test.go
+tests
+openspec
+scripts
 *.md
 !README.md
 .venv
 **/__pycache__
 bench
+coverage.json

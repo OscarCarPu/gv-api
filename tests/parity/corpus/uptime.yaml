@@ -1,6 +1,7 @@
 # /domotics/uptime (semi tier). Each app's heartbeat writes `outages` on its own clock: a row
 # right after start, whose ends_at then moves every 30 s. Everything measured up to now moves
-# with the clock too.
+# with the clock too. On a production snapshot the open outage and `up_since` also depend on
+# when each app started.
 db_volatile: [outages.ends_at]
 requests:
   - name: no token
@@ -13,6 +14,7 @@ requests:
       - "ranges[*].down_seconds"
       - "ranges[*].failover_seconds"
       - "ranges[*].range_end"
+      - up_since
   - name: overview with a full token
     path: /domotics/uptime
     tier: full
@@ -20,7 +22,7 @@ requests:
   - name: windows by default
     path: /domotics/uptime/windows
     tier: semi
-    volatile: &windows [to, up_seconds, "windows[*].end_time", "windows[*].seconds"]
+    volatile: &windows [to, up_seconds, down_seconds, "windows[*].end_time", "windows[*].seconds"]
   - name: windows with a limit
     path: /domotics/uptime/windows?limit=1
     tier: semi

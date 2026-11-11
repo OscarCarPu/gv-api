@@ -4,7 +4,11 @@
 name: gv-parity
 
 x-app: &app
-  env_file: tests/parity/parity.env
+  env_file:
+    - tests/parity/parity.env
+    # Optional, never committed: the real printer for the printers corpus (PRINTERS_CHECKLIST.md).
+    - path: tests/parity/printer.env
+      required: false
   user: "1000:1000"
   depends_on:
     db:
@@ -41,9 +45,7 @@ services:
   py:
     <<: *app
     image: gv-api-py:parity
-    build:
-      context: .
-      dockerfile: Dockerfile.py
+    build: .
     environment:
       DATABASE_URL: postgresql://parity:parity@db:5432/parity_py?sslmode=disable
     ports:

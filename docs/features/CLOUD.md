@@ -37,7 +37,7 @@
 
 ## FAILOVER_SIDE
 
-`FAILOVER_SIDE` is `home` (default) or `aws`; anything else stops startup. On `aws`, the Domotics routes (`/domotics/lights`, `/domotics/printers` including the signed camera and recording URLs, `/domotics/uptime`) answer `503` with `code: "unavailable_on_failover"` after auth. The BlueZ driver, lights polling and the pipeline pool are not started. gv-web and Android read `code` to show the unavailable state. `/health` and every non-Domotics route are unaffected.
+`FAILOVER_SIDE` is `home` (default) or `aws`; anything else stops startup. On `aws`, the Domotics routes (`/domotics/printers` including the signed camera and recording URLs, `/domotics/uptime`) answer `503` with `code: "unavailable_on_failover"` after auth. Printer polling and the uptime heartbeat are not started. gv-web and Android read `code` to show the unavailable state. `/health` and every non-Domotics route are unaffected.
 
 ## Planned maintenance
 

@@ -234,3 +234,63 @@ The first port missed the gate on 18 of 30 endpoints. The cause was a fixed cost
 - **`tasks.tree`**: projects and open tasks come as one JSON array each (`json_agg`), parsed by Pydantic's compiled validator, and the tree is built from dicts and validated in one pass. Model responses are serialized with `pydantic_core.to_json` (same bytes as before).
 
 Process: about 590 ms to start, 105 MB RSS idle and 112 MB peak (Go: 73 ms, 28 MB and 83 MB). That is well under the 512 MB limit.
+
+## Cutover gate (task 18.2)
+
+Python at scenario `5y` on the same i7-1360P, median p95 of 3 runs (`bench/results/py-5c78b0b`,
+`-r2`, `-r3`), against the Go median (`go-d32ab42-median.json`). Run 1 shared the machine with
+other work and is noisier. **10 endpoints miss the gate**: the finance reads (`transactions.all`
+about 4× Go, `overview`, `budgets`, `transactions.month`) consistently, and several small reads
+by 1–3 ms (`tasks.tree`, `rutas.marks`, `uptime`, `plan.range.2w`, …) that passed at the H3
+checkpoint. The cutover went ahead with these open; the finance reads are the first follow-up.
+
+| Endpoint | Go | Limit | Python | py-5c78b0b | py-5c78b0b-r2 | py-5c78b0b-r3 |
+|---|---:|---:|---:|---:|---:|---:|
+| `health` | 0.4 | 5.4 | 1.6 | 1.7 | 1.6 | 1.6 |
+| `habits.daily` | 66.0 | 99.0 | 68.5 | 125.7 | 63.8 | 68.5 |
+| `habits.history.1y` | 1.8 | 6.8 | 6.1 | 7.7 | 5.9 | 6.1 |
+| `tasks.tree` | 8.1 | 13.1 | 15.7 **MISS** | 20.4 | 13.1 | 15.7 |
+| `tasks.projects.roots` | 0.8 | 5.8 | 3.9 | 5.1 | 3.8 | 3.9 |
+| `tasks.projects.list-fast` | 1.0 | 6.0 | 4.5 | 6.1 | 4.5 | 2.9 |
+| `tasks.tasks.list-fast` | 2.3 | 7.3 | 6.5 | 6.8 | 5.8 | 6.5 |
+| `tasks.project` | 6.1 | 11.1 | 5.8 | 9.8 | 5.8 | 5.8 |
+| `tasks.project.children` | 37.2 | 55.7 | 38.0 | 58.4 | 38.0 | 34.4 |
+| `tasks.project.parent-candidates` | 2.7 | 7.7 | 7.7 **MISS** | 10.6 | 7.6 | 7.7 |
+| `tasks.task` | 1.3 | 6.3 | 3.0 | 4.5 | 3.0 | 3.0 |
+| `tasks.task.time-entries` | 1.1 | 6.1 | 3.9 | 4.5 | 3.7 | 3.9 |
+| `tasks.by-due-date` | 95.0 | 142.6 | 109.2 | 158.7 | 103.4 | 109.2 |
+| `tasks.by-due-date.slack` | 90.4 | 135.5 | 111.5 | 165.3 | 105.3 | 111.5 |
+| `tasks.time-entries.week` | 5.9 | 10.9 | 11.5 **MISS** | 11.8 | 11.5 | 11.1 |
+| `tasks.time-entries.active` | 0.5 | 5.5 | 2.9 | 3.1 | 2.3 | 2.9 |
+| `tasks.time-entries.summary` | 2.0 | 7.0 | 3.6 | 3.6 | 3.0 | 4.2 |
+| `tasks.time-entries.history.30d` | 10.3 | 15.4 | 9.8 | 9.8 | 8.9 | 12.4 |
+| `tasks.time-entries.history.5y` | 41.3 | 62.0 | 51.1 | 61.2 | 39.6 | 51.1 |
+| `plan.today` | 2.9 | 7.9 | 7.2 | 9.4 | 6.6 | 7.2 |
+| `plan.range.2w` | 5.8 | 10.8 | 11.3 **MISS** | 11.3 | 10.7 | 12.1 |
+| `plan.commitments` | 0.6 | 5.6 | 2.0 | 3.9 | 2.0 | 1.7 |
+| `capacity.30d` | 39.3 | 58.9 | 39.1 | 54.2 | 36.1 | 39.1 |
+| `calendar.month` | 0.9 | 5.9 | 3.6 | 5.6 | 3.4 | 3.6 |
+| `finance.accounts` | 0.6 | 5.6 | 3.3 | 3.9 | 2.8 | 3.3 |
+| `finance.categories` | 0.8 | 5.8 | 3.6 | 4.5 | 2.4 | 3.6 |
+| `finance.overview` | 5.3 | 10.3 | 13.7 **MISS** | 13.7 | 13.8 | 13.3 |
+| `finance.transactions.all` | 35.3 | 52.9 | 136.0 **MISS** | 172.5 | 134.0 | 136.0 |
+| `finance.transactions.month` | 3.2 | 8.2 | 8.9 **MISS** | 9.0 | 8.4 | 8.9 |
+| `finance.budgets` | 8.0 | 13.0 | 16.6 **MISS** | 16.5 | 16.6 | 17.5 |
+| `finance.stats.monthly.1y` | 2.3 | 7.3 | 4.6 | 5.6 | 4.6 | 4.3 |
+| `finance.stats.monthly.5y` | 6.4 | 11.4 | 8.8 | 11.1 | 8.7 | 8.8 |
+| `finance.stats.by-category.1y` | 3.0 | 8.0 | 6.3 | 7.0 | 6.3 | 5.6 |
+| `finance.stats.networth.1y` | 70.8 | 106.3 | 76.5 | 107.0 | 73.2 | 76.5 |
+| `finance.stats.networth.5y` | 92.1 | 138.2 | 97.5 | 143.4 | 93.8 | 97.5 |
+| `finance.stats.estimation` | 32.2 | 48.3 | 34.5 | 39.9 | 33.9 | 34.5 |
+| `rutas.marks` | 1.4 | 6.4 | 9.1 **MISS** | 10.5 | 8.8 | 9.1 |
+| `uptime` | 1.9 | 6.9 | 10.2 **MISS** | 10.2 | 4.9 | 13.1 |
+| `uptime.windows.30d` | 1.2 | 6.2 | 5.1 | 5.1 | 5.1 | 5.4 |
+| `w.habits.log` | 32.2 | 48.3 | 33.4 | 29.9 | 34.3 | 33.4 |
+| `w.finance.transaction` | 8.8 | 13.8 | 11.9 | 11.1 | 12.8 | 11.9 |
+| `w.tasks.task` | 15.3 | 22.9 | 18.4 | 15.6 | 21.4 | 18.4 |
+| `w.tasks.time-entry` | 8.0 | 13.0 | 11.0 | 9.2 | 11.5 | 11.0 |
+| `w.plan.block` | 9.8 | 14.8 | 14.7 | 11.9 | 15.6 | 14.7 |
+| `w.calendar.event` | 7.8 | 12.8 | 10.0 | 8.9 | 11.1 | 10.0 |
+
+Process: about 0.8 s to start, 120 MB RSS idle, peak 127 MB (prod), 157 MB (5y) and 217 MB
+(5y ×3), under the 512 MB limit.

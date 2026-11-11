@@ -22,8 +22,6 @@ services:
     image: gv-api
     build: .
     container_name: gv_api
-    # dbus-daemon drops connections from uids unknown on the host; 1000 exists there.
-    user: "1000:1000"
     depends_on:
       db:
         condition: service_healthy
@@ -31,12 +29,7 @@ services:
       - .env
     ports:
       - "8080:8080"
-    # central-pipeline's database is only reachable through its published host port.
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
     volumes:
-      # Host BlueZ for the lights; without it every bulb reads offline.
-      - /run/dbus/system_bus_socket:/run/dbus/system_bus_socket
       - ./backups:/backups
       - printer_recordings:/data/recordings
       - prusa_connect:/data/prusa

@@ -80,6 +80,6 @@ The user's day plan: time-boxed blocks. A block is **linked** (points at a task)
 - **`ON DELETE SET NULL`**: deleting a task should not silently remove planned time from the day.
 - **Plan never mutates tasks**: the plan is intent, not execution.
 - **Overlap in the service, not an EXCLUDE constraint**: a `COUNT(*)` is enough at this scale.
-- **Budget reused from `tasks/budget.go`**: one source of truth for the daily/weekly targets.
+- **Budget reused from `tasks/budget.py`**: one source of truth for the daily/weekly targets.
 - **Only blocks count as busy, not events**: most calendar events are informational; only deliberately scheduled time reduces capacity.
 - **Commitments materialize rows instead of a recurrence engine**: generated blocks reuse every existing block operation.

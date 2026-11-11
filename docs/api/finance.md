@@ -6,7 +6,7 @@ Accounts, categories, transactions, budgets and stats.
 
 **Total:** each account's `total` is maintained by a trigger on `transactions` (income adds, expense subtracts, a transfer moves it between accounts). It is read-only.
 
-**Transaction type:** `income`, `expense` or `transfer` (Postgres `transaction_type`, Go `txtype.Type`). A transaction's category must have the same type, or the API answers 400.
+**Transaction type:** `income`, `expense` or `transfer` (Postgres `transaction_type`). A transaction's category must have the same type, or the API answers 400.
 
 ### Account fields
 

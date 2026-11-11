@@ -2,8 +2,6 @@
 
 from pathlib import Path
 
-import pytest
-
 from gv_api.config import Config
 from gv_api.core.routing import route_table
 from gv_api.main import build
@@ -45,7 +43,6 @@ def test_every_python_route_exists_in_go_with_the_same_tier() -> None:
     assert not extra, f"routes Go never served (or with another tier): {sorted(extra)}"
 
 
-@pytest.mark.xfail(reason="domains are still being ported; strict at cutover (task 18.1)")
 def test_python_serves_every_go_route() -> None:
     missing = go_table() - python_table()
     assert not missing, f"{len(missing)} Go routes not ported yet"
