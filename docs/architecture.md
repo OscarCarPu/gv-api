@@ -38,7 +38,6 @@ gv-api/
                              # CORS, JSON responses, URL params
     history/                 # shared history types and period maths
     testutil/                # test DB pool and truncation
-    pipeline/                # read-only connection to central-pipeline's database
     auth/                    # login, 2FA, bearer middleware
     <domain>/                # handler.go, service.go, repository.go, dto.go,
                              # errors.go, doc.go, mocks/
@@ -77,21 +76,6 @@ integration tests against a real database.
 Queries live in `db/queries/<domain>.sql`; `sqlc generate` builds one `gvdb`
 package with a `<domain>.sql.go` per query file. Repositories use only their own
 domain's queries by convention.
-
-### The Second Database (central-pipeline)
-
-`uptime` reads [central-pipeline][cp]'s dbt marts through `internal/pipeline`,
-shared by any future domain on that pipeline:
-
-- **Separate DSN and pool** (`PIPELINE_DATABASE_URL`), opened without a ping. Unset
-  means `pipeline.ErrNotConfigured` and a 503.
-- **Read-only on the connection** (`default_transaction_read_only`).
-- **No migrations, no sqlc.** Queries are hand-written against central-pipeline's
-  `docs/sources/watchdog.md`; integration tests build the marts as fixtures.
-- **Reads retry** while dbt drops and recreates a mart.
-- **Nothing is live.** Responses carry `computed_at` and `stale`.
-
-[cp]: https://github.com/OscarCarPu/central-pipeline
 
 ### Authentication
 

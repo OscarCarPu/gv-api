@@ -91,10 +91,10 @@ Milestones: **H0** foundations (1–5) · **H1** parity harness (6) · **H2** si
 
 ## 14. H5 · Uptime
 
-- [ ] 14.1 Port the uptime tables and repository (beat, windows, outages, `LastAlive`), with integration tests. Verify with `py-test-integration -k uptime`.
-- [ ] 14.2 Port `pipeline`: a lazy read-only second engine, the retry while marts rebuild, and 503 when unset. Integration tests build the marts as fixtures, as in Go. Verify that tests pass.
-- [ ] 14.3 Port the uptime service, router (semi tier, AWS-side guard) and heartbeat worker (30 s, 90 s gap, failover-gated, off on the AWS side). Verify with unit tests from `service_test.go` and `heartbeat_test.go`.
-- [ ] 14.4 Add `tests/parity/corpus/uptime.yaml` with `computed_at` and `stale` marked volatile. Verify that it is green.
+- [x] 14.1 Port the uptime tables and repository (beat, windows, outages, `LastAlive`), with integration tests. Verify with `py-test-integration -k uptime`.
+- [x] 14.2 Leave `pipeline` out: the Go release has no consumer (uptime reads its own heartbeat), so porting it would add dead code. Verify that design, proposal and docs no longer describe it.
+- [x] 14.3 Port the uptime service, router (semi tier, AWS-side guard) and heartbeat worker (30 s, 90 s gap, failover-gated, off on the AWS side). Verify with unit tests from `service_test.go` and `heartbeat_test.go`.
+- [x] 14.4 Add `tests/parity/corpus/uptime.yaml` with the fields that move with the clock (heartbeat `ends_at`, seconds and range ends measured up to now) marked volatile. Verify that it is green.
 
 ## 15. H6 · Backups
 

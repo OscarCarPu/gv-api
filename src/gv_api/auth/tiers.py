@@ -27,6 +27,6 @@ def full_router() -> APIRouter:
     return tier_router("full", [_require("full")])
 
 
-def semi_router() -> APIRouter:
+def semi_router(*extra: params.Depends) -> APIRouter:
     """rutas, printers and uptime: a `semi` or a `full` token."""
-    return tier_router("semi", [_require("semi", "full")])
+    return tier_router("semi", [_require("semi", "full"), *extra])

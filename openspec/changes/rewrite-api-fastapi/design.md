@@ -8,7 +8,7 @@ See proposal.md for motivation and scope. The current service:
 - **`internal/<domain>/`** follows handler → service → repository. Data access is sqlc over pgx, using `db/queries/*.sql` (about 1,240 lines of SQL).
 - **Circular dependency:** tasks and plan depend on each other. The urgency providers (capacity, plan) are injected into the tasks service with a setter after construction.
 - **In-process state** that must live in exactly one process: failover mode and merge, printer transfers, the warm ffmpeg camera process, active recordings, the Prusa Connect session, and caches.
-- **External processes and services:** `pg_dump`/`psql` for backups and restore, `ffmpeg` for camera and recordings, PrusaLink (HTTP Digest), Prusa Connect, AWS SSM and S3, and the read-only central-pipeline database.
+- **External processes and services:** `pg_dump`/`psql` for backups and restore, `ffmpeg` for camera and recordings, PrusaLink (HTTP Digest), Prusa Connect, and AWS SSM and S3. (Go's `internal/pipeline`, a read-only connection to central-pipeline, has no consumer since uptime moved to its own heartbeat, so it is not ported.)
 - **Tests:** about 12k lines of Go tests. Unit tests use mockery, repository integration tests run against a real DB, and an 824-line e2e suite runs over HTTP.
 
 The constraints come from the specs: client-compatible HTTP (`http-platform`, `auth`, `api-surface`), a self-contained migration history (`schema-migrations`), the same runtime behavior (`runtime-lifecycle`), and Telegram alerts (`error-alerts`).
@@ -59,7 +59,7 @@ src/gv_api/
   db/                  # engines, shared MetaData, startup migration runner
   alerts/              # Telegram logging handler
   auth/ habits/ tasks/ plan/ capacity/ finance/ calendar/ rutas/
-  uptime/ pipeline/ backup/ failover/ restore/ report/ history/ printers/
+  uptime/ backup/ failover/ restore/ report/ history/ printers/
       router.py  service.py  repository.py  schemas.py  tables.py  errors.py
 migrations/            # alembic env.py, versions/ (one linear history), baseline.sql
 alembic.ini            # for the alembic CLI (the deploy's one-time stamp)
@@ -161,7 +161,6 @@ The Go migrations are history, not something the new app builds on. Nothing in P
 - **Camera:** one supervised `ffmpeg` subprocess per printer, with a 5-minute idle-out. MJPEG is served as a `StreamingResponse` with `multipart/x-mixed-replace`.
 - **Recordings:** served with `FileResponse` (Range support). Range responses (206, `Content-Range`, 416) are checked against Go's `http.ServeContent` in the harness.
 - **Signed URLs:** the same HMAC-SHA256 input string and expiry rounding as Go.
-- **Pipeline DB:** a second `AsyncEngine` created lazily with `server_settings={"default_transaction_read_only": "on"}`, retrying reads while a mart is being rebuilt, as Go does. Unset returns 503.
 - **AWS:** boto3 clients for SSM and S3. moto stays in `docker-compose.dev-aws.yaml`.
 
 ### D14. Test strategy
