@@ -83,8 +83,15 @@ def test_failover_side_invalid(monkeypatch: pytest.MonkeyPatch) -> None:
 
 def test_failover_token(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("FAILOVER_TOKEN", "")
-    assert load().failover_token == ""
+    assert not load().failover_enabled
     monkeypatch.setenv("FAILOVER_TOKEN", "abc123")
+    with pytest.raises(ConfigError, match="FAILOVER_TOKEN is set but BACKUP_S3_BUCKET is not"):
+        load()
+    monkeypatch.setenv("BACKUP_S3_BUCKET", "bucket")
+    assert load().failover_enabled
+    monkeypatch.setenv("FAILOVER_SIDE", "aws")
+    assert not load().failover_enabled, "the backup server has no failover of its own"
+    monkeypatch.delenv("BACKUP_S3_BUCKET")
     assert load().failover_token == "abc123"
 
 

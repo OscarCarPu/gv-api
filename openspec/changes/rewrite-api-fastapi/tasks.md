@@ -105,10 +105,10 @@ Milestones: **H0** foundations (1–5) · **H1** parity harness (6) · **H2** si
 
 ## 16. H7 · Failover, restore and report
 
-- [ ] 16.1 Port `report` (schema introspection and the three-way diff between base, home and EC2 rows) with unit tests from `internal/report`. Verify that tests pass.
-- [ ] 16.2 Port `restore`: load the dumps through `psql`, `ALLOW_CONNECTIONS` and rename swap with undo, `_pre_restore` kept, ignore and skip lists, and `LastAlive`. Verify with integration tests from `restore_test.go`.
-- [ ] 16.3 Port the failover controller: the startup gate with 30 s retry, the `hold` and `merge` modes, the gate the workers call, the hold lock middleware with exempt prefixes, `/failover*` with `X-Failover-Token`, `/report` GET and DELETE, the report file, and engine dispose plus migrations after the swap. Verify with unit tests from `failover_test.go`, `flow_test.go` and `outage_test.go`.
-- [ ] 16.4 Rehearse with moto using `make up` and `scripts/failover-dev.sh` (scenario → merge → status → outage → finish) against the Python image. Verify that every step behaves as `docs/dev-failover.md` describes, and that a failed restore produces a Telegram alert.
+- [x] 16.1 Port `report` (schema introspection and the three-way diff between base, home and EC2 rows) with unit tests from `internal/report`. Verify that tests pass.
+- [x] 16.2 Port `restore`: load the dumps through `psql`, `ALLOW_CONNECTIONS` and rename swap with undo, `_pre_restore` kept, ignore and skip lists, and `LastAlive`. Verify with integration tests from `restore_test.go`.
+- [x] 16.3 Port the failover controller: the startup gate with 30 s retry, the `hold` and `merge` modes, the gate the workers call, the hold lock middleware with exempt prefixes, `/failover*` with `X-Failover-Token`, `/report` GET and DELETE, the report file, and engine dispose plus migrations after the swap. Verify with unit tests from `failover_test.go`, `flow_test.go` and `outage_test.go`.
+- [x] 16.4 Rehearse with moto using `make up` and `scripts/failover-dev.sh` (scenario → merge → status → outage → finish) against the Python image. Verify that every step behaves as `docs/dev-failover.md` describes, and that a failed restore produces a Telegram alert.
 
 ## 17. H8 · Printers
 

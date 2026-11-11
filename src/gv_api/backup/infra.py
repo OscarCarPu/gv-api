@@ -2,20 +2,18 @@
 
 import asyncio
 import gzip
-import os
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-import boto3
-from botocore.config import Config as BotoConfig
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncEngine
 
 from gv_api.backup.errors import RunningError
 from gv_api.backup.service import BackupService
 from gv_api.config import Config
+from gv_api.core import aws
 
 if TYPE_CHECKING:
     from mypy_boto3_s3 import S3Client
@@ -86,10 +84,7 @@ class S3Uploader:
 
     def _put(self, key: str, file: Path) -> None:
         if self._client is None:
-            # A custom endpoint (the local fake AWS) has no bucket.host name to resolve.
-            path_style = BotoConfig(s3={"addressing_style": "path"})
-            custom = bool(os.environ.get("AWS_ENDPOINT_URL"))
-            self._client = boto3.client("s3", config=path_style if custom else None)
+            self._client = aws.client("s3")
         with file.open("rb") as body:
             self._client.put_object(
                 Bucket=self._bucket, Key="gv-db/" + key, Body=body, IfNoneMatch="*"

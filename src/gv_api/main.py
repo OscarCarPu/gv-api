@@ -17,6 +17,7 @@ from gv_api import (
     backup,
     calendar,
     capacity,
+    failover,
     finance,
     habits,
     plan,
@@ -71,28 +72,42 @@ def build(cfg: Config, alerts: TelegramHandler | None = None) -> FastAPI:
     container.provide(rutas.RutasService(rutas.RutasRepository(container.engine)))
     backup_service = backup.backup_service(cfg, container.engine)
     container.provide(backup_service)
-    container.workers.add("backup", backup.BackupWorker(backup_service, cfg.backup_interval).run)
     uptime_repo = uptime.UptimeRepository(container.engine)
     container.provide(uptime.UptimeService(uptime_repo))
+    backup_worker = backup.BackupWorker(backup_service, cfg.backup_interval)
+    heartbeat = uptime.Heartbeat(uptime_repo)
+    ctl = None
+    if cfg.failover_enabled:
+        ctl = failover.setup.controller(cfg, container.engine)
+        ctl.outages = uptime_repo
+        backup_worker.gate, heartbeat.gate = ctl.allowed, ctl.beating
+        container.provide(ctl)
+    container.workers.add("backup", backup_worker.run)
     if not cfg.on_failover:
-        container.workers.add("heartbeat", uptime.Heartbeat(uptime_repo).run)
+        container.workers.add("heartbeat", heartbeat.run)
     if alerts is not None:
         container.workers.add("alerts", alerts.run)
 
     @asynccontextmanager
     async def lifespan(_: FastAPI) -> AsyncGenerator[None]:
-        try:
-            await migrate(container.engine)
-        except Exception as err:
-            log.error("failed to run migrations", extra={"error": str(err)})
-            await container.engine.dispose()
-            raise
+        if ctl is not None:
+            await ctl.start()
+        # A held home may be an empty database; migrating it would hide that from the report.
+        if ctl is None or ctl.mode == failover.MODE_NORMAL:
+            try:
+                await migrate(container.engine)
+            except Exception as err:
+                log.error("failed to run migrations", extra={"error": str(err)})
+                await container.engine.dispose()
+                raise
         container.workers.start()
         try:
             yield
         finally:
             log.info("shutting down server")
             await container.workers.stop()
+            if ctl is not None:
+                await ctl.stop()
             await container.engine.dispose()
             if alerts is not None:
                 await alerts.flush_batch()
@@ -111,8 +126,10 @@ def build(cfg: Config, alerts: TelegramHandler | None = None) -> FastAPI:
             rutas.router,
             uptime.router,
             backup.router,
+            *([failover.router, failover.report_router] if ctl is not None else []),
         ],
         lifespan=lifespan,
+        middleware=[(failover.HoldLock, {"controller": ctl})] if ctl is not None else [],
     )
     app.state.container = container
     return app

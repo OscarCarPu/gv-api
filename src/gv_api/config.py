@@ -80,6 +80,11 @@ class Config(BaseSettings):
     telegram_chat_id: str = ""
 
     @property
+    def failover_enabled(self) -> bool:
+        """Home's side of the AWS failover runs: home with a token."""
+        return self.failover_side == "home" and bool(self.failover_token)
+
+    @property
     def on_failover(self) -> bool:
         return self.failover_side == "aws"
 
@@ -123,6 +128,8 @@ def load() -> Config:
         )
     if cfg.failover_side not in ("home", "aws"):
         raise ConfigError(f'invalid FAILOVER_SIDE "{cfg.failover_side}": must be home or aws')
+    if cfg.failover_enabled and not cfg.backup_s3_bucket:
+        raise ConfigError("FAILOVER_TOKEN is set but BACKUP_S3_BUCKET is not")
     try:
         cfg.location  # noqa: B018
     except (ZoneInfoNotFoundError, ValueError) as err:

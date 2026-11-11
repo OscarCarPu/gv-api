@@ -102,3 +102,9 @@ leading month from the default series.
 
 An `account_id` or `category_id` filter beyond 32 bits is a 400, like a path id. Go wrapped it
 to a negative id and matched nothing.
+
+## report-row-numbers
+
+The failover report (`GET /report`) shows each row as JSON parsed from `to_jsonb`, so a
+`numeric` reads `12.5` where Go kept Postgres's text `12.50`. Rows are still compared on the
+exact `jsonb` text. `alembic_version` is left out of the report like `schema_migrations`.

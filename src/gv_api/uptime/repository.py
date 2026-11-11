@@ -49,6 +49,11 @@ class UptimeRepository:
             value: datetime | None = (await conn.execute(query)).scalar_one_or_none()
         return value
 
+    @staticmethod
+    async def last_alive_of(engine: AsyncEngine) -> datetime | None:
+        """last_alive on another database (home's, before a restore replaces it)."""
+        return await UptimeRepository(engine).last_alive()
+
     async def beat(self, now: datetime, gap: timedelta) -> None:
         """Extend the current up range, or open one; a silence longer than gap was down."""
         async with self._engine.begin() as conn:
