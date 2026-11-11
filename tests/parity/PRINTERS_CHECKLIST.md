@@ -27,12 +27,12 @@ once per app. They are checked here by hand, on the Python service, before the c
 
 Tick each item with the date it passed (`- [x] 2026-11-12 …`).
 
-- [ ] Upload a small file (one PUT); it appears in the file list.
-- [ ] Upload a file over the chunk size (PATCH chunks); progress reaches `done` and it is listed.
-- [ ] Rename a file; progress goes downloading → forwarding → done, and the old name is gone.
-- [ ] Start a print from the list, then stop it (`DELETE …/job`).
-- [ ] Take a camera frame (`GET …/camera`).
-- [ ] Open the MJPEG stream from `GET …/camera/url` in a browser.
-- [ ] Auto-record starts within seconds of a print starting, and stops when it ends.
-- [ ] Download a recording and seek in it (Range requests); the poster shows in the list.
-- [ ] Bulk-delete two recordings; the response lists both under `deleted`.
+- [x] 2026-11-11 Upload a small file (one PUT); it appears in the file list.
+- [x] 2026-11-11 Upload a file over the chunk size (PATCH chunks); progress reaches `done` and it is listed. A repeated chunk is not counted twice; an out-of-order one answers 409 with `received`.
+- [x] 2026-11-11 Rename a file; progress goes downloading → forwarding → done, and the old name is gone.
+- [x] 2026-11-11 Start a print from the list, then stop it (`DELETE …/job`). The printer takes up to ~2 min to leave `PRINTING` after the stop; a G-code without the slicer's `M862` checks waits in `ATTENTION` for a confirmation on the printer.
+- [x] 2026-11-11 Take a camera frame (`GET …/camera`).
+- [x] 2026-11-11 Open the MJPEG stream from `GET …/camera/url` in a browser. Checked with curl: `multipart/x-mixed-replace`, ~5 fps.
+- [x] 2026-11-11 Auto-record starts within seconds of a print starting, and stops when it ends. Started 6 s after `PRINTING`, stopped when the printer reached `STOPPED`.
+- [x] 2026-11-11 Download a recording and seek in it (Range requests); the poster shows in the list. 206 with `Content-Range`, 416 past the end, ffprobe reads it over HTTP.
+- [x] 2026-11-11 Bulk-delete two recordings; the response lists both under `deleted`.
