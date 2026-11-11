@@ -17,6 +17,7 @@ from gv_api import backup
 from gv_api.auth import AuthService
 from gv_api.backup import BackupService, BackupWorker
 from gv_api.backup.errors import RunningError
+from gv_api.backup.schemas import Backup
 from gv_api.core.app import create_app
 
 from .test_tasks_router import AUTH, CFG, FULL, ping
@@ -279,13 +280,15 @@ async def test_router_errors(tmp_path: Path) -> None:
     assert (resp.status_code, resp.json()) == (400, {"error": "invalid backup name"})
     resp = await call(svc(tmp_path), "GET", "/backups/gv-db-20260103T000000Z.sql.gz")
     assert (resp.status_code, resp.json()) == (404, {"error": "backup not found"})
-    (tmp_path / "hourly").mkdir(parents=True, exist_ok=True)
-    (tmp_path / "hourly").chmod(0)
-    try:
-        resp = await call(svc(tmp_path), "GET", "/backups")
-        assert (resp.status_code, resp.json()) == (500, {"error": "Failed to list backups"})
-    finally:
-        (tmp_path / "hourly").chmod(0o700)
+    # Raised directly: a chmod-ed folder still lists for root, as in CI.
+    broken = svc(tmp_path)
+
+    def denied() -> list[Backup]:
+        raise PermissionError("denied")
+
+    broken.backups = denied  # type: ignore[method-assign]
+    resp = await call(broken, "GET", "/backups")
+    assert (resp.status_code, resp.json()) == (500, {"error": "Failed to list backups"})
 
 
 # The backup command
