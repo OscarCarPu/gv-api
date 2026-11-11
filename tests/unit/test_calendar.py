@@ -12,10 +12,10 @@ from gv_api import calendar
 from gv_api.auth import AuthService
 from gv_api.calendar import CalendarService
 from gv_api.calendar.errors import InvalidError, NotFoundError
-from gv_api.calendar.router import parse_query_time
 from gv_api.calendar.schemas import CreateEventRequest, Event, UpdateEventRequest
 from gv_api.calendar.service import Repository
 from gv_api.core.app import create_app
+from gv_api.core.dates import parse_instant
 
 from .test_tasks_router import AUTH, CFG, FAIL, FULL, ping
 from .test_tasks_service import FakeRepo
@@ -126,13 +126,13 @@ async def test_plan_failures_are_logged_not_raised(caplog: pytest.LogCaptureFixt
     ]
 
 
-def test_parse_query_time() -> None:
-    assert parse_query_time("2026-08-20") == datetime(2026, 8, 20, tzinfo=UTC)
-    assert parse_query_time("2026-08-20T09:00:00Z") == T0
-    assert parse_query_time("2026-08-20T11:00:00.5+02:00") == T0 + timedelta(milliseconds=500)
+def test_parse_instant() -> None:
+    assert parse_instant("2026-08-20") == datetime(2026, 8, 20, tzinfo=UTC)
+    assert parse_instant("2026-08-20T09:00:00Z") == T0
+    assert parse_instant("2026-08-20T11:00:00.5+02:00") == T0 + timedelta(milliseconds=500)
     for raw in ["", "2026-08-20T09:00:00", "yesterday", "2026-8-20"]:
         with pytest.raises(ValueError):
-            parse_query_time(raw)
+            parse_instant(raw)
 
 
 # Router

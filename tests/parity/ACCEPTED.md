@@ -12,7 +12,7 @@ unknown path. The `lights` table is kept until a later change drops it.
 
 ## name-length-in-characters
 
-Name limits (habits 40, rutas 200, tasks 40, plan labels 200) count characters, as the `varchar` columns do. Go
+Name limits (habits 40, rutas 200, tasks 40, plan labels 200, finance accounts and categories 40) count characters, as the `varchar` columns do. Go
 counted UTF-8 bytes, so a 21-letter name of `ñ` (42 bytes) was a 400 there and is accepted now.
 No corpus entry: it would create a row on one side only.
 
@@ -81,7 +81,7 @@ started_at`. Go read a missing time as year 1, so a block with only `ended_at` w
 
 ## calendar-iso-instants
 
-`/calendar/events` filters read an instant with `datetime.fromisoformat`, which also takes ISO
+`/calendar/events` and `/finance` date filters read an instant with `datetime.fromisoformat`, which also takes ISO
 forms Go's RFC 3339 parser refused (no seconds, a space instead of `T`). It still needs an
 offset, and every value Go accepted means the same instant.
 
@@ -90,3 +90,15 @@ offset, and every value Go accepted means the same instant.
 Moving a plan block's start sets its `plan_date` to the start's local date (`TIMEZONE`), as
 creating it does. Go used the UTC date on update, so a block moved to 00:00-02:00 Madrid time
 was listed under the previous day.
+
+## stats-start-clamped
+
+Without `from`, finance stats start one period before the earliest transaction (or six months
+back), and a month back from the 29th-31st is clamped to the end of the shorter month, as in
+history-start-clamped. Go rolled the overflow forward (Mar 31 → Mar 3), which could drop the
+leading month from the default series.
+
+## finance-filter-ids
+
+An `account_id` or `category_id` filter beyond 32 bits is a 400, like a path id. Go wrapped it
+to a negative id and matched nothing.

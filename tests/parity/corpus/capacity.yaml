@@ -1,6 +1,7 @@
 # /capacity/free-busy and the urgency it feeds: /tasks/tasks/by-due-date and its slack (full
 # tier). Reading capacity generates the demo commitment's blocks ("Trabajo", Mon-Fri 09:00-17:00
-# Madrid), which count as busy. Today's free hours shrink with the clock.
+# Madrid), which count as busy. Today's free hours shrink with the clock, and so do the hours
+# a task still has planned while one of today's blocks is under way.
 db_volatile:
   - plan_blocks.created_at
   - plan_blocks.updated_at
@@ -36,9 +37,11 @@ requests:
   - name: by due date
     path: /tasks/tasks/by-due-date
     tier: full
+    volatile: ["[*].remaining_hours", "[*].dependent_hours[*].remaining_hours", "[*].dependent_hours[*].cumulative_hours"]
   - name: by due date from priority 2
     path: /tasks/tasks/by-due-date?min_priority=2
     tier: full
+    volatile: ["[*].remaining_hours", "[*].dependent_hours[*].remaining_hours", "[*].dependent_hours[*].cumulative_hours"]
   - name: by due date with a bad min_priority
     path: /tasks/tasks/by-due-date?min_priority=0
     tier: full
@@ -55,6 +58,7 @@ requests:
   - name: by due date with the block
     path: /tasks/tasks/by-due-date
     tier: full
+    volatile: ["[*].remaining_hours", "[*].dependent_hours[*].remaining_hours", "[*].dependent_hours[*].cumulative_hours"]
   - name: busy Saturday
     path: /capacity/free-busy?from=2027-03-06&to=2027-03-07
     tier: full

@@ -1,0 +1,474 @@
+# /finance (full tier). Demo seed: accounts 1-4, categories 1-31 (income 1-5, expense trees under
+# 6-10, transfers 27-29, yearly-budgeted 30 and 31), budgets around the current month, and two
+# years of transactions up to now. Fixed past or future months keep month_progress at 1 or 0.
+# Rows created here carry the creation time, which differs between the two apps.
+db_volatile:
+  - accounts.created_at
+  - categories.created_at
+  - transactions.created_at
+  - budgets.created_at
+requests:
+  - name: no token
+    path: /finance/accounts
+  - name: semi token
+    path: /finance/accounts
+    tier: semi
+
+  # Accounts and categories
+  - name: accounts
+    path: /finance/accounts
+    tier: full
+  - name: account 2
+    path: /finance/accounts/2
+    tier: full
+  - name: unknown account
+    path: /finance/accounts/999999
+    tier: full
+  - name: invalid account id
+    path: /finance/accounts/abc
+    tier: full
+  - name: categories
+    path: /finance/categories
+    tier: full
+  - name: category 11
+    path: /finance/categories/11
+    tier: full
+  - name: unknown category
+    path: /finance/categories/999999
+    tier: full
+  - name: overview
+    path: /finance/overview
+    tier: full
+
+  # Transactions
+  - name: every transaction
+    path: /finance/transactions
+    tier: full
+  - name: transactions of account 3, source or destination
+    path: /finance/transactions?account_id=3
+    tier: full
+  - name: transactions of category 15
+    path: /finance/transactions?category_id=15
+    tier: full
+  - name: transfers
+    path: /finance/transactions?type=transfer
+    tier: full
+  - name: transactions in a date range
+    path: /finance/transactions?from=2026-01-01&to=2026-01-31&type=expense
+    tier: full
+  - name: transactions between instants
+    path: /finance/transactions?from=2026-02-01T10:00:00Z&to=2026-02-03T00:00:00%2B01:00
+    tier: full
+  - name: transactions in an empty month
+    path: /finance/transactions?from=2030-01-01&to=2030-01-31
+    tier: full
+  - name: transactions with a bad account
+    path: /finance/transactions?account_id=x
+    tier: full
+  - name: transactions with account 0
+    path: /finance/transactions?account_id=0
+    tier: full
+  - name: transactions with a bad category
+    path: /finance/transactions?category_id=-2
+    tier: full
+  - name: transactions with a bad type
+    path: /finance/transactions?type=refund
+    tier: full
+  - name: transactions with a bad from
+    path: /finance/transactions?from=yesterday
+    tier: full
+  - name: transactions with a bad to
+    path: /finance/transactions?to=2026-13-01
+    tier: full
+  - name: unknown transaction
+    path: /finance/transactions/999999
+    tier: full
+
+  # Stats
+  - name: net worth by default
+    path: /finance/stats/networth
+    tier: full
+  - name: net worth per month across a year
+    path: /finance/stats/networth?from=2025-11-01&to=2026-02-28&granularity=month
+    tier: full
+  - name: net worth per week
+    path: /finance/stats/networth?from=2026-01-01&to=2026-02-15&granularity=week
+    tier: full
+  - name: net worth per day
+    path: /finance/stats/networth?from=2026-03-01&to=2026-03-10&granularity=day
+    tier: full
+  - name: net worth in the future
+    path: /finance/stats/networth?from=2030-01-01&to=2030-03-01&granularity=month
+    tier: full
+  - name: net worth with a bad granularity
+    path: /finance/stats/networth?granularity=year
+    tier: full
+  - name: net worth with a bad from
+    path: /finance/stats/networth?from=x
+    tier: full
+  - name: expenses by category by default
+    path: /finance/stats/by-category?type=expense
+    tier: full
+  - name: income by category in a month
+    path: /finance/stats/by-category?type=income&from=2026-01-01&to=2026-01-31
+    tier: full
+  - name: transfers by category of account 3
+    path: /finance/stats/by-category?type=transfer&account_id=3
+    tier: full
+  - name: by category in an empty month
+    path: /finance/stats/by-category?type=expense&from=2030-01-01&to=2030-01-31
+    tier: full
+  - name: by category without a type
+    path: /finance/stats/by-category
+    tier: full
+  - name: by category with a bad account
+    path: /finance/stats/by-category?type=expense&account_id=x
+    tier: full
+  - name: monthly by default
+    path: /finance/stats/monthly
+    tier: full
+  - name: monthly across a year
+    path: /finance/stats/monthly?from=2025-11-01&to=2026-02-28
+    tier: full
+  - name: monthly of a category and an account
+    path: /finance/stats/monthly?category_id=15&account_id=1
+    tier: full
+  - name: monthly with a bad category
+    path: /finance/stats/monthly?category_id=x
+    tier: full
+  - name: estimation by rate
+    path: /finance/stats/estimation?start_month=2025-06&end_month=2027-06&mode=rate
+    tier: full
+  - name: estimation by saving from before the data
+    path: /finance/stats/estimation?start_month=2015-01&end_month=2026-12-15&mode=saving
+    tier: full
+  - name: estimation in the future only
+    path: /finance/stats/estimation?start_month=2030-01&end_month=2030-03&mode=rate
+    tier: full
+  - name: estimation without start
+    path: /finance/stats/estimation?end_month=2026-12&mode=rate
+    tier: full
+  - name: estimation ending before it starts
+    path: /finance/stats/estimation?start_month=2026-12&end_month=2026-01&mode=rate
+    tier: full
+  - name: estimation with a bad mode
+    path: /finance/stats/estimation?start_month=2026-01&end_month=2026-12&mode=linear
+    tier: full
+
+  # Budgets
+  - name: budgets this month
+    path: /finance/budgets
+    tier: full
+    volatile: [month_progress, yearly.year_progress]
+  - name: budgets last October
+    path: /finance/budgets?month=2026-10
+    tier: full
+    volatile: [yearly.year_progress]
+  - name: budgets in January
+    path: /finance/budgets?month=2026-01
+    tier: full
+    volatile: [yearly.year_progress]
+  - name: budgets in December of last year
+    path: /finance/budgets?month=2025-12
+    tier: full
+  - name: budgets in an empty future month
+    path: /finance/budgets?month=2030-01
+    tier: full
+  - name: budgets with a bad month
+    path: /finance/budgets?month=2026-1
+    tier: full
+  - name: what the Food budget counted in October
+    path: /finance/budgets/6/transactions?month=2026-10
+    tier: full
+  - name: what the car budget counted this year
+    path: /finance/budgets/31/transactions?period=yearly
+    tier: full
+  - name: what the Transport budget counted in July
+    path: /finance/budgets/10/transactions?month=2026-07&period=monthly
+    tier: full
+  - name: budget transactions of a transfer category
+    path: /finance/budgets/27/transactions
+    tier: full
+  - name: budget transactions of an unknown category
+    path: /finance/budgets/999999/transactions
+    tier: full
+  - name: budget transactions with a bad period
+    path: /finance/budgets/6/transactions?period=weekly
+    tier: full
+
+  # Writes: accounts and categories
+  - name: create an account
+    method: POST
+    path: /finance/accounts
+    tier: full
+    volatile: [created_at]
+    body: {name: " Parity "}
+    capture: {acc: id}
+  - name: create an account without a name
+    method: POST
+    path: /finance/accounts
+    tier: full
+    body: {name: "  "}
+  - name: create an account with a long name
+    method: POST
+    path: /finance/accounts
+    tier: full
+    body: {name: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa}
+  - name: rename the account
+    method: PUT
+    path: /finance/accounts/{{acc}}
+    tier: full
+    volatile: [created_at]
+    body: {name: Parity renamed}
+  - name: rename an unknown account
+    method: PUT
+    path: /finance/accounts/999999
+    tier: full
+    body: {name: x}
+  - name: create a category
+    method: POST
+    path: /finance/categories
+    tier: full
+    volatile: [created_at]
+    body: {name: " Parity food ", type: expense, parent_id: 6}
+    capture: {cat: id}
+  - name: create a category with a bad type
+    method: POST
+    path: /finance/categories
+    tier: full
+    body: {name: x, type: savings}
+  - name: create a category under an unknown parent
+    method: POST
+    path: /finance/categories
+    tier: full
+    body: {name: x, type: expense, parent_id: 999999}
+  - name: make the category its own parent
+    method: PUT
+    path: /finance/categories/{{cat}}
+    tier: full
+    raw: '{"name": "x", "type": "expense", "parent_id": {{cat}}}'
+  - name: move the category to the root
+    method: PUT
+    path: /finance/categories/{{cat}}
+    tier: full
+    volatile: [created_at]
+    body: {name: Parity food, type: expense}
+  - name: update an unknown category
+    method: PUT
+    path: /finance/categories/999999
+    tier: full
+    body: {name: x, type: expense}
+
+  # Writes: transactions
+  - name: income into the account
+    method: POST
+    path: /finance/transactions
+    tier: full
+    volatile: [created_at]
+    raw: '{"type": "income", "amount": "1000.50", "account_id": {{acc}}, "category_id": 1, "occurred_at": "2026-03-31T23:30:00Z"}'
+    capture: {t1: id}
+  - name: expense in the new category
+    method: POST
+    path: /finance/transactions
+    tier: full
+    volatile: [created_at]
+    raw: '{"type": "expense", "amount": 12.345, "account_id": {{acc}}, "category_id": {{cat}}, "description": "lunch", "occurred_at": "2026-04-01T00:30:00+02:00"}'
+    capture: {t2: id}
+  - name: transfer to savings
+    method: POST
+    path: /finance/transactions
+    tier: full
+    volatile: [created_at]
+    raw: '{"type": "transfer", "amount": "100", "account_id": {{acc}}, "to_account_id": 3, "category_id": 27, "occurred_at": "2026-04-02T10:00:00Z"}'
+    capture: {t3: id}
+  - name: income with an expense category
+    method: POST
+    path: /finance/transactions
+    tier: full
+    body: {type: income, amount: "10", account_id: 1, category_id: 6, occurred_at: "2026-04-02T10:00:00Z"}
+  - name: income in an unknown account
+    method: POST
+    path: /finance/transactions
+    tier: full
+    body: {type: income, amount: "10", account_id: 999999, category_id: 1, occurred_at: "2026-04-02T10:00:00Z"}
+  - name: income in an unknown category
+    method: POST
+    path: /finance/transactions
+    tier: full
+    body: {type: income, amount: "10", account_id: 1, category_id: 999999}
+  - name: transfer without a destination
+    method: POST
+    path: /finance/transactions
+    tier: full
+    body: {type: transfer, amount: "10", account_id: 1, category_id: 27}
+  - name: transfer to the same account
+    method: POST
+    path: /finance/transactions
+    tier: full
+    body: {type: transfer, amount: "10", account_id: 1, to_account_id: 1, category_id: 27}
+  - name: expense with a destination
+    method: POST
+    path: /finance/transactions
+    tier: full
+    body: {type: expense, amount: "10", account_id: 1, to_account_id: 2, category_id: 6}
+  - name: transaction without an account
+    method: POST
+    path: /finance/transactions
+    tier: full
+    body: {type: expense, amount: "10", category_id: 6}
+  - name: zero amount
+    method: POST
+    path: /finance/transactions
+    tier: full
+    body: {type: expense, amount: "0", account_id: 1, category_id: 6}
+  - name: transaction without a category
+    method: POST
+    path: /finance/transactions
+    tier: full
+    body: {type: expense, amount: "1", account_id: 1}
+  - name: amount that is not a number
+    method: POST
+    path: /finance/transactions
+    tier: full
+    body: {type: expense, amount: ten, account_id: 1, category_id: 6}
+  - name: the new account's total
+    path: /finance/accounts/{{acc}}
+    tier: full
+    volatile: [created_at]
+  - name: update the expense
+    method: PUT
+    path: /finance/transactions/{{t2}}
+    tier: full
+    volatile: [created_at]
+    raw: '{"type": "expense", "amount": "20", "account_id": {{acc}}, "category_id": {{cat}}, "occurred_at": "2026-04-03T09:00:00Z"}'
+  - name: update without a time
+    method: PUT
+    path: /finance/transactions/{{t2}}
+    tier: full
+    raw: '{"type": "expense", "amount": "20", "account_id": {{acc}}, "category_id": {{cat}}}'
+  - name: update an unknown transaction
+    method: PUT
+    path: /finance/transactions/999999
+    tier: full
+    body: {type: expense, amount: "20", account_id: 1, category_id: 6, occurred_at: "2026-04-03T09:00:00Z"}
+  - name: the expense
+    path: /finance/transactions/{{t2}}
+    tier: full
+    volatile: [created_at]
+  - name: the account's transactions
+    path: /finance/transactions?account_id={{acc}}
+    tier: full
+    volatile: ["[*].created_at"]
+  - name: April by category
+    path: /finance/stats/by-category?type=expense&from=2026-04-01&to=2026-04-30&account_id={{acc}}
+    tier: full
+  - name: delete the account with transactions
+    method: DELETE
+    path: /finance/accounts/{{acc}}
+    tier: full
+  - name: delete the category in use
+    method: DELETE
+    path: /finance/categories/{{cat}}
+    tier: full
+
+  # Writes: budgets
+  - name: budget the new category from March
+    method: PUT
+    path: /finance/budgets/{{cat}}
+    tier: full
+    body: {month: "2026-03", amount: "100"}
+  - name: a one-month exception in April
+    method: PUT
+    path: /finance/budgets/{{cat}}
+    tier: full
+    body: {month: "2026-04", amount: 12.345, scope: once}
+  - name: a yearly budget for the category
+    method: PUT
+    path: /finance/budgets/{{cat}}
+    tier: full
+    body: {month: "2026", amount: "900", period: yearly}
+  - name: budget a transfer category
+    method: PUT
+    path: /finance/budgets/27
+    tier: full
+    body: {month: "2026-04", amount: "1"}
+  - name: budget an unknown category
+    method: PUT
+    path: /finance/budgets/999999
+    tier: full
+    body: {month: "2026-04", amount: "1"}
+  - name: budget with a bad scope
+    method: PUT
+    path: /finance/budgets/{{cat}}
+    tier: full
+    body: {month: "2026-04", amount: "1", scope: always}
+  - name: budget with a negative amount
+    method: PUT
+    path: /finance/budgets/{{cat}}
+    tier: full
+    body: {month: "2026-04", amount: "-1"}
+  - name: budget without a month
+    method: PUT
+    path: /finance/budgets/{{cat}}
+    tier: full
+    body: {amount: "1"}
+  - name: budgets in April with the new ones
+    path: /finance/budgets?month=2026-04
+    tier: full
+    volatile: [yearly.year_progress]
+  - name: budgets in May with the new ones
+    path: /finance/budgets?month=2026-05
+    tier: full
+    volatile: [yearly.year_progress]
+  - name: what the new budget counted in April
+    path: /finance/budgets/{{cat}}/transactions?month=2026-04
+    tier: full
+  - name: end the budget from May
+    method: DELETE
+    path: /finance/budgets/{{cat}}?month=2026-05
+    tier: full
+  - name: end the yearly budget
+    method: DELETE
+    path: /finance/budgets/{{cat}}?month=2026&period=yearly&scope=forward
+    tier: full
+  - name: end a budget without a month
+    method: DELETE
+    path: /finance/budgets/{{cat}}
+    tier: full
+  - name: budgets in May after the end
+    path: /finance/budgets?month=2026-05
+    tier: full
+    volatile: [yearly.year_progress]
+
+  # Clean up
+  - name: delete the income
+    method: DELETE
+    path: /finance/transactions/{{t1}}
+    tier: full
+  - name: delete the expense
+    method: DELETE
+    path: /finance/transactions/{{t2}}
+    tier: full
+  - name: delete the transfer
+    method: DELETE
+    path: /finance/transactions/{{t3}}
+    tier: full
+  - name: delete it again
+    method: DELETE
+    path: /finance/transactions/{{t3}}
+    tier: full
+  - name: delete the category
+    method: DELETE
+    path: /finance/categories/{{cat}}
+    tier: full
+  - name: delete the account
+    method: DELETE
+    path: /finance/accounts/{{acc}}
+    tier: full
+  - name: overview after the writes
+    path: /finance/overview
+    tier: full
+  - name: wrong method on accounts
+    method: PATCH
+    path: /finance/accounts/1
+    tier: full

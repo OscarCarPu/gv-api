@@ -84,10 +84,10 @@ Milestones: **H0** foundations (1–5) · **H1** parity harness (6) · **H2** si
 
 ## 13. H4 · Finance
 
-- [ ] 13.1 Port the finance tables (accounts, categories, transactions with the `transaction_type` enum, budgets) and the repository, with integration tests from `repository_test.go` and `repository_budgets_test.go`. Verify with `py-test-integration -k finance`.
-- [ ] 13.2 Port the finance services (accounts, categories, transactions, budgets, overview, stats by category, estimation, monthly and net worth, month boundaries in `TIMEZONE`) with unit tests. Verify coverage ≥ 90% and the `Money` encoding on every amount.
-- [ ] 13.3 Port the finance routers, with handler tests from `handler_test.go` and `handler_budgets_test.go`. Verify the route-inventory rows for `/finance/*`.
-- [ ] 13.4 Add `tests/parity/corpus/finance.yaml` covering every route, month and year edges, and empty months. Verify that it is green against both demo data and a production snapshot.
+- [x] 13.1 Port the finance tables (accounts, categories, transactions with the `transaction_type` enum, budgets) and the repository, with integration tests from `repository_test.go` and `repository_budgets_test.go`. Verify with `py-test-integration -k finance`.
+- [x] 13.2 Port the finance services (accounts, categories, transactions, budgets, overview, stats by category, estimation, monthly and net worth, month boundaries in `TIMEZONE`) with unit tests. Verify coverage ≥ 90% and the `Money` encoding on every amount.
+- [x] 13.3 Port the finance routers, with handler tests from `handler_test.go` and `handler_budgets_test.go`. Verify the route-inventory rows for `/finance/*`.
+- [x] 13.4 Add `tests/parity/corpus/finance.yaml` covering every route, month and year edges, and empty months. Verify that it is green against both demo data and a production snapshot.
 
 ## 14. H5 · Uptime
 

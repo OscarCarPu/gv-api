@@ -3,7 +3,7 @@
 import re
 from calendar import monthrange
 from collections.abc import Callable
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, time
 from zoneinfo import ZoneInfo
 
 Clock = Callable[[], datetime]
@@ -33,3 +33,15 @@ def add_months(d: date, months: int) -> date:
 
 def today_in(loc: ZoneInfo, now: Clock = utcnow) -> date:
     return now().astimezone(loc).date()
+
+
+def parse_instant(raw: str) -> datetime:
+    """An instant with its offset, or a plain YYYY-MM-DD (midnight UTC); ValueError otherwise."""
+    try:
+        return datetime.combine(parse_day(raw), time(), UTC)
+    except ValueError:
+        pass
+    t = datetime.fromisoformat(raw)
+    if t.tzinfo is None:
+        raise ValueError("an instant needs an offset")
+    return t

@@ -39,6 +39,9 @@ seed_template() {
       -c "INSERT INTO schema_migrations VALUES (36, false)"
     psql -d parity_template >/dev/null <"$demo"
   fi
+  # The corpora open their own timer; a running one (the demo leaves one depending on the hour)
+  # would make that a conflict.
+  psql -d parity_template -c "UPDATE time_entries SET finished_at = now() WHERE finished_at IS NULL"
 }
 
 up() {
