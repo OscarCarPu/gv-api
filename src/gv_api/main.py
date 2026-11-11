@@ -21,6 +21,7 @@ from gv_api import (
     finance,
     habits,
     plan,
+    printers,
     rutas,
     tasks,
     uptime,
@@ -70,6 +71,8 @@ def build(cfg: Config, alerts: TelegramHandler | None = None) -> FastAPI:
         finance.FinanceService(finance.FinanceRepository(container.engine), cfg.location)
     )
     container.provide(rutas.RutasService(rutas.RutasRepository(container.engine)))
+    printers_service = printers.PrintersService(printers.settings(cfg))
+    container.provide(printers_service)
     backup_service = backup.backup_service(cfg, container.engine)
     container.provide(backup_service)
     uptime_repo = uptime.UptimeRepository(container.engine)
@@ -85,6 +88,7 @@ def build(cfg: Config, alerts: TelegramHandler | None = None) -> FastAPI:
     container.workers.add("backup", backup_worker.run)
     if not cfg.on_failover:
         container.workers.add("heartbeat", heartbeat.run)
+        container.workers.add("printers", printers_service.run)
     if alerts is not None:
         container.workers.add("alerts", alerts.run)
 
@@ -106,6 +110,7 @@ def build(cfg: Config, alerts: TelegramHandler | None = None) -> FastAPI:
         finally:
             log.info("shutting down server")
             await container.workers.stop()
+            await printers_service.close()
             if ctl is not None:
                 await ctl.stop()
             await container.engine.dispose()
@@ -124,6 +129,8 @@ def build(cfg: Config, alerts: TelegramHandler | None = None) -> FastAPI:
             calendar.router,
             finance.router,
             rutas.router,
+            printers.router,
+            printers.public_router,
             uptime.router,
             backup.router,
             *([failover.router, failover.report_router] if ctl is not None else []),

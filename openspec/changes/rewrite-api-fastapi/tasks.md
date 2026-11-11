@@ -112,11 +112,11 @@ Milestones: **H0** foundations (1–5) · **H1** parity harness (6) · **H2** si
 
 ## 17. H8 · Printers
 
-- [ ] 17.1 Port the PrusaLink client (Digest or API key) and status, job stop, and history, chamber and file metadata from Prusa Connect, keeping the token-file format and the 10 s chamber cache. Verify with unit tests on recorded responses ported from `printers_test.go`.
-- [ ] 17.2 Port files: list with signed `downloadUrl`, PUT upload, PATCH chunks (idempotent, 409 with `received`), start print, delete, the rename transfer queue, progress, and the signed download stream. Verify with unit tests for the chunk protocol and the rename state machine.
-- [ ] 17.3 Port the camera: a supervised ffmpeg subprocess with a 5-minute idle-out, a single JPEG frame with a 20 s cold-start cap, `camera/url`, and the MJPEG `multipart/x-mixed-replace` stream. Verify with unit tests using a fake ffmpeg script.
-- [ ] 17.4 Port recordings and auto-record: start and stop, list with signed URLs, bulk delete with `{deleted, failed}`, Range-capable media, size and duration caps, overlay and font options, and a poll-driven auto start and stop. Verify with unit tests and a Range test (206, `Content-Range`, 416).
-- [ ] 17.5 Port the signed URL scheme byte for byte. Verify that a URL signed by the Go service validates in Python and vice versa.
+- [x] 17.1 Port the PrusaLink client (Digest or API key) and status, job stop, and history, chamber and file metadata from Prusa Connect, keeping the token-file format and the 10 s chamber cache. Verify with unit tests on recorded responses ported from `printers_test.go`.
+- [x] 17.2 Port files: list with signed `downloadUrl`, PUT upload, PATCH chunks (idempotent, 409 with `received`), start print, delete, the rename transfer queue, progress, and the signed download stream. Verify with unit tests for the chunk protocol and the rename state machine.
+- [x] 17.3 Port the camera: a supervised ffmpeg subprocess with a 5-minute idle-out, a single JPEG frame with a 20 s cold-start cap, `camera/url`, and the MJPEG `multipart/x-mixed-replace` stream. Verify with unit tests using a fake ffmpeg script.
+- [x] 17.4 Port recordings and auto-record: start and stop, list with signed URLs, bulk delete with `{deleted, failed}`, Range-capable media, size and duration caps, overlay and font options, and a poll-driven auto start and stop. Verify with unit tests and a Range test (206, `Content-Range`, 416).
+- [x] 17.5 Port the signed URL scheme byte for byte. Verify that a URL signed by the Go service validates in Python and vice versa.
 - [ ] 17.6 Add the `prusa-login` CLI command. Verify by running it interactively against Prusa Connect and checking that the running API picks the session up.
 - [ ] 17.7 Add `tests/parity/corpus/printers.yaml` with read-only routes only (status, files, files/meta, history, chamber, recordings, camera/url), telemetry and signatures marked volatile, run against the real printer. Verify that it is green.
 - [ ] 17.8 Run the manual printer checklist on real hardware (`tests/parity/PRINTERS_CHECKLIST.md`): upload a small and a chunked file, rename, start a print and stop it, take a camera frame, open the MJPEG stream, confirm auto-record starts and stops, download a recording with seeking, and run a bulk delete. Verify that each item is ticked with its date.

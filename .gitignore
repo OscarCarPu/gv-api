@@ -10,4 +10,5 @@ htmlcov/
 
 # Parity runner output
 /tests/parity/results/
+/tests/parity/printer.env
 coverage.json

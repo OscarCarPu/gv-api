@@ -103,7 +103,7 @@ Shared building blocks live in `core/encoding.py`:
 - `Day` gives `YYYY-MM-DD`; `DayTime` writes a date column as midnight UTC where the API types it as a timestamp.
 - `Real` writes a SQL `real` with 7 significant digits.
 
-Null versus `[]` is decided per field by its declared type: `list[X] | None = None` where Go emitted `null`, and `list[X] = []` where it emitted `[]`. Every field is always serialized: keys Go left out when empty are present as `null` or `[]`, so there is no `omitempty` machinery. The parity harness catches any other mistake.
+Null versus `[]` is decided per field by its declared type: `list[X] | None = None` where Go emitted `null`, and `list[X] = []` where it emitted `[]`. Every field is always serialized: keys Go left out when empty are present as `null` or `[]`, so there is no `omitempty` machinery. The one exception is the printer routes: gv-web's printer schemas read their fields as optional, not nullable, so printer responses leave `None` out (`exclude_none`). The parity harness catches any other mistake.
 
 Responses go through `core.respond(status, model_or_list)`. Models and lists of models are serialized with `pydantic_core.to_json`; anything else (dicts of plain values) goes through `jsonable` and a `JSONResponse`. Both write the same bytes. FastAPI's `response_model` is not used, which avoids validating twice and keeps encoding in one place.
 

@@ -1,0 +1,74 @@
+# /domotics/printers (semi tier, plus three public routes authorized by a signed link).
+# Reads only: every write would reach the physical printer once per app. Writes are covered by
+# the unit tests and tests/parity/PRINTERS_CHECKLIST.md.
+#
+# By default the parity stack has no printer configured, so this checks the "not configured"
+# answers. With tests/parity/printer.env (PRUSALINK_*, PRUSA_CONNECT_*, PRINTER_RTSP_URL; see
+# PRINTERS_CHECKLIST.md) both apps read the real printer, and its telemetry is volatile.
+requests:
+  - name: no token
+    path: /domotics/printers
+  - name: printer list
+    path: /domotics/printers
+    tier: semi
+  - name: printer list with a full token
+    path: /domotics/printers
+    tier: full
+  - name: unknown printer
+    path: /domotics/printers/nope/status
+    tier: semi
+  - name: status
+    path: /domotics/printers/core-one/status
+    tier: semi
+    volatile: [state, temps, fans, axisZ, speed, flow, job]
+  - name: files
+    path: /domotics/printers/core-one/files
+    tier: semi
+    volatile: ["files[*].downloadUrl", storage.freeSpace]
+  - name: file metadata from Prusa Connect
+    path: /domotics/printers/core-one/files/meta
+    tier: semi
+  - name: print history
+    path: /domotics/printers/core-one/history
+    tier: semi
+  - name: chamber
+    path: /domotics/printers/core-one/chamber
+    tier: semi
+    volatile: [temp, targetTemp]
+  - name: transfers in progress
+    path: /domotics/printers/core-one/files/progress
+    tier: semi
+  - name: an unknown transfer
+    path: /domotics/printers/core-one/files/progress?u=upload-unknown
+    tier: semi
+  - name: a malformed transfer id
+    path: /domotics/printers/core-one/files/progress?u=x
+    tier: semi
+  - name: recordings
+    path: /domotics/printers/core-one/recordings
+    tier: semi
+    volatile: ["recordings[*].url", "recordings[*].posterUrl", "recordings[*].durationMs"]
+  - name: camera link
+    path: /domotics/printers/core-one/camera/url
+    tier: semi
+    volatile: [url]
+  - name: camera stream without a signature
+    path: /domotics/printers/core-one/camera/stream
+  - name: recording with a bad signature
+    path: /domotics/printers/core-one/recordings/2026-08-06T14-32-05.mp4?exp=9999999999&sig=00
+  - name: download with a bad signature
+    path: /domotics/printers/core-one/files/download?name=A.BGC&exp=9999999999&sig=00
+  - name: download of a name that is not a print file
+    path: /domotics/printers/core-one/files/download?name=notes.txt
+  - name: unknown recording action
+    method: POST
+    path: /domotics/printers/core-one/recordings?action=pause
+    tier: semi
+  - name: recording delete without a name
+    method: DELETE
+    path: /domotics/printers/core-one/recordings
+    tier: semi
+  - name: wrong method
+    method: PUT
+    path: /domotics/printers/core-one/status
+    tier: semi

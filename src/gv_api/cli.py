@@ -77,12 +77,38 @@ async def _backup(cfg: Config) -> int:
         await engine.dispose()
 
 
-def _not_ready(name: str) -> Callable[[argparse.Namespace], int]:
-    def run(_: argparse.Namespace) -> int:
-        print(f"{name}: not implemented yet", file=sys.stderr)
-        return 2
+PRUSA_LOGIN_TIMEOUT = 300
 
-    return run
+
+def prusa_login(_: argparse.Namespace) -> int:
+    from gv_api.printers import core_one
+    from gv_api.printers.connect import ConnectClient
+
+    cfg = _config()
+    if cfg is None:
+        return 1
+
+    async def ask_code() -> str:
+        print("Prusa sent a code to your email. Code: ", end="", flush=True)
+        line: str = await asyncio.to_thread(sys.stdin.readline)
+        if not line:
+            raise EOFError("no code entered")
+        return line.strip()
+
+    async def login() -> None:
+        client = ConnectClient(core_one(cfg))
+        try:
+            await asyncio.wait_for(client.save_login(ask_code), PRUSA_LOGIN_TIMEOUT)
+        finally:
+            await client.aclose()
+
+    try:
+        asyncio.run(login())
+    except Exception as err:
+        print("Login failed:", str(err) or type(err).__name__, file=sys.stderr)
+        return 1
+    print("Logged in. The running API will pick the session up on its next request.")
+    return 0
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -91,7 +117,7 @@ def build_parser() -> argparse.ArgumentParser:
     sub.add_parser("serve", help="run the HTTP API").set_defaults(run=serve)
     sub.add_parser("backup", help="take one database backup and exit").set_defaults(run=backup)
     sub.add_parser("prusa-login", help="log in to Prusa Connect interactively").set_defaults(
-        run=_not_ready("prusa-login")
+        run=prusa_login
     )
     return parser
 
