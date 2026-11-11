@@ -57,7 +57,8 @@ up() {
     psql -d postgres -c "DROP DATABASE IF EXISTS $db WITH (FORCE)" \
       -c "CREATE DATABASE $db TEMPLATE parity_template"
   done
-  "${compose[@]}" up -d --wait go py
+  # Fresh containers: nothing a previous run left in them (backups) carries over.
+  "${compose[@]}" up -d --wait --force-recreate go py
   echo ">>> parity stack up: go http://127.0.0.1:18180  py http://127.0.0.1:18181" >&2
 }
 

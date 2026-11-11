@@ -76,6 +76,9 @@ class Entry(_Model):
     body: Any = None
     raw: str | None = None
     volatile: list[str] = []
+    volatile_headers: list[str] = []
+    # A generated binary body (a dump): only the status and headers are compared.
+    opaque: bool = False
     capture: dict[str, str] = {}
     # A known difference: Python is checked against expect_py instead of against Go.
     accepted: str | None = None
@@ -270,9 +273,11 @@ def compare(entry: Entry, go: Reply, py: Reply) -> list[str]:
         return problems
     if go.status != py.status:
         problems.append(f"status: go={go.status} py={py.status}")
-    for h in sorted(set(go.headers) | set(py.headers)):
+    for h in sorted((set(go.headers) | set(py.headers)) - set(entry.volatile_headers)):
         if _header(go, h) != _header(py, h):
             problems.append(f"header {h}: go={go.headers.get(h)} py={py.headers.get(h)}")
+    if entry.opaque:
+        return problems
     left, right = go.body, py.body
     if go.is_json and py.is_json:
         left, right = mask(left, entry.volatile), mask(right, entry.volatile)

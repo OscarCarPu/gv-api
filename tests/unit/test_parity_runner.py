@@ -230,3 +230,17 @@ def test_every_corpus_file_parses() -> None:
     for corpus in corpora.values():
         for entry in corpus.requests:
             assert entry.accepted is None or entry.accepted in ids
+
+
+def test_an_opaque_body_and_volatile_headers_are_not_compared() -> None:
+    entry = runner.Entry(
+        name="download",
+        path="/backups/x",
+        opaque=True,
+        volatile_headers=["content-disposition"],
+    )
+    go = runner.Reply(200, {"content-disposition": ["a"], "content-type": ["gz"]}, "x", False, 0)
+    py = runner.Reply(200, {"content-disposition": ["b"], "content-type": ["gz"]}, "y", False, 0)
+    assert runner.compare(entry, go, py) == []
+    other = runner.Reply(200, {"content-type": ["text"]}, "y", False, 0)
+    assert runner.compare(entry, go, other) == ["header content-type: go=['gz'] py=['text']"]

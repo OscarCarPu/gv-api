@@ -1,4 +1,5 @@
 import argparse
+import asyncio
 import logging
 import sys
 from collections.abc import Callable, Sequence
@@ -33,6 +34,49 @@ def serve(_: argparse.Namespace) -> int:
             alerts.uninstall(handler)
 
 
+BACKUP_TIMEOUT = 600
+
+
+def backup(_: argparse.Namespace) -> int:
+    cfg = _config()
+    if cfg is None:
+        return 1
+    handler = alerts.install(cfg)
+    try:
+        return asyncio.run(_backup(cfg))
+    finally:
+        if handler is not None:
+            handler.flush_on_exit()
+            alerts.uninstall(handler)
+
+
+async def _backup(cfg: Config) -> int:
+    from gv_api.backup import backup_service
+    from gv_api.db.engine import create_engine, ping
+
+    engine = create_engine(cfg.database_url, pool_size=2)
+    try:
+        try:
+            await ping(engine)
+        except Exception as err:
+            log.error("failed to connect to database", extra={"error": str(err)})
+            return 1
+        try:
+            svc = backup_service(cfg, engine)
+        except Exception as err:
+            log.error("failed to set up backups", extra={"error": str(err)})
+            return 1
+        try:
+            done = await asyncio.wait_for(svc.run(), BACKUP_TIMEOUT)
+        except Exception as err:
+            log.error("backup failed", extra={"error": str(err) or type(err).__name__})
+            return 1
+        log.info("backup done", extra={"file": done.name, "size": done.size})
+        return 0
+    finally:
+        await engine.dispose()
+
+
 def _not_ready(name: str) -> Callable[[argparse.Namespace], int]:
     def run(_: argparse.Namespace) -> int:
         print(f"{name}: not implemented yet", file=sys.stderr)
@@ -45,9 +89,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="gv-api", description="gv-api server and tools")
     sub = parser.add_subparsers(dest="command", required=True)
     sub.add_parser("serve", help="run the HTTP API").set_defaults(run=serve)
-    sub.add_parser("backup", help="take one database backup and exit").set_defaults(
-        run=_not_ready("backup")
-    )
+    sub.add_parser("backup", help="take one database backup and exit").set_defaults(run=backup)
     sub.add_parser("prusa-login", help="log in to Prusa Connect interactively").set_defaults(
         run=_not_ready("prusa-login")
     )

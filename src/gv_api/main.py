@@ -12,7 +12,18 @@ import uvicorn
 from fastapi import FastAPI
 from sqlalchemy.ext.asyncio import AsyncEngine
 
-from gv_api import auth, calendar, capacity, finance, habits, plan, rutas, tasks, uptime
+from gv_api import (
+    auth,
+    backup,
+    calendar,
+    capacity,
+    finance,
+    habits,
+    plan,
+    rutas,
+    tasks,
+    uptime,
+)
 from gv_api.alerts import TelegramHandler
 from gv_api.config import Config
 from gv_api.core.app import create_app
@@ -58,6 +69,9 @@ def build(cfg: Config, alerts: TelegramHandler | None = None) -> FastAPI:
         finance.FinanceService(finance.FinanceRepository(container.engine), cfg.location)
     )
     container.provide(rutas.RutasService(rutas.RutasRepository(container.engine)))
+    backup_service = backup.backup_service(cfg, container.engine)
+    container.provide(backup_service)
+    container.workers.add("backup", backup.BackupWorker(backup_service, cfg.backup_interval).run)
     uptime_repo = uptime.UptimeRepository(container.engine)
     container.provide(uptime.UptimeService(uptime_repo))
     if not cfg.on_failover:
@@ -96,6 +110,7 @@ def build(cfg: Config, alerts: TelegramHandler | None = None) -> FastAPI:
             finance.router,
             rutas.router,
             uptime.router,
+            backup.router,
         ],
         lifespan=lifespan,
     )

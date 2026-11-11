@@ -1,0 +1,33 @@
+# /backups (full tier). Each app dumps its own database into its own BACKUP_DIR, so names,
+# sizes, times and the gzip bytes differ: only the shape is compared.
+requests:
+  - name: no token
+    path: /backups
+  - name: semi token
+    path: /backups
+    tier: semi
+  - name: take a backup
+    method: POST
+    path: /backups
+    tier: full
+    volatile: [name, size, created_at]
+    capture: {name: name}
+  - name: list the backups
+    path: /backups
+    tier: full
+    volatile: ["[*].name", "[*].size", "[*].created_at"]
+  - name: download it
+    path: /backups/{{name}}
+    tier: full
+    opaque: true
+    volatile_headers: [content-disposition, content-length, last-modified, etag]
+  - name: download an invalid name
+    path: /backups/gv-db-x.sql.gz
+    tier: full
+  - name: download a missing backup
+    path: /backups/gv-db-20200101T000000Z.sql.gz
+    tier: full
+  - name: wrong method
+    method: DELETE
+    path: /backups
+    tier: full

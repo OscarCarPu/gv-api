@@ -98,10 +98,10 @@ Milestones: **H0** foundations (1–5) · **H1** parity harness (6) · **H2** si
 
 ## 15. H6 · Backups
 
-- [ ] 15.1 Port the backup service: async `pg_dump` with gzip, hourly and daily filing and pruning, the `pg_try_advisory_lock(hashtext('backup'))` lock, and the optional S3 upload through threads. Verify with unit tests from `service_test.go` and integration tests from `integration_test.go`.
-- [ ] 15.2 Port the backup worker (wall-clock aligned, interval 0 disables it, failover-gated) and the `/backups` routes, including download. Verify with unit tests and handler tests.
-- [ ] 15.3 Add the `backup` CLI command (10-minute cap, exit codes). Verify that `docker compose exec gv-api gv-api backup` writes a dump and exits 0, and that a concurrent run respects the lock.
-- [ ] 15.4 Add `tests/parity/corpus/backups.yaml` (list and download shape; file names volatile). Verify that it is green.
+- [x] 15.1 Port the backup service: async `pg_dump` with gzip, hourly and daily filing and pruning, the `pg_try_advisory_lock(hashtext('backup'))` lock, and the optional S3 upload through threads. Verify with unit tests from `service_test.go` and integration tests from `integration_test.go`.
+- [x] 15.2 Port the backup worker (wall-clock aligned, interval 0 disables it, failover-gated) and the `/backups` routes, including download. Verify with unit tests and handler tests.
+- [x] 15.3 Add the `backup` CLI command (10-minute cap, exit codes). Verify that `docker compose exec gv-api gv-api backup` writes a dump and exits 0, and that a concurrent run respects the lock.
+- [x] 15.4 Add `tests/parity/corpus/backups.yaml` (list and download shape; file names volatile). Verify that it is green.
 
 ## 16. H7 · Failover, restore and report
 
