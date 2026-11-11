@@ -195,11 +195,11 @@ async def test_update_end_only_keeps_the_plan_date() -> None:
     assert repo.calls[-1] == ("update", 5, {"ended_at": t(13)})
 
 
-async def test_update_start_sets_the_utc_plan_date() -> None:
+async def test_update_start_sets_the_local_plan_date() -> None:
     repo = FakeRepo(get=block(5, t(20), t(25)), has_overlap=False)
-    start = datetime(2026, 5, 10, 22, 30, tzinfo=UTC)
+    start = datetime(2026, 5, 10, 22, 30, tzinfo=UTC)  # 00:30 on the 11th in Madrid
     await svc(repo, MADRID).update(5, UpdatePlanBlockRequest(started_at=start))
-    assert repo.calls[-1][2]["plan_date"] == date(2026, 5, 10)
+    assert repo.calls[-1][2]["plan_date"] == date(2026, 5, 11)
 
 
 async def test_update_moving_a_generated_block_to_another_day_detaches_it() -> None:

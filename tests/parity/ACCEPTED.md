@@ -84,3 +84,9 @@ started_at`. Go read a missing time as year 1, so a block with only `ended_at` w
 `/calendar/events` filters read an instant with `datetime.fromisoformat`, which also takes ISO
 forms Go's RFC 3339 parser refused (no seconds, a space instead of `T`). It still needs an
 offset, and every value Go accepted means the same instant.
+
+## plan-date-local-on-update
+
+Moving a plan block's start sets its `plan_date` to the start's local date (`TIMEZONE`), as
+creating it does. Go used the UTC date on update, so a block moved to 00:00-02:00 Madrid time
+was listed under the previous day.

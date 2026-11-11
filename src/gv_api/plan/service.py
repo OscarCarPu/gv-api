@@ -227,7 +227,7 @@ class PlanService:
 
         if start is not None:
             values["started_at"] = start
-            values["plan_date"] = start.astimezone(UTC).date()
+            values["plan_date"] = start.astimezone(self._loc).date()
         if end is not None:
             values["ended_at"] = end
         if req.clear_task:
