@@ -7,11 +7,11 @@ Sends every error the service logs to a Telegram chat, so the operator learns ab
 ## ADDED Requirements
 
 ### Requirement: Telegram delivery of error logs
-When `TELEGRAM_BOT_TOKEN` and `TELEGRAM_CHAT_ID` are both set, every log record at ERROR level or above SHALL be sent to that chat. Each message SHALL include the failover side, the log message, the error text, and the `request_id` when there is one.
+When `TELEGRAM_BOT_TOKEN` and `TELEGRAM_CHAT_ID` are both set, every log record at ERROR level or above SHALL be sent to that chat. Each message SHALL include the environment (`ENVIRONMENT`, default `dev`), the failover side, the log message, the error text, and the `request_id` when there is one.
 
 #### Scenario: Failed scheduled backup
 - **WHEN** a scheduled backup fails and logs `backup: scheduled backup failed`
-- **THEN** the chat receives a message with that text, the error and the side (`home` or `aws`)
+- **THEN** the chat receives a message with that text, the error, the environment and the side (for example `gv-api prod/home`)
 
 #### Scenario: Failed request
 - **WHEN** a request fails with a 500 and its error is logged

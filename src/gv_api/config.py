@@ -76,6 +76,8 @@ class Config(BaseSettings):
     backup_interval_ms: Ms = 5 * 60 * 1000
     backup_s3_bucket: str = ""
 
+    # Names the deployment in alerts (dev, prod), next to the failover side.
+    environment: str = "dev"
     telegram_bot_token: str = ""
     telegram_chat_id: str = ""
 

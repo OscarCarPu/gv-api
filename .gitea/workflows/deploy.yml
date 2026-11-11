@@ -31,9 +31,8 @@ jobs:
         run: |
           cd /home/ocp/docker/gv/gv-api
           docker run --rm -v "$PWD/backups:/b" alpine:3.22 sh -c "mkdir -p /b/hourly /b/daily && chown 1000:1000 /b /b/hourly /b/daily"
-          # Fatal while the running container may still be the previous release (./main); make it
-          # best-effort again once the cutover is deployed.
-          docker compose exec -T gv-api gv-api backup || docker compose exec -T gv-api ./main backup
+          # Best-effort: a failed backup must not block the deploy.
+          docker compose exec -T gv-api gv-api backup || echo "::warning::pre-deploy backup skipped or failed"
 
       - name: Deploy
         run: |

@@ -361,12 +361,14 @@ def test_unset_variables_log_one_info_line(
 
 
 def test_install_attaches_handler_when_configured() -> None:
-    cfg = Config(telegram_bot_token=TOKEN, telegram_chat_id="42", failover_side="aws")
+    cfg = Config(
+        telegram_bot_token=TOKEN, telegram_chat_id="42", failover_side="aws", environment="prod"
+    )
     h = install(cfg)
     try:
         assert isinstance(h, TelegramHandler)
         assert h in logging.getLogger().handlers
-        assert h._side == "aws"
+        assert h._side == "prod/aws"
     finally:
         if h is not None:
             logging.getLogger().removeHandler(h)
@@ -410,7 +412,7 @@ def test_failing_startup_sends_alert_before_exit(
     assert path == f"/bot{TOKEN}/sendMessage"
     assert body["chat_id"] == "42"
     text = str(body["text"])
-    assert text.startswith("gv-api home: ")
+    assert text.startswith("gv-api dev/home: ")
     assert "failed to run migrations" in text
     out = capsys.readouterr().out
     assert TOKEN not in out

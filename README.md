@@ -38,8 +38,8 @@ Optional integrations (printers, Prusa Connect, S3)
 degrade gracefully when unset.
 
 `TELEGRAM_BOT_TOKEN` and `TELEGRAM_CHAT_ID` (optional) send every ERROR log
-to a Telegram chat: batched every 10 s, repeated messages collapsed with a count, and the side
-(`home` or `aws`) and `request_id` in each alert. With either one unset, alerts are off and the
+to a Telegram chat: batched every 10 s, repeated messages collapsed with a count, and the environment
+(`ENVIRONMENT`, default `dev`), the side (`home` or `aws`) and `request_id` in each alert. With either one unset, alerts are off and the
 service logs that once at startup. A failed send is dropped with a WARNING and never affects
 requests or jobs.
 

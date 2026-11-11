@@ -162,7 +162,8 @@ def install(cfg: Config) -> TelegramHandler | None:
     if not cfg.telegram_bot_token or not cfg.telegram_chat_id:
         log.info("telegram alerts disabled: TELEGRAM_BOT_TOKEN or TELEGRAM_CHAT_ID not set")
         return None
-    handler = TelegramHandler(cfg.telegram_bot_token, cfg.telegram_chat_id, cfg.failover_side)
+    origin = f"{cfg.environment}/{cfg.failover_side}"
+    handler = TelegramHandler(cfg.telegram_bot_token, cfg.telegram_chat_id, origin)
     logging.getLogger().addHandler(handler)
     return handler
 
