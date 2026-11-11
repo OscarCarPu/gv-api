@@ -102,6 +102,10 @@ The deploy workflow runs this before every deploy. The HTTP endpoints, response 
 
 The test databases are created per run. Load benchmarks live in [bench/](bench/README.md).
 
+`uv run pytest --testmon tests/unit` runs only the tests affected by the code changed since the
+last run ([pytest-testmon](https://testmon.org), data in the git-ignored `.testmondata`); the
+pre-commit hook uses it. CI and `make test` always run everything with the coverage gate.
+
 ## Migrations
 
 Alembic, applied at startup in one transaction (`migrations/versions/`). The first revision,

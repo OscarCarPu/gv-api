@@ -12,3 +12,4 @@ htmlcov/
 /tests/parity/results/
 /tests/parity/printer.env
 coverage.json
+.testmondata*
