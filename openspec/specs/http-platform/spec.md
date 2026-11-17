@@ -47,34 +47,34 @@ Timestamps SHALL encode as RFC 3339 strings, with `Z` for UTC and six fractional
 Error responses SHALL be JSON objects `{"error": "<message>"}`, with an added `"code"` key where the Go service sent one. Status codes and message texts SHALL match the Go service for the same failure.
 
 #### Scenario: Validation failure
-- **WHEN** a client creates a habit with an empty name
+- **WHEN** a client creates a project with an empty name
 - **THEN** the response is 400 with body `{"error": "name is required"}`
 
 #### Scenario: Unexpected server failure
-- **WHEN** a repository call fails while listing daily habits
-- **THEN** the response is 500 with body `{"error": "Failed to get daily habits"}` and the cause is logged, not returned
+- **WHEN** a repository call fails while listing root projects
+- **THEN** the response is 500 with body `{"error": "Failed to get projects"}` and the cause is logged, not returned
 
 ### Requirement: Lenient request body decoding
 Unknown body fields SHALL be ignored, and missing fields SHALL take their zero value (`""`, `0`, `false`, or null for optional fields). A malformed body (including content after the JSON value), or a value that cannot be coerced to the field's type, SHALL return the handler's own 400 message, never a 422 or a framework error shape. Coercible values such as `"5"` for an integer MAY be accepted.
 
 #### Scenario: Unknown field
-- **WHEN** a client posts a habit log with an extra key `"foo": 1`
+- **WHEN** a client posts a project with an extra key `"foo": 1`
 - **THEN** the request succeeds as if the key were absent
 
 #### Scenario: Wrong type
-- **WHEN** a client posts `{"habit_id": "abc"}` to `/habits/log`
+- **WHEN** a client posts `{"priority": "abc"}` to `/tasks/projects`
 - **THEN** the response is 400 with body `{"error": "Invalid Body"}`
 
 ### Requirement: Path id parsing
 Numeric path ids SHALL be accepted only as positive integers that fit in 32 bits. Any other value SHALL return 400 with `{"error": "invalid <entity> id"}`.
 
 #### Scenario: Non-numeric id
-- **WHEN** a client calls `DELETE /habits/abc`
-- **THEN** the response is 400 with body `{"error": "invalid habit id"}`
+- **WHEN** a client calls `DELETE /tasks/projects/abc`
+- **THEN** the response is 400 with body `{"error": "invalid project id"}`
 
 #### Scenario: Zero or overflow
-- **WHEN** a client calls `DELETE /habits/0` or `DELETE /habits/4294967296`
-- **THEN** the response is 400 with body `{"error": "invalid habit id"}`
+- **WHEN** a client calls `DELETE /tasks/projects/0` or `DELETE /tasks/projects/4294967296`
+- **THEN** the response is 400 with body `{"error": "invalid project id"}`
 
 ### Requirement: Unmatched routes and methods
 A path no route matches SHALL return 404 with body `{"detail": "Not Found"}`. A known path called with an unsupported method SHALL return 405 with an `Allow` header listing the supported methods. Neither SHALL require authentication.
@@ -84,7 +84,7 @@ A path no route matches SHALL return 404 with body `{"detail": "Not Found"}`. A 
 - **THEN** the response is 404 with body `{"detail": "Not Found"}`
 
 #### Scenario: Wrong method
-- **WHEN** a client calls `PATCH /habits`
+- **WHEN** a client calls `PATCH /tasks/projects`
 - **THEN** the response is 405 and its `Allow` header includes `GET` and `POST`
 
 ### Requirement: CORS policy

@@ -109,11 +109,6 @@ def endpoints(task: int, project: int) -> list[Endpoint]:
     t, p, d30 = str(task), str(project), timedelta(days=30)
     reads = [
         Endpoint("health", "/health", kind=""),
-        Endpoint("habits.daily", f"/habits?date={day(0)}"),
-        Endpoint(
-            "habits.history.1y",
-            f"/habits/1/history?frequency=daily&start_at={day(-365)}&end_at={day(0)}",
-        ),
         Endpoint("tasks.tree", "/tasks/tree"),
         Endpoint("tasks.projects.roots", "/tasks/projects"),
         Endpoint("tasks.projects.list-fast", "/tasks/projects/list-fast"),
@@ -187,12 +182,6 @@ def endpoints(task: int, project: int) -> list[Endpoint]:
     # Plan blocks reject overlaps; this slot is past every seeded block.
     b_start, b_end = ts(timedelta(days=700)), ts(timedelta(days=700, hours=1))
     writes = [
-        Endpoint(
-            "w.habits.log",
-            "/habits/log",
-            method="POST",
-            body=json.dumps({"habit_id": 1, "date": day(0), "value": 2}),
-        ),
         Endpoint(
             "w.finance.transaction",
             "/finance/transactions",

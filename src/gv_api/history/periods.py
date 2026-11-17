@@ -1,4 +1,4 @@
-"""Period maths shared by the history endpoints (habits, time entries)."""
+"""Period maths shared by the history endpoints (time entries)."""
 
 from datetime import date, timedelta
 from zoneinfo import ZoneInfo

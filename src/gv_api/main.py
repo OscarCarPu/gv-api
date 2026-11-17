@@ -19,7 +19,6 @@ from gv_api import (
     capacity,
     failover,
     finance,
-    habits,
     plan,
     printers,
     rutas,
@@ -53,7 +52,6 @@ class Container:
 def build(cfg: Config, alerts: TelegramHandler | None = None) -> FastAPI:
     container = Container(cfg=cfg, engine=create_engine(cfg.database_url))
     container.provide(auth.AuthService(cfg))
-    container.provide(habits.HabitsService(habits.HabitsRepository(container.engine), cfg.location))
     task_service = tasks.TasksService(tasks.TasksRepository(container.engine), cfg.location)
     plan_service = plan.PlanService(
         plan.PlanRepository(container.engine), task_service, cfg.location
@@ -122,7 +120,6 @@ def build(cfg: Config, alerts: TelegramHandler | None = None) -> FastAPI:
         ping=lambda: ping(container.engine),
         routers=[
             auth.router,
-            habits.router,
             tasks.router,
             plan.router,
             capacity.router,

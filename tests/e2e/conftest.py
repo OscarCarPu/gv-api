@@ -78,7 +78,7 @@ def truncate_tables() -> None:
         conn = await asyncpg.connect(url)
         try:
             await conn.execute(
-                "TRUNCATE habits, habit_logs, projects, tasks, todos, time_entries,"
+                "TRUNCATE projects, tasks, todos, time_entries,"
                 " task_dependencies, calendar_events CASCADE"
             )
         finally:

@@ -3,7 +3,7 @@
 \set ON_ERROR_STOP on
 BEGIN;
 
-TRUNCATE accounts, budgets, calendar_events, categories, concello_marks, habit_logs, habits,
+TRUNCATE accounts, budgets, calendar_events, categories, concello_marks,
     outages, plan_blocks, projects, recurring_commitment_skips, recurring_commitments,
     task_dependencies, tasks, time_entries, todos, transactions RESTART IDENTITY CASCADE;
 
@@ -43,17 +43,6 @@ INSERT INTO budgets (category_id, month, amount, period, created_at)
 SELECT c.id, (date_trunc('month', now()) - make_interval(months => m))::date, 100 + (c.id * 7) % 300, 'monthly', now()
 FROM generate_series(0, :budget_months - 1) m
 CROSS JOIN (SELECT id FROM categories WHERE type = 'expense' ORDER BY id LIMIT :n_budget_cats) c;
-
-INSERT INTO habits (name, frequency, current_streak, longest_streak, target_min, target_max, recording_required, created_at)
-SELECT 'Habit ' || g, (ARRAY['daily', 'daily', 'daily', 'weekly', 'monthly'])[1 + g % 5], 0, 0,
-       1, CASE WHEN g % 2 = 0 THEN 5 END, g % 3 = 0, now() - make_interval(days => :days)
-FROM generate_series(1, :n_habits) g;
-
-INSERT INTO habit_logs (habit_id, log_date, value)
-SELECT h.id, d::date, 1 + floor(random() * 4)
-FROM habits h
-CROSS JOIN generate_series(now() - make_interval(days => :days), now(), interval '1 day') d
-WHERE random() < :hl_prob;
 
 INSERT INTO projects (name, priority, started_at, finished_at)
 SELECT 'Project ' || g, 1 + g % 5, now() - random() * make_interval(days => :days),

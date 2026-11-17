@@ -52,7 +52,6 @@ scenario() {
   gunzip -c "$work/base.sql.gz" | psql_ -d gv_dev_ec2 > /dev/null
   psql_ -d gv_dev_ec2 > /dev/null <<'SQL'
 INSERT INTO tasks (name) VALUES ('Created on the backup server');
-INSERT INTO habits (name) VALUES ('Habit from the backup server');
 UPDATE tasks SET description = 'edited on the backup server' WHERE id = (SELECT min(id) FROM tasks);
 SQL
   dump_ -d gv_dev_ec2 | gzip > "$work/ec2.sql.gz"
@@ -60,7 +59,6 @@ SQL
 
   psql_ -d "$POSTGRES_DB" <<'SQL'
 INSERT INTO tasks (name) VALUES ('Created at home during the outage');
-INSERT INTO habits (name) VALUES ('Habit from home');
 UPDATE tasks SET description = 'edited at home' WHERE id = (SELECT min(id) FROM tasks);
 SQL
 

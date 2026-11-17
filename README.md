@@ -50,7 +50,6 @@ requests or jobs.
 | Domain | Description | Docs |
 |---|---|---|
 | **Auth** | JWT login with TOTP 2FA. Two token tiers: full and semiprivate. | [auth](docs/api/auth.md) |
-| **Habits** | Habits with daily/weekly/monthly targets, logs, streaks and history. | [habits](docs/api/habits.md) |
 | **Tasks** | Hierarchical project/task tree with todos, due dates, and Pomodoro time entries. | [tasks](docs/api/tasks/README.md) |
 | **Plan** | Daily time blocks, linked to tasks, events or recurring commitments. | [plan](docs/api/plan.md) |
 | **Capacity** | Free and busy hours per day. | [capacity](docs/api/capacity.md) |

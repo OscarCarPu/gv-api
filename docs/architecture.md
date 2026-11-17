@@ -3,7 +3,7 @@
 ## Overview
 
 **gv-api** is a single-user REST API in Python that centralises personal data:
-habits, tasks (projects/tasks/todos/time entries), day planning, finance,
+tasks (projects/tasks/todos/time entries), day planning, finance,
 route marks, calendar events, 3D printers, backups and the uptime of the home lab.
 
 ## Tech Stack
@@ -45,7 +45,7 @@ gv-api/
   docs/                      # api/, business_logic/, data_models/
 ```
 
-Domains: `auth`, `habits`, `tasks`, `plan`, `capacity`, `finance`, `calendar`, `rutas`,
+Domains: `auth`, `tasks`, `plan`, `capacity`, `finance`, `calendar`, `rutas`,
 `printers`, `uptime`, `backup`, `failover`, `restore`, `report`.
 
 `capacity` has no table: daily free hours come from `DAILY_CAPACITY_HOURS`, and busy hours

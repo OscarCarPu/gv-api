@@ -39,11 +39,10 @@ for s in "${scenarios[@]}"; do
   echo ">>> $s: seeding $db" >&2
   psql_db postgres -c "DROP DATABASE IF EXISTS $db" -c "CREATE DATABASE $db TEMPLATE gv_bench_template"
   "scenario_$s"
-  hl_prob=$(python3 -c "print(min(1, $n_hl / ($n_habits * ($days + 1))))")
   vars=()
-  for v in days n_accounts n_cat_roots n_cat_children n_tx n_budget_cats budget_months n_habits \
+  for v in days n_accounts n_cat_roots n_cat_children n_tx n_budget_cats budget_months \
            n_projects n_proj_roots n_tasks n_open n_dep n_todos n_te n_pb future_days n_ev \
-           ev_days_back n_marks n_out hl_prob; do
+           ev_days_back n_marks n_out; do
     vars+=(-v "$v=${!v}")
   done
   psql_db "$db" "${vars[@]}" <"$here/seed.sql"

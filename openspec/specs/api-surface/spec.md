@@ -43,7 +43,7 @@ The service SHALL serve these routes to `semi` or `full` tokens: `/rutas/marks` 
 - **THEN** the response is 200 with `[{id, name, model}]`
 
 ### Requirement: Full-private routes
-The service SHALL serve these route families to `full` tokens only: `/habits`, `/tasks/projects`, `/tasks/tasks`, `/tasks/todos`, `/tasks/time-entries`, `/tasks/tree`, `/plan`, `/capacity/free-busy`, `/finance`, `/calendar/events`, `/backups` and, when the failover is enabled, `/report`. Within each family the methods and subpaths SHALL be exactly those the Go release served.
+The service SHALL serve these route families to `full` tokens only: `/tasks/projects`, `/tasks/tasks`, `/tasks/todos`, `/tasks/time-entries`, `/tasks/tree`, `/plan`, `/capacity/free-busy`, `/finance`, `/calendar/events`, `/backups` and, when the failover is enabled, `/report`. Within each family the methods and subpaths SHALL be exactly those the Go release served.
 
 #### Scenario: Static subpath beside an id
 - **WHEN** a client calls `GET /tasks/projects/list-fast`
@@ -64,7 +64,7 @@ When `FAILOVER_SIDE=home` and `FAILOVER_TOKEN` is set, the service SHALL serve `
 While the failover holds the app or a merge runs, every request except those under `/health`, `/login`, `/failover` and `/report` SHALL return 503 `{"error": "Restoring data after the failover. Back in a moment.", "code": "merge_pending"}`, before authentication is checked.
 
 #### Scenario: Held app
-- **WHEN** the app is held and a client calls `GET /habits` with a valid `full` token
+- **WHEN** the app is held and a client calls `GET /tasks/tree` with a valid `full` token
 - **THEN** the response is 503 with code `merge_pending`
 
 #### Scenario: Exempt route while held

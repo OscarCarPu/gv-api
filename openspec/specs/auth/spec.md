@@ -51,7 +51,7 @@ Tokens SHALL be HS256 JWTs signed with `JWT_SECRET` that carry `exp`, `iat` and 
 Protected routes SHALL require `Authorization: Bearer <token>`. Semiprivate routes (rutas, printers, uptime) SHALL accept `semi` or `full` tokens. All other protected routes SHALL accept only `full`. A `tmp` token SHALL be accepted by no protected route. A missing, malformed, expired, invalid or wrong-kind token SHALL return 401 `{"error": "Unauthorized"}`.
 
 #### Scenario: Semi token on a full route
-- **WHEN** a client calls `GET /habits` with a `semi` token
+- **WHEN** a client calls `GET /tasks/tree` with a `semi` token
 - **THEN** the response is 401 with `{"error": "Unauthorized"}`
 
 #### Scenario: Semi token on a semiprivate route
